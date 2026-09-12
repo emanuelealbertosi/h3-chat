@@ -5,7 +5,7 @@ import zipfile
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
-INCLUDE=('h3chat','static','licenses','scripts/Launcher.cs','scripts/install.ps1','app.py','launcher.py','catalog.json','runtimes.json',
+INCLUDE=('h3chat','static','licenses','docs','scripts/Launcher.cs','scripts/install.ps1','app.py','launcher.py','catalog.json','runtimes.json',
          'H3-Chat.exe','Installa-H3-Chat.bat','Avvia-H3-Chat.bat','Ferma-H3-Chat.bat','README.md','LICENSE','NOTICE','runtime/python')
 
 
