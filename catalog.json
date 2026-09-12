@@ -1,0 +1,195 @@
+[
+  {
+    "id": "qwen3-06",
+    "name": "Qwen3 · 0.6B Q4",
+    "capabilities": [
+      "chat"
+    ],
+    "description": "Chat e router leggeri. Ideale per CPU; ragionamento e routing limitati rispetto ai modelli più grandi.",
+    "files": [
+      {
+        "role": "model",
+        "repo": "unsloth/Qwen3-0.6B-GGUF",
+        "revision": "50968a4468ef4233ed78cd7c3de230dd1d61a56b",
+        "filename": "Qwen3-0.6B-Q4_K_M.gguf",
+        "url": "https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/50968a4468ef4233ed78cd7c3de230dd1d61a56b/Qwen3-0.6B-Q4_K_M.gguf",
+        "path": "models/files/ac2d97712095a558-Qwen3-0.6B-Q4_K_M.gguf",
+        "size": 396705472,
+        "sha256": "ac2d97712095a558e31573f62f466a3f9d93990898b0ec79d7c974c1780d524a"
+      }
+    ],
+    "size": 396705472,
+    "license": "Apache-2.0",
+    "ram_gb": 3,
+    "max_refs": 0
+  },
+  {
+    "id": "qwen3-4",
+    "name": "Qwen3 · 4B Q4",
+    "capabilities": [
+      "chat"
+    ],
+    "description": "Chat, codice e instradamento. Profilo consigliato per 4–8 GB di VRAM.",
+    "files": [
+      {
+        "role": "model",
+        "repo": "unsloth/Qwen3-4B-GGUF",
+        "revision": "22c9fc8a8c7700b76a1789366280a6a5a1ad1120",
+        "filename": "Qwen3-4B-Q4_K_M.gguf",
+        "url": "https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/22c9fc8a8c7700b76a1789366280a6a5a1ad1120/Qwen3-4B-Q4_K_M.gguf",
+        "path": "models/files/f6f8517777098610-Qwen3-4B-Q4_K_M.gguf",
+        "size": 2497281312,
+        "sha256": "f6f851777709861056efcdad3af01da38b31223a3ba26e61a4f8bf3a2195813a"
+      }
+    ],
+    "size": 2497281312,
+    "license": "Apache-2.0",
+    "ram_gb": 6,
+    "max_refs": 0
+  },
+  {
+    "id": "smolvlm",
+    "name": "SmolVLM · 500M Vision",
+    "capabilities": [
+      "chat",
+      "vision"
+    ],
+    "description": "Vision essenziale per una sola immagine, principalmente in inglese. Non consigliato per italiano, grafici o documenti: scegli Qwen2.5-VL per queste attività.",
+    "files": [
+      {
+        "role": "model",
+        "repo": "ggml-org/SmolVLM-500M-Instruct-GGUF",
+        "revision": "72e986006ef53e37cdd3f6d4241c90b0f01df376",
+        "filename": "SmolVLM-500M-Instruct-Q8_0.gguf",
+        "url": "https://huggingface.co/ggml-org/SmolVLM-500M-Instruct-GGUF/resolve/72e986006ef53e37cdd3f6d4241c90b0f01df376/SmolVLM-500M-Instruct-Q8_0.gguf",
+        "path": "models/files/9d4612de6a422144-SmolVLM-500M-Instruct-Q8_0.gguf",
+        "size": 436806912,
+        "sha256": "9d4612de6a42214499e301494a3ecc2be0abdd9de44e663bda63f1152fad1bf4"
+      },
+      {
+        "role": "mmproj",
+        "repo": "ggml-org/SmolVLM-500M-Instruct-GGUF",
+        "revision": "72e986006ef53e37cdd3f6d4241c90b0f01df376",
+        "filename": "mmproj-SmolVLM-500M-Instruct-f16.gguf",
+        "url": "https://huggingface.co/ggml-org/SmolVLM-500M-Instruct-GGUF/resolve/72e986006ef53e37cdd3f6d4241c90b0f01df376/mmproj-SmolVLM-500M-Instruct-f16.gguf",
+        "path": "models/files/4b2fca922e549e9b-mmproj-SmolVLM-500M-Instruct-f16.gguf",
+        "size": 199468800,
+        "sha256": "4b2fca922e549e9b9608f4ba56f93565dd5220e935ba5570a2a864a0fcc988a6"
+      }
+    ],
+    "size": 636275712,
+    "license": "Apache-2.0",
+    "ram_gb": 3,
+    "max_refs": 1
+  },
+  {
+    "id": "qwen25-vl3",
+    "name": "Qwen2.5-VL · 3B Vision Q4",
+    "capabilities": [
+      "chat",
+      "vision"
+    ],
+    "description": "Vision, OCR, codice, lettura di grafici e diagrammi. I valori stimati vanno verificati.",
+    "files": [
+      {
+        "role": "model",
+        "repo": "ggml-org/Qwen2.5-VL-3B-Instruct-GGUF",
+        "revision": "5037fcf163dd95d1e41d1974465f0898ed108ca2",
+        "filename": "Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf",
+        "url": "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/5037fcf163dd95d1e41d1974465f0898ed108ca2/Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf",
+        "path": "models/files/d02fe9b69ad8cadb-Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf",
+        "size": 1929901056,
+        "sha256": "d02fe9b69ad8cadbbd228e387667af66612c44bed29ffc8eb1e7caf9ac486c12"
+      },
+      {
+        "role": "mmproj",
+        "repo": "ggml-org/Qwen2.5-VL-3B-Instruct-GGUF",
+        "revision": "5037fcf163dd95d1e41d1974465f0898ed108ca2",
+        "filename": "mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf",
+        "url": "https://huggingface.co/ggml-org/Qwen2.5-VL-3B-Instruct-GGUF/resolve/5037fcf163dd95d1e41d1974465f0898ed108ca2/mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf",
+        "path": "models/files/b9160fe9d814d1fa-mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf",
+        "size": 1338428128,
+        "sha256": "b9160fe9d814d1fadf68395677468534778b39ac33c2e7561b7b218626e60d5e"
+      }
+    ],
+    "size": 3268329184,
+    "license": "Qwen Research",
+    "ram_gb": 6,
+    "max_refs": 4
+  },
+  {
+    "id": "sd15",
+    "name": "Stable Diffusion · 1.5",
+    "capabilities": [
+      "create",
+      "edit"
+    ],
+    "description": "Immagini a 512 px e trasformazione img2img di una foto. Non è editing semantico multi-riferimento.",
+    "files": [
+      {
+        "role": "model",
+        "repo": "stable-diffusion-v1-5/stable-diffusion-v1-5",
+        "revision": "451f4fe16113bff5a5d2269ed5ad43b0592e9a14",
+        "filename": "v1-5-pruned-emaonly.safetensors",
+        "url": "https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/resolve/451f4fe16113bff5a5d2269ed5ad43b0592e9a14/v1-5-pruned-emaonly.safetensors",
+        "path": "models/files/6ce0161689b3853a-v1-5-pruned-emaonly.safetensors",
+        "size": 4265146304,
+        "sha256": "6ce0161689b3853acaa03779ec93eafe75a02f4ced659bee03f50797806fa2fa"
+      }
+    ],
+    "size": 4265146304,
+    "architecture": "sd",
+    "license": "CreativeML Open RAIL-M",
+    "ram_gb": 6,
+    "max_refs": 1,
+    "cfg": 7
+  },
+  {
+    "id": "flux2-klein4",
+    "name": "FLUX.2 klein · 4B Q4",
+    "capabilities": [
+      "create",
+      "edit"
+    ],
+    "description": "Creazione e modifica guidata da fino a quattro riferimenti. Include encoder Qwen3 e VAE; su poca VRAM usa la RAM.",
+    "files": [
+      {
+        "role": "diffusion",
+        "repo": "leejet/FLUX.2-klein-4B-GGUF",
+        "revision": "3b1f5a9dc3abb32238b053aeb3d823c30afdacbd",
+        "filename": "flux-2-klein-4b-Q4_0.gguf",
+        "url": "https://huggingface.co/leejet/FLUX.2-klein-4B-GGUF/resolve/3b1f5a9dc3abb32238b053aeb3d823c30afdacbd/flux-2-klein-4b-Q4_0.gguf",
+        "path": "models/files/d1023499ef3f2f82-flux-2-klein-4b-Q4_0.gguf",
+        "size": 2460378560,
+        "sha256": "d1023499ef3f2f82ff7c50e6778495195c1b6cc34835741778868428111f9ff4"
+      },
+      {
+        "role": "llm",
+        "repo": "unsloth/Qwen3-4B-GGUF",
+        "revision": "22c9fc8a8c7700b76a1789366280a6a5a1ad1120",
+        "filename": "Qwen3-4B-Q4_K_M.gguf",
+        "url": "https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/22c9fc8a8c7700b76a1789366280a6a5a1ad1120/Qwen3-4B-Q4_K_M.gguf",
+        "path": "models/files/f6f8517777098610-Qwen3-4B-Q4_K_M.gguf",
+        "size": 2497281312,
+        "sha256": "f6f851777709861056efcdad3af01da38b31223a3ba26e61a4f8bf3a2195813a"
+      },
+      {
+        "role": "vae",
+        "repo": "Comfy-Org/flux2-dev",
+        "revision": "ab9055628ea245000e610f2aa2c96f4746093546",
+        "filename": "split_files/vae/flux2-vae.safetensors",
+        "url": "https://huggingface.co/Comfy-Org/flux2-dev/resolve/ab9055628ea245000e610f2aa2c96f4746093546/split_files/vae/flux2-vae.safetensors",
+        "path": "models/files/d64f3a68e1cc4f9f-flux2-vae.safetensors",
+        "size": 336213556,
+        "sha256": "d64f3a68e1cc4f9f4e29b6e0da38a0204fe9a49f2d4053f0ec1fa1ca02f9c4b5"
+      }
+    ],
+    "size": 5293873428,
+    "architecture": "flux2",
+    "license": "Apache-2.0 (modello klein); vedi licenze componenti",
+    "ram_gb": 16,
+    "max_refs": 4,
+    "steps": 4,
+    "cfg": 1
+  }
+]

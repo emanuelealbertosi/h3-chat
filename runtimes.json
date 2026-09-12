@@ -1,0 +1,78 @@
+{
+  "cpu": {
+    "files": [
+      {
+        "path": "runtime/archives/llama-b10809-bin-win-cpu-x64.zip",
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b10809/llama-b10809-bin-win-cpu-x64.zip",
+        "size": 18407457,
+        "sha256": "9df3158ed228a641a4b127942d7f459f24c9e13f04682659d05c00c80099b6b5",
+        "extract_to": "runtime/cpu/llama",
+        "version": "b10809"
+      },
+      {
+        "path": "runtime/archives/sd-master-7f410a3-bin-win-cpu-x64.zip",
+        "url": "https://github.com/leejet/stable-diffusion.cpp/releases/download/master-859-7f410a3/sd-master-7f410a3-bin-win-cpu-x64.zip",
+        "size": 24207083,
+        "sha256": "38c58cd603e39f91a63fb4c854db4af19c6a15b642d3982ab3c5b336b05c1855",
+        "extract_to": "runtime/cpu/sd",
+        "version": "master-859-7f410a3"
+      }
+    ]
+  },
+  "vulkan": {
+    "files": [
+      {
+        "path": "runtime/archives/llama-b10809-bin-win-vulkan-x64.zip",
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b10809/llama-b10809-bin-win-vulkan-x64.zip",
+        "size": 35221385,
+        "sha256": "97e50b3ef0cdd2cb4d5afd446a9006b3496bee6c0d0ba7083d32f36075771870",
+        "extract_to": "runtime/vulkan/llama",
+        "version": "b10809"
+      },
+      {
+        "path": "runtime/archives/sd-master-7f410a3-bin-win-vulkan-x64.zip",
+        "url": "https://github.com/leejet/stable-diffusion.cpp/releases/download/master-859-7f410a3/sd-master-7f410a3-bin-win-vulkan-x64.zip",
+        "size": 38957132,
+        "sha256": "59a56c7e3e6ed87acc8c63d90116711474e9b363e75ba58b4e0448a8e4ba1f0b",
+        "extract_to": "runtime/vulkan/sd",
+        "version": "master-859-7f410a3"
+      }
+    ]
+  },
+  "cuda": {
+    "files": [
+      {
+        "path": "runtime/archives/llama-b10809-bin-win-cuda-12.4-x64.zip",
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b10809/llama-b10809-bin-win-cuda-12.4-x64.zip",
+        "size": 253938543,
+        "sha256": "c77bfcd9ed8d91e8721a2d6a290b907fddd4fa5412a47b21c6fa1709116b85f9",
+        "extract_to": "runtime/cuda/llama",
+        "version": "b10809"
+      },
+      {
+        "path": "runtime/archives/cudart-llama-bin-win-cuda-12.4-x64.zip",
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b10809/cudart-llama-bin-win-cuda-12.4-x64.zip",
+        "size": 391443627,
+        "sha256": "8c79a9b226de4b3cacfd1f83d24f962d0773be79f1e7b75c6af4ded7e32ae1d6",
+        "extract_to": "runtime/cuda/llama",
+        "version": "b10809"
+      },
+      {
+        "path": "runtime/archives/sd-master-7f410a3-bin-win-cuda12-x64.zip",
+        "url": "https://github.com/leejet/stable-diffusion.cpp/releases/download/master-859-7f410a3/sd-master-7f410a3-bin-win-cuda12-x64.zip",
+        "size": 336517170,
+        "sha256": "b97beb83f471138d63d48354e006067a9d0e52fea47f6d20b3b45a3105062eb9",
+        "extract_to": "runtime/cuda/sd",
+        "version": "master-859-7f410a3"
+      },
+      {
+        "path": "runtime/archives/cudart-sd-bin-win-cu12-x64.zip",
+        "url": "https://github.com/leejet/stable-diffusion.cpp/releases/download/master-859-7f410a3/cudart-sd-bin-win-cu12-x64.zip",
+        "size": 563452046,
+        "sha256": "fe20366827d357c00797eebb58244dddab7fd9a348d70090c3871004c320f38d",
+        "extract_to": "runtime/cuda/sd",
+        "version": "master-859-7f410a3"
+      }
+    ]
+  }
+}

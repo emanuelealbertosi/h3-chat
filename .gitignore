@@ -1,0 +1,14 @@
+data/
+models/
+runtime/
+dist/
+logs/
+__pycache__/
+*.pyc
+.venv/
+work/
+node_modules/
+static/app.js
+static/app.js.LEGAL.txt
+static/vendor/
+H3-Chat.exe

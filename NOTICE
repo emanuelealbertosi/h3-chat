@@ -1,0 +1,14 @@
+H3-Chat includes open-source components with their own licenses.
+
+llama.cpp and stable-diffusion.cpp: MIT; copyright their respective contributors.
+Python: Python Software Foundation License, included in runtime/python/LICENSE.txt.
+Manrope and Cormorant: SIL Open Font License 1.1.
+Frontend dependencies and their notices are in licenses/ and package-lock.json.
+Bundled JavaScript preserves esbuild's legal notices in static/app.js.LEGAL.txt.
+
+Model weights are not part of the release archive. Their licenses are shown in
+catalog.json and link to their original model repositories. Application licensing
+does not replace or relax model license terms.
+
+H3-Chat is an independent application. The names of upstream projects identify
+compatibility and do not imply endorsement.
