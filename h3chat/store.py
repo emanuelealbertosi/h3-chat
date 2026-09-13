@@ -17,7 +17,7 @@ DEFAULTS = {
     "edit_model": "", "context": 4096, "gpu_layers": 20, "max_tokens": 1024,
     "temperature": 0.7, "width": 512, "height": 512, "steps": 20,
     "strength": 0.65, "threads": 4, "system_prompt": "Rispondi in italiano, in modo chiaro e utile.",
-    "setup_done": False, "think_level": "off", "memory_policy": "on_demand", "ram_cache_gb": 2,
+    "setup_done": False, "think_level": "off", "mtp_enabled": False, "mtp_draft_tokens": 3, "memory_policy": "on_demand", "ram_cache_gb": 2,
 }
 
 

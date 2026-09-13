@@ -22,7 +22,7 @@ def main():
         source=ROOT/'runtime/cpu'/engine
         if source.exists():files.extend(p for p in source.rglob('*') if p.is_file())
     out=ROOT/'dist';out.mkdir(exist_ok=True)
-    archive=out/'H3-Chat-0.4.0-windows-x64.zip'
+    archive=out/'H3-Chat-0.5.0-windows-x64.zip'
     manifest={}
     with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as z:
         for file in sorted(set(files)):

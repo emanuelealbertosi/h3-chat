@@ -1,5 +1,6 @@
 """Read-only hardware discovery and conservative, per-engine memory estimates."""
 from __future__ import annotations
+from .models import mtp_tokens
 import csv
 import ctypes as C
 import io
@@ -140,6 +141,16 @@ def assess_model(model, settings, hardware, references=1):
             vram+=projector*1.2+workspace
             needed_ram=max(.5,needed_ram-projector*1.2)
         cpu_ram=weights*1.3+projector*1.2+kv+workspace
+        draft=mtp_tokens(model,settings)
+        if draft:
+            # Native MTP shares target weights, but needs another context and workspace.
+            # All file weights are already included above, even with MTP disabled.
+            extra_kv=kv/layers*max(1,model.get('mtp',{}).get('layers',1))
+            extra=extra_kv+.25+emb*(128+draft)*4/GIB
+            cpu_ram+=extra
+            if frac: vram+=extra; needed_ram+=.1
+            else: needed_ram+=extra
+            assumptions.append('MTP: pesi condivisi, ma KV cache e spazio di lavoro aggiuntivi inclusi nella stima prudente. La velocità dipende dal modello e dai token accettati.')
         if not p.get('layers'): assumptions.append('KV cache stimata dai parametri del catalogo o da valori conservativi; sarà affinata dopo il download.')
         if frac<1 and backend!='cpu': assumptions.append('Parte dei layer resta in RAM con le impostazioni attuali.')
     else:

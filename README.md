@@ -4,7 +4,7 @@ Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle 
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.4.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.4.0/H3-Chat-0.4.0-windows-x64.zip) dalla [release v0.4.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.4.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.5.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.5.0/H3-Chat-0.5.0-windows-x64.zip) dalla [release v0.5.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.5.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 **Primo avvio:** apri **Impostazioni → Setup**, scegli hardware e modelli. Il catalogo scarica i pesi e tutti i componenti richiesti, controllando dimensione e SHA-256. I backend GPU si installano dallo stesso setup. Dopo i download, inferenza, interfaccia e documenti funzionano offline.
 
@@ -46,6 +46,14 @@ I file riconoscibili nella stessa cartella vengono proposti come componenti; con
 Dopo il collegamento scegli il modello nel Setup per chat, creazione o editing. Lo stesso modello immagini può occupare entrambi i menu e condivide un solo caricamento. Vision, Think, stime RAM/VRAM, modalità Residenti/A richiesta e cache si applicano anche ai collegamenti esterni.
 
 **Modifica collegamento** corregge i percorsi se sposti i file o cambi unità. Se un file non è più disponibile, il modello resta nel catalogo con un avviso. **Scollega** elimina soltanto il riferimento dall’app: non cancella, sposta o sovrascrive i file originali. Durante un lavoro i collegamenti non possono essere sostituiti o rimossi; interrompi o attendi il lavoro. Usa Libera memoria prima di spostare manualmente pesi in uso. Il backup di `data/` conserva i collegamenti, ma non include i file esterni: su un altro computer occorre correggere i percorsi.
+
+## MTP e max token
+
+In chat, accanto a Think, il pulsante **MTP · Max token** mostra lo stato e il limite di risposta e apre le **Preferenze**. **Max token di risposta** era già disponibile e mantiene il valore salvato: 64–8192 token, fino a metà del contesto, comprendendo il thinking e gli artefatti nel canvas.
+
+Puoi attivare **MTP** e scegliere **1–8 token da anticipare** (3 iniziali) per i GGUF completi che incorporano moduli NextN supportati dal motore. Il rilevamento legge metadati e tensori, anche tra più shard; un nome contenente “MTP” non basta. Sui modelli incompatibili compare **MTP N/D**, l'opzione è disabilitata e la chat continua normalmente. Il motore verifica l'attivazione effettiva dopo il caricamento.
+
+MTP usa pesi condivisi e un contesto aggiuntivo, incluso nelle stime RAM/VRAM. Cambiare MTP ricarica il modello; max token e Think si applicano senza ricaricarlo. [Dettagli, limiti e fonti](docs/mtp.md). [Verifiche della versione 0.5](docs/validation-v0.5.md).
 
 ## Thinking nella chat
 

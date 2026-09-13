@@ -11,7 +11,7 @@ from pathlib import Path
 from .downloads import Cancelled, Downloads, model_ready, safe_join
 from .engine import CREATE_NO_WINDOW, Engine, runtime_executable, explicit_route
 from .store import DEFAULTS, PROFILES, Store, uid
-from .models import discover_local, inspect_model, THINK_LEVELS, thinking_parameters
+from .models import discover_local, inspect_model, THINK_LEVELS, thinking_parameters, mtp_tokens
 from .external_models import PROFILES as EXTERNAL_PROFILES, ROLE_LABELS, build_model, validate_config
 from .hardware import detect_hardware, assess_model, assess_selection
 
@@ -35,18 +35,24 @@ class Service:
 
     def refresh_models(self):
         with self.lock:
-            for key in list(self.catalog):
-                if self.catalog[key].get("local"):
-                    del self.catalog[key]
-            self.catalog.update({m["id"]:m for m in discover_local(self.root)})
+            # Build the replacement before publishing: file/SQLite I/O must never
+            # leave an externally linked model absent while the worker reads it.
+            fresh={key:model for key,model in self.catalog.items() if not model.get("local")}
+            fresh.update({m["id"]:m for m in discover_local(self.root)})
             for row in self.store.all("SELECT config FROM external_models"):
                 model=build_model(json.loads(row["config"]))
-                self.catalog[model["id"]]=model
-            return [m | inspect_model(self.root, m) for m in list(self.catalog.values())]
+                fresh[model["id"]]=model
+            fresh={key:model|inspect_model(self.root,model) for key,model in fresh.items()}
+            with self.engine.process_lock:
+                # Preserve the shared dictionary used by Engine and Downloads.
+                self.catalog.update(fresh)
+                for key in list(self.catalog):
+                    if key not in fresh: del self.catalog[key]
+            return list(fresh.values())
 
     def state(self):
         models = self.refresh_models()
-        return {"token": self.token, "version": "0.4.0", "settings": self.store.settings(), "profiles": PROFILES,
+        return {"token": self.token, "version": "0.5.0", "settings": self.store.settings(), "profiles": PROFILES,
                 "models": models,"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
                 "runtimes": {key: {"ready": all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
                                     "size": sum(f["size"] for f in r["files"])} for key, r in self.runtimes.items()},
@@ -94,7 +100,7 @@ class Service:
         if s["profile"] not in PROFILES or s["backend"] not in self.runtimes:
             raise ValueError("Profilo hardware non valido.")
         for key, lo, hi in (("context", 1024, 32768), ("gpu_layers", 0, 999), ("max_tokens", 64, 8192),
-                            ("width", 256, 1536), ("height", 256, 1536), ("steps", 1, 100), ("threads", 1, 64), ("ram_cache_gb", 0, 32)):
+                            ("width", 256, 1536), ("height", 256, 1536), ("steps", 1, 100), ("threads", 1, 64), ("ram_cache_gb", 0, 32), ("mtp_draft_tokens", 1, 8)):
             if type(s[key]) is not int or not lo <= s[key] <= hi:
                 raise ValueError(f"{key}: inserisci un intero tra {lo} e {hi}.")
         if s["max_tokens"] > s["context"] // 2:
@@ -106,6 +112,8 @@ class Service:
                 raise ValueError(f"{key} fuori intervallo.")
         if not isinstance(s["system_prompt"], str) or len(s["system_prompt"]) > 8000:
             raise ValueError("Istruzioni di sistema troppo lunghe.")
+        if type(s["mtp_enabled"]) is not bool:
+            raise ValueError("MTP: scegli attivato o disattivato.")
         if type(s["setup_done"]) is not bool:
             raise ValueError("setup_done non valido.")
         for key, capability in (("chat_model", "chat"), ("create_model", "create"), ("edit_model", "edit")):
@@ -277,7 +285,8 @@ class Service:
             meta.update(vision=model.get("vision",{}).get("enabled",False),
                         model_warning=model.get("vision",{}).get("warning",""),
                         think_level=settings.get("think_level","off") if model.get("thinking",{}).get("supported") else "off",
-                        think_budget=thinking_parameters(model, settings)["reasoning_budget_tokens"])
+                        think_budget=thinking_parameters(model, settings)["reasoning_budget_tokens"],
+                        mtp_tokens=mtp_tokens(model,settings) if intent=="chat" else 0, max_tokens=settings["max_tokens"])
             if intent == "chat":
                 stage("Scrittura della risposta")
                 last_update = 0

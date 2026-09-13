@@ -87,7 +87,7 @@ class Handler(BaseHTTPRequestHandler):
             method = self.command
             if method == "GET":
                 if path == "/api/health":
-                    return self.json({"app": "h3-chat", "version": "0.4.0", "instance": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]})
+                    return self.json({"app": "h3-chat", "version": "0.5.0", "instance": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]})
                 if path == "/api/state":
                     return self.json(self.app.state())
                 if path == "/api/hardware":
@@ -197,7 +197,7 @@ class Handler(BaseHTTPRequestHandler):
             self.json({"error": str(exc)}, 403)
         except (ValueError, KeyError, TypeError, sqlite3.IntegrityError) as exc:
             self.json({"error": str(exc)}, 400)
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             pass
         except Exception as exc:
             self.json({"error": str(exc)}, 500)

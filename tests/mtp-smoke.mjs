@@ -1,0 +1,58 @@
+import {createRequire} from 'node:module';
+import {mkdir,readFile,writeFile} from 'node:fs/promises';
+const require=createRequire(import.meta.url);
+const {chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
+const fixture=JSON.parse(await readFile(new URL('../work/qa-v05-fixtures.json',import.meta.url),'utf8'));
+const out=new URL('../work/qa-v05-ui/',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1');
+await mkdir(out,{recursive:true});
+const browser=await chromium.launch({channel:'msedge',headless:true});
+const page=await browser.newPage({viewport:{width:1440,height:1050},reducedMotion:'reduce'});
+const errors=[];page.on('pageerror',e=>errors.push(e.message));
+const check=(value,message)=>{if(!value)throw Error(message);};
+const state=()=>page.evaluate(async()=>await(await fetch('/api/state')).json());
+const api=(path,body)=>page.evaluate(async({path,body})=>{const s=await(await fetch('/api/state')).json();const r=await fetch('/api'+path,{method:'POST',headers:{'Content-Type':'application/json','X-H3-Token':s.token},body:JSON.stringify(body)});const result=await r.json();if(!r.ok)throw Error(result.error);return result;},{path,body});
+const ready=()=>page.waitForFunction(()=>document.querySelector('#generation-settings').textContent.includes('Max'));
+async function save(){await page.click('#settings-save');await page.waitForFunction(()=>!document.querySelector('#settings').open);}
+async function jobDone(id){for(let n=0;n<600;n++){const s=await state();const j=s.jobs.find(j=>j.id===id);if(['done','failed','cancelled'].includes(j?.status)){check(j.status==='done',JSON.stringify(j));return s;}await new Promise(r=>setTimeout(r,300));}throw Error('Timeout lavoro '+id);}
+try{
+ await page.goto(process.env.H3_TEST_URL||'http://127.0.0.1:8788');await ready();
+ check((await state()).settings.chat_model===fixture.model,'Fixture not selected');
+ await page.click('#generation-settings');
+ check(await page.locator('[data-setting="mtp_enabled"]').isEnabled(),'MTP supported toggle disabled');
+ await page.check('[data-setting="mtp_enabled"]');await page.fill('[data-setting="mtp_draft_tokens"]','5');
+ await page.fill('[data-setting="max_tokens"]','192');
+ await page.screenshot({path:out+'/preferences.png'});await save();
+ await page.reload();await ready();
+ check((await page.locator('#generation-settings').textContent()).includes('MTP On · 5 · Max 192'),'Settings not shown after reload');
+ await page.click('#settings-open');await page.selectOption('[data-setting="chat_model"]','qwen3-06');await save();
+ await page.click('#generation-settings');
+ check(await page.locator('[data-setting="mtp_enabled"]').isDisabled(),'Unsupported model toggle should be disabled');
+ check((await page.locator('#mtp-model-note').textContent()).includes('disattivato su questo modello'),'Unsupported preference explanation missing');
+ await page.fill('[data-setting="max_tokens"]','96');await save();
+ await page.reload();await ready();
+ check((await page.locator('#generation-settings').textContent()).includes('MTP N/D · Max 96'),'Unsupported state unclear');
+ await api('/settings',{threads:6,think_level:'off',create_model:'',edit_model:''});
+ const c=await api('/chats',{});
+ const first=await api('/chats/'+c.id+'/messages',{prompt:'Scrivi una lunga lista numerata di animali, uno per riga. Prosegui fino a 100.',media:[],canvas:false});
+ const one=await jobDone(first.job_id||first.id);
+ const loaded=one.memory.models.find(m=>m.kind==='chat');check(loaded?.ready,'Real model did not stay loaded');
+ await api('/settings',{max_tokens:64});
+ const second=await api('/chats/'+c.id+'/messages',{prompt:'Continua la lista con altri animali.',media:[],canvas:false});
+ const two=await jobDone(second.job_id||second.id);
+ check(two.memory.models.find(m=>m.kind==='chat')?.pid===loaded.pid,'Max token change reloaded the model');
+ const chat=await page.evaluate(async id=>await(await fetch('/api/chats/'+id)).json(),c.id);
+ const answers=chat.messages.filter(m=>m.role==='assistant');
+ check(answers.length===2&&answers.every(m=>m.content&&m.meta.mtp_tokens===0),'Real non-MTP generation failed');
+ check(answers[0].meta.max_tokens===96&&answers[1].meta.max_tokens===64,'Per-message limits not preserved');
+ await api('/memory/release',{});
+ await page.reload();await ready();
+ await page.screenshot({path:out+'/chat.png'});
+ const mobile=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'});
+ await mobile.goto(page.url());await mobile.waitForFunction(()=>document.querySelector('#generation-settings').textContent.includes('Max'));
+ await mobile.click('#generation-settings');
+ check(await mobile.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Mobile overflow');
+ await mobile.screenshot({path:out+'/mobile.png'});await mobile.close();
+ check(!errors.length,errors.join('\n'));
+ const result={passed:true,real_model:'Qwen3-0.6B Q4_K_M',same_pid:loaded.pid,limits:answers.map(a=>a.meta.max_tokens),finish_reasons:answers.map(a=>a.meta.finish_reason),answers:answers.map(a=>a.content),mtp_native_inference_tested:false,errors};
+ await writeFile(out+'/result.json',JSON.stringify(result,null,2));process.stdout.write(JSON.stringify(result));
+}finally{await browser.close();}

@@ -13,7 +13,7 @@ import urllib.request
 from pathlib import Path
 
 from .downloads import Cancelled, safe_join
-from .models import inspect_model, thinking_parameters, model_path
+from .models import inspect_model, thinking_parameters, model_path, mtp_tokens
 from .residency import Session, FileCache
 
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
@@ -114,7 +114,9 @@ class Engine:
         keys = ('profile', 'backend', 'threads', 'memory_policy')
         if kind == 'chat':
             keys += ('context', 'gpu_layers')
-        return (kind, tuple(fingerprint), tuple((k,settings.get(k, 'on_demand' if k=='memory_policy' else None)) for k in keys))
+        runtime_options=tuple((k,settings.get(k, 'on_demand' if k=='memory_policy' else None)) for k in keys)
+        if kind=='chat': runtime_options+=(('mtp_tokens',mtp_tokens(model,settings)),)
+        return (kind, tuple(fingerprint), runtime_options)
 
     def configure(self, settings):
         with self.process_lock:
@@ -212,6 +214,9 @@ class Engine:
                 "--n-gpu-layers", 0 if backend == "cpu" else 999 if settings.get("memory_policy") == "resident" else settings["gpu_layers"],
                 "--threads", settings["threads"], "--batch-size", 128, "--ubatch-size", 64,
                 "--jinja", "--no-webui", "--reasoning-format", "deepseek"]
+        draft=mtp_tokens(model,settings)
+        args += ["--spec-type", "draft-mtp" if draft else "none"]
+        if draft: args += ["--spec-draft-n-max", draft, "--slots"]
         if "mmproj" in files:
             args += ["--mmproj", files["mmproj"], "--image-max-tokens", 512 if settings["context"] <= 4096 else 1024]
         if "mmproj" in files and (backend == "cpu" or settings.get("memory_policy") != "resident"):
@@ -231,6 +236,12 @@ class Engine:
                 req = urllib.request.Request(f"http://127.0.0.1:{self.port}/health", headers={"Authorization": f"Bearer {self.key}"})
                 with urllib.request.urlopen(req, timeout=1) as response:
                     if response.status == 200:
+                        if draft:
+                            probe=urllib.request.Request(f"http://127.0.0.1:{self.port}/slots",headers={"Authorization":f"Bearer {self.key}"})
+                            with urllib.request.urlopen(probe,timeout=2) as status:
+                                slots=json.load(status)
+                            if not isinstance(slots,list) or not slots or not all(s.get("speculative") is True for s in slots):
+                                raise RuntimeError("Il motore non ha attivato MTP per questo modello/contesto. Disattiva MTP nelle Preferenze e riprova.")
                         session.ready = True
                         session.uses += 1
                         return

@@ -7,6 +7,7 @@ import struct
 from functools import lru_cache
 from pathlib import Path
 from .downloads import safe_join, model_ready
+from .mtp import inspect_mtp, mtp_tokens
 
 THINK_LEVELS = ('off', 'low', 'med', 'high', 'xhigh')
 _FORMATS = {0:'B', 1:'b', 2:'H', 3:'h', 4:'I', 5:'i', 6:'f', 7:'?', 10:'Q', 11:'q', 12:'d'}
@@ -40,7 +41,7 @@ def _metadata(path, size, stamp):
                 return None
             raise ValueError('Tipo GGUF non supportato.')
         if read(4)!=b'GGUF' or number('I') not in (2,3): raise ValueError('GGUF non valido.')
-        number('Q'); count=number('Q')
+        tensor_count=number('Q'); count=number('Q')
         if count>10000: raise ValueError('Troppi metadati GGUF.')
         result={}
         for _ in range(count):
@@ -48,6 +49,28 @@ def _metadata(path, size, stamp):
             keep=not key.startswith('tokenizer.') or key=='tokenizer.chat_template'
             item=value(kind,keep)
             if keep and item is not None: result[key]=item
+        # Inspect only the bounded tensor directory, never load model weights.
+        # Keep metadata usable even when a tensor directory is damaged/too large.
+        names=[]
+        try:
+            if tensor_count>200_000: raise ValueError('Troppi tensori GGUF.')
+            max_offset=-1
+            for _ in range(tensor_count):
+                name=string(); dims=number('I')
+                if not 1<=dims<=4: raise ValueError('Dimensioni GGUF non valide.')
+                for _ in range(dims):
+                    if number('Q')<=0: raise ValueError('Tensore GGUF vuoto.')
+                number('I'); max_offset=max(max_offset,number('Q'))
+                if name in ('token_embd.weight','blk.0.attn_norm.weight') or '.nextn.' in name: names.append(name)
+            alignment=result.get('general.alignment',32)
+            if type(alignment) is not int or not 1<=alignment<=4096: raise ValueError('Allineamento GGUF non valido.')
+            data_start=(f.tell()+alignment-1)//alignment*alignment
+            if tensor_count and data_start+max_offset>=size: raise ValueError('Dati dei tensori GGUF incompleti.')
+            result['_h3_tensor_names']=tuple(names)
+            result['_h3_tensor_scan_ok']=True
+        except (ValueError,struct.error):
+            result['_h3_tensor_names']=()
+            result['_h3_tensor_scan_ok']=False
         return result
 
 
@@ -145,7 +168,7 @@ def inspect_model(root, model):
             'projector':(str(projector.resolve()) if model.get('external') else projector.relative_to(Path(root).resolve()).as_posix()) if projector else None,
             'projector_size':projector.stat().st_size if projector else 0,
             'warning':warning, 'max_refs':max(1,model.get('max_refs',4)) if projector else 0},
-            'thinking':thinking,'parameters':params}
+            'thinking':thinking,'parameters':params,'mtp':inspect_mtp(root,model,info,ready)}
 
 
 def thinking_parameters(model, settings, router=False):
