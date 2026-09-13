@@ -13,7 +13,7 @@ import urllib.request
 from pathlib import Path
 
 from .downloads import Cancelled, safe_join
-from .models import inspect_model, thinking_parameters
+from .models import inspect_model, thinking_parameters, model_path
 from .residency import Session, FileCache
 
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
@@ -177,17 +177,19 @@ class Engine:
         if not model or capability not in model["capabilities"]:
             raise ValueError(f"Scegli un modello per {capability} nelle impostazioni.")
         model = model | inspect_model(self.root, model)
+        if not model["ready"] and model.get("external"):
+            raise ValueError("Collegamento non disponibile: " + " ".join(model.get("external_problems",[])) + " Controlla i percorsi in Catalogo modelli → Modifica collegamento.")
         if not model["ready"]:
             raise ValueError(f"Scarica tutti i componenti di {model['name']} nelle impostazioni.")
         return model
 
     def model_files(self, model):
-        files = {entry["role"]: str(safe_join(self.root, entry["path"])) for entry in model["files"]}
+        files = {(entry["role"] if entry["role"]!="shard" else f"shard_{i}"): str(model_path(self.root, model, entry["path"])) for i,entry in enumerate(model["files"])}
         if "chat" in model["capabilities"]:
             traits = inspect_model(self.root, model)
             files.pop("mmproj", None)
             if traits["vision"]["projector"]:
-                files["mmproj"] = str(safe_join(self.root, traits["vision"]["projector"]))
+                files["mmproj"] = str(model_path(self.root, model, traits["vision"]["projector"]))
         return files
 
     def start_llama(self, model, settings, log_path, cancel):

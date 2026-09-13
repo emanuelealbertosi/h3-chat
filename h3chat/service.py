@@ -12,6 +12,7 @@ from .downloads import Cancelled, Downloads, model_ready, safe_join
 from .engine import CREATE_NO_WINDOW, Engine, runtime_executable, explicit_route
 from .store import DEFAULTS, PROFILES, Store, uid
 from .models import discover_local, inspect_model, THINK_LEVELS, thinking_parameters
+from .external_models import PROFILES as EXTERNAL_PROFILES, ROLE_LABELS, build_model, validate_config
 from .hardware import detect_hardware, assess_model, assess_selection
 
 
@@ -38,18 +39,52 @@ class Service:
                 if self.catalog[key].get("local"):
                     del self.catalog[key]
             self.catalog.update({m["id"]:m for m in discover_local(self.root)})
+            for row in self.store.all("SELECT config FROM external_models"):
+                model=build_model(json.loads(row["config"]))
+                self.catalog[model["id"]]=model
             return [m | inspect_model(self.root, m) for m in list(self.catalog.values())]
 
     def state(self):
         models = self.refresh_models()
-        return {"token": self.token, "version": "0.3.0", "settings": self.store.settings(), "profiles": PROFILES,
-                "models": models,
+        return {"token": self.token, "version": "0.4.0", "settings": self.store.settings(), "profiles": PROFILES,
+                "models": models,"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
                 "runtimes": {key: {"ready": all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
                                     "size": sum(f["size"] for f in r["files"])} for key, r in self.runtimes.items()},
                 "chats": self.store.all("SELECT * FROM chats ORDER BY pinned DESC,updated DESC"),
                 "collections": self.store.all("SELECT * FROM collections ORDER BY name"),
                 "jobs": self.store.all("SELECT id,chat_id,status,stage,error,created,json_extract(payload,'$.canvas') AS canvas FROM jobs ORDER BY created DESC LIMIT 100"),
                 "downloads": self.downloads.snapshot(), "memory": self.engine.snapshot()}
+
+    def external_model(self, body):
+        with self.lock:
+            model_id=body.get('id')
+            if model_id and not self.store.one('SELECT id FROM external_models WHERE id=?',(model_id,)):
+                raise ValueError('Collegamento non trovato.')
+            config=validate_config(body,model_id)
+            if self.current_id or self.store.one("SELECT id FROM jobs WHERE status IN ('queued','running')"):
+                raise ValueError('Attendi o interrompi i lavori prima di cambiare i collegamenti ai modelli.')
+            self.store.execute('INSERT OR REPLACE INTO external_models VALUES (?,?)',(config['id'],json.dumps(config)))
+            self.refresh_models()
+            model=self.catalog[config['id']]
+            settings=self.store.settings()
+            self.store.save_settings({key:'' for key,cap in (('chat_model','chat'),('create_model','create'),('edit_model','edit')) if settings[key]==config['id'] and cap not in model['capabilities']})
+            self.engine.configure(self.store.settings())
+            self.engine.cache.clear()
+            return model | inspect_model(self.root,model)
+
+    def remove_external_model(self, model_id):
+        with self.lock:
+            row=self.store.one('SELECT config FROM external_models WHERE id=?',(model_id,))
+            if not row:raise ValueError('Collegamento non trovato.')
+            if self.current_id or self.store.one("SELECT id FROM jobs WHERE status IN ('queued','running')"):
+                raise ValueError('Attendi o interrompi i lavori prima di scollegare il modello.')
+            self.store.execute('DELETE FROM external_models WHERE id=?',(model_id,))
+            settings=self.store.settings()
+            self.store.save_settings({key:'' for key in ('chat_model','create_model','edit_model') if settings[key]==model_id})
+            self.refresh_models()
+            self.engine.configure(self.store.settings())
+            self.engine.cache.clear()
+            return {'ok':True}
 
     def validate_settings(self, patch):
         self.refresh_models()

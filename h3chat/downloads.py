@@ -109,6 +109,8 @@ class Downloads:
                 raise ValueError("È già in corso un download. Attendi o interrompilo.")
             if kind == "model":
                 model = self.catalog[key]
+                if model.get("local"):
+                    raise ValueError("I modelli locali sono collegamenti: nessun download o sovrascrittura dei pesi.")
                 files = model["files"]
             elif kind == "runtime" and key in self.runtimes:
                 files = self.runtimes[key]["files"]

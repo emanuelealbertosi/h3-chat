@@ -13,6 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from h3chat.downloads import safe_join
 from h3chat.service import Service
+from h3chat.external_models import browse, suggest
 from h3chat.pdf_export import export_pdf
 from h3chat.store import uid
 
@@ -86,7 +87,7 @@ class Handler(BaseHTTPRequestHandler):
             method = self.command
             if method == "GET":
                 if path == "/api/health":
-                    return self.json({"app": "h3-chat", "version": "0.3.0", "instance": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]})
+                    return self.json({"app": "h3-chat", "version": "0.4.0", "instance": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]})
                 if path == "/api/state":
                     return self.json(self.app.state())
                 if path == "/api/hardware":
@@ -115,6 +116,14 @@ class Handler(BaseHTTPRequestHandler):
                     return self.file(safe_join(self.app.data, relative))
                 return self.json({"error": "Risorsa non trovata."}, 404)
             body = self.read_body()
+            if path == "/api/model-files/browse" and method == "POST":
+                return self.json(browse(body))
+            if path == "/api/model-files/suggest" and method == "POST":
+                return self.json(suggest(body))
+            if path == "/api/external-models" and method == "POST":
+                return self.json(self.app.external_model(body),201)
+            if len(parts)==3 and parts[:2]==["api","external-models"] and method=="DELETE":
+                return self.json(self.app.remove_external_model(parts[2]))
             if path == "/api/export/pdf" and method == "POST":
                 return self.json(export_pdf(ROOT, self.app.data, body))
             if path == "/api/memory/release" and method == "POST":

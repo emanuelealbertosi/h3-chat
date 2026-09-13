@@ -4,7 +4,7 @@ Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle 
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.3.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.3.0/H3-Chat-0.3.0-windows-x64.zip) dalla [release v0.3.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.3.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.4.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.4.0/H3-Chat-0.4.0-windows-x64.zip) dalla [release v0.4.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.4.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 **Primo avvio:** apri **Impostazioni → Setup**, scegli hardware e modelli. Il catalogo scarica i pesi e tutti i componenti richiesti, controllando dimensione e SHA-256. I backend GPU si installano dallo stesso setup. Dopo i download, inferenza, interfaccia e documenti funzionano offline.
 
@@ -28,9 +28,24 @@ Le tre selezioni nelle impostazioni sono **chat/router/vision**, **creazione imm
 
 Il composer indica sempre **Vision attiva** oppure **Non vision**, con un avviso se manca il proiettore. Il nome commerciale del modello non basta: l'app verifica la presenza del `mmproj`. Nei modelli del catalogo usa esclusivamente il componente associato; non prende proiettori di altri modelli dalla cache condivisa. Se il proiettore viene rimosso da un modello già installato, i pesi verificati restano utilizzabili per il testo e il catalogo permette di completare di nuovo il download.
 
-Per un GGUF locale, crea una cartella dedicata come `models/local/NomeModello/` e inserisci i pesi insieme al **solo mmproj compatibile**. Apri Catalogo modelli → Rileva modelli locali e scegli il modello nel setup. I metadati GGUF vengono letti senza eseguire codice; il proiettore presente nella stessa cartella viene passato automaticamente al motore. Se ci sono più proiettori non viene scelto arbitrariamente. La presenza del file non certifica l'abbinamento: un proiettore incompatibile viene rifiutato dal motore. Il GGUF deve essere supportato dalla versione integrata di llama.cpp. I file locali non sono scaricati né verificati contro un hash del catalogo.
+Per usare un GGUF già scaricato, apri **Catalogo modelli → Collega un modello → Chat / vision** e scegli il file con **Sfoglia** oppure incolla il suo percorso completo. Non serve copiarlo in H3-Chat. In modalità mmproj Automatico l’app cerca il proiettore nella stessa cartella: se ne trova uno lo usa, se ne trova più di uno segnala l’ambiguità e puoi sceglierlo manualmente. Le vecchie cartelle `models/local/NomeModello/` continuano a essere rilevate. I metadati GGUF vengono letti senza eseguire codice; il proiettore presente nella stessa cartella viene passato automaticamente al motore. Se ci sono più proiettori non viene scelto arbitrariamente. La presenza del file non certifica l'abbinamento: un proiettore incompatibile viene rifiutato dal motore. Il GGUF deve essere supportato dalla versione integrata di llama.cpp. I file locali non sono scaricati né verificati contro un hash del catalogo.
 
 Senza vision, la chat testuale continua a funzionare e le risposte conservano l'indicazione. Una richiesta di lettura delle immagini viene fermata con un messaggio esplicito; creazione e modifica artistica continuano a usare il proprio motore immagini.
+
+## Modelli già scaricati in altre cartelle
+
+**Impostazioni → Catalogo modelli → Collega un modello** registra soltanto i percorsi assoluti dei file in `data/chat.sqlite`. Puoi usare altre cartelle, unità locali o percorsi UNC accessibili al tuo utente Windows. Sfoglia mostra le unità e le cartelle; puoi anche incollare un percorso. La navigazione è esplicita, una cartella alla volta: nessuna scansione automatica dell’intero disco.
+
+- **Chat / vision:** GGUF, anche suddiviso in più parti (seleziona la prima `00001`). Il mmproj è automatico nella stessa cartella, selezionabile manualmente oppure disattivabile. Se manca, il modello resta utilizzabile per il testo con avviso Non vision. La presenza di un proiettore non certifica la compatibilità: il motore verifica l’abbinamento al caricamento.
+- **Stable Diffusion / SDXL:** checkpoint completo GGUF o safetensors, con eventuale VAE esterno.
+- **FLUX.2 klein:** diffusore, encoder LLM e VAE. Puoi selezionare ogni componente nella sua cartella originale. Passi e CFG sono configurabili, con valori iniziali per i modelli distillati.
+- **Qwen Image Edit:** diffusore, encoder testo, encoder vision e VAE; selezione esplicita dei componenti e dei parametri di campionamento.
+
+I file riconoscibili nella stessa cartella vengono proposti come componenti; controlla che appartengano al modello scelto. Questa funzione collega file compatibili con i motori inclusi: non converte checkpoint PyTorch `.ckpt`/`.bin`, directory Diffusers o architetture non supportate. Non viene eseguito codice Python proveniente dalle cartelle dei modelli. I file locali sono controllati per formato e disponibilità, senza copiarli né calcolare ogni volta un hash completo dei pesi.
+
+Dopo il collegamento scegli il modello nel Setup per chat, creazione o editing. Lo stesso modello immagini può occupare entrambi i menu e condivide un solo caricamento. Vision, Think, stime RAM/VRAM, modalità Residenti/A richiesta e cache si applicano anche ai collegamenti esterni.
+
+**Modifica collegamento** corregge i percorsi se sposti i file o cambi unità. Se un file non è più disponibile, il modello resta nel catalogo con un avviso. **Scollega** elimina soltanto il riferimento dall’app: non cancella, sposta o sovrascrive i file originali. Durante un lavoro i collegamenti non possono essere sostituiti o rimossi; interrompi o attendi il lavoro. Usa Libera memoria prima di spostare manualmente pesi in uso. Il backup di `data/` conserva i collegamenti, ma non include i file esterni: su un altro computer occorre correggere i percorsi.
 
 ## Thinking nella chat
 
@@ -158,7 +173,9 @@ Per aggiornare una vecchia installazione, arrestala con `Ferma-H3-Chat.bat`, fai
 
 Il packaging include una lista esplicita di file, esclude chat, modelli, cache e registri personali, produce uno ZIP Windows e il suo SHA-256. Il workflow GitHub costruisce l'artefatto; su un tag `v*` prepara una **release in bozza** per la revisione del proprietario del repository. Nessun repository remoto viene creato automaticamente dall'app.
 
-## Stato della versione 0.3
+## Stato della versione 0.4
+
+I collegamenti esterni sono verificati anche con un modello vision reale caricato fuori dalla cartella dell’app, senza copie dei pesi: [Verifica 0.4](docs/validation-v0.4.md).
 
 Chat CPU, streaming, canvas separato, gestione conversazioni, rendering e API sono implementati e collaudati. Creazione, editing e riuso dei processi immagini sono stati eseguiti su CPU con SD 1.5; i dettagli sono in [Verifica 0.3](docs/validation-v0.3.md). Il collaudo di questa versione non equivale a una certificazione di tutte le combinazioni di GPU, driver e modelli: in particolare CUDA/Vulkan e FLUX multi-riferimento richiedono ancora una prova di inferenza sulle rispettive configurazioni hardware. Video, audio, esecuzione del codice generato, ricerca web, importazione PDF/Word in ingresso e plugin non sono inclusi.
 

@@ -58,6 +58,17 @@ def metadata(path):
     except (OSError, ValueError, struct.error): return {}
 
 
+def model_path(root, model, value):
+    # Only registered external model descriptors opt in to absolute paths.
+    # Downloads, uploads, media and exports continue to use safe_join exclusively.
+    if model.get('external'):
+        path=Path(value)
+        if not path.is_absolute() or path.suffix.lower() not in ('.gguf','.safetensors'):
+            raise ValueError('Percorso del modello esterno non valido.')
+        return path.resolve()
+    return safe_join(root,value)
+
+
 def discover_local(root):
     """One model per dedicated folder. Never pair a projector from a shared cache."""
     root=Path(root).resolve(); base=root/'models/local'; result=[]
@@ -86,22 +97,25 @@ def discover_local(root):
 
 
 def inspect_model(root, model):
-    files={e['role']:safe_join(root,e['path']) for e in model['files']}
+    files={e['role']:model_path(root,model,e['path']) for e in model['files']}
     if 'chat' not in model['capabilities']:
-        return {'ready':model_ready(root,model),'complete':model_ready(root,model)}
+        ready=not model.get('external_problems') and all(e.get('valid',True) and model_path(root,model,e['path']).is_file() for e in model['files']) if model.get('external') else model_ready(root,model)
+        return {'ready':ready,'complete':ready}
     base=files.get('model'); info=metadata(base) if base else {}
     projector=None; warning=''; candidates=[]
     if 'mmproj' in files:
         p=files['mmproj']
         entry=next(e for e in model['files'] if e['role']=='mmproj')
         if p.is_file() and p.stat().st_size==entry['size'] and metadata(p): projector=p
-    if model.get('local') and base:
-        candidates=[p for p in sorted(base.parent.glob('*.gguf')) if 'mmproj' in p.name.lower() and p.resolve().is_relative_to(Path(root).resolve()) and metadata(p).get('general.architecture')=='clip']
+    if model.get('local') and base and (not model.get('external') or model.get('projector_mode','auto')=='auto'):
+        candidates=[p for p in sorted(base.parent.glob('*.gguf')) if 'mmproj' in p.name.lower() and (model.get('external') or p.resolve().is_relative_to(Path(root).resolve())) and metadata(p).get('general.architecture')=='clip']
         weights=[p for p in base.parent.glob('*.gguf') if 'mmproj' not in p.name.lower() and not re.search(r'-(?!00001)\d{5}-of-\d{5}\.gguf$',p.name)]
-        if len(weights)>1:
+        if len(weights)>1 and not model.get('external'):
             warning='Più modelli nella cartella: usa una cartella separata per ogni LLM e il suo mmproj.'
         elif len(candidates)==1: projector=candidates[0]
-        elif len(candidates)>1: warning='Più mmproj nella cartella: conserva solo il proiettore compatibile con questo modello.'
+        elif len(candidates)>1: warning='Più mmproj nella cartella: scegli il proiettore compatibile in Modifica collegamento.' if model.get('external') else 'Più mmproj nella cartella: conserva solo il proiettore compatibile con questo modello.'
+    if model.get('external') and model.get('projector_mode')=='off':
+        projector=None;warning='Vision disattivata per questo collegamento. Il modello usa solo testo.'
     expected='vision' in model['capabilities']
     if not projector and not warning:
         warning='Modello non vision: mmproj assente. Puoi scrivere testo, ma il modello non può leggere le immagini.'
@@ -125,9 +139,10 @@ def inspect_model(root, model):
     params={key:info.get(arch+'.'+suffix) for key,suffix in {
         'layers':'block_count','embedding':'embedding_length','heads':'attention.head_count',
         'kv_heads':'attention.head_count_kv','key_length':'attention.key_length','value_length':'attention.value_length'}.items()}
-    if model.get('local') and int(info.get('split.count',1))>len(model['files']): ready=False
+    if model.get('local') and int(info.get('split.count',1))>sum(e['role'] in ('model','shard') for e in model['files']): ready=False
+    if model.get('external') and model.get('external_problems'): ready=False
     return {'ready':ready, 'complete':ready if model.get('local') else model_ready(root,model), 'vision':{'enabled':bool(projector),'expected':expected,
-            'projector':projector.relative_to(Path(root).resolve()).as_posix() if projector else None,
+            'projector':(str(projector.resolve()) if model.get('external') else projector.relative_to(Path(root).resolve()).as_posix()) if projector else None,
             'projector_size':projector.stat().st_size if projector else 0,
             'warning':warning, 'max_refs':max(1,model.get('max_refs',4)) if projector else 0},
             'thinking':thinking,'parameters':params}
