@@ -4,7 +4,7 @@ Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle 
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.1.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.1.0/H3-Chat-0.1.0-windows-x64.zip) dalla [release v0.1.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.1.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.2.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.2.0/H3-Chat-0.2.0-windows-x64.zip) dalla [release v0.2.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.2.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 **Primo avvio:** apri **Impostazioni → Setup**, scegli hardware e modelli. Il catalogo scarica i pesi e tutti i componenti richiesti, controllando dimensione e SHA-256. I backend GPU si installano dallo stesso setup. Dopo i download, inferenza, interfaccia e documenti funzionano offline.
 
@@ -24,13 +24,42 @@ Non ci sono modalità da selezionare nel composer. Le richieste esplicite più c
 
 Le tre selezioni nelle impostazioni sono **chat/router/vision**, **creazione immagini** e **modifica immagini**. Un solo modello è assegnato a ciascun ruolo. Chat e immagini non restano contemporaneamente in memoria: il processo LLM viene terminato prima di avviare quello immagini. A fine richiesta viene rilasciato anche il motore attivo. La coda è globale e seriale, con interruzione del lavoro e registrazione degli errori.
 
+## Vision e modelli locali
+
+Il composer indica sempre **Vision attiva** oppure **Non vision**, con un avviso se manca il proiettore. Il nome commerciale del modello non basta: l'app verifica la presenza del `mmproj`. Nei modelli del catalogo usa esclusivamente il componente associato; non prende proiettori di altri modelli dalla cache condivisa. Se il proiettore viene rimosso da un modello già installato, i pesi verificati restano utilizzabili per il testo e il catalogo permette di completare di nuovo il download.
+
+Per un GGUF locale, crea una cartella dedicata come `models/local/NomeModello/` e inserisci i pesi insieme al **solo mmproj compatibile**. Apri Catalogo modelli → Rileva modelli locali e scegli il modello nel setup. I metadati GGUF vengono letti senza eseguire codice; il proiettore presente nella stessa cartella viene passato automaticamente al motore. Se ci sono più proiettori non viene scelto arbitrariamente. La presenza del file non certifica l'abbinamento: un proiettore incompatibile viene rifiutato dal motore. Il GGUF deve essere supportato dalla versione integrata di llama.cpp. I file locali non sono scaricati né verificati contro un hash del catalogo.
+
+Senza vision, la chat testuale continua a funzionare e le risposte conservano l'indicazione. Una richiesta di lettura delle immagini viene fermata con un messaggio esplicito; creazione e modifica artistica continuano a usare il proprio motore immagini.
+
+## Thinking nella chat
+
+Il menu **Think** offre **Off, Low, Med, High e XHigh**. È abilitato solo se i metadati/template del modello indicano un thinking compatibile (oppure per i modelli del catalogo con supporto noto). Qwen3 lo supporta; SmolVLM e Qwen2.5-VL del catalogo non lo espongono.
+
+I livelli riservano rispettivamente 0%, 12,5%, 25%, 50% e 75% del limite di risposta al ragionamento, lasciando spazio al testo finale. Con 1024 token: 0, 128, 256, 512 e 768. Il valore è un budget massimo, non un numero di token obbligatorio e non una garanzia di qualità. Per template con livelli nativi viene inviato anche il livello supportato; XHigh usa il livello nativo High quando il template non accetta XHigh, mantenendo il budget più ampio. Per artefatti lunghi aumenta la risposta massima e il contesto nelle Preferenze.
+
+La scelta è salvata e fotografata in ogni richiesta, anche con canvas attivo. Il router usa sempre Think Off per evitare lavoro aggiuntivo prima di una generazione immagini. La fase thinking è indicata nello stato; la risposta e il canvas ricevono solo il contenuto finale, senza i token di ragionamento.
+
+## Verifica preventiva della memoria
+
+Il setup mostra CPU e thread, RAM totale/libera e GPU con VRAM totale/libera quando il driver la espone. NVIDIA usa `nvidia-smi`; su Windows DXGI rileva anche AMD/Intel, e i contatori WDDM integrano la memoria libera quando disponibili. La RAM condivisa delle GPU integrate non viene sommata alla VRAM dedicata. Più GPU o contatori mancanti producono una stima non determinabile, non un falso “OK”.
+
+Ogni modello selezionato ha una valutazione separata, perché i motori lavorano uno alla volta:
+
+- **OK stimato**: pesi, cache e buffer stimati rientrano nella memoria libera con margine.
+- **Offload previsto/necessario**: parte dei layer resta in RAM, oppure occorre ridurre i layer GPU. Se la configurazione attuale rischia OOM, viene scritto esplicitamente.
+- **Rischio OOM**: la memoria stimata non entra nella configurazione corrente e la RAM libera non offre spazio sufficiente.
+- **Non determinabile**: informazioni hardware insufficienti.
+
+La stima cambia con modello, contesto, layer, risoluzione e numero di riferimenti allegati (almeno uno per una previsione vision). “Applica suggerimento” modifica il setup da salvare. La memoria è aggiornata durante l'apertura delle impostazioni, con cache di circa 10 secondi. Sono stime euristiche: kernel, driver, template, dimensioni reali delle immagini e memoria occupata successivamente possono cambiare il risultato. Il motore continua a riportare gli errori OOM effettivi nel lavoro.
+
 ## Chat e canvas
 
 Puoi creare, cercare per titolo, rinominare, fissare in evidenza, archiviare, ripristinare ed eliminare conversazioni; organizzarle in raccolte e spostarle tra raccolte. Eliminare una raccolta conserva le chat. Messaggi, impostazioni, stato dei lavori e canvas sono persistiti in SQLite. Gli allegati sono file locali; quelli condivisi vengono conservati anche dopo la cancellazione di una chat.
 
 **Canvas spento:** la risposta e le immagini appaiono nella chat.
 
-**Canvas acceso al momento dell'invio:** il motore scrive l'artefatto nel pannello laterale, con aggiornamenti durante la generazione; nel corpo chat resta il testo di accompagnamento. La destinazione viene salvata nella richiesta e non cambia se chiudi il pannello mentre il lavoro è in corso. Puoi chiedere modifiche all'artefatto esistente, editarne il Markdown e salvare. Le risposte completate conservano anche la versione del proprio artefatto; il pulsante «Apri canvas» permette di riportarla nel pannello.
+**Canvas acceso al momento dell'invio:** il motore scrive l'artefatto nel pannello laterale, con aggiornamenti durante la generazione; nel corpo chat resta un breve messaggio standard di accompagnamento scritto dall’app, così anche un modello piccolo non può duplicare l’artefatto nel corpo. La destinazione viene salvata nella richiesta e non cambia se chiudi il pannello mentre il lavoro è in corso. Puoi chiedere modifiche all'artefatto esistente, editarne il Markdown e salvare. Le risposte completate conservano anche la versione del proprio artefatto; il pulsante «Apri canvas» permette di riportarla nel pannello.
 
 Il canvas esporta **Markdown, PNG completo, PDF e Word (.docx)**. Il PDF conserva testo selezionabile e SVG vettoriali; i grafici canvas sono inclusi come immagini ad alta risoluzione. Il Word mantiene paragrafi, elenchi, tabelle e codice modificabili; formule, diagrammi e immagini vengono inseriti come immagini. Il formato legacy `.doc` non è previsto. L'originale di un'immagine generata è scaricabile senza convertirla in un documento.
 
@@ -60,7 +89,7 @@ Sono supportati `line`, `bar`, `scatter`, `pie` e `doughnut`. Per `scatter` i da
 | GPU 4–8 GB | Vulkan oppure CUDA NVIDIA | Contesto moderato, offload parziale LLM, immagini 512×512 |
 | GPU 12–24 GB | Vulkan oppure CUDA NVIDIA | Contesto più ampio, più layer su GPU, immagini 768×768 |
 
-Vulkan copre NVIDIA, AMD e Intel con driver compatibili. CUDA è per NVIDIA; la release dei motori fissa il proprio runtime CUDA. I profili sono modificabili: non misurano né garantiscono un consumo massimo. Memoria occupata da altre applicazioni, modello, risoluzione e numero di riferimenti possono richiedere CPU, meno layer GPU o dimensioni inferiori.
+Vulkan copre NVIDIA, AMD e Intel con driver compatibili. CUDA è per NVIDIA; la release dei motori fissa il proprio runtime CUDA. I profili sono modificabili. Il setup rileva CPU, RAM e GPU e stima il rischio di memoria per i modelli selezionati, usando anche la memoria attualmente libera; non garantisce un consumo massimo. Memoria occupata da altre applicazioni, modello, risoluzione e numero di riferimenti possono richiedere CPU, meno layer GPU o dimensioni inferiori.
 
 Le immagini usano batch singolo, VAE a tasselli e, su GPU, offload delle parti supportate sulla RAM. FLUX.2 klein e quattro riferimenti richiedono più RAM e tempo dei modelli di base. La CPU permette di lavorare senza VRAM, con prestazioni inferiori.
 
@@ -110,10 +139,14 @@ python scripts/install_cpu.py
 python scripts/package.py
 ```
 
+Per aggiornare una vecchia installazione, arrestala con `Ferma-H3-Chat.bat`, fai un backup di `data/`, quindi estrai i file della nuova release nella stessa cartella. Le release non contengono `data/` né pesi dei modelli.
+
 Il packaging include una lista esplicita di file, esclude chat, modelli, cache e registri personali, produce uno ZIP Windows e il suo SHA-256. Il workflow GitHub costruisce l'artefatto; su un tag `v*` prepara una **release in bozza** per la revisione del proprietario del repository. Nessun repository remoto viene creato automaticamente dall'app.
 
-## Stato della versione 0.1
+## Stato della versione 0.2
 
 Chat CPU, streaming, canvas separato, gestione conversazioni, rendering e API sono implementati e collaudati. Le integrazioni immagini sono basate sui parametri verificati dei motori ufficiali. Il collaudo di questa versione non equivale a una certificazione di tutte le combinazioni di GPU, driver e modelli: in particolare CUDA/Vulkan e FLUX multi-riferimento richiedono ancora una prova di inferenza sulle rispettive configurazioni hardware. Video, audio, esecuzione del codice generato, ricerca web, importazione PDF/Word in ingresso e plugin non sono inclusi.
 
 Font e layout derivano dai riferimenti locali H3-Music e H3-Comics. Motori: [llama.cpp](https://github.com/ggml-org/llama.cpp), [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp). Riferimenti: [multimodalità llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md), [FLUX.2 nel motore immagini](https://github.com/leejet/stable-diffusion.cpp/blob/master/docs/flux2.md), [FLUX.2 ufficiale](https://github.com/black-forest-labs/flux2), [Python integrato](https://www.python.org/downloads/release/python-31315/).
+
+Implementazione thinking verificata sulla [API llama.cpp b10809](https://github.com/ggml-org/llama.cpp/blob/b10809/tools/server/README.md); rilevamento memoria tramite [DXGI](https://learn.microsoft.com/en-us/windows/win32/api/dxgi/ns-dxgi-dxgi_adapter_desc) e [GlobalMemoryStatusEx](https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-globalmemorystatusex).

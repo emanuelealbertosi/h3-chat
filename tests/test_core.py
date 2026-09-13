@@ -51,6 +51,8 @@ class CoreTests(unittest.TestCase):
         payload=json.loads(self.app.store.one('SELECT * FROM jobs WHERE id=?',(job,))['payload'])
         self.assertEqual(payload['settings']['temperature'],0.7)
         self.assertTrue(payload['canvas'])
+        self.app.store.save_settings({'think_level':'xhigh'})
+        self.assertEqual(payload['settings']['think_level'],'off')
         self.app.cancel(job)
         self.assertEqual(self.app.store.chat(c['id'])['messages'][-1]['status'],'cancelled')
 
@@ -63,7 +65,7 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(s.chat(c['id'])['messages'][-1]['status'],'interrupted')
 
     def test_bad_settings_and_attachment_limits(self):
-        for p in ({'backend':'remote'},{'context':True},{'width':510},{'temperature':float('nan')},{'chat_model':'sd15'},{'profile':'nope'}):
+        for p in ({'backend':'remote'},{'context':True},{'width':510},{'temperature':float('nan')},{'chat_model':'sd15'},{'profile':'nope'},{'think_level':'extreme'}):
             with self.assertRaises(ValueError):self.app.save_settings(p)
         with self.assertRaises(ValueError):self.app.validate_media([{}]*5)
         with self.assertRaises(ValueError):self.app.validate_media([{'id':'../passwd'}])
@@ -122,7 +124,7 @@ class CoreTests(unittest.TestCase):
         with patch.object(self.app.engine,'require_model',return_value=self.app.catalog['qwen3-06']),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'route',return_value={'intent':'chat','prompt':''}),patch.object(self.app.engine,'completion',side_effect=completion),patch.object(self.app.engine,'stop') as stop:
             self.app.execute_job(job,threading.Event())
             stop.assert_called()
-        self.assertEqual(s.chat(c['id'])['messages'][-1]['content'],'Creato nel canvas.')
+        self.assertEqual(s.chat(c['id'])['messages'][-1]['content'],'Ho scritto l’artefatto nel canvas.')
         self.assertIn('print(42)',s.one('SELECT content FROM canvases WHERE chat_id=?',(c['id'],))['content'])
 
     def test_prompt_routing_and_pdf_sanitizer(self):

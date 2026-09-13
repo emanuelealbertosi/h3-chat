@@ -11,6 +11,8 @@ from pathlib import Path
 from .downloads import Cancelled, Downloads, model_ready, safe_join
 from .engine import CREATE_NO_WINDOW, Engine, runtime_executable
 from .store import DEFAULTS, PROFILES, Store, uid
+from .models import discover_local, inspect_model, THINK_LEVELS, thinking_parameters
+from .hardware import detect_hardware, assess_model
 
 
 class Service:
@@ -30,9 +32,18 @@ class Service:
         if start_worker:
             self.worker.start()
 
+    def refresh_models(self):
+        with self.lock:
+            for key in list(self.catalog):
+                if self.catalog[key].get("local"):
+                    del self.catalog[key]
+            self.catalog.update({m["id"]:m for m in discover_local(self.root)})
+            return [m | inspect_model(self.root, m) for m in list(self.catalog.values())]
+
     def state(self):
-        return {"token": self.token, "version": "0.1.0", "settings": self.store.settings(), "profiles": PROFILES,
-                "models": [m | {"ready": model_ready(self.root, m)} for m in self.catalog.values()],
+        models = self.refresh_models()
+        return {"token": self.token, "version": "0.2.0", "settings": self.store.settings(), "profiles": PROFILES,
+                "models": models,
                 "runtimes": {key: {"ready": all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
                                     "size": sum(f["size"] for f in r["files"])} for key, r in self.runtimes.items()},
                 "chats": self.store.all("SELECT * FROM chats ORDER BY pinned DESC,updated DESC"),
@@ -40,7 +51,8 @@ class Service:
                 "jobs": self.store.all("SELECT id,chat_id,status,stage,error,created,json_extract(payload,'$.canvas') AS canvas FROM jobs ORDER BY created DESC LIMIT 100"),
                 "downloads": self.downloads.snapshot()}
 
-    def save_settings(self, patch):
+    def validate_settings(self, patch):
+        self.refresh_models()
         if not isinstance(patch, dict) or set(patch) - set(DEFAULTS):
             raise ValueError("Impostazione sconosciuta.")
         s = self.store.settings() | patch
@@ -64,8 +76,28 @@ class Service:
         for key, capability in (("chat_model", "chat"), ("create_model", "create"), ("edit_model", "edit")):
             if s[key] and (s[key] not in self.catalog or capability not in self.catalog[s[key]]["capabilities"]):
                 raise ValueError(f"Modello incompatibile con {capability}.")
-        self.store.save_settings(s)
+        if s.get("think_level") not in THINK_LEVELS:
+            raise ValueError("Thinking: scegli off, low, med, high o xhigh.")
         return s
+
+    def save_settings(self, patch):
+        settings = self.validate_settings(patch)
+        self.store.save_settings(settings)
+        return settings
+
+    def assess(self, body):
+        settings = self.validate_settings(body.get("settings", {}))
+        refs = body.get("references", 1)
+        if type(refs) is not int or not 0 <= refs <= 4:
+            raise ValueError("Numero di riferimenti non valido.")
+        hardware = self.hardware()
+        models = self.refresh_models()
+        selected = []
+        for key in ("chat_model", "create_model", "edit_model"):
+            model = next((m for m in models if m["id"] == settings[key]), None)
+            if model:
+                selected.append(assess_model(model, settings, hardware, refs) | {"role":key})
+        return {"hardware":hardware,"models":selected,"references":refs}
 
     def upload(self, body):
         try:
@@ -115,7 +147,7 @@ class Service:
         if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 24000:
             raise ValueError("Scrivi una richiesta tra 1 e 24.000 caratteri.")
         media = self.validate_media(body.get("media", []))
-        settings = self.store.settings()
+        settings = self.validate_settings({"think_level":body.get("think_level", self.store.settings()["think_level"])})
         self.engine.require_model(settings["chat_model"], "chat")
         canvas = body.get("canvas", False)
         if type(canvas) is not bool:
@@ -161,6 +193,7 @@ class Service:
 
     def execute_job(self, job, cancel):
         text = ""
+        meta = {}
         try:
             payload = json.loads(job["payload"])
             settings = payload["settings"]
@@ -185,30 +218,45 @@ class Service:
             route = self.engine.route(history, settings, cancel)
             intent = route["intent"]
             meta = {"intent": intent, "model": model["name"], "settings": settings, "prompt": payload["prompt"], "canvas": payload.get("canvas", False)}
+            meta.update(vision=model.get("vision",{}).get("enabled",False),
+                        model_warning=model.get("vision",{}).get("warning",""),
+                        think_level=settings.get("think_level","off") if model.get("thinking",{}).get("supported") else "off",
+                        think_budget=thinking_parameters(model, settings)["reasoning_budget_tokens"])
             if intent == "chat":
                 stage("Scrittura della risposta")
                 last_update = 0
                 def update(content):
-                    nonlocal text, last_update
-                    text = partial_string(content, "reply") if payload.get("canvas") else content
+                    nonlocal text, last_update, reason_started
+                    if not content:
+                        return
+                    text = "Sto scrivendo nel canvas." if payload.get("canvas") else content
+                    if content and reason_started:
+                        stage("Scrittura della risposta")
+                        reason_started = False
                     if time.monotonic() - last_update > 0.18:
                         self.store.update_answer(job, text, meta=meta)
                         if payload.get("canvas"):
                             self.save_artifact(job["chat_id"], partial_string(content, "title") or "Canvas", partial_string(content, "content"), [])
                         last_update = time.monotonic()
+                reason_started = False
+                def reasoning():
+                    nonlocal reason_started
+                    if not reason_started:
+                        stage("Thinking · " + meta["think_level"])
+                        reason_started = True
                 messages = self.engine.chat_messages(history, model, settings)
                 schema = None
                 if payload.get("canvas"):
                     messages[0]["content"] += CANVAS_INSTRUCTIONS
                     schema = CANVAS_SCHEMA
-                raw, finish = self.engine.completion(messages, settings, cancel, on_text=update, schema=schema)
+                raw, finish = self.engine.completion(messages, settings, cancel, on_text=update, schema=schema, on_reasoning=reasoning)
                 if payload.get("canvas"):
                     if finish == "length":
-                        text = partial_string(raw, "reply") or "Ho iniziato a scrivere nel canvas. Chiedimi di continuare."
+                        text = "Ho iniziato a scrivere nel canvas. Chiedimi di continuare."
                         self.save_artifact(job["chat_id"], partial_string(raw,"title") or "Canvas", partial_string(raw,"content"), [])
                     else:
                         artifact = json.loads(raw)
-                        text = artifact["reply"]
+                        text = "Ho scritto l’artefatto nel canvas."
                         self.save_artifact(job["chat_id"], artifact["title"], artifact["content"], [])
                 else:
                     text = raw
@@ -248,7 +296,7 @@ class Service:
         except Exception as exc:
             status = "cancelled" if isinstance(exc, Cancelled) or cancel.is_set() else "failed"
             error = "Generazione interrotta." if status == "cancelled" else str(exc)
-            self.store.update_answer(job, text, status, meta={"error": error})
+            self.store.update_answer(job, text, status, meta=meta | {"error": error})
             self.store.execute("UPDATE jobs SET status=?,error=?,stage=? WHERE id=?", (status, error, error, job["id"]))
         finally:
             self.engine.stop()
@@ -269,29 +317,20 @@ class Service:
             self.worker.join(timeout=8)
 
     def hardware(self):
-        result = {"cpu_threads": os.cpu_count(), "gpu": [], "note": "CPU disponibile; Vulkan richiede driver compatibili. Le stime di memoria non sono garanzie."}
-        try:
-            raw = subprocess.check_output(["nvidia-smi", "--query-gpu=name,memory.total,memory.free", "--format=csv,noheader,nounits"],
-                                          timeout=4, creationflags=CREATE_NO_WINDOW, stderr=subprocess.DEVNULL).decode()
-            for line in raw.strip().splitlines():
-                name, total, free = line.rsplit(",", 2)
-                result["gpu"].append({"name": name, "total_mb": int(total), "free_mb": int(free)})
-        except (OSError, subprocess.SubprocessError, ValueError):
-            pass
-        return result
+        return detect_hardware()
 
 
 CANVAS_INSTRUCTIONS = """
 Il canvas è ATTIVO. Rispondi esclusivamente con JSON conforme allo schema.
-reply: breve accompagnamento nella chat, senza ripetere l'artefatto.
+L’app aggiunge autonomamente un breve messaggio di accompagnamento nella chat.
 title: titolo breve del documento o del grafico.
 content: artefatto completo in Markdown, comprensivo di codice, LaTeX, mermaid e chart
 secondo le regole precedenti. Questo campo appare soltanto nel canvas laterale.
 Se l'utente chiede una modifica, riscrivi il documento completo aggiornato, mantenendo
 le parti non coinvolte. Non rispondere con un diff o con "resto invariato".
 """
-CANVAS_SCHEMA = {"type":"object", "properties":{k:{"type":"string"} for k in ("reply","title","content")},
-                 "required":["reply","title","content"], "additionalProperties":False}
+CANVAS_SCHEMA = {"type":"object", "properties":{k:{"type":"string"} for k in ("title","content")},
+                 "required":["title","content"], "additionalProperties":False}
 
 
 def partial_string(source, key):

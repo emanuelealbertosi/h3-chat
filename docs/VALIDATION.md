@@ -1,15 +1,15 @@
-# Verifica della versione 0.1.0
+# Verifica della versione 0.2.0
 
-Verificata su Windows, 12–13 settembre 2026.
+Verificata su Windows il 13 settembre 2026.
 
-- 11 test Python: ciclo di vita chat/raccolte, archivio e pin, coda e annullamento, snapshot immutabili, recupero dopo riavvio, destinazione canvas, Unicode, validazione delle impostazioni, riferimenti multipli, ripresa download e SHA-256, estrazione ZIP, isolamento HTTP e sanificazione PDF.
-- 2 test JavaScript: coordinate preservate, serie coerenti, valori finiti e rigetto di opzioni eseguibili nei grafici.
-- Test browser desktop e mobile: risposta reale su CPU, persistenza del canvas, codice evidenziato, LaTeX, etichette Mermaid, grafico numerico, download Word/PDF/PNG, assenza di overflow orizzontale e di errori JavaScript.
-- Export Word aperto e renderizzato con Microsoft Word; PDF e Word controllati visivamente. Verificate formule, dati, frecce ed etichette. Il PDF conserva testo e diagrammi vettoriali.
-- Qwen3 0.6B: inferenza reale di testo e output JSON separato nel canvas, con chiusura del processo dopo la richiesta.
-- SmolVLM 500M: download e collegamento vision verificati. Il modello è risultato poco affidabile con quattro riferimenti e in italiano; il catalogo limita questo modello a una sola immagine e ne indica i limiti. Per analisi di grafici il catalogo propone Qwen2.5-VL.
-- Parametri e quattro riferimenti del motore FLUX verificati contro la CLI installata e con test del comando; inferenza FLUX/Stable Diffusion e backend CUDA/Vulkan non ancora collaudati su GPU.
-- Audit npm di produzione: nessuna vulnerabilità segnalata al momento della verifica.
-- ZIP standalone: avviata una copia estratta con il Python incluso, senza ambiente Python/Node esterno; motori CPU rilevati. Verificati gli SHA-256 di tutti i file e l'esclusione di dati personali e pesi dei modelli.
+- 19 test Python superati: funzioni di base della chat, snapshot dei lavori, canvas, HTTP, download, riconoscimento GGUF e mmproj, ambiguità dei proiettori, recupero dopo rimozione del mmproj, metadati incompleti, livelli thinking e separazione dello stream, scenari di memoria OK/offload/OOM/non rilevabile.
+- 2 test JavaScript superati: coordinate e serie dei grafici preservate, opzioni eseguibili rifiutate.
+- Browser Edge desktop e mobile: cinque livelli Think salvati, selezione del modello vision e disabilitazione del thinking non supportato, avvisi non vision nel composer e nella risposta, letture reali RAM/VRAM nel setup, catalogo e scansione locale. Nessun errore JavaScript né overflow orizzontale.
+- Qwen3 0.6B su CPU, Think Low: risposta reale corretta al prodotto 17 × 19.
+- Qwen3 0.6B su CPU, Think High: osservati eventi di ragionamento separati con budget massimo di 512 token, artefatto nel canvas e messaggio standard nella chat. Il testo di ragionamento non entra nel documento né nel corpo.
+- SmolVLM locale: GGUF e mmproj in una cartella dedicata, rilevamento automatico e avvio reale di llama-server su CPU con proiettore caricato e health check riuscito. Pesi temporanei collegati ai file già presenti, poi rimossi dal test.
+- Hardware reale: Ryzen 5 3600, RAM e RTX 5070 Ti rilevati tramite API Windows e nvidia-smi. VRAM libera misurata, senza sommarla alla RAM condivisa. Valutazioni AMD/Intel, contatori WDDM e più GPU non collaudati su hardware fisico di tali tipi: i dati mancanti producono uno stato non determinabile.
 
-I test di inferenza delle diverse GPU e dei modelli immagini restano necessari prima di dichiarare una versione stabile per tutte le configurazioni. I profili VRAM rappresentano impostazioni iniziali, non limiti di consumo garantiti.
+Le verifiche della versione 0.1 comprendevano già Markdown, codice, LaTeX, grafici e Mermaid, export Word/PDF/PNG con controllo visivo e avvio del pacchetto estratto. I renderer e gli esportatori restano invariati nella 0.2.
+
+L'inferenza immagini Stable Diffusion/FLUX e i backend CUDA/Vulkan devono ancora essere collaudati sulle rispettive configurazioni hardware. I valori di memoria sono stime preventive, non limiti o garanzie; anche un esito OK può essere superato da driver, buffer o altre applicazioni. La qualità delle risposte e della formattazione resta dipendente dal modello selezionato.

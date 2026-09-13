@@ -17,7 +17,7 @@ DEFAULTS = {
     "edit_model": "", "context": 4096, "gpu_layers": 20, "max_tokens": 1024,
     "temperature": 0.7, "width": 512, "height": 512, "steps": 20,
     "strength": 0.65, "threads": 4, "system_prompt": "Rispondi in italiano, in modo chiaro e utile.",
-    "setup_done": False,
+    "setup_done": False, "think_level": "off",
 }
 
 

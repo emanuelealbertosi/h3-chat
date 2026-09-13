@@ -6,6 +6,7 @@ let state=null,current=null,chat=null,filter='all',collection=null,attachments=[
 let canvasOpen=false,canvas={title:'Canvas',content:'',media:[]},canvasEditing=false,canvasSaveTimer,canvasDirty=false;
 let loading=false,pollTimer,lastSidebar='',lastCanvas='',renderQueue=Promise.resolve();
 const drafts=new Map();
+let assessmentTimer,assessmentRequest=0,lastAssessment=0,thinkSaving=false;
 const api=async(path,body,method='POST')=>{
   const response=await fetch('/api'+path,{method:body===undefined?'GET':method,headers:body===undefined?{}:{'Content-Type':'application/json','X-H3-Token':state?.token||''},body:body===undefined?undefined:JSON.stringify(body)});
   const data=await response.json();if(!response.ok)throw Error(data.error||'Operazione non riuscita.');return data;
@@ -23,6 +24,7 @@ async function refresh(){
     if(current){const id=current;const fresh=await api('/chats/'+id);if(current===id){chat=fresh;await renderChat();}
       if(canvasOpen&&!canvasDirty&&!canvasEditing){const c=await api('/canvas/'+id);if(current===id)await setCanvas(c,false);}}
     updateDownloads();
+    if($('#settings').open&&Date.now()-lastAssessment>10000)scheduleAssessment();
   }catch(e){if(state)toast(e.message,true);else $('#job-status').textContent='Impossibile connettersi. Avvia H3-Chat.';}
   finally{loading=false;clearTimeout(pollTimer);pollTimer=setTimeout(refresh,state?.jobs.some(j=>['queued','running'].includes(j.status))||state?.downloads.some(d=>d.status==='running')?850:3500);}
 }
@@ -40,6 +42,16 @@ function renderStatus(){
   const job=activeJob(),any=state.jobs.some(j=>j.status==='running');
   $('#engine-badge').classList.toggle('busy',any);$('#engine-badge').innerHTML=`<i></i> ${any?'Motore al lavoro':'Motore locale'}`;
   $('#model-name').textContent=modelName(state.settings.chat_model);
+  const model=state.models.find(m=>m.id===state.settings.chat_model),vision=model?.vision,thinking=model?.thinking;
+  $('#vision-badge').textContent=vision?.enabled?'Vision attiva':model?'Non vision':'Vision da configurare';
+  $('#vision-badge').className='badge '+(vision?.enabled?'ready':'warning');
+  $('#vision-badge').title=vision?.projector?'Proiettore automatico: '+vision.projector:vision?.warning||'Scegli un modello nelle impostazioni.';
+  $('#vision-warning').hidden=!model||!!vision?.enabled;
+  $('#vision-warning').textContent=vision?.warning||'';
+  $('#think-level').disabled=!thinking?.supported||thinkSaving;
+  if(!thinkSaving)$('#think-level').value=thinking?.supported?state.settings.think_level:'off';
+  $('#think-note').textContent=thinking?.supported?'Budget di ragionamento':'Non supportato dal modello';
+  $('#think-note').title=thinking?.note||'';
   $('#job-status').textContent=job?job.stage:chat?.archived?'Conversazione archiviata. Ripristinala per continuare.':canvasOpen?'Destinazione: canvas · nella chat solo il messaggio di accompagnamento.':'';
   $('#send').hidden=!!job;$('#stop').hidden=!job;$('#prompt').disabled=!!chat?.archived;
   $('#setup-nudge').hidden=state.settings.setup_done&&!!state.models.find(m=>m.id===state.settings.chat_model)?.ready;
@@ -71,6 +83,8 @@ async function renderChat(){
     else if(message.content)await renderRich(content,message.content,{final:message.status==='done'});
     else if(['queued','running'].includes(message.status))content.innerHTML='<div class="thinking" aria-label="Elaborazione in corso"><i></i><i></i><i></i></div>';
     appendMedia(content,message.media);
+    if(message.role==='assistant'&&message.meta.model_warning){const note=document.createElement('div');note.className='vision-warning';note.textContent=message.meta.model_warning;content.append(note);}
+    if(message.role==='assistant'&&message.meta.think_level){const badge=document.createElement('span');badge.className='badge';badge.textContent='Think '+message.meta.think_level;badge.title=message.meta.think_budget+' token massimi di ragionamento';article.querySelector('.message-head').append(badge);}
     if(['failed','interrupted','cancelled'].includes(message.status)){const err=document.createElement('div');err.className='message-error';err.textContent=message.meta.error||'Risposta interrotta. Puoi riprovare.';content.append(err);}
     const actions=article.querySelector('.message-actions');
     if(message.content){const copy=document.createElement('button');copy.className='text-button';copy.textContent='Copia';copy.onclick=act(async()=>{await navigator.clipboard.writeText(message.content);toast('Copiato.');});actions.append(copy);}
@@ -99,7 +113,7 @@ async function uploadFiles(files){
 async function send(event){event.preventDefault();if(activeJob())return;const prompt=$('#prompt').value.trim();if(!prompt)return;
   $('#send').disabled=true;
   try{if(!current){const fresh=await api('/chats',{collection_id:collection});current=fresh.id;chat=fresh;}
-    await persistCanvas();await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen});
+    await persistCanvas();await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,think_level:$('#think-level').value});
     $('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);await refresh();
   }finally{$('#send').disabled=false;}
 }
@@ -139,38 +153,64 @@ function collectSettings(){for(const field of $('#settings-body').querySelectorA
 function options(items,value){return items.map(([id,label])=>`<option value="${id}" ${id===value?'selected':''}>${esc(label)}</option>`).join('');}
 function settingSelect(key,label,items,hint=''){return `<label class="field"><span>${label}</span><select data-setting="${key}">${options(items,settingsDraft[key])}</select>${hint?`<small>${hint}</small>`:''}</label>`;}
 function numberField(key,label,min,max,step=1){return `<label class="field"><span>${label}</span><input type="number" data-setting="${key}" value="${settingsDraft[key]}" min="${min}" max="${max}" step="${step}"></label>`;}
-async function openSettings(tab='setup'){settingsDraft={...state.settings};settingsTab=tab;$('#settings').showModal();renderSettings();
-  try{const h=await api('/hardware');const note=$('#hardware-info');if(note)note.textContent=h.gpu.length?h.gpu.map(g=>`${g.name} · ${(g.total_mb/1024).toFixed(1)} GB VRAM · ${(g.free_mb/1024).toFixed(1)} GB liberi`).join(' / '):`${h.cpu_threads} thread CPU · Vulkan per NVIDIA, AMD e Intel con driver compatibili.`;}catch{}
+async function openSettings(tab='setup'){if(!state)return;settingsDraft={...state.settings};settingsTab=tab;$('#settings').showModal();renderSettings();}
+function scheduleAssessment(){
+  clearTimeout(assessmentTimer);assessmentRequest++;
+  assessmentTimer=setTimeout(act(updateAssessment),300);
+}
+async function updateAssessment(){
+  if(!$('#settings').open)return;
+  collectSettings();const ticket=++assessmentRequest;lastAssessment=Date.now();
+  const box=$('#memory-assessment');if(!box)return;
+  box.setAttribute('aria-busy','true');
+  try{
+    const report=await api('/assess',{settings:settingsDraft,references:Math.max(1,attachments.length)});
+    if(ticket!==assessmentRequest||!$('#settings').open)return;
+    const h=report.hardware,mem=n=>n==null?'non rilevata':(n/1024).toLocaleString('it-IT',{maximumFractionDigits:1})+' GiB';
+    const summary=`${h.cpu_name} · ${h.cpu_threads} thread · RAM ${mem(h.ram.total_mb)}, libera ${mem(h.ram.free_mb)}`;
+    const gpus=h.gpu.map(g=>`${g.name} · VRAM ${mem(g.total_mb)}, libera ${mem(g.free_mb)}`).join(' / ');
+    const info=$('#hardware-info');if(info)info.textContent=summary+(gpus?' · '+gpus:' · Nessuna GPU rilevata');
+    const roles={chat_model:'Chat / vision',create_model:'Creazione immagini',edit_model:'Modifica immagini'};
+    box.innerHTML=`<div class="assessment-head"><h3>Memoria per i modelli scelti</h3><button type="button" id="refresh-hardware" class="text-button">Aggiorna</button></div><p class="small-note">${esc(summary)}${gpus?'<br>'+esc(gpus):''}</p><p class="small-note">Stime per ${report.references} riferiment${report.references===1?'o':'i'}, contesto ${settingsDraft.context} e immagini ${settingsDraft.width} × ${settingsDraft.height}. I motori lavorano uno alla volta.</p>`+report.models.map((m,i)=>`<article class="memory-result ${m.status}"><div><strong>${roles[m.role]} · ${esc(m.name)}</strong><span class="badge">${esc(m.title)}</span></div><p>${esc(m.advice)}</p><small>Stima RAM ${m.ram_gb} GiB · VRAM ${m.vram_gb} GiB${m.gpu_name?' · '+esc(m.gpu_name):''}</small>${m.assumptions.length?`<details><summary>Come viene stimata</summary><p>${esc(m.assumptions.join(' '))}</p></details>`:''}${Object.keys(m.recommended_patch).length?`<button type="button" class="btn small" data-memory-patch="${i}">Applica suggerimento</button>`:''}</article>`).join('')+(!report.models.length?'<p class="small-note">Seleziona i modelli per vedere la stima prima di scaricarli.</p>':'')+`<p class="small-note">${esc(h.note)}</p>`;
+    $('#refresh-hardware').onclick=scheduleAssessment;
+    box.querySelectorAll('[data-memory-patch]').forEach(b=>b.onclick=()=>{collectSettings();Object.assign(settingsDraft,report.models[Number(b.dataset.memoryPatch)].recommended_patch);renderSettings();});
+  }catch(e){if(ticket===assessmentRequest)box.textContent='Stima non disponibile: '+e.message;}
+  finally{box.removeAttribute('aria-busy');}
 }
 function renderSettings(){
   document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===settingsTab));
   const body=$('#settings-body');
   if(settingsTab==='setup'){
-    const modelSelect=(key,label,cap)=>settingSelect(key,label,[['','Scegli dal catalogo…'],...state.models.filter(m=>m.capabilities.includes(cap)).map(m=>[m.id,m.name+(m.ready?'':' · da scaricare')])]);
-    body.innerHTML=`<div class="hardware-note" id="hardware-info">Scegli l'hardware. CPU, NVIDIA, AMD e Intel condividono la stessa interfaccia.</div><div class="settings-grid"><section class="card"><h3>01 · Il tuo computer</h3>${settingSelect('profile','Profilo memoria',[['cpu','Solo CPU / nessuna GPU'],['low','GPU · 4–8 GB VRAM'],['balanced','GPU · 12–24 GB VRAM']],'Il profilo imposta valori iniziali modificabili nelle Preferenze.')}${settingSelect('backend','Motore di calcolo',[['cpu','CPU · massima compatibilità'],['vulkan','Vulkan · NVIDIA / AMD / Intel'],['cuda','CUDA · NVIDIA']],'Il profilo Solo CPU usa sempre il backend CPU.')}<div class="runtime-actions"><button id="install-runtime" class="btn">Installa motori</button><span class="small-note" id="runtime-ready"></span></div><div id="runtime-downloads"></div></section><section class="card"><h3>02 · I tuoi modelli</h3>${modelSelect('chat_model','Chat, router e visione','chat')}${modelSelect('create_model','Creazione immagini','create')}${modelSelect('edit_model','Modifica e riferimenti','edit')}<p>Un'unica chat. Il router sceglie cosa fare dal prompt; viene caricato un solo motore alla volta.</p><button id="go-catalog" class="text-button">Apri il catalogo e scarica i componenti →</button></section></div><div class="note">Con 4–8 GB scegli modelli quantizzati e pochi riferimenti. FLUX usa anche la RAM di sistema; CPU e offload riducono la VRAM ma aumentano i tempi. Il video sarà aggiunto in una versione futura.</div>`;
+    const modelSelect=(key,label,cap)=>settingSelect(key,label,[['','Scegli dal catalogo…'],...state.models.filter(m=>m.capabilities.includes(cap)).map(m=>[m.id,m.name+(cap==='chat'?(m.vision?.enabled?' · Vision':m.vision?.expected?' · Vision da completare':' · Non vision'):'')+(m.ready?'':' · da scaricare')])]);
+    body.innerHTML=`<div class="hardware-note" id="hardware-info">Scegli l'hardware. CPU, NVIDIA, AMD e Intel condividono la stessa interfaccia.</div><div class="settings-grid"><section class="card"><h3>01 · Il tuo computer</h3>${settingSelect('profile','Profilo memoria',[['cpu','Solo CPU / nessuna GPU'],['low','GPU · 4–8 GB VRAM'],['balanced','GPU · 12–24 GB VRAM']],'Il profilo imposta valori iniziali modificabili nelle Preferenze.')}${settingSelect('backend','Motore di calcolo',[['cpu','CPU · massima compatibilità'],['vulkan','Vulkan · NVIDIA / AMD / Intel'],['cuda','CUDA · NVIDIA']],'Il profilo Solo CPU usa sempre il backend CPU.')}<div class="runtime-actions"><button id="install-runtime" class="btn">Installa motori</button><span class="small-note" id="runtime-ready"></span></div><div id="runtime-downloads"></div></section><section class="card"><h3>02 · I tuoi modelli</h3>${modelSelect('chat_model','Chat, router e visione','chat')}<p id="setup-vision-note" class="vision-warning"></p>${modelSelect('create_model','Creazione immagini','create')}${modelSelect('edit_model','Modifica e riferimenti','edit')}<p>Un'unica chat. Il router sceglie cosa fare dal prompt; viene caricato un solo motore alla volta.</p><button id="go-catalog" class="text-button">Apri il catalogo e scarica i componenti →</button></section></div><div class="note">Con 4–8 GB scegli modelli quantizzati e pochi riferimenti. FLUX usa anche la RAM di sistema; CPU e offload riducono la VRAM ma aumentano i tempi. Il video sarà aggiunto in una versione futura.</div>`;
     $('#install-runtime').onclick=act(async()=>{collectSettings();const backend=settingsDraft.profile==='cpu'?'cpu':settingsDraft.backend;await api('/downloads',{id:backend,kind:'runtime'});await refresh();});
     $('#go-catalog').onclick=()=>{collectSettings();settingsTab='models';renderSettings();};
     body.querySelector('[data-setting="profile"]').onchange=e=>{collectSettings();Object.assign(settingsDraft,state.profiles[e.target.value]);if(e.target.value==='cpu')settingsDraft.backend='cpu';renderSettings();};
     body.querySelector('[data-setting="backend"]').onchange=()=>{collectSettings();updateDownloads();};
   }else if(settingsTab==='models'){
-    body.innerHTML='<p class="small-note">I download includono pesi, encoder, proiettori e VAE richiesti. Ogni file viene verificato con SHA-256; un download interrotto può essere ripreso.</p>'+state.models.map(m=>`<article class="model-card"><div class="model-top"><h3>${esc(m.name)}</h3><button class="btn small" data-download="${m.id}">${m.ready?'Verificato':'Scarica · '+gb(m.size)}</button></div><p>${esc(m.description)}</p><div class="model-meta">${m.capabilities.map(c=>`<span class="badge">${({chat:'CHAT',vision:'VISION',create:'CREA',edit:'MODIFICA'})[c]}</span>`).join('')}<span class="badge">${m.max_refs?m.max_refs+' riferimenti':'Testo'}</span><span class="badge">RAM indicativa ≥ ${m.ram_gb} GB</span><span class="badge ${m.ready?'ready':''}" id="ready-${m.id}">${m.ready?'Installato':'Non installato'}</span></div><details><summary>Componenti e licenza</summary><p>${esc(m.license)}</p>${m.files.map(f=>`<div class="component"><span>${esc(f.role)} · <a href="https://huggingface.co/${esc(f.repo)}/blob/${f.revision}/${esc(f.filename)}" target="_blank" rel="noopener noreferrer">${esc(f.filename)}</a></span><span>${gb(f.size)}</span></div>`).join('')}</details><div data-download-status="${m.id}"></div></article>`).join('');
-    body.querySelectorAll('[data-download]').forEach(b=>{const model=state.models.find(m=>m.id===b.dataset.download);b.disabled=model.ready;b.onclick=act(async()=>{await api('/downloads',{id:model.id,kind:'model'});await refresh();});});
+    body.innerHTML='<div class="hardware-note">Modelli locali: copia il GGUF e il suo mmproj in <strong>models/local/NomeModello/</strong>. Una cartella per modello; un solo proiettore compatibile. <button type="button" id="rescan-models" class="text-button">Rileva modelli locali</button></div><p class="small-note">I download includono pesi, encoder, proiettori e VAE richiesti. Ogni file viene verificato con SHA-256; un download interrotto può essere ripreso.</p>'+state.models.map(m=>`<article class="model-card"><div class="model-top"><h3>${esc(m.name)}</h3><button class="btn small" data-download="${m.id}">${m.local?'Locale pronto':m.complete?'Verificato':'Scarica · '+gb(m.size)}</button></div><p>${esc(m.description)}</p><div class="model-meta">${m.local?'<span class="badge">LOCALE</span>':''}${m.thinking?.supported?'<span class="badge">THINK</span>':''}${m.vision?'<span class="badge '+(m.vision.enabled?'ready':'warning')+'">'+(m.vision.enabled?'Vision attiva':'Non vision / mmproj assente')+'</span>':''}${m.capabilities.map(c=>`<span class="badge">${({chat:'CHAT',vision:'VISION',create:'CREA',edit:'MODIFICA'})[c]}</span>`).join('')}<span class="badge">${m.max_refs?m.max_refs+' riferimenti':'Testo'}</span><span class="badge">RAM indicativa ≥ ${m.ram_gb} GB</span><span class="badge ${m.ready?'ready':''}" id="ready-${m.id}">${m.complete?'Installato':m.ready?'Solo testo · completa mmproj':'Non installato'}</span></div><details><summary>Componenti e licenza</summary><p>${esc(m.license)}</p>${m.files.map(f=>`<div class="component"><span>${esc(f.role)} · ${f.repo?`<a href="https://huggingface.co/${esc(f.repo)}/blob/${f.revision}/${esc(f.filename)}" target="_blank" rel="noopener noreferrer">${esc(f.filename)}</a>`:esc(f.filename)}</span><span>${gb(f.size)}</span></div>`).join('')}</details><div data-download-status="${m.id}"></div></article>`).join('');
+    $('#rescan-models').onclick=act(async()=>{collectSettings();state=await api('/state');renderSettings();renderStatus();toast('Cartelle locali aggiornate.');});
+    body.querySelectorAll('[data-download]').forEach(b=>{const model=state.models.find(m=>m.id===b.dataset.download);b.disabled=model.complete||model.local;b.onclick=act(async()=>{await api('/downloads',{id:model.id,kind:'model'});await refresh();});});
   }else{
     body.innerHTML=`<div class="settings-grid"><section class="card"><h3>Chat e memoria</h3><div class="settings-grid">${numberField('context','Contesto (token)',1024,32768,1024)}${numberField('max_tokens','Risposta massima',64,8192,64)}${numberField('gpu_layers','Layer su GPU',0,999)}${numberField('threads','Thread CPU',1,64)}${numberField('temperature','Temperatura',0,2,0.1)}</div></section><section class="card"><h3>Immagini</h3><div class="settings-grid">${numberField('width','Larghezza (px)',256,1536,64)}${numberField('height','Altezza (px)',256,1536,64)}${numberField('steps','Passi (modelli standard)',1,100)}${numberField('strength','Intensità img2img',0.05,1,0.05)}</div><p>FLUX.2 klein usa i suoi 4 passi. Batch singolo, VAE a tasselli e rilascio dei processi dopo ogni richiesta.</p></section><section class="card full"><h3>Come vuoi che risponda</h3><label class="field"><span>Istruzioni personali</span><textarea data-setting="system_prompt">${esc(settingsDraft.system_prompt)}</textarea></label><p>Codice evidenziato, Markdown, LaTeX, diagrammi Mermaid e grafici numerici sono già abilitati. Il canvas esporta Word modificabile e PDF/PNG fedeli all'anteprima; formule e figure nel Word sono immagini.</p></section></div>`;
   }
-  updateDownloads();
+  body.insertAdjacentHTML('beforeend','<section id="memory-assessment" class="memory-assessment" aria-live="polite">Rilevamento del computer e stima della memoria…</section>');
+  const updateVision=()=>{const m=state.models.find(m=>m.id===settingsDraft.chat_model),el=$('#setup-vision-note');if(el){el.textContent=m?.vision?.enabled?'Vision attiva: mmproj caricato automaticamente.':m?.vision?.warning||'Scegli un modello vision per leggere immagini e grafici.';el.classList.toggle('vision-ok',!!m?.vision?.enabled);}};
+  body.onchange=e=>{if(e.target.matches('[data-setting]')){collectSettings();updateVision();scheduleAssessment();}};
+  updateVision();scheduleAssessment();updateDownloads();
 }
 function updateDownloads(){
   if(!$('#settings').open)return;
   const progress=task=>`<div class="download-status ${task.status==='failed'?'error':''}"><span>${task.status==='running'?esc(task.file.split('/').pop()):({done:'Download completato e verificato',failed:esc(task.error),cancelled:'Interrotto · premi Scarica per riprendere'})[task.status]}</span>${task.status==='running'?`<progress max="${task.total||1}" value="${task.received}"></progress><span>${gb(task.received)} / ${gb(task.total)}</span> <button class="text-button" data-cancel-download="${task.id}">Interrompi</button>`:''}</div>`;
   for(const div of document.querySelectorAll('[data-download-status]')){const task=state.downloads.find(t=>t.id===div.dataset.downloadStatus);div.innerHTML=task?progress(task):'';}
-  for(const m of state.models){const ready=document.getElementById('ready-'+m.id);if(ready){ready.textContent=m.ready?'Installato':'Non installato';ready.classList.toggle('ready',m.ready);}const b=document.querySelector(`[data-download="${m.id}"]`);if(b){b.disabled=m.ready||state.downloads.some(t=>t.status==='running');b.textContent=m.ready?'Verificato':'Scarica · '+gb(m.size);}}
+  for(const m of state.models){const ready=document.getElementById('ready-'+m.id);if(ready){ready.textContent=m.complete?'Installato':m.ready?'Solo testo · completa mmproj':'Non installato';ready.classList.toggle('ready',m.ready);}const b=document.querySelector(`[data-download="${m.id}"]`);if(b){b.disabled=m.complete||m.local||state.downloads.some(t=>t.status==='running');b.textContent=m.local?'Locale pronto':m.complete?'Verificato':'Scarica · '+gb(m.size);}}
   const backend=settingsDraft?.profile==='cpu'?'cpu':settingsDraft?.backend;
   if($('#runtime-ready')){$('#runtime-ready').textContent=state.runtimes[backend]?.ready?'Motori installati':gb(state.runtimes[backend]?.size||0);$('#install-runtime').disabled=state.downloads.some(t=>t.status==='running');}
   if($('#runtime-downloads'))$('#runtime-downloads').innerHTML=state.downloads.filter(d=>d.kind==='runtime').map(progress).join('');
   document.querySelectorAll('[data-cancel-download]').forEach(b=>b.onclick=act(async()=>{await api('/downloads/'+b.dataset.cancelDownload+'/cancel',{});await refresh();}));
 }
 
+$('#think-level').onchange=act(async()=>{const level=$('#think-level').value;thinkSaving=true;try{state.settings=await api('/settings',{think_level:level});}finally{thinkSaving=false;renderStatus();}});
 $('#composer').onsubmit=act(send);
 $('#prompt').onkeydown=act(async e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();await send(e);}});
 $('#prompt').oninput=()=>{$('#prompt').style.height='auto';$('#prompt').style.height=Math.min(180,$('#prompt').scrollHeight)+'px';};

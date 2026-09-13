@@ -14,6 +14,7 @@ import urllib.request
 from pathlib import Path
 
 from .downloads import Cancelled, model_ready, safe_join
+from .models import inspect_model, thinking_parameters
 
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
@@ -101,15 +102,23 @@ class Engine:
         model = self.catalog.get(model_id)
         if not model or capability not in model["capabilities"]:
             raise ValueError(f"Scegli un modello per {capability} nelle impostazioni.")
-        if not model_ready(self.root, model):
+        model = model | inspect_model(self.root, model)
+        if not model["ready"]:
             raise ValueError(f"Scarica tutti i componenti di {model['name']} nelle impostazioni.")
         return model
 
     def model_files(self, model):
-        return {entry["role"]: str(safe_join(self.root, entry["path"])) for entry in model["files"]}
+        files = {entry["role"]: str(safe_join(self.root, entry["path"])) for entry in model["files"]}
+        if "chat" in model["capabilities"]:
+            traits = inspect_model(self.root, model)
+            files.pop("mmproj", None)
+            if traits["vision"]["projector"]:
+                files["mmproj"] = str(safe_join(self.root, traits["vision"]["projector"]))
+        return files
 
     def start_llama(self, model, settings, log_path, cancel):
         self.stop()
+        self.active_model = model
         backend = "cpu" if settings["profile"] == "cpu" else settings["backend"]
         exe = runtime_executable(self.root, backend, "llama")
         if not exe:
@@ -123,7 +132,7 @@ class Engine:
                 "--api-key", self.key, "--ctx-size", settings["context"], "--parallel", 1,
                 "--n-gpu-layers", 0 if backend == "cpu" else settings["gpu_layers"],
                 "--threads", settings["threads"], "--batch-size", 128, "--ubatch-size", 64,
-                "--jinja", "--no-webui"]
+                "--jinja", "--no-webui", "--reasoning-format", "deepseek"]
         if "mmproj" in files:
             args += ["--mmproj", files["mmproj"], "--no-mmproj-offload", "--image-max-tokens", 512 if settings["context"] <= 4096 else 1024]
         process = self.spawn(args, log_path, cancel)
@@ -143,9 +152,10 @@ class Engine:
             cancel.wait(0.2)
         raise RuntimeError("Caricamento del modello scaduto dopo 4 minuti. Consulta il registro del lavoro.")
 
-    def completion(self, messages, settings, cancel, on_text=None, schema=None):
+    def completion(self, messages, settings, cancel, on_text=None, schema=None, on_reasoning=None):
         body = {"messages": messages, "temperature": settings["temperature"], "max_tokens": settings["max_tokens"],
-                "stream": on_text is not None, "chat_template_kwargs": {"enable_thinking": False}}
+                "stream": on_text is not None}
+        body.update(thinking_parameters(getattr(self, "active_model", {}), settings, router=on_text is None))
         if schema:
             body.update(temperature=0, max_tokens=settings["max_tokens"] if on_text else 768, response_format={"type": "json_schema", "json_schema": {"name": "route", "strict": True, "schema": schema}})
         req = urllib.request.Request(f"http://127.0.0.1:{self.port}/v1/chat/completions", data=json.dumps(body).encode(),
@@ -172,7 +182,10 @@ class Engine:
                     choices = event.get("choices") or []
                     if not choices:
                         continue
-                    delta = choices[0].get("delta", {}).get("content") or ""
+                    part = choices[0].get("delta", {})
+                    if part.get("reasoning_content") and on_reasoning:
+                        on_reasoning()
+                    delta = part.get("content") or ""
                     content += delta
                     finish = choices[0].get("finish_reason") or finish
                     on_text(content)
@@ -210,7 +223,7 @@ class Engine:
         result = [{"role": "system", "content": settings["system_prompt"] + "\n" + instructions}]
         # Current uploaded references, or the latest visual turn for follow-up vision questions.
         latest_media_seq = next((m["seq"] for m in reversed(history) if m["media"]), None)
-        has_vision = "vision" in model["capabilities"]
+        has_vision = model.get("vision", inspect_model(self.root, model).get("vision", {})).get("enabled", False)
         if latest_media_seq and not has_vision:
             result[0]["content"] += "\nNon puoi vedere le immagini della chat: non inventarne il contenuto. Per analizzarle chiedi di scegliere un modello vision."
         if latest_media_seq and not has_vision and history[-1]["media"]:
@@ -300,7 +313,7 @@ class Engine:
                 tail = stream.read().decode("utf-8", "replace")
         except OSError:
             tail = ""
-        if any(word in tail.lower() for word in ("out of memory", "failed to allocate", "not enough memory")):
+        if any(word in tail.lower() for word in ("out of memory", "failed to allocate", "not enough memory", "error_out_of_device_memory", "error_out_of_host_memory", "cuda error 2")):
             return prefix + " Memoria insufficiente: scegli CPU, meno layer GPU o un modello più piccolo.\n" + tail[-1000:]
         return prefix + "\n" + tail[-1800:]
 
