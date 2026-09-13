@@ -9,10 +9,10 @@ import threading
 import time
 from pathlib import Path
 from .downloads import Cancelled, Downloads, model_ready, safe_join
-from .engine import CREATE_NO_WINDOW, Engine, runtime_executable
+from .engine import CREATE_NO_WINDOW, Engine, runtime_executable, explicit_route
 from .store import DEFAULTS, PROFILES, Store, uid
 from .models import discover_local, inspect_model, THINK_LEVELS, thinking_parameters
-from .hardware import detect_hardware, assess_model
+from .hardware import detect_hardware, assess_model, assess_selection
 
 
 class Service:
@@ -42,14 +42,14 @@ class Service:
 
     def state(self):
         models = self.refresh_models()
-        return {"token": self.token, "version": "0.2.0", "settings": self.store.settings(), "profiles": PROFILES,
+        return {"token": self.token, "version": "0.3.0", "settings": self.store.settings(), "profiles": PROFILES,
                 "models": models,
                 "runtimes": {key: {"ready": all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
                                     "size": sum(f["size"] for f in r["files"])} for key, r in self.runtimes.items()},
                 "chats": self.store.all("SELECT * FROM chats ORDER BY pinned DESC,updated DESC"),
                 "collections": self.store.all("SELECT * FROM collections ORDER BY name"),
                 "jobs": self.store.all("SELECT id,chat_id,status,stage,error,created,json_extract(payload,'$.canvas') AS canvas FROM jobs ORDER BY created DESC LIMIT 100"),
-                "downloads": self.downloads.snapshot()}
+                "downloads": self.downloads.snapshot(), "memory": self.engine.snapshot()}
 
     def validate_settings(self, patch):
         self.refresh_models()
@@ -59,7 +59,7 @@ class Service:
         if s["profile"] not in PROFILES or s["backend"] not in self.runtimes:
             raise ValueError("Profilo hardware non valido.")
         for key, lo, hi in (("context", 1024, 32768), ("gpu_layers", 0, 999), ("max_tokens", 64, 8192),
-                            ("width", 256, 1536), ("height", 256, 1536), ("steps", 1, 100), ("threads", 1, 64)):
+                            ("width", 256, 1536), ("height", 256, 1536), ("steps", 1, 100), ("threads", 1, 64), ("ram_cache_gb", 0, 32)):
             if type(s[key]) is not int or not lo <= s[key] <= hi:
                 raise ValueError(f"{key}: inserisci un intero tra {lo} e {hi}.")
         if s["max_tokens"] > s["context"] // 2:
@@ -76,14 +76,26 @@ class Service:
         for key, capability in (("chat_model", "chat"), ("create_model", "create"), ("edit_model", "edit")):
             if s[key] and (s[key] not in self.catalog or capability not in self.catalog[s[key]]["capabilities"]):
                 raise ValueError(f"Modello incompatibile con {capability}.")
+        if s["memory_policy"] not in ("on_demand", "resident"):
+            raise ValueError("Memoria: scegli A richiesta o Residenti.")
         if s.get("think_level") not in THINK_LEVELS:
             raise ValueError("Thinking: scegli off, low, med, high o xhigh.")
         return s
 
     def save_settings(self, patch):
         settings = self.validate_settings(patch)
-        self.store.save_settings(settings)
+        with self.lock:
+            self.store.save_settings(settings)
+            if not self.current_id:
+                self.engine.configure(settings)
         return settings
+
+    def release_memory(self):
+        with self.lock:
+            if self.current_id or self.store.one("SELECT id FROM jobs WHERE status IN ('queued','running')"):
+                raise ValueError("Attendi o interrompi il lavoro prima di liberare la memoria.")
+            self.engine.stop()
+        return self.engine.snapshot()
 
     def assess(self, body):
         settings = self.validate_settings(body.get("settings", {}))
@@ -93,11 +105,14 @@ class Service:
         hardware = self.hardware()
         models = self.refresh_models()
         selected = []
+        selected_models = []
         for key in ("chat_model", "create_model", "edit_model"):
             model = next((m for m in models if m["id"] == settings[key]), None)
             if model:
+                selected_models.append(model)
                 selected.append(assess_model(model, settings, hardware, refs) | {"role":key})
-        return {"hardware":hardware,"models":selected,"references":refs}
+        return {"hardware":hardware,"models":selected,"references":refs,
+                "overall":assess_selection(selected_models,settings,hardware,refs),"memory":self.engine.snapshot()}
 
     def upload(self, body):
         try:
@@ -190,13 +205,14 @@ class Service:
             self.execute_job(job, self.cancel_event)
             with self.lock:
                 self.current_id, self.cancel_event = None, None
+                self.engine.configure(self.store.settings())
 
     def execute_job(self, job, cancel):
         text = ""
         meta = {}
         try:
             payload = json.loads(job["payload"])
-            settings = payload["settings"]
+            settings = DEFAULTS | payload["settings"]
             history = self.store.messages(job["chat_id"], payload["until"])
             for previous in history:
                 artifact = previous.get("meta", {}).get("artifact")
@@ -212,10 +228,15 @@ class Service:
             log_path.parent.mkdir(parents=True, exist_ok=True)
             def stage(label):
                 self.store.execute("UPDATE jobs SET stage=? WHERE id=?", (label, job["id"]))
-            stage("Caricamento del modello chat")
-            self.engine.start_llama(model, settings, log_path, cancel)
-            stage("Comprensione della richiesta")
-            route = self.engine.route(history, settings, cancel)
+            self.engine.prepare(settings, cancel, stage)
+            direct = explicit_route(history)
+            if direct in ('create', 'edit'):
+                route = {'intent':direct,'prompt':history[-1]['content']}
+            else:
+                stage("Caricamento / riuso del modello chat")
+                self.engine.start_llama(model, settings, log_path, cancel)
+                stage("Comprensione della richiesta")
+                route = self.engine.route(history, settings, cancel)
             intent = route["intent"]
             meta = {"intent": intent, "model": model["name"], "settings": settings, "prompt": payload["prompt"], "canvas": payload.get("canvas", False)}
             meta.update(vision=model.get("vision",{}).get("enabled",False),
@@ -279,8 +300,6 @@ class Service:
                 if len(refs) > image_model.get("max_refs", 1):
                     raise ValueError(f"Il modello accetta fino a {image_model.get('max_refs', 1)} riferimenti. Seleziona un modello compatibile nelle impostazioni.")
                 meta.update(intent=intent, model=image_model["name"], image_prompt=route["prompt"] or payload["prompt"], references=refs)
-                stage("Rilascio della memoria del modello chat")
-                self.engine.stop()
                 stage("Modifica immagine" if intent == "edit" else "Creazione immagine")
                 media = self.engine.generate(image_model, settings, meta["image_prompt"], refs, job["id"], cancel, stage)
                 text = "Ecco l'immagine modificata." if intent == "edit" else "Ecco l'immagine."
@@ -294,12 +313,12 @@ class Service:
                 stage("Immagine pronta")
             self.store.execute("UPDATE jobs SET status='done' WHERE id=?", (job["id"],))
         except Exception as exc:
+            self.engine.abort_active()
             status = "cancelled" if isinstance(exc, Cancelled) or cancel.is_set() else "failed"
             error = "Generazione interrotta." if status == "cancelled" else str(exc)
             self.store.update_answer(job, text, status, meta=meta | {"error": error})
             self.store.execute("UPDATE jobs SET status=?,error=?,stage=? WHERE id=?", (status, error, error, job["id"]))
         finally:
-            self.engine.stop()
             self.store.execute("UPDATE chats SET updated=? WHERE id=?", (time.time(), job["chat_id"]))
 
     def save_artifact(self, chat_id, title, content, media):

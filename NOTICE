@@ -12,3 +12,8 @@ does not replace or relax model license terms.
 
 H3-Chat is an independent application. The names of upstream projects identify
 compatibility and do not imply endorsement.
+
+The H3 image worker vendors the stable-diffusion.cpp C API header at commit 7f410a3,
+nlohmann/json (MIT), stb_image and stb_image_write (MIT/public-domain dual license).
+Source URLs and SHA-256 hashes are recorded in native/vendor/SOURCES.json.
+Each vendored header retains its upstream copyright and license notice.

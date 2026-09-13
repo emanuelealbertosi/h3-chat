@@ -4,7 +4,7 @@ Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle 
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.2.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.2.0/H3-Chat-0.2.0-windows-x64.zip) dalla [release v0.2.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.2.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.3.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.3.0/H3-Chat-0.3.0-windows-x64.zip) dalla [release v0.3.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.3.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 **Primo avvio:** apri **Impostazioni → Setup**, scegli hardware e modelli. Il catalogo scarica i pesi e tutti i componenti richiesti, controllando dimensione e SHA-256. I backend GPU si installano dallo stesso setup. Dopo i download, inferenza, interfaccia e documenti funzionano offline.
 
@@ -40,11 +40,26 @@ I livelli riservano rispettivamente 0%, 12,5%, 25%, 50% e 75% del limite di risp
 
 La scelta è salvata e fotografata in ogni richiesta, anche con canvas attivo. Il router usa sempre Think Off per evitare lavoro aggiuntivo prima di una generazione immagini. La fase thinking è indicata nello stato; la risposta e il canvas ricevono solo il contenuto finale, senza i token di ragionamento.
 
+## Modelli residenti o a richiesta
+
+In **Impostazioni → Setup → Modelli in memoria** scegli:
+
+- **A richiesta** (predefinito): conserva il modello corrente fra i messaggi. Prima di usarne uno diverso, termina il processo precedente per liberare RAM/VRAM. Chat → creazione → editing → chat comporta i cambi necessari; se crea ed edit condividono lo stesso modello, il processo e i pesi vengono riutilizzati. Le richieste immagini esplicite non caricano inutilmente il router LLM; quelle ambigue possono richiederlo.
+- **Residenti**: al prossimo messaggio carica tutti i modelli selezionati e già installati, poi li conserva fino al cambio di configurazione, al rilascio manuale o alla chiusura. Sulla GPU richiede tutti i layer LLM e il mmproj, più i componenti dei modelli immagini; con CPU conserva tutto in RAM. I modelli non scaricati non vengono caricati automaticamente. Il numero di layer GPU nelle Preferenze vale per A richiesta.
+
+Il pulsante memoria sotto la chat mostra quanti modelli sono caricati e apre il setup. **Libera memoria** scarica tutti i modelli e chiude la cache quando non ci sono lavori; i file su disco e le chat restano disponibili. Un cambio di modello, backend, contesto o modalità ricarica i contesti interessati. Think, temperatura e dimensioni dell'immagine non obbligano a ricaricare i pesi. Le impostazioni cambiate durante un lavoro si applicano dopo quel lavoro; ogni richiesta conserva la propria configurazione.
+
+La **cache file in RAM recuperabile**, facoltativa e limitabile a 0/2/4/8/16/32 GiB, conserva mapping in sola lettura dei pesi usati di recente (predefinito 2 GiB). Non duplica i pesi in un buffer Python e non blocca RAM fisica. Il limite riguarda i byte mappati, non una quantità di RAM fisica riservata: Windows può recuperarne le pagine e usa anche la propria cache disco. Quando le pagine sono ancora disponibili, il ricaricamento può evitare letture dal disco; restano necessari inizializzazione del contesto e trasferimenti alla GPU. I modelli già residenti consentono il riuso più completo; scaricare il processo LLM perde anche la sua KV cache. Prima di sostituire manualmente file di modelli, usa Libera memoria.
+
+La stima nel setup include pesi, proiettore, encoder, KV cache, risoluzione e riferimenti. La memoria libera misurata comprende anche l'occupazione dei modelli già caricati: per confrontare configurazioni a freddo usa Libera memoria e Aggiorna. Le stime sono conservative e non garantiscono assenza di OOM.
+
+Il motore immagini usa `native/h3-sd-worker.exe`, un processo persistente con protocollo JSON su pipe private, senza porte HTTP. Il worker carica le DLL CPU/Vulkan/CUDA già incluse nei motori, con ABI verificata su stable-diffusion.cpp `7f410a3`. Il binario è incluso nel repository e nello ZIP: l'utente non deve compilare nulla. Per ricompilarlo da sorgente servono MSVC Build Tools x64 e `powershell -File scripts/build-sd-worker.ps1`.
+
 ## Verifica preventiva della memoria
 
 Il setup mostra CPU e thread, RAM totale/libera e GPU con VRAM totale/libera quando il driver la espone. NVIDIA usa `nvidia-smi`; su Windows DXGI rileva anche AMD/Intel, e i contatori WDDM integrano la memoria libera quando disponibili. La RAM condivisa delle GPU integrate non viene sommata alla VRAM dedicata. Più GPU o contatori mancanti producono una stima non determinabile, non un falso “OK”.
 
-Ogni modello selezionato ha una valutazione separata, perché i motori lavorano uno alla volta:
+Ogni modello selezionato ha una valutazione separata. La valutazione complessiva usa il massimo in modalità A richiesta e la somma prudente dei modelli distinti in Residenti; creazione ed editing con gli stessi pesi contano una volta:
 
 - **OK stimato**: pesi, cache e buffer stimati rientrano nella memoria libera con margine.
 - **Offload previsto/necessario**: parte dei layer resta in RAM, oppure occorre ridurre i layer GPU. Se la configurazione attuale rischia OOM, viene scritto esplicitamente.
@@ -91,7 +106,7 @@ Sono supportati `line`, `bar`, `scatter`, `pie` e `doughnut`. Per `scatter` i da
 
 Vulkan copre NVIDIA, AMD e Intel con driver compatibili. CUDA è per NVIDIA; la release dei motori fissa il proprio runtime CUDA. I profili sono modificabili. Il setup rileva CPU, RAM e GPU e stima il rischio di memoria per i modelli selezionati, usando anche la memoria attualmente libera; non garantisce un consumo massimo. Memoria occupata da altre applicazioni, modello, risoluzione e numero di riferimenti possono richiedere CPU, meno layer GPU o dimensioni inferiori.
 
-Le immagini usano batch singolo, VAE a tasselli e, su GPU, offload delle parti supportate sulla RAM. FLUX.2 klein e quattro riferimenti richiedono più RAM e tempo dei modelli di base. La CPU permette di lavorare senza VRAM, con prestazioni inferiori.
+Le immagini usano batch singolo e VAE a tasselli. In A richiesta i pesi sono conservati in RAM, la diffusione usa la GPU a segmenti ed encoder/VAE usano CPU; Residenti mantiene anche questi componenti sulla GPU. FLUX.2 klein e quattro riferimenti richiedono più RAM e tempo dei modelli di base. La CPU permette di lavorare senza VRAM, con prestazioni inferiori.
 
 ## Catalogo iniziale
 
@@ -143,9 +158,9 @@ Per aggiornare una vecchia installazione, arrestala con `Ferma-H3-Chat.bat`, fai
 
 Il packaging include una lista esplicita di file, esclude chat, modelli, cache e registri personali, produce uno ZIP Windows e il suo SHA-256. Il workflow GitHub costruisce l'artefatto; su un tag `v*` prepara una **release in bozza** per la revisione del proprietario del repository. Nessun repository remoto viene creato automaticamente dall'app.
 
-## Stato della versione 0.2
+## Stato della versione 0.3
 
-Chat CPU, streaming, canvas separato, gestione conversazioni, rendering e API sono implementati e collaudati. Le integrazioni immagini sono basate sui parametri verificati dei motori ufficiali. Il collaudo di questa versione non equivale a una certificazione di tutte le combinazioni di GPU, driver e modelli: in particolare CUDA/Vulkan e FLUX multi-riferimento richiedono ancora una prova di inferenza sulle rispettive configurazioni hardware. Video, audio, esecuzione del codice generato, ricerca web, importazione PDF/Word in ingresso e plugin non sono inclusi.
+Chat CPU, streaming, canvas separato, gestione conversazioni, rendering e API sono implementati e collaudati. Creazione, editing e riuso dei processi immagini sono stati eseguiti su CPU con SD 1.5; i dettagli sono in [Verifica 0.3](docs/validation-v0.3.md). Il collaudo di questa versione non equivale a una certificazione di tutte le combinazioni di GPU, driver e modelli: in particolare CUDA/Vulkan e FLUX multi-riferimento richiedono ancora una prova di inferenza sulle rispettive configurazioni hardware. Video, audio, esecuzione del codice generato, ricerca web, importazione PDF/Word in ingresso e plugin non sono inclusi.
 
 Font e layout derivano dai riferimenti locali H3-Music e H3-Comics. Motori: [llama.cpp](https://github.com/ggml-org/llama.cpp), [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp). Riferimenti: [multimodalità llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md), [FLUX.2 nel motore immagini](https://github.com/leejet/stable-diffusion.cpp/blob/master/docs/flux2.md), [FLUX.2 ufficiale](https://github.com/black-forest-labs/flux2), [Python integrato](https://www.python.org/downloads/release/python-31315/).
 

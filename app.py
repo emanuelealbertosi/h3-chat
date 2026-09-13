@@ -86,7 +86,7 @@ class Handler(BaseHTTPRequestHandler):
             method = self.command
             if method == "GET":
                 if path == "/api/health":
-                    return self.json({"app": "h3-chat", "version": "0.2.0", "instance": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]})
+                    return self.json({"app": "h3-chat", "version": "0.3.0", "instance": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]})
                 if path == "/api/state":
                     return self.json(self.app.state())
                 if path == "/api/hardware":
@@ -117,6 +117,8 @@ class Handler(BaseHTTPRequestHandler):
             body = self.read_body()
             if path == "/api/export/pdf" and method == "POST":
                 return self.json(export_pdf(ROOT, self.app.data, body))
+            if path == "/api/memory/release" and method == "POST":
+                return self.json(self.app.release_memory())
             if path == "/api/assess" and method == "POST":
                 return self.json(self.app.assess(body))
             if path == "/api/settings" and method == "POST":

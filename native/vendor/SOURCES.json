@@ -1,0 +1,22 @@
+[
+  {
+    "name": "stable-diffusion.h",
+    "url": "https://raw.githubusercontent.com/leejet/stable-diffusion.cpp/7f410a3/include/stable-diffusion.h",
+    "sha256": "4a914422b706cab624ad0d50779f0b20776c9febff5d5baab63999a6786c04ab"
+  },
+  {
+    "name": "json.hpp",
+    "url": "https://raw.githubusercontent.com/leejet/stable-diffusion.cpp/7f410a3/thirdparty/json.hpp",
+    "sha256": "665fa14b8af3837966949e8eb0052d583e2ac105d3438baba9951785512cf921"
+  },
+  {
+    "name": "stb_image.h",
+    "url": "https://raw.githubusercontent.com/leejet/stable-diffusion.cpp/7f410a3/thirdparty/stb_image.h",
+    "sha256": "38e08c1c5ab8869ae8d605ddaefa85ad3fea24a2964fd63a099c0c0f79c70bcc"
+  },
+  {
+    "name": "stb_image_write.h",
+    "url": "https://raw.githubusercontent.com/leejet/stable-diffusion.cpp/7f410a3/thirdparty/stb_image_write.h",
+    "sha256": "683e15c6dfdc2d57b06b9e166ba27665328e0854a9c1130c2ba9958afaf2f8da"
+  }
+]

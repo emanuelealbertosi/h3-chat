@@ -1,0 +1,56 @@
+import {createRequire} from 'node:module';
+import {mkdir,writeFile} from 'node:fs/promises';
+const require=createRequire(import.meta.url);
+const {chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
+const out=new URL('../work/qa-v03-ui/',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1');
+await mkdir(out,{recursive:true});
+const browser=await chromium.launch({channel:'msedge',headless:true});
+const page=await browser.newPage({viewport:{width:1440,height:1080}});
+page.setDefaultTimeout(20000);
+const errors=[];page.on('pageerror',e=>errors.push(e.message));
+const check=(v,m)=>{if(!v)throw Error(m);};
+try{
+ await page.goto(process.env.H3_TEST_URL||'http://127.0.0.1:8788');
+ await page.waitForFunction(()=>document.querySelector('#think-note').textContent.length>0);
+ await page.click('#memory-status');
+ await page.selectOption('[data-setting="profile"]','cpu');
+ await page.selectOption('[data-setting="chat_model"]','qwen3-06');
+ await page.selectOption('[data-setting="create_model"]','sd15');
+ await page.selectOption('[data-setting="edit_model"]','sd15');
+ await page.selectOption('[data-setting="memory_policy"]','resident');
+ await page.selectOption('[data-setting="ram_cache_gb"]','4');
+ await page.waitForFunction(()=>document.querySelector('.memory-total')?.textContent.includes('2 modelli distinti'));
+ await page.locator('.memory-settings').scrollIntoViewIfNeeded();
+ await page.screenshot({path:out+'/settings.png'});
+ await page.selectOption('[data-setting="create_model"]','');
+ await page.selectOption('[data-setting="edit_model"]','');
+ await page.click('#settings-save');
+ await page.waitForFunction(()=>!document.querySelector('#settings').open);
+ let state=await page.evaluate(async()=> (await (await fetch('/api/state')).json()));
+ check(state.settings.memory_policy==='resident'&&state.settings.ram_cache_gb===4,'Memory settings not saved');
+ for(let n=0;n<2;n++){
+  await page.fill('#prompt','Scrivi solo il numero '+(42+n)+', senza spiegazioni.');
+  const sent=page.waitForResponse(r=>r.url().endsWith('/messages')&&r.request().method()==='POST');
+  await page.click('#send');const {job_id}=await (await sent).json();check(job_id,'Message not enqueued');
+  let next;const deadline=Date.now()+120000;
+  do{next=await page.evaluate(async()=> (await (await fetch('/api/state')).json()));if(['done','failed','cancelled'].includes(next.jobs.find(j=>j.id===job_id)?.status))break;await new Promise(r=>setTimeout(r,300));}while(Date.now()<deadline);
+  check(next.jobs.find(j=>j.id===job_id)?.status==='done','Chat failed: '+JSON.stringify(next.jobs));
+  check(next.memory.models.length===1&&next.memory.models[0].ready,'LLM not kept resident');
+  if(n)check(next.memory.models[0].pid===state.memory.models[0].pid,'Repeated chat restarted LLM');
+  state=next;
+ }
+ await page.click('#memory-status');
+ await page.click('#release-memory');
+ await page.waitForFunction(()=>document.querySelector('#resident-models').textContent==='Nessun modello caricato');
+ await page.selectOption('[data-setting="memory_policy"]','on_demand');
+ await page.click('#settings-save');
+ await page.waitForFunction(()=>!document.querySelector('#settings').open);
+ await page.waitForFunction(()=>document.querySelector('#memory-status').textContent.includes('A richiesta'));
+ await page.screenshot({path:out+'/chat.png'});
+ await page.setViewportSize({width:390,height:844});
+ await page.screenshot({path:out+'/mobile.png'});
+ check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Mobile page overflows');
+ check(errors.length===0,'Browser errors: '+errors.join(';'));
+ await writeFile(out+'/result.json',JSON.stringify({passed:true,pid:state.memory.models[0].pid,errors},null,2));
+ console.log('Memory settings, aggregate deduplication, resident chat reuse, release and mobile layout passed.');
+}finally{await browser.close();}

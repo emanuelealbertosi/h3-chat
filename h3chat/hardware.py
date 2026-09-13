@@ -109,7 +109,7 @@ def detect_hardware(refresh=False):
 
 
 def assess_model(model, settings, hardware, references=1):
-    """Estimate peak for each engine separately: chat and diffusion run serially."""
+    """Estimate one loaded context and its inference workspace, for the selected placement."""
     chat='chat' in model['capabilities']; files=model['files']; p=model.get('parameters',{})
     sizes={role:sum(f['size']/GIB for f in files if f['role']==role) for role in {f['role'] for f in files}}
     projector=sizes.get('mmproj',0)
@@ -117,6 +117,7 @@ def assess_model(model, settings, hardware, references=1):
     elif model.get('ready') and not model.get('vision',{}).get('enabled'): projector=0
     weights=sum(sizes.values())-sizes.get('mmproj',0)
     backend='cpu' if settings['profile']=='cpu' else settings['backend']
+    resident=settings.get('memory_policy')=='resident'
     gpus=[g for g in hardware['gpu'] if backend!='cuda' or g.get('vendor')=='NVIDIA']
     # Do not add different GPUs together or claim an unverified device selection.
     gpu=gpus[0] if len(gpus)==1 else None
@@ -129,12 +130,15 @@ def assess_model(model, settings, hardware, references=1):
         emb=p.get('embedding') or default[1]; kv_heads=p.get('kv_heads') or default[3]
         kd=p.get('key_length') or (emb//heads if p.get('embedding') else default[4]);vd=p.get('value_length') or kd
         kv=settings['context']*layers*kv_heads*(kd+vd)*2/GIB
-        frac=min(1,settings['gpu_layers']/(layers+1)) if backend!='cpu' else 0
+        frac=(1 if resident else min(1,settings['gpu_layers']/(layers+1))) if backend!='cpu' else 0
         vision=projector>0 or model.get('vision',{}).get('expected',False)
         workspace=.65+(references*.2*settings['context']/4096 if vision else 0)
         all_gpu=weights*1.15+kv
         vram=all_gpu*frac+(.45 if frac else 0)
         needed_ram=weights*(1-frac)*1.15+weights*.15+projector*1.2+kv*(1-frac)+workspace
+        if resident and backend!='cpu':
+            vram+=projector*1.2+workspace
+            needed_ram=max(.5,needed_ram-projector*1.2)
         cpu_ram=weights*1.3+projector*1.2+kv+workspace
         if not p.get('layers'): assumptions.append('KV cache stimata dai parametri del catalogo o da valori conservativi; sarà affinata dopo il download.')
         if frac<1 and backend!='cpu': assumptions.append('Parte dei layer resta in RAM con le impostazioni attuali.')
@@ -144,10 +148,13 @@ def assess_model(model, settings, hardware, references=1):
         pixels=settings['width']*settings['height']/(512*512)
         workspace=(1.4 if model.get('architecture')=='sd' else 2.5)*pixels**.7+references*.3
         vram=main*1.15+workspace if backend!='cpu' else 0
-        needed_ram=companions*1.25+main*.4+2 if backend!='cpu' else weights*1.3+workspace+1
+        needed_ram=weights*1.25+2 if backend!='cpu' else weights*1.3+workspace+1
+        if resident and backend!='cpu':
+            vram=weights*1.25+workspace
+            needed_ram=weights*.15+1
         cpu_ram=weights*1.3+workspace+1
         frac=1
-        assumptions.append('Picco immagini stimato da pesi, risoluzione e riferimenti; VAE ed encoder usano la RAM.')
+        assumptions.append('Picco immagini stimato da pesi, risoluzione e riferimenti. '+('Pesi, VAE ed encoder restano sulla GPU.' if resident and backend!='cpu' else 'Pesi in RAM recuperati dalla GPU a segmenti; VAE ed encoder usano la CPU.' if backend!='cpu' else 'Tutti i componenti usano la RAM.'))
     status='ok'; title='OK stimato'; advice='La configurazione sembra rientrare nella memoria libera, con un margine di sicurezza.'
     if ram.get('free_mb') is None:
         status='unknown';title='Memoria non rilevata';advice='Impossibile valutare il rischio OOM senza conoscere la RAM libera.'
@@ -168,6 +175,7 @@ def assess_model(model, settings, hardware, references=1):
                 if chat:
                     fit=max(0,int(max(0,gpu['free_mb']/1024-.95)/all_gpu*(layers+1)))
                     patches={'gpu_layers':min(fit,settings['gpu_layers'])}
+                    if resident: patches['memory_policy']='on_demand'
                     advice=f'Con i layer attuali rischi OOM sulla GPU. Riduci a circa {patches["gpu_layers"]} layer GPU; il resto userà la RAM.'
                 else:
                     patches={'profile':'cpu','backend':'cpu','gpu_layers':0}
@@ -179,3 +187,34 @@ def assess_model(model, settings, hardware, references=1):
     return {'id':model['id'],'name':model['name'],'status':status,'title':title,'advice':advice,
             'oom_risk':risk,'ram_gb':round(needed_ram,2),'vram_gb':round(vram,2),'cpu_ram_gb':round(cpu_ram,2),
             'gpu_name':gpu['name'] if gpu else None,'assumptions':assumptions,'recommended_patch':patches}
+
+
+def assess_selection(models, settings, hardware, references=1):
+    """Conservative peak sum for resident contexts; maximum for serial on-demand use.
+
+    Shared create/edit weights identify one context; distinct models keep their own
+    companions because native contexts cannot share tensor allocations.
+    """
+    unique = {}
+    for model in models:
+        kind = 'chat' if 'chat' in model['capabilities'] else 'image'
+        key = (kind,tuple(sorted((f['role'],f['path']) for f in model['files'])))
+        unique[key] = model
+    values = [assess_model(m,settings,hardware,references) for m in unique.values()]
+    resident = settings.get('memory_policy')=='resident'
+    combine = sum if resident else lambda values:max(values,default=0)
+    ram = round(combine(v['ram_gb'] for v in values),2)
+    vram = round(combine(v['vram_gb'] for v in values),2)
+    backend = 'cpu' if settings['profile']=='cpu' else settings['backend']
+    gpus = [g for g in hardware['gpu'] if backend!='cuda' or g.get('vendor')=='NVIDIA']
+    free_ram = hardware['ram'].get('free_mb')
+    status,title,advice = 'ok','OK stimato','I modelli scelti sembrano rientrare nella memoria libera.'
+    if free_ram is None or (backend!='cpu' and (len(gpus)!=1 or gpus[0].get('free_mb') is None)):
+        status,title,advice = 'unknown','Non determinabile','La memoria libera non è misurabile con sufficiente affidabilità.'
+    elif ram>max(0,free_ram/1024-.75) or (backend!='cpu' and vram>max(0,gpus[0]['free_mb']/1024-.5)):
+        status,title,advice = 'oom','Rischio OOM complessivo','La memoria libera non basta alla stima complessiva. '+('Passa ad A richiesta o scegli modelli più piccoli.' if resident else 'Riduci modello, contesto o risoluzione; valuta CPU o meno layer GPU.')
+    elif any(v['status']=='offload' for v in values):
+        status,title,advice = 'offload','Offload previsto','Alcuni componenti restano in RAM con le impostazioni attuali.'
+    return {'status':status,'title':title,'advice':advice,'ram_gb':ram,'vram_gb':vram,'unique_models':len(unique),
+            'policy':settings.get('memory_policy','on_demand'),
+            'note':('Somma prudente dei picchi dei modelli distinti; crea ed edit con gli stessi pesi contano una volta.' if resident else 'Picco massimo dei modelli distinti: viene conservato un solo contesto alla volta.')}

@@ -5,12 +5,12 @@ import zipfile
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
-INCLUDE=('h3chat','static','licenses','docs','scripts/Launcher.cs','scripts/install.ps1','app.py','launcher.py','catalog.json','runtimes.json',
+INCLUDE=('native','h3chat','static','licenses','docs','scripts/Launcher.cs','scripts/install.ps1','app.py','launcher.py','catalog.json','runtimes.json',
          'H3-Chat.exe','Installa-H3-Chat.bat','Avvia-H3-Chat.bat','Ferma-H3-Chat.bat','README.md','LICENSE','NOTICE','runtime/python')
 
 
 def main():
-    for required in ('runtime/python/python.exe','H3-Chat.exe','static/app.js','README.md'):
+    for required in ('runtime/python/python.exe','H3-Chat.exe','static/app.js','native/h3-sd-worker.exe','README.md'):
         if not (ROOT/required).exists():raise SystemExit('Missing: '+required)
     files=[]
     for relative in INCLUDE:
@@ -22,7 +22,7 @@ def main():
         source=ROOT/'runtime/cpu'/engine
         if source.exists():files.extend(p for p in source.rglob('*') if p.is_file())
     out=ROOT/'dist';out.mkdir(exist_ok=True)
-    archive=out/'H3-Chat-0.2.0-windows-x64.zip'
+    archive=out/'H3-Chat-0.3.0-windows-x64.zip'
     manifest={}
     with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as z:
         for file in sorted(set(files)):

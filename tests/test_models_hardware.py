@@ -41,7 +41,7 @@ class ModelTests(unittest.TestCase):
         traits=inspect_model(self.root,model)
         self.assertTrue(traits['vision']['enabled'])
         engine=Engine(self.root,self.root/'data',{model['id']:model})
-        self.assertEqual(Path(engine.model_files(model)['mmproj']),projector)
+        self.assertEqual(Path(engine.model_files(model)['mmproj']).resolve(),projector.resolve())
         second=gguf(self.base.parent/'mmproj-other.gguf',**{'general.architecture':'clip'})
         self.assertFalse(inspect_model(self.root,model)['vision']['enabled'])
         self.assertIn('Più mmproj',inspect_model(self.root,model)['vision']['warning'])
@@ -88,7 +88,9 @@ class ModelTests(unittest.TestCase):
     def test_streaming_reasoning_never_leaks_into_answer_or_canvas_json(self):
         model={'thinking':{'supported':True,'mode':'budget'}}
         engine=Engine(self.root,self.root,{})
-        engine.active_model=model;engine.port=1000;engine.key='test'
+        engine.active_model=model
+        from types import SimpleNamespace
+        engine.active=SimpleNamespace(port=1000,api_key='test')
         output=[];thinking=[];requests=[]
         def response(req,**kwargs):
             requests.append(json.loads(req.data))

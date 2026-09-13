@@ -108,14 +108,12 @@ class CoreTests(unittest.TestCase):
     def test_multiref_arguments_retain_order_and_reject_extra(self):
         model=self.app.catalog['flux2-klein4'];settings=DEFAULTS|{'profile':'cpu'}
         refs=[{'path':f'uploads/{i}.png'} for i in range(4)]
-        with patch('h3chat.engine.runtime_executable',return_value=self.data/'sd-cli.exe'):
-            args=self.app.engine.image_args(model,settings,'test',refs,self.data/'out.png')
-            self.assertEqual(args.count('--ref-image'),4)
-            paths=[str(args[i+1]) for i,arg in enumerate(args) if arg=='--ref-image']
-            self.assertTrue(paths[0].endswith('0.png'));self.assertTrue(paths[-1].endswith('3.png'))
-            with self.assertRaises(ValueError):self.app.engine.image_args(model,settings,'test',refs+[refs[0]],self.data/'out.png')
+        request=self.app.engine.image_request(model,settings,'test',refs,self.data/'out.png')
+        self.assertEqual(len(request['references']),4)
+        self.assertTrue(request['references'][0].endswith('0.png'));self.assertTrue(request['references'][-1].endswith('3.png'))
+        with self.assertRaises(ValueError):self.app.engine.image_request(model,settings,'test',refs+[refs[0]],self.data/'out.png')
 
-    def test_canvas_output_not_in_body_and_engine_release(self):
+    def test_canvas_output_not_in_body_and_engine_retained(self):
         s=self.app.store;c=s.create_chat();jobid=s.enqueue(c['id'],'Scrivi codice',[],DEFAULTS|{'chat_model':'qwen3-06'},True)
         job=s.one('SELECT * FROM jobs WHERE id=?',(jobid,))
         raw=json.dumps({'reply':'Creato nel canvas.','title':'Codice','content':'```python\nprint(42)\n```'})
@@ -123,7 +121,7 @@ class CoreTests(unittest.TestCase):
             kwargs['on_text'](raw[:40]);kwargs['on_text'](raw);return raw,'stop'
         with patch.object(self.app.engine,'require_model',return_value=self.app.catalog['qwen3-06']),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'route',return_value={'intent':'chat','prompt':''}),patch.object(self.app.engine,'completion',side_effect=completion),patch.object(self.app.engine,'stop') as stop:
             self.app.execute_job(job,threading.Event())
-            stop.assert_called()
+            stop.assert_not_called()
         self.assertEqual(s.chat(c['id'])['messages'][-1]['content'],'Ho scritto l’artefatto nel canvas.')
         self.assertIn('print(42)',s.one('SELECT content FROM canvases WHERE chat_id=?',(c['id'],))['content'])
 
