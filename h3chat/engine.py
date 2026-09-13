@@ -15,6 +15,7 @@ from pathlib import Path
 from .downloads import Cancelled, safe_join
 from .models import inspect_model, thinking_parameters, model_path, mtp_tokens
 from .residency import Session, FileCache
+from .image_options import options as image_options
 
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
@@ -371,7 +372,7 @@ class Engine:
         session.wait('hello',cancel,15)
         session.send({'op':'load','dll':str(dll),'files':session.files,'threads':settings['threads'],
                       'backend':placement,'params_backend':device if resident else 'cpu',
-                      'mmap':True,'diffusion_fa':model.get('architecture') in ('flux2','qwen-edit')})
+                      'mmap':True,'diffusion_fa':model.get('architecture') in ('flux2','qwen-edit','anima')})
         try:
             session.wait('ready',cancel,600)
         except RuntimeError as exc:
@@ -383,24 +384,27 @@ class Engine:
         if len(refs)>model.get('max_refs',1):
             raise ValueError(f"{model['name']} accetta al massimo {model.get('max_refs',1)} riferimenti; ne hai forniti {len(refs)}.")
         architecture = model.get('architecture')
-        seed = settings.get('seed',-1)
-        return {'op':'generate','prompt':prompt,'output':str(output),'width':settings['width'],'height':settings['height'],
-                'steps':model.get('steps',settings['steps']),'cfg':model.get('cfg',7),'seed':secrets.randbits(31) if seed<0 else seed,
-                'strength':settings['strength'],'references':[str(safe_join(self.data,r['path'])) for r in refs],
-                'init_image':architecture=='sd','euler':architecture in ('flux2','qwen-edit'),
-                'flow_shift':3 if architecture=='qwen-edit' else 0}
+        params=settings.get('_image_options') or image_options(model,settings)
+        return params|{'op':'generate','prompt':prompt,'output':str(output),
+                'references':[str(safe_join(self.data,r['path'])) for r in refs],
+                'init_image':architecture=='sd','euler':architecture in ('flux2','qwen-edit','anima'),
+                'loras':[{'path':l['path'],'weight':l['weight']} for l in settings.get('_loras',[])]}
 
     def generate(self, model, settings, prompt, refs, job_id, cancel, stage):
         folder = self.data / 'outputs' / job_id
         folder.mkdir(parents=True,exist_ok=True)
         output,log_path = folder/'image.png', folder/'engine.log'
         request = self.image_request(model,settings,prompt,refs,output)
+        stamps={l['path']:(l['size'],l['mtime_ns']) for l in settings.get('_loras',[])}
+        with self.process_lock:
+            existing=self.sessions.get(self.session_key('image',model,settings))
+            if existing and any(p in getattr(existing,'lora_stamps',{}) and existing.lora_stamps[p]!=stamp for p,stamp in stamps.items()):self._drop(existing.key)
         stage('Caricamento / riuso · ' + model['name'])
         session = self.start_image(model,settings,log_path,cancel)
         stage('Generazione immagine')
         session.send(request)
         try:
-            session.wait('done',cancel,7200,stage)
+            done=session.wait('done',cancel,7200,stage)
         except RuntimeError as exc:
             raise RuntimeError(self.failure(session.log_path,str(exc))) from exc
         if cancel.is_set():
@@ -408,7 +412,9 @@ class Engine:
         if not output.exists() or output.read_bytes()[:8] != b'\x89PNG\r\n\x1a\n':
             raise RuntimeError("Il motore non ha prodotto un'immagine PNG valida.")
         session.uses += 1
-        return {'id':job_id,'name':output.name,'path':output.relative_to(self.data).as_posix(),'mime':'image/png'}
+        session.lora_stamps=getattr(session,'lora_stamps',{})|stamps
+        session.active_loras=[{'name':l['name'],'weight':l['weight'],'size':l['size']} for l in settings.get('_loras',[])]
+        return {'generation':done.get('parameters',{}),'id':job_id,'name':output.name,'path':output.relative_to(self.data).as_posix(),'mime':'image/png'}
 
     @staticmethod
     def failure(path, prefix):

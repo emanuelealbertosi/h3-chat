@@ -58,6 +58,12 @@ def main():
            ("unsloth/Qwen3-4B-GGUF", "Q4_K_M.gguf", "llm"),
            ("Comfy-Org/flux2-dev", "flux2-vae.safetensors", "vae")],
           architecture="flux2", license="Apache-2.0 (modello klein); vedi licenze componenti", ram_gb=16, max_refs=4, steps=4, cfg=1)
+    model("anima-turbo-q4", "Anima Turbo · 1.1 Q4", ["create"], "Illustrazioni da testo. Include Qwen3-0.6B Base Q4 e VAE Qwen Image. Preset 8 step, CFG 1; supporta LoRA Anima compatibili.",
+          [("vanes430/Anima-Turbo-V1.1-GGUF", "anima-turbo-v1.1-Q4_K_M.gguf", "diffusion"),
+           ("mradermacher/Qwen3-0.6B-Base-GGUF", "Qwen3-0.6B-Base.Q4_K_M.gguf", "llm"),
+           ("circlestone-labs/Anima", "split_files/vae/qwen_image_vae.safetensors", "vae")],
+          architecture="anima", license="CircleStone Labs Non-Commercial License (Anima); NVIDIA Open Model License e licenze dei componenti. Vedi le schede originali dei pesi.",
+          ram_gb=8, max_refs=0, steps=8, cfg=1, sampler="euler")
     (ROOT / "catalog.json").write_text(json.dumps(models, ensure_ascii=False, indent=2), encoding="utf-8")
 
     llama = json.loads((ROOT / "work/llama-release.json").read_text(encoding="utf-8-sig"))

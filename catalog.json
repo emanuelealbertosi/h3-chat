@@ -191,5 +191,53 @@
     "max_refs": 4,
     "steps": 4,
     "cfg": 1
+  },
+  {
+    "id": "anima-turbo-q4",
+    "name": "Anima Turbo · 1.1 Q4",
+    "capabilities": [
+      "create"
+    ],
+    "description": "Illustrazioni da testo. Include Qwen3-0.6B Base Q4 e VAE Qwen Image. Preset 8 step, CFG 1; supporta LoRA Anima compatibili.",
+    "files": [
+      {
+        "role": "diffusion",
+        "repo": "vanes430/Anima-Turbo-V1.1-GGUF",
+        "revision": "efdf070de980a52fc03027d2f6ed543cc1d87a8f",
+        "filename": "anima-turbo-v1.1-Q4_K_M.gguf",
+        "url": "https://huggingface.co/vanes430/Anima-Turbo-V1.1-GGUF/resolve/efdf070de980a52fc03027d2f6ed543cc1d87a8f/anima-turbo-v1.1-Q4_K_M.gguf",
+        "path": "models/files/709fceeec6b4f0eb-anima-turbo-v1.1-Q4_K_M.gguf",
+        "size": 1384407168,
+        "sha256": "709fceeec6b4f0eb155330c83fd2539406e86c01e431407276a1f31095484782"
+      },
+      {
+        "role": "llm",
+        "repo": "mradermacher/Qwen3-0.6B-Base-GGUF",
+        "revision": "b8b11a6dbbb14c739e25018f3f77abac860c28f4",
+        "filename": "Qwen3-0.6B-Base.Q4_K_M.gguf",
+        "url": "https://huggingface.co/mradermacher/Qwen3-0.6B-Base-GGUF/resolve/b8b11a6dbbb14c739e25018f3f77abac860c28f4/Qwen3-0.6B-Base.Q4_K_M.gguf",
+        "path": "models/files/1c728e4fe4abb28c-Qwen3-0.6B-Base.Q4_K_M.gguf",
+        "size": 396704960,
+        "sha256": "1c728e4fe4abb28cde33b59cd66396e62b2ef755f53db44cdb54e9655b863782"
+      },
+      {
+        "role": "vae",
+        "repo": "circlestone-labs/Anima",
+        "revision": "f973fc41ec7545364ac9776c2440285f43ff2a30",
+        "filename": "split_files/vae/qwen_image_vae.safetensors",
+        "url": "https://huggingface.co/circlestone-labs/Anima/resolve/f973fc41ec7545364ac9776c2440285f43ff2a30/split_files/vae/qwen_image_vae.safetensors",
+        "path": "models/files/a70580f0213e6796-qwen_image_vae.safetensors",
+        "size": 253806246,
+        "sha256": "a70580f0213e67967ee9c95f05bb400e8fb08307e017a924bf3441223e023d1f"
+      }
+    ],
+    "size": 2034918374,
+    "architecture": "anima",
+    "license": "CircleStone Labs Non-Commercial License (Anima); NVIDIA Open Model License e licenze dei componenti. Vedi le schede originali dei pesi.",
+    "ram_gb": 8,
+    "max_refs": 0,
+    "steps": 8,
+    "cfg": 1,
+    "sampler": "euler"
   }
 ]

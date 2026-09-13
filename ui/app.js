@@ -1,6 +1,8 @@
 import {renderRich,appendMedia,escape as esc,saveBlob} from './render.js';
 import {exportPdf,exportDocx,exportPng} from './exports.js';
 import {initLocalModels} from './local-models.js';
+import {initLoras} from './loras.js';
+import {renderImagePreferences} from './image-settings.js';
 
 const $=s=>document.querySelector(s);
 let state=null,current=null,chat=null,filter='all',collection=null,attachments=[],settingsTab='setup',settingsDraft=null;
@@ -21,6 +23,7 @@ const localModels=initLocalModels({api,getState:()=>state,notify:toast,onChange:
   if(removed)for(const key of ['chat_model','create_model','edit_model'])if(settingsDraft[key]===removed)settingsDraft[key]='';
   renderSettings();renderStatus();
 }});
+const loraUI=initLoras({api,getState:()=>state,getChatId:()=>current,pickDirectory:(path,callback)=>localModels.pickDirectory(path,callback),openPreferences:()=>openSettings('advanced'),notify:toast,onChange:()=>scheduleAssessment()});
 function localCard(model){
   const m=model;
   return `<article class="model-card" data-external-card="${m.id}"><div class="model-top"><h3>${esc(m.name)}</h3><div class="model-link-actions"><button type="button" class="btn small" data-edit-external="${m.id}">Modifica collegamento</button><button type="button" class="text-button" data-remove-external="${m.id}">Scollega</button></div></div><p>${esc(m.description)}</p><div class="model-meta"><span class="badge">PERCORSO ESTERNO</span><span class="badge ${m.ready?'ready':'warning'}">${m.ready?'Disponibile':'Non disponibile'}</span>${m.vision?`<span class="badge ${m.vision.enabled?'ready':'warning'}">${m.vision.enabled?'Vision attiva':'Non vision'}</span>`:''}${m.thinking?.supported?'<span class="badge">THINK</span>':''}${m.mtp?.supported?'<span class="badge">MTP</span>':''}${m.capabilities.map(c=>`<span class="badge">${({chat:'CHAT',create:'CREA',edit:'MODIFICA'})[c]||esc(c)}</span>`).join('')}</div>${m.external_problems?.length?`<p class="local-error">${esc(m.external_problems.join(' '))}</p>`:''}${m.vision?.warning?`<p class="small-note">${esc(m.vision.warning)}</p>`:''}<details><summary>Percorsi collegati e componenti</summary>${m.files.map(f=>`<div class="external-path"><strong>${esc(state.model_role_labels[f.role]||f.role)}</strong><span>${esc(f.path)}</span><small>${gb(f.size)}</small></div>`).join('')}${m.vision?.projector&&!m.files.some(f=>f.role==='mmproj')?`<div class="external-path"><strong>mmproj automatico</strong><span>${esc(m.vision.projector)}</span></div>`:''}<p class="small-note">${esc(m.license)}</p></details></article>`;
@@ -50,6 +53,8 @@ function renderSidebar(){
   $('#chat-list').innerHTML=chats.map(c=>`<div class="chat-row ${current===c.id?'active':''}"><button class="chat-link" data-chat="${c.id}">${c.pinned?'<span class="pin-mark">⌖</span>':''}${esc(c.title)}</button><button class="chat-options" data-chat-menu="${c.id}" aria-label="Opzioni ${esc(c.title)}">⋯</button></div>`).join('')||'<div class="side-empty">Le tue conversazioni appariranno qui.</div>';
 }
 function renderStatus(){
+  loraUI.render();
+  $('#chat-advanced').checked=!!state.settings.chat_advanced;
   const job=activeJob(),any=state.jobs.some(j=>j.status==='running');
   $('#engine-badge').classList.toggle('busy',any);$('#engine-badge').innerHTML=`<i></i> ${any?'Motore al lavoro':'Motore locale'}`;
   const loaded=state.memory?.models||[];
@@ -93,7 +98,7 @@ async function renderChat(){
   if(!chat)return;
   const scroll=$('#scroll-area'),atBottom=scroll.scrollHeight-scroll.scrollTop-scroll.clientHeight<130;
   for(const message of chat.messages){
-    let article=document.getElementById('msg-'+message.id);const signature=JSON.stringify([message.content,message.status,message.media,message.meta]);
+    let article=document.getElementById('msg-'+message.id);const signature=JSON.stringify([message.content,message.status,message.media,message.meta,state.settings.chat_advanced]);
     if(article?.dataset.signature===signature)continue;
     if(!article){article=document.createElement('article');article.id='msg-'+message.id;article.className='message '+message.role;$('#messages').append(article);}
     article.dataset.signature=signature;
@@ -103,6 +108,9 @@ async function renderChat(){
     else if(message.content)await renderRich(content,message.content,{final:message.status==='done'});
     else if(['queued','running'].includes(message.status))content.innerHTML='<div class="thinking" aria-label="Elaborazione in corso"><i></i><i></i><i></i></div>';
     appendMedia(content,message.media);
+    if(message.meta.loras?.length&&(message.role==='user'||state.settings.chat_advanced)){const row=document.createElement('div');row.className='message-loras';row.textContent=message.meta.loras.map(l=>'◇ '+l.name+' × '+l.weight+' · '+l.model_name).join(' / ');content.append(row);}
+    if(message.meta.loras_skipped?.length){const note=document.createElement('p');note.className='small-note';note.textContent=message.meta.loras_skipped.length+' LoRA non applicati: associati a un altro modello o con peso 0.';content.append(note);}
+    if(message.meta.image_parameters&&state.settings.chat_advanced){const p=message.meta.image_parameters,details=document.createElement('details');details.className='image-parameters';const title=document.createElement('summary');title.textContent='Parametri immagine';const values=document.createElement('p');values.textContent=p.width+' × '+p.height+' · '+p.steps+' step · CFG '+p.cfg+' · '+p.sampler+' / '+p.scheduler+' · Seed '+p.seed+' · Intensità '+p.strength;details.append(title,values);if(p.negative_prompt){const negative=document.createElement('p');negative.textContent='Negative prompt: '+p.negative_prompt;details.append(negative);}content.append(details);}
     if(message.role==='assistant'&&message.meta.model_warning){const note=document.createElement('div');note.className='vision-warning';note.textContent=message.meta.model_warning;content.append(note);}
     if(message.role==='assistant'&&message.meta.mtp_tokens){const badge=document.createElement('span');badge.className='badge';badge.textContent='MTP · '+message.meta.mtp_tokens;article.querySelector('.message-head').append(badge);}
     if(message.role==='assistant'&&message.meta.think_level){const badge=document.createElement('span');badge.className='badge';badge.textContent='Think '+message.meta.think_level;badge.title=message.meta.think_budget+' token massimi di ragionamento';article.querySelector('.message-head').append(badge);}
@@ -113,7 +121,7 @@ async function renderChat(){
       const toCanvas=document.createElement('button');toCanvas.className='text-button';toCanvas.textContent=message.meta.canvas?'Apri canvas':'Apri nel canvas';toCanvas.onclick=act(async()=>{if(!message.meta.canvas||message.meta.artifact){if(canvas.content||canvas.media.length){if(!await ask('Sostituire il canvas?',{description:'Il contenuto attuale verrà sostituito da questa risposta.',confirm:true}))return;}await setCanvas(message.meta.artifact||{title:chat.title,content:message.content,media:message.media});canvasDirty=true;await persistCanvas();}await toggleCanvas(true);});actions.append(toCanvas);
       if(message.meta.finish_reason==='length'){const note=document.createElement('span');note.textContent='Limite di risposta raggiunto';actions.append(note);}
     }
-    if(message.role==='user'){const repeat=document.createElement('button');repeat.className='text-button';repeat.textContent='Riutilizza';repeat.onclick=()=>{$('#prompt').value=message.content;attachments=[...message.media];renderAttachments();$('#prompt').focus();};actions.append(repeat);}
+    if(message.role==='user'){const repeat=document.createElement('button');repeat.className='text-button';repeat.textContent='Riutilizza';repeat.onclick=()=>{$('#prompt').value=message.content;attachments=[...message.media];loraUI.setSelections(message.meta.loras||[]);renderAttachments();$('#prompt').focus();};actions.append(repeat);}
   }
   if(atBottom)scroll.scrollTop=scroll.scrollHeight;
 }
@@ -133,8 +141,8 @@ async function uploadFiles(files){
 }
 async function send(event){event.preventDefault();if(activeJob())return;const prompt=$('#prompt').value.trim();if(!prompt)return;
   $('#send').disabled=true;
-  try{if(!current){const fresh=await api('/chats',{collection_id:collection});current=fresh.id;chat=fresh;}
-    await persistCanvas();await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,think_level:$('#think-level').value});
+  try{if(!current){const fresh=await api('/chats',{collection_id:collection});loraUI.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
+    await persistCanvas();await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,think_level:$('#think-level').value,loras:loraUI.getSelections()});
     $('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);await refresh();
   }finally{$('#send').disabled=false;}
 }
@@ -166,7 +174,7 @@ async function renderCanvas(){
   $('#canvas-preview-tab').classList.toggle('active',!canvasEditing);$('#canvas-source-tab').classList.toggle('active',canvasEditing);
   if(!canvasEditing){const value={...canvas,media:[...canvas.media]};renderQueue=renderQueue.then(async()=>{await renderRich($('#canvas-preview'),value.content,{final:!activeJob()?.canvas});appendMedia($('#canvas-preview'),value.media);});await renderQueue;}
 }
-async function persistCanvas(){clearTimeout(canvasSaveTimer);if(!canvasDirty)return;if(!current){const fresh=await api('/chats',{});current=fresh.id;chat=fresh;}
+async function persistCanvas(){clearTimeout(canvasSaveTimer);if(!canvasDirty)return;if(!current){const fresh=await api('/chats',{});loraUI.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
   const id=current,value={...canvas};await api('/canvas/'+id,value,'PUT');canvasDirty=false;$('#canvas-save-status').textContent='Salvato sul computer';}
 function canvasChanged(){canvas.title=$('#canvas-title').value;canvas.content=$('#canvas-source').value;canvasDirty=true;$('#canvas-save-status').textContent='Modifiche da salvare';clearTimeout(canvasSaveTimer);canvasSaveTimer=setTimeout(act(persistCanvas),800);}
 
@@ -174,7 +182,7 @@ function collectSettings(){for(const field of $('#settings-body').querySelectorA
 function options(items,value){return items.map(([id,label])=>`<option value="${id}" ${id===value?'selected':''}>${esc(label)}</option>`).join('');}
 function settingSelect(key,label,items,hint=''){return `<label class="field"><span>${label}</span><select data-setting="${key}">${options(items,settingsDraft[key])}</select>${hint?`<small>${hint}</small>`:''}</label>`;}
 function numberField(key,label,min,max,step=1){return `<label class="field"><span>${label}</span><input type="number" data-setting="${key}" value="${settingsDraft[key]}" min="${min}" max="${max}" step="${step}"></label>`;}
-async function openSettings(tab='setup'){if(!state)return;settingsDraft={...state.settings};settingsTab=tab;$('#settings').showModal();renderSettings();}
+async function openSettings(tab='setup'){if(!state)return;settingsDraft=structuredClone(state.settings);settingsTab=tab;$('#settings').showModal();renderSettings();}
 function scheduleAssessment(){
   clearTimeout(assessmentTimer);assessmentRequest++;
   assessmentTimer=setTimeout(act(updateAssessment),300);
@@ -185,7 +193,7 @@ async function updateAssessment(){
   const box=$('#memory-assessment');if(!box)return;
   box.setAttribute('aria-busy','true');
   try{
-    const report=await api('/assess',{settings:settingsDraft,references:Math.max(1,attachments.length)});
+    const report=await api('/assess',{loras:loraUI.getSelections(),settings:settingsDraft,references:Math.max(1,attachments.length)});
     if(ticket!==assessmentRequest||!$('#settings').open)return;
     const h=report.hardware,mem=n=>n==null?'non rilevata':(n/1024).toLocaleString('it-IT',{maximumFractionDigits:1})+' GiB';
     const summary=`${h.cpu_name} · ${h.cpu_threads} thread · RAM ${mem(h.ram.total_mb)}, libera ${mem(h.ram.free_mb)}`;
@@ -219,8 +227,10 @@ function renderSettings(){
     $('#rescan-models').onclick=act(async()=>{collectSettings();state=await api('/state');renderSettings();renderStatus();toast('Cartelle locali aggiornate.');});
     body.querySelectorAll('[data-download]').forEach(b=>{const model=state.models.find(m=>m.id===b.dataset.download);b.disabled=model.complete||model.local;b.onclick=act(async()=>{await api('/downloads',{id:model.id,kind:'model'});await refresh();});});
   }else{
-    body.innerHTML=`<div class="settings-grid"><section class="card"><h3>Chat e memoria</h3><div class="settings-grid">${numberField('context','Contesto (token)',1024,32768,1024)}${numberField('max_tokens','Max token di risposta',64,8192,1)}${numberField('gpu_layers','Layer su GPU',0,999)}${numberField('threads','Thread CPU',1,64)}${numberField('temperature','Temperatura',0,2,0.1)}</div><p>Il limite di risposta comprende testo e thinking: da 64 a 8192 token, al massimo metà del contesto. Si applica anche al canvas.</p><div class="mtp-settings"><h3>MTP · Multi-token prediction</h3><label class="mtp-toggle"><input type="checkbox" data-setting="mtp_enabled" ${settingsDraft.mtp_enabled?'checked':''}> Attiva MTP per i modelli compatibili</label>${numberField('mtp_draft_tokens','Token da anticipare',1,8)}<p id="mtp-model-note"></p><p>Il modello anticipa alcuni token e verifica quelli accettabili. Più token non garantiscono più velocità; serve memoria aggiuntiva. Cambiare MTP ricarica il modello dal prossimo messaggio.</p></div></section><section class="card"><h3>Immagini</h3><div class="settings-grid">${numberField('width','Larghezza (px)',256,1536,64)}${numberField('height','Altezza (px)',256,1536,64)}${numberField('steps','Passi (modelli standard)',1,100)}${numberField('strength','Intensità img2img',0.05,1,0.05)}</div><p>FLUX.2 klein usa i suoi 4 passi. Batch singolo e VAE a tasselli. Il setup decide se conservare tutti i modelli o caricarli a richiesta.</p></section><section class="card full"><h3>Come vuoi che risponda</h3><label class="field"><span>Istruzioni personali</span><textarea data-setting="system_prompt">${esc(settingsDraft.system_prompt)}</textarea></label><p>Codice evidenziato, Markdown, LaTeX, diagrammi Mermaid e grafici numerici sono già abilitati. Il canvas esporta Word modificabile e PDF/PNG fedeli all'anteprima; formule e figure nel Word sono immagini.</p></section></div>`;
+    body.innerHTML=`<div class="settings-grid"><section class="card"><h3>Chat e memoria</h3><div class="settings-grid">${numberField('context','Contesto (token)',1024,32768,1024)}${numberField('max_tokens','Max token di risposta',64,8192,1)}${numberField('gpu_layers','Layer su GPU',0,999)}${numberField('threads','Thread CPU',1,64)}${numberField('temperature','Temperatura',0,2,0.1)}</div><p>Il limite di risposta comprende testo e thinking: da 64 a 8192 token, al massimo metà del contesto. Si applica anche al canvas.</p><div class="mtp-settings"><h3>MTP · Multi-token prediction</h3><label class="mtp-toggle"><input type="checkbox" data-setting="mtp_enabled" ${settingsDraft.mtp_enabled?'checked':''}> Attiva MTP per i modelli compatibili</label>${numberField('mtp_draft_tokens','Token da anticipare',1,8)}<p id="mtp-model-note"></p><p>Il modello anticipa alcuni token e verifica quelli accettabili. Più token non garantiscono più velocità; serve memoria aggiuntiva. Cambiare MTP ricarica il modello dal prossimo messaggio.</p></div></section><section class="card" id="image-settings-card"></section><section class="card full"><h3>Come vuoi che risponda</h3><label class="field"><span>Istruzioni personali</span><textarea data-setting="system_prompt">${esc(settingsDraft.system_prompt)}</textarea></label><p>Codice evidenziato, Markdown, LaTeX, diagrammi Mermaid e grafici numerici sono già abilitati. Il canvas esporta Word modificabile e PDF/PNG fedeli all'anteprima; formule e figure nel Word sono immagini.</p></section></div>`;
   }
+  if(settingsTab==='advanced')renderImagePreferences($('#image-settings-card'),settingsDraft,state,scheduleAssessment);
+  if(settingsTab==='advanced'){const folders=document.createElement('section');folders.className='card lora-folder-settings';body.append(folders);loraUI.renderFolders(folders,settingsDraft);}
   body.insertAdjacentHTML('beforeend','<section id="memory-assessment" class="memory-assessment" aria-live="polite">Rilevamento del computer e stima della memoria…</section>');
   const updateVision=()=>{const m=state.models.find(m=>m.id===settingsDraft.chat_model),el=$('#setup-vision-note');if(el){el.textContent=m?.vision?.enabled?'Vision attiva: mmproj caricato automaticamente.':m?.vision?.warning||'Scegli un modello vision per leggere immagini e grafici.';el.classList.toggle('vision-ok',!!m?.vision?.enabled);}};
   body.onchange=e=>{if(e.target.matches('[data-setting]')){collectSettings();updateVision();updateMtpSettings();scheduleAssessment();}};
@@ -243,6 +253,7 @@ function updateDownloads(){
   document.querySelectorAll('[data-cancel-download]').forEach(b=>b.onclick=act(async()=>{await api('/downloads/'+b.dataset.cancelDownload+'/cancel',{});await refresh();}));
 }
 
+$('#chat-advanced').onchange=act(async()=>{const value=$('#chat-advanced').checked;state.settings=await api('/settings',{chat_advanced:value});renderStatus();await renderChat();});
 $('#generation-settings').onclick=()=>openSettings('advanced');
 $('#think-level').onchange=act(async()=>{const level=$('#think-level').value;thinkSaving=true;try{state.settings=await api('/settings',{think_level:level});}finally{thinkSaving=false;renderStatus();}});
 $('#composer').onsubmit=act(send);

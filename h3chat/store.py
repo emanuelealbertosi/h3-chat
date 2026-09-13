@@ -15,6 +15,8 @@ PROFILES = {
 DEFAULTS = {
     "profile": "low", "backend": "vulkan", "chat_model": "", "create_model": "",
     "edit_model": "", "context": 4096, "gpu_layers": 20, "max_tokens": 1024,
+    "image_advanced": False, "chat_advanced": False, "image_overrides": {}, "image_cfg": 7,
+    "lora_dirs": [], "image_sampler": "auto", "image_scheduler": "auto", "seed": -1, "negative_prompt": "",
     "temperature": 0.7, "width": 512, "height": 512, "steps": 20,
     "strength": 0.65, "threads": 4, "system_prompt": "Rispondi in italiano, in modo chiaro e utile.",
     "setup_done": False, "think_level": "off", "mtp_enabled": False, "mtp_draft_tokens": 3, "memory_policy": "on_demand", "ram_cache_gb": 2,
@@ -109,8 +111,10 @@ class Store:
         self.execute("INSERT INTO chats VALUES (?,?,?,0,0,?,?)", (chat_id, title, collection_id, now, now))
         return self.chat(chat_id)
 
-    def enqueue(self, chat_id, prompt, media, settings, canvas=False):
+    def enqueue(self, chat_id, prompt, media, settings, canvas=False, loras=None):
         job_id, user_id, answer_id, now = uid(), uid(), uid(), time.time()
+        loras=loras or []
+        lora_meta={"loras":[{k:l[k] for k in ("id","name","weight","model_id","model_name")} for l in loras]}
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             chat = db.execute("SELECT * FROM chats WHERE id=?", (chat_id,)).fetchone()
@@ -120,10 +124,10 @@ class Store:
                 raise ValueError("Ripristina la chat dall’archivio per continuare.")
             if db.execute("SELECT 1 FROM jobs WHERE chat_id=? AND status IN ('queued','running')", (chat_id,)).fetchone():
                 raise ValueError("Attendi la risposta oppure interrompila.")
-            cur = db.execute("INSERT INTO messages(id,chat_id,role,content,media,created) VALUES (?,?,'user',?,?,?)",
-                             (user_id, chat_id, prompt, json.dumps(media), now))
+            cur = db.execute("INSERT INTO messages(id,chat_id,role,content,media,created,meta) VALUES (?,?,'user',?,?,?,?)",
+                             (user_id, chat_id, prompt, json.dumps(media), now, json.dumps(lora_meta)))
             snapshot = db.execute("SELECT * FROM canvases WHERE chat_id=?", (chat_id,)).fetchone()
-            payload = {"prompt": prompt, "media": media, "settings": settings, "until": cur.lastrowid, "canvas": canvas,
+            payload = {"prompt": prompt, "media": media, "settings": settings, "loras": loras, "until": cur.lastrowid, "canvas": canvas,
                        "canvas_snapshot": dict(snapshot) if canvas and snapshot else None}
             db.execute("INSERT INTO messages(id,chat_id,role,status,created) VALUES (?,?,'assistant','queued',?)", (answer_id, chat_id, now))
             db.execute("INSERT INTO jobs VALUES (?,?,?,?, 'queued','In attesa','',?)", (job_id, chat_id, answer_id, json.dumps(payload), now))

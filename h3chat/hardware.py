@@ -1,6 +1,7 @@
 """Read-only hardware discovery and conservative, per-engine memory estimates."""
 from __future__ import annotations
 from .models import mtp_tokens
+from .image_options import configured as image_configured
 import csv
 import ctypes as C
 import io
@@ -112,6 +113,7 @@ def detect_hardware(refresh=False):
 def assess_model(model, settings, hardware, references=1):
     """Estimate one loaded context and its inference workspace, for the selected placement."""
     chat='chat' in model['capabilities']; files=model['files']; p=model.get('parameters',{})
+    if not chat:settings=settings|image_configured(model,settings)
     sizes={role:sum(f['size']/GIB for f in files if f['role']==role) for role in {f['role'] for f in files}}
     projector=sizes.get('mmproj',0)
     if model.get('vision',{}).get('projector_size'): projector=model['vision']['projector_size']/GIB
@@ -166,6 +168,11 @@ def assess_model(model, settings, hardware, references=1):
         cpu_ram=weights*1.3+workspace+1
         frac=1
         assumptions.append('Picco immagini stimato da pesi, risoluzione e riferimenti. '+('Pesi, VAE ed encoder restano sulla GPU.' if resident and backend!='cpu' else 'Pesi in RAM recuperati dalla GPU a segmenti; VAE ed encoder usano la CPU.' if backend!='cpu' else 'Tutti i componenti usano la RAM.'))
+    lora_gb=model.get('active_lora_bytes',0)/GIB
+    if lora_gb:
+        needed_ram+=lora_gb*2+.1;cpu_ram+=lora_gb*2+.1
+        if backend!='cpu':vram+=lora_gb*2+.1
+        assumptions.append('Incluso un margine per i LoRA selezionati. Gli adapter sono applicati al volo e aumentano il consumo di memoria.')
     status='ok'; title='OK stimato'; advice='La configurazione sembra rientrare nella memoria libera, con un margine di sicurezza.'
     if ram.get('free_mb') is None:
         status='unknown';title='Memoria non rilevata';advice='Impossibile valutare il rischio OOM senza conoscere la RAM libera.'

@@ -14,6 +14,8 @@ from .store import DEFAULTS, PROFILES, Store, uid
 from .models import discover_local, inspect_model, THINK_LEVELS, thinking_parameters, mtp_tokens
 from .external_models import PROFILES as EXTERNAL_PROFILES, ROLE_LABELS, build_model, validate_config
 from .hardware import detect_hardware, assess_model, assess_selection
+from .loras import LoraLibrary, validate_directories, for_model as loras_for_model, public as public_loras
+from .image_options import SAMPLERS, SCHEDULERS, IMAGE_DEFAULT_KEYS, validate_overrides, options as image_options
 
 
 class Service:
@@ -25,6 +27,7 @@ class Service:
         self.runtimes = json.loads((self.root / "runtimes.json").read_text(encoding="utf-8"))
         self.downloads = Downloads(self.root, self.catalog, self.runtimes)
         self.engine = Engine(self.root, self.data, self.catalog)
+        self.loras = LoraLibrary()
         self.token = secrets.token_hex(32)
         self.wake, self.closed = threading.Event(), threading.Event()
         self.lock = threading.RLock()
@@ -52,8 +55,8 @@ class Service:
 
     def state(self):
         models = self.refresh_models()
-        return {"token": self.token, "version": "0.5.0", "settings": self.store.settings(), "profiles": PROFILES,
-                "models": models,"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
+        return {"token": self.token, "version": "0.6.0", "settings": self.store.settings(), "profiles": PROFILES,
+                "models": models,"image_options":{"samplers":SAMPLERS,"schedulers":SCHEDULERS,"defaults":{k:DEFAULTS[k] for k in IMAGE_DEFAULT_KEYS}},"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
                 "runtimes": {key: {"ready": all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
                                     "size": sum(f["size"] for f in r["files"])} for key, r in self.runtimes.items()},
                 "chats": self.store.all("SELECT * FROM chats ORDER BY pinned DESC,updated DESC"),
@@ -103,6 +106,14 @@ class Service:
                             ("width", 256, 1536), ("height", 256, 1536), ("steps", 1, 100), ("threads", 1, 64), ("ram_cache_gb", 0, 32), ("mtp_draft_tokens", 1, 8)):
             if type(s[key]) is not int or not lo <= s[key] <= hi:
                 raise ValueError(f"{key}: inserisci un intero tra {lo} e {hi}.")
+        s['lora_dirs']=validate_directories(s['lora_dirs'])
+        validate_overrides(s['image_overrides'])
+        if type(s['image_advanced']) is not bool or type(s['chat_advanced']) is not bool:raise ValueError('Avanzate: usa un valore booleano.')
+        if type(s['image_cfg']) not in (int,float) or not 0<=s['image_cfg']<=30:raise ValueError('CFG fuori intervallo.')
+        if s['image_sampler'] not in SAMPLERS or s['image_scheduler'] not in SCHEDULERS:
+            raise ValueError('Sampler o scheduler non supportato dal motore integrato.')
+        if type(s['seed']) is not int or not -1<=s['seed']<=2147483647:raise ValueError('Seed: usa -1 per casuale oppure un intero da 0 a 2147483647.')
+        if not isinstance(s['negative_prompt'],str) or len(s['negative_prompt'])>8000:raise ValueError('Negative prompt: massimo 8000 caratteri.')
         if s["max_tokens"] > s["context"] // 2:
             raise ValueError("I token di risposta non possono superare metà del contesto.")
         if s["width"] % 64 or s["height"] % 64:
@@ -147,11 +158,13 @@ class Service:
             raise ValueError("Numero di riferimenti non valido.")
         hardware = self.hardware()
         models = self.refresh_models()
+        chosen_loras=self.loras.capture(body.get("loras",[]),settings["lora_dirs"],self.catalog)
         selected = []
         selected_models = []
         for key in ("chat_model", "create_model", "edit_model"):
             model = next((m for m in models if m["id"] == settings[key]), None)
             if model:
+                model=model|{"active_lora_bytes":sum(l["size"] for l in chosen_loras if l["model_id"]==model["id"] and l["weight"]!=0)}
                 selected_models.append(model)
                 selected.append(assess_model(model, settings, hardware, refs) | {"role":key})
         return {"hardware":hardware,"models":selected,"references":refs,
@@ -210,7 +223,8 @@ class Service:
         canvas = body.get("canvas", False)
         if type(canvas) is not bool:
             raise ValueError("Destinazione canvas non valida.")
-        job_id = self.store.enqueue(chat_id, prompt.strip(), media, settings, canvas)
+        loras=self.loras.capture(body.get('loras',[]),settings['lora_dirs'],self.catalog)
+        job_id = self.store.enqueue(chat_id, prompt.strip(), media, settings, canvas, loras)
         self.wake.set()
         return {"job_id": job_id}
 
@@ -344,8 +358,14 @@ class Service:
                 if len(refs) > image_model.get("max_refs", 1):
                     raise ValueError(f"Il modello accetta fino a {image_model.get('max_refs', 1)} riferimenti. Seleziona un modello compatibile nelle impostazioni.")
                 meta.update(intent=intent, model=image_model["name"], image_prompt=route["prompt"] or payload["prompt"], references=refs)
+                selected_loras=loras_for_model(payload.get('loras',[]),image_model)
+                generation_settings=settings|{'_loras':selected_loras,'_image_options':image_options(image_model,settings)}
+                meta['loras']=public_loras(selected_loras)
+                meta['image_parameters']=generation_settings['_image_options']
+                meta['loras_skipped']=public_loras([l for l in payload.get('loras',[]) if l not in selected_loras])
                 stage("Modifica immagine" if intent == "edit" else "Creazione immagine")
-                media = self.engine.generate(image_model, settings, meta["image_prompt"], refs, job["id"], cancel, stage)
+                media = self.engine.generate(image_model, generation_settings, meta["image_prompt"], refs, job["id"], cancel, stage)
+                if media.get('generation'):meta['image_parameters'].update(media['generation'])
                 text = "Ecco l'immagine modificata." if intent == "edit" else "Ecco l'immagine."
                 if payload.get("canvas"):
                     self.save_artifact(job["chat_id"], "Immagine", "", [media])

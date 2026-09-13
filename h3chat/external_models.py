@@ -8,12 +8,19 @@ import struct
 from functools import lru_cache
 from pathlib import Path
 from .models import metadata
+from .image_options import SAMPLERS, SCHEDULERS
 
 PROFILES = {
     'chat': {'label':'Chat / vision · GGUF','main':'model','required':['model'],'optional':['mmproj'],
              'capabilities':['chat'],'max_refs':4},
     'sd': {'label':'Stable Diffusion / SDXL · checkpoint completo','main':'model','required':['model'],'optional':['vae'],
            'architecture':'sd','capabilities':['create','edit'],'max_refs':1},
+    'sdxl': {'label':'SDXL · checkpoint completo','main':'model','required':['model'],'optional':['vae'],
+             'architecture':'sd','capabilities':['create','edit'],'max_refs':1},
+    'anima': {'label':'Anima Base / Aesthetic · diffusore + Qwen3 Base + VAE','main':'diffusion','required':['diffusion','llm','vae'],'optional':[],
+              'architecture':'anima','capabilities':['create'],'max_refs':0,'steps':30,'cfg':4},
+    'anima-turbo': {'label':'Anima Turbo · diffusore + Qwen3 Base + VAE','main':'diffusion','required':['diffusion','llm','vae'],'optional':[],
+              'architecture':'anima','capabilities':['create'],'max_refs':0,'steps':8,'cfg':1},
     'flux2': {'label':'FLUX.2 klein · diffusore + encoder + VAE','main':'diffusion','required':['diffusion','llm','vae'],'optional':[],
               'architecture':'flux2','capabilities':['create','edit'],'max_refs':4,'steps':4,'cfg':1},
     'qwen-edit': {'label':'Qwen Image Edit · diffusore + componenti','main':'diffusion','required':['diffusion','llm','llm_vision','vae'],'optional':[],
@@ -90,6 +97,8 @@ def build_model(config):
         defaults.pop('steps',None)
         if config['steps']:defaults['steps']=config['steps']
     if 'cfg' in config:defaults['cfg']=config['cfg']
+    for key in ('sampler','scheduler'):
+        if key in config:defaults[key]=config[key]
     return defaults | {
         'id':config['id'],'name':config['name'] or str(info.get('general.name') or main.stem),
         'local':True,'external':True,'external_config':config,'files':files,'size':size,'ram_gb':round(size/1024**3+2,1),
@@ -99,7 +108,7 @@ def build_model(config):
 
 
 def validate_config(body, model_id=None):
-    if not isinstance(body,dict) or set(body)-{'id','profile','name','files','projector_mode','steps','cfg'}:
+    if not isinstance(body,dict) or set(body)-{'id','profile','name','files','projector_mode','steps','cfg','sampler','scheduler'}:
         raise ValueError('Collegamento modello non valido.')
     kind=body.get('profile')
     if kind not in PROFILES:raise ValueError('Scegli il tipo di modello.')
@@ -133,7 +142,9 @@ def validate_config(body, model_id=None):
         steps=body.get('steps',profile.get('steps',0));cfg=body.get('cfg',profile.get('cfg',7))
         if type(steps) is not int or not 0<=steps<=100 or type(cfg) not in (int,float) or not 0<=cfg<=30:
             raise ValueError('Passi o CFG non validi.')
-        config.update(steps=steps,cfg=cfg)
+        sampler=body.get('sampler','auto');scheduler=body.get('scheduler','auto')
+        if sampler not in SAMPLERS or scheduler not in SCHEDULERS:raise ValueError('Sampler o scheduler non supportato dal motore integrato.')
+        config.update(steps=steps,cfg=cfg,sampler=sampler,scheduler=scheduler)
     model=build_model(config)
     if model['external_problems']:raise ValueError(' '.join(model['external_problems']))
     return config

@@ -127,4 +127,5 @@ class Session:
                 'ready':self.ready and self.alive(),'pid':self.process.pid if self.alive() else None,
                 'location':'VRAM' if gpu and self.settings.get('memory_policy')=='resident' else 'RAM / VRAM' if gpu else 'RAM',
                 'mtp_tokens':next((v for k,v in self.key[2] if k=='mtp_tokens'),0) if self.ready else 0,
+                'loras':getattr(self,'active_loras',[]),
                 'uses':self.uses,'started':self.started}

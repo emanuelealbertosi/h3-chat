@@ -4,7 +4,7 @@ Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle 
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.5.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.5.0/H3-Chat-0.5.0-windows-x64.zip) dalla [release v0.5.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.5.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.6.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.6.0/H3-Chat-0.6.0-windows-x64.zip) dalla [release v0.6.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.6.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 **Primo avvio:** apri **Impostazioni → Setup**, scegli hardware e modelli. Il catalogo scarica i pesi e tutti i componenti richiesti, controllando dimensione e SHA-256. I backend GPU si installano dallo stesso setup. Dopo i download, inferenza, interfaccia e documenti funzionano offline.
 
@@ -22,7 +22,7 @@ La finestra desktop usa Microsoft Edge in modalità app, normalmente già presen
 
 Non ci sono modalità da selezionare nel composer. Le richieste esplicite più comuni sono riconosciute direttamente; quelle ambigue sono classificate dal modello chat con uno schema JSON vincolato. I modelli piccoli possono interpretare male richieste complesse: per codice, routing e analisi densa scegli un modello più capace dal setup.
 
-Le tre selezioni nelle impostazioni sono **chat/router/vision**, **creazione immagini** e **modifica immagini**. Un solo modello è assegnato a ciascun ruolo. Chat e immagini non restano contemporaneamente in memoria: il processo LLM viene terminato prima di avviare quello immagini. A fine richiesta viene rilasciato anche il motore attivo. La coda è globale e seriale, con interruzione del lavoro e registrazione degli errori.
+Le tre selezioni nelle impostazioni sono **chat/router/vision**, **creazione immagini** e **modifica immagini**. Un solo modello è assegnato a ciascun ruolo. La modalità A richiesta conserva il modello corrente e lo scarica prima di caricarne uno diverso; Residenti conserva i modelli scelti. Le due modalità sono selezionabili dal Setup. La coda è globale e seriale, con interruzione del lavoro e registrazione degli errori.
 
 ## Vision e modelli locali
 
@@ -46,6 +46,12 @@ I file riconoscibili nella stessa cartella vengono proposti come componenti; con
 Dopo il collegamento scegli il modello nel Setup per chat, creazione o editing. Lo stesso modello immagini può occupare entrambi i menu e condivide un solo caricamento. Vision, Think, stime RAM/VRAM, modalità Residenti/A richiesta e cache si applicano anche ai collegamenti esterni.
 
 **Modifica collegamento** corregge i percorsi se sposti i file o cambi unità. Se un file non è più disponibile, il modello resta nel catalogo con un avviso. **Scollega** elimina soltanto il riferimento dall’app: non cancella, sposta o sovrascrive i file originali. Durante un lavoro i collegamenti non possono essere sostituiti o rimossi; interrompi o attendi il lavoro. Usa Libera memoria prima di spostare manualmente pesi in uso. Il backup di `data/` conserva i collegamenti, ma non include i file esterni: su un altro computer occorre correggere i percorsi.
+
+## Immagini, Anima e LoRA
+
+In **Preferenze → Impostazioni immagini** trovi i valori predefiniti per modello. Attiva **Avanzate** per modificarli; disattivarlo nasconde i controlli mantenendo i valori salvati. Il secondo flag **Avanzate nella chat** mostra i parametri effettivi delle immagini.
+
+**Anima Turbo 1.1 Q4** è scaricabile con encoder Qwen3-0.6B Base e VAE Qwen Image. Puoi anche collegare Anima Base/Aesthetic o Turbo dalle cartelle originali. In **Preferenze → Cartelle LoRA** scegli una o più cartelle; in chat, **LoRA** permette di selezionare fino a otto adapter con peso e modello destinatario. I file restano dove si trovano. [Guida a preset, parametri e LoRA](docs/images-and-loras.md).
 
 ## MTP e max token
 
@@ -181,7 +187,9 @@ Per aggiornare una vecchia installazione, arrestala con `Ferma-H3-Chat.bat`, fai
 
 Il packaging include una lista esplicita di file, esclude chat, modelli, cache e registri personali, produce uno ZIP Windows e il suo SHA-256. Il workflow GitHub costruisce l'artefatto; su un tag `v*` prepara una **release in bozza** per la revisione del proprietario del repository. Nessun repository remoto viene creato automaticamente dall'app.
 
-## Stato della versione 0.4
+## Stato della versione 0.6
+
+Preset, controlli Avanzate e LoRA sono descritti nelle [verifiche della 0.6](docs/validation-v0.6.md).
 
 I collegamenti esterni sono verificati anche con un modello vision reale caricato fuori dalla cartella dell’app, senza copie dei pesi: [Verifica 0.4](docs/validation-v0.4.md).
 

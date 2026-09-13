@@ -87,7 +87,7 @@ class Handler(BaseHTTPRequestHandler):
             method = self.command
             if method == "GET":
                 if path == "/api/health":
-                    return self.json({"app": "h3-chat", "version": "0.5.0", "instance": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]})
+                    return self.json({"app": "h3-chat", "version": "0.6.0", "instance": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]})
                 if path == "/api/state":
                     return self.json(self.app.state())
                 if path == "/api/hardware":
@@ -116,6 +116,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.file(safe_join(self.app.data, relative))
                 return self.json({"error": "Risorsa non trovata."}, 404)
             body = self.read_body()
+            if path == "/api/loras" and method == "POST":
+                return self.json(self.app.loras.scan(self.app.store.settings()["lora_dirs"],refresh=body.get("refresh") is True))
             if path == "/api/model-files/browse" and method == "POST":
                 return self.json(browse(body))
             if path == "/api/model-files/suggest" and method == "POST":

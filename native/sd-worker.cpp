@@ -5,6 +5,7 @@
 #include <io.h>
 #include <fcntl.h>
 #include <cstdio>
+#include <cmath>
 #include <filesystem>
 #include <iostream>
 #include <map>
@@ -32,7 +33,7 @@ struct Api {
  FN(sd_commit) FN(sd_ctx_params_init) FN(new_sd_ctx) FN(free_sd_ctx)
  FN(sd_img_gen_params_init) FN(generate_image) FN(free_sd_images)
  FN(sd_set_progress_callback) FN(sd_get_default_sample_method) FN(sd_get_default_scheduler)
- FN(sd_list_devices)
+ FN(sd_list_devices) FN(str_to_sample_method) FN(str_to_scheduler) FN(sd_sample_method_name) FN(sd_scheduler_name)
 #undef FN
  void open(const std::string& path){
   auto directory=std::filesystem::path(wide(path)).parent_path().wstring();
@@ -43,7 +44,7 @@ struct Api {
   LOAD(sd_commit) LOAD(sd_ctx_params_init) LOAD(new_sd_ctx) LOAD(free_sd_ctx)
   LOAD(sd_img_gen_params_init) LOAD(generate_image) LOAD(free_sd_images)
   LOAD(sd_set_progress_callback) LOAD(sd_get_default_sample_method) LOAD(sd_get_default_scheduler)
-  LOAD(sd_list_devices)
+  LOAD(sd_list_devices) LOAD(str_to_sample_method) LOAD(str_to_scheduler) LOAD(sd_sample_method_name) LOAD(sd_scheduler_name)
 #undef LOAD
   std::string commit=p_sd_commit();
   if(commit.find("7f410a3")==std::string::npos)throw std::runtime_error("Native ABI version mismatch: "+commit);
@@ -99,18 +100,35 @@ int main(){
 #undef PATH
      p.n_threads=r.value("threads",4);p.enable_mmap=r.value("mmap",true);p.eager_load=true;
      p.backend=text("backend",r.at("backend"));p.params_backend=text("params_backend",r.at("params_backend"));
+     p.lora_apply_mode=LORA_APPLY_AT_RUNTIME;
      p.auto_fit=false;p.diffusion_flash_attn=r.value("diffusion_fa",false);
      context=api.p_new_sd_ctx(&p);if(!context)throw std::runtime_error("Model initialization failed");
      api.p_sd_set_progress_callback(progress,nullptr);emit({{"event","ready"},{"commit",api.p_sd_commit()}});continue;
     }
     if(op!="generate"||!context)throw std::runtime_error("No model loaded");
     sd_img_gen_params_t p{};api.p_sd_img_gen_params_init(&p);
-    std::string prompt=r.at("prompt"),negative="";p.prompt=prompt.c_str();p.negative_prompt=negative.c_str();
+    std::string prompt=r.at("prompt"),negative=r.value("negative_prompt",std::string());p.prompt=prompt.c_str();p.negative_prompt=negative.c_str();
     p.width=r.at("width");p.height=r.at("height");p.batch_count=1;p.seed=r.at("seed");p.strength=r.value("strength",.65f);
     p.sample_params.sample_steps=r.at("steps");p.sample_params.guidance.txt_cfg=r.at("cfg");p.sample_params.guidance.img_cfg=r.at("cfg");
     p.sample_params.sample_method=r.value("euler",false)?EULER_SAMPLE_METHOD:api.p_sd_get_default_sample_method(context);
-    p.sample_params.scheduler=api.p_sd_get_default_scheduler(context,p.sample_params.sample_method);
-    p.sample_params.flow_shift=r.value("flow_shift",0.f);p.vae_tiling_params.enabled=true;
+    std::string sampler=r.value("sampler",std::string("auto")),scheduler=r.value("scheduler",std::string("auto"));
+    if(sampler!="auto"){p.sample_params.sample_method=api.p_str_to_sample_method(sampler.c_str());if(p.sample_params.sample_method==SAMPLE_METHOD_COUNT)throw std::runtime_error("Unsupported sampler");}
+    p.sample_params.scheduler=scheduler=="auto"?api.p_sd_get_default_scheduler(context,p.sample_params.sample_method):api.p_str_to_scheduler(scheduler.c_str());
+    if(p.sample_params.scheduler==SCHEDULER_COUNT)throw std::runtime_error("Unsupported scheduler");
+    auto selected=r.value("loras",json::array());if(!selected.is_array()||selected.size()>8)throw std::runtime_error("Invalid LoRA selection");
+    std::vector<std::string> lora_paths;std::vector<sd_lora_t> loras;lora_paths.reserve(selected.size());loras.reserve(selected.size());
+    for(const auto& item:selected){
+     float weight=item.at("weight");if(!std::isfinite(weight)||weight < -2||weight > 2)throw std::runtime_error("Invalid LoRA weight");
+     lora_paths.push_back(item.at("path"));sd_lora_t lora{};lora.path=lora_paths.back().c_str();lora.multiplier=weight;lora.is_high_noise=false;loras.push_back(lora);
+    }
+    p.loras=loras.empty()?nullptr:loras.data();p.lora_count=(uint32_t)loras.size();
+    // Omitted flow shift must keep the API's automatic value (INFINITY).
+    // Zero collapses flow-model timesteps and produces invalid/blank images.
+    if(r.contains("flow_shift")){
+     float shift=r.at("flow_shift");if(!std::isfinite(shift)||shift<=0)throw std::runtime_error("Invalid flow shift");
+     p.sample_params.flow_shift=shift;
+    }
+    p.vae_tiling_params.enabled=true;
     std::vector<std::unique_ptr<InputImage>> owners;std::vector<sd_image_t> refs;
     for(const auto& path:r.value("references",json::array())){owners.push_back(std::make_unique<InputImage>(path));refs.push_back(owners.back()->value);}
     if(r.value("init_image",false)&&!refs.empty())p.init_image=refs[0];
@@ -121,7 +139,8 @@ int main(){
      if(!ok||!result||count<1)throw std::runtime_error("Image generation returned no result");
      write_png(r.at("output"),result[0]);
     }catch(...){if(result)api.p_free_sd_images(result,count);throw;}
-    api.p_free_sd_images(result,count);emit({{"event","done"},{"output",r.at("output")}});
+    api.p_free_sd_images(result,count);emit({{"event","done"},{"output",r.at("output")},
+      {"parameters",{{"seed",p.seed},{"sampler",api.p_sd_sample_method_name(p.sample_params.sample_method)},{"scheduler",api.p_sd_scheduler_name(p.sample_params.scheduler)}}}});
    }catch(const std::exception& error){emit({{"event","error"},{"message",error.what()}});}
   }
  }catch(const std::exception& error){emit({{"event","error"},{"message",error.what()}});}
