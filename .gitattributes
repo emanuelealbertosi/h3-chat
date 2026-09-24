@@ -4,4 +4,4 @@
 *.ttf binary
 *.png binary
 
-*.patch text eol=lf
+*.patch text eol=lf whitespace=-blank-at-eol
