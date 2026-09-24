@@ -43,8 +43,8 @@ class MusicTests(unittest.TestCase):
  def test_original_model_paths_and_required_sidecars(self):
   self.assertTrue(self.model['ready'])
   files=self.app.engine.model_files(self.model)
-  self.assertEqual(files['vae'],self.config['files']['vae'])
-  self.assertEqual(files['model'],self.config['files']['model'])
+  self.assertTrue(Path(files['vae']).samefile(self.config['files']['vae']))
+  self.assertTrue(Path(files['model']).samefile(self.config['files']['model']))
   self.assertFalse((self.data/'data/models').exists())
   Path(files['tokenizer']).unlink()
   with self.assertRaisesRegex(ValueError,'Tokenizer'):self.app.external_model(self.config)
