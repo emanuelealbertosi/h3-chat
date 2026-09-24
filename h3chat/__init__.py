@@ -1,2 +1,2 @@
 """H3-Chat: private, local multimodal conversations."""
-__version__ = "0.8.0"
+__version__ = "0.8.1"

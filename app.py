@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import logging
 import mimetypes
 import secrets
 import sqlite3
@@ -20,6 +21,7 @@ from h3chat.pdf_export import export_pdf
 from h3chat.store import uid
 
 ROOT = Path(__file__).resolve().parent
+LOG = logging.getLogger("h3chat.http")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -33,6 +35,11 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def json(self, value, status=200):
+        path = urllib.parse.urlsplit(self.path).path
+        if status >= 400:
+            LOG.warning("%s %s — %s: %s", self.command, path, status, value.get("error", "Errore"))
+        elif self.command != "GET" and path != "/api/assess":
+            LOG.info("%s %s — %s", self.command, path, status)
         body = json.dumps(value, ensure_ascii=False).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -205,6 +212,7 @@ class Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             pass
         except Exception as exc:
+            LOG.exception("Errore interno durante %s %s", self.command, urllib.parse.urlsplit(self.path).path)
             self.json({"error": str(exc)}, 500)
 
     do_GET = do_POST = do_PATCH = do_DELETE = do_PUT = handle_request
@@ -215,17 +223,21 @@ def main():
     parser.add_argument("--port", type=int, default=8787)
     parser.add_argument("--data", type=Path)
     args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     app = Service(ROOT, args.data)
     try:
         server.app = app
         server.daemon_threads = True
-        print(f"H3-Chat http://127.0.0.1:{args.port}", flush=True)
+        LOG.info("H3-Chat %s pronto: http://127.0.0.1:%s", __version__, args.port)
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        LOG.info("Arresto di H3-Chat e dei motori…")
         app.close()
+        server.server_close()
+        LOG.info("H3-Chat arrestato.")
 
 
 if __name__ == "__main__":

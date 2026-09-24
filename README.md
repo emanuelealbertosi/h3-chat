@@ -4,13 +4,15 @@ Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle 
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.8.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.8.0/H3-Chat-0.8.0-windows-x64.zip) dalla [release v0.8.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.8.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.8.1-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.8.1/H3-Chat-0.8.1-windows-x64.zip) dalla [release v0.8.1](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.8.1), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+
+Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 
 **Primo avvio:** apri **Impostazioni → Setup**, scegli hardware e modelli. Il catalogo scarica i pesi e tutti i componenti richiesti, controllando dimensione e SHA-256. I backend GPU si installano dallo stesso setup. Dopo i download, inferenza, interfaccia e documenti funzionano offline.
 
 **Dai sorgenti:** `Installa-H3-Chat.bat` prepara Python integrato e il launcher. Se manca il bundle dell'interfaccia, servono Node.js 22+ e npm per compilarlo. Usa la release ZIP per evitare questo passaggio.
 
-La finestra desktop usa Microsoft Edge in modalità app, normalmente già presente in Windows 10/11. Se Edge manca, la chat si apre nel browser predefinito; l'export PDF richiede Edge. Chiudere la finestra lascia finire il lavoro corrente. `Ferma-H3-Chat.bat` arresta il servizio e i processi di inferenza posseduti dall'app.
+La finestra desktop usa Microsoft Edge in modalità app, normalmente già presente in Windows 10/11. Se Edge manca, la chat si apre nel browser predefinito; l'export PDF richiede Edge. Chiudere la finestra lascia finire il lavoro corrente. `H3-Chat.exe` e `Avvia-H3-Chat.bat` lasciano aperta una console con i log in tempo reale: avvio, errori delle operazioni e fasi di generazione. Chiudere la console (o Ctrl+C) chiude soltanto la vista dei log. `Ferma-H3-Chat.bat` arresta il servizio e i processi di inferenza posseduti dall'app. I log restano in `data/server.log`, con i dettagli dei motori in `data/logs/`.
 
 ## Un unico prompt
 
@@ -205,7 +207,7 @@ I limiti degli allegati sono quattro immagini, 12 MB ciascuna e 8192 px per lato
 - `data/exports/`: PDF creati e documenti di stampa intermedi.
 - `models/files/`: componenti condivisi, con identificazione dal checksum.
 - `runtime/`: Python e motori CPU/Vulkan/CUDA isolati dall'ambiente di sistema.
-- `data/logs/`: registri dei lavori; `data/server.log`: avvio dell'app.
+- `data/logs/`: registri dei lavori; `data/server.log`: avvio, operazioni, errori e fasi di generazione.
 
 Il servizio ascolta solo su `127.0.0.1`. Host e Origin sono verificati, le modifiche richiedono il token di sessione e il server LLM privato usa una propria chiave. La UI non esegue HTML o JavaScript generato dal modello. I download vengono scritti in `.part` e pubblicati solo dopo la verifica completa. Gli archivi con percorsi esterni o symlink sono rifiutati. Dopo un arresto inatteso le risposte incomplete sono marcate come interrotte.
 

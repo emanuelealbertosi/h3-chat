@@ -135,6 +135,21 @@ class CoreTests(unittest.TestCase):
         self.assertIn('Router',output)
         self.assertEqual(partial_string('{"content":"\\ud83d\\ude00"}', 'content'), chr(0x1f600))
 
+    def test_settings_error_is_logged_without_request_body_or_token(self):
+        server=ThreadingHTTPServer(('127.0.0.1',0),Handler);server.app=self.app
+        thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+        try:
+            request=urllib.request.Request(f'http://127.0.0.1:{server.server_port}/api/settings',data=json.dumps({'context':1024,'max_tokens':2048,'system_prompt':'private request body'}).encode(),headers={'Content-Type':'application/json','X-H3-Token':self.app.token})
+            with self.assertLogs('h3chat.http',level='WARNING') as logs:
+                with self.assertRaises(urllib.error.HTTPError) as error:urllib.request.urlopen(request)
+            self.assertEqual(error.exception.code,400)
+            text=' '.join(logs.output)
+            self.assertIn('POST /api/settings',text)
+            self.assertIn('metà del contesto',text)
+            self.assertNotIn('private request body',text)
+            self.assertNotIn(self.app.token,text)
+        finally:server.shutdown();server.server_close()
+
     def test_origin_and_session_guards(self):
         server=ThreadingHTTPServer(('127.0.0.1',0),Handler);server.app=self.app
         thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()

@@ -2,6 +2,7 @@ from __future__ import annotations
 from . import __version__
 import base64
 import json
+import logging
 import os
 import re
 import secrets
@@ -22,6 +23,9 @@ from .external_models import PROFILES as EXTERNAL_PROFILES, ROLE_LABELS, build_m
 from .hardware import detect_hardware, assess_model, assess_selection
 from .loras import LoraLibrary, validate_directories, for_model as loras_for_model, public as public_loras
 from .image_options import SAMPLERS, SCHEDULERS, NATIVE_SAMPLERS, NATIVE_SCHEDULERS, IMAGE_DEFAULT_KEYS, validate_overrides, options as image_options
+
+
+LOG = logging.getLogger("h3chat.jobs")
 
 
 class Service:
@@ -322,6 +326,7 @@ class Service:
             log_path = self.data / "logs" / (job["id"] + ".log")
             log_path.parent.mkdir(parents=True, exist_ok=True)
             def stage(label):
+                LOG.info("Lavoro %s · %s", job["id"][:8], label)
                 self.store.execute("UPDATE jobs SET stage=? WHERE id=?", (label, job["id"]))
             self.engine.prepare(settings, cancel, stage)
             visual_history=[m|{"media":[x for x in m["media"] if x.get("mime", "").startswith("image/")]} for m in history]
@@ -447,6 +452,7 @@ class Service:
             self.engine.abort_active()
             status = "cancelled" if isinstance(exc, Cancelled) or cancel.is_set() else "failed"
             error = "Generazione interrotta." if status == "cancelled" else str(exc)
+            LOG.log(logging.INFO if status == "cancelled" else logging.ERROR, "Lavoro %s · %s", job["id"][:8], error)
             self.store.update_answer(job, text, status, meta=meta | {"error": error})
             self.store.execute("UPDATE jobs SET status=?,error=?,stage=? WHERE id=?", (status, error, error, job["id"]))
         finally:

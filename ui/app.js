@@ -16,7 +16,20 @@ const api=async(path,body,method='POST')=>{
   const response=await fetch('/api'+path,{method:body===undefined?'GET':method,headers:body===undefined?{}:{'Content-Type':'application/json','X-H3-Token':state?.token||''},body:body===undefined?undefined:JSON.stringify(body)});
   const data=await response.json();if(!response.ok)throw Error(data.error||'Operazione non riuscita.');return data;
 };
-function toast(text,error=false){$('#toast').textContent=text;$('#toast').className='show'+(error?' error':'');clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').className='',5000);}
+function toast(text,error=false){
+  const notice=$('#toast');
+  const host=document.activeElement?.closest('dialog[open]')||[...document.querySelectorAll('dialog:modal')].at(-1)||document.body;
+  host.append(notice);notice.textContent=text;notice.className='show'+(error?' error':'');
+  clearTimeout(toast.timer);toast.timer=setTimeout(()=>notice.className='',5000);
+}
+// Native modal dialogs live above body content, including any z-index.
+document.addEventListener('close',e=>{if(e.target.contains?.($('#toast'))){
+  const host=[...document.querySelectorAll('dialog:modal')].at(-1)||document.body;host.append($('#toast'));
+}},true);
+function settingsError(message=''){
+  const box=$('#settings-error');box.textContent=message?'Impostazioni non salvate. '+message:'';box.hidden=!message;
+  if(message)box.focus();
+}
 const act=fn=>(...args)=>{try{return Promise.resolve(fn(...args)).catch(e=>toast(e.message,true));}catch(e){toast(e.message,true);}};
 const gb=n=>(n/1e9).toLocaleString('it-IT',{maximumFractionDigits:2})+' GB';
 const visualControls=initVisualControls({getState:()=>state,getChatId:()=>current});
@@ -190,7 +203,7 @@ function collectSettings(){for(const field of $('#settings-body').querySelectorA
 function options(items,value){return items.map(([id,label])=>`<option value="${id}" ${id===value?'selected':''}>${esc(label)}</option>`).join('');}
 function settingSelect(key,label,items,hint=''){return `<label class="field"><span>${label}</span><select data-setting="${key}">${options(items,settingsDraft[key])}</select>${hint?`<small>${hint}</small>`:''}</label>`;}
 function numberField(key,label,min,max,step=1){return `<label class="field"><span>${label}</span><input type="number" data-setting="${key}" value="${settingsDraft[key]}" min="${min}" max="${max}" step="${step}"></label>`;}
-async function openSettings(tab='setup'){if(!state)return;settingsDraft=structuredClone(state.settings);settingsTab=tab;$('#settings').showModal();renderSettings();}
+async function openSettings(tab='setup'){if(!state)return;settingsDraft=structuredClone(state.settings);settingsTab=tab;settingsError();$('#settings').showModal();renderSettings();}
 function scheduleAssessment(){
   clearTimeout(assessmentTimer);assessmentRequest++;
   assessmentTimer=setTimeout(act(updateAssessment),300);
@@ -301,7 +314,15 @@ document.querySelectorAll('[data-prompt]').forEach(b=>b.onclick=()=>{$('#prompt'
 $('#memory-status').onclick=()=>openSettings();
 $('#settings-open').onclick=()=>openSettings();$('#setup-nudge').onclick=()=>openSettings();$('#settings-close').onclick=()=>$('#settings').close();
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{collectSettings();settingsTab=b.dataset.tab;renderSettings();});
-$('#settings-save').onclick=act(async()=>{collectSettings();settingsDraft.setup_done=true;state.settings=await api('/settings',settingsDraft);toast('Impostazioni salvate.');$('#settings').close();await refresh();});
+$('#settings-save').onclick=async()=>{
+  const button=$('#settings-save');if(button.disabled)return;
+  settingsError();button.disabled=true;button.textContent='Salvataggio…';
+  try{
+    collectSettings();settingsDraft.setup_done=true;state.settings=await api('/settings',settingsDraft);
+    $('#settings').close();toast('Impostazioni salvate.');await refresh();
+  }catch(e){settingsError(e.message);}
+  finally{button.disabled=false;button.textContent='Salva impostazioni';}
+};
 $('#canvas-toggle').onclick=act(()=>toggleCanvas());$('#canvas-close').onclick=act(()=>toggleCanvas(false));
 $('#canvas-follow').onchange=act(()=>toggleCanvas($('#canvas-follow').checked));
 $('#canvas-preview-tab').onclick=act(async()=>{canvasEditing=false;await persistCanvas();await renderCanvas();});

@@ -22,3 +22,13 @@
 .visual-model-actions{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}.visual-setup{margin-top:24px}.visual-setup>.card{margin-top:16px}
 
 .music-toggle[aria-pressed="true"]{background:var(--ink,#153d40);color:#fff}.music-inputs{padding:10px 14px;border-top:1px solid #dce2d9;max-height:330px;overflow:auto}.music-inputs textarea{font-size:13px;min-height:60px}.music-inputs summary,.music-composition summary,.music-parameters summary{cursor:pointer}.music-composition pre,.music-parameters pre{white-space:pre-wrap;overflow-wrap:anywhere}.audio-output{background:#f0f3eb;border:1px solid #d5ded2;border-radius:16px;padding:18px;max-width:100%;margin:12px 0}.audio-title{font-weight:600;margin-bottom:12px;overflow-wrap:anywhere}.audio-output audio{display:block;width:100%;max-width:100%;height:44px}.audio-output figcaption{margin-top:10px}.music-settings{margin-top:18px}.music-settings hr{border:0;border-top:1px solid #dce2d9;margin:20px 0}
+
+/* Keep failed saves in the modal's visible footer, including small screens. */
+.settings-dialog[open]{display:flex;flex-direction:column;overflow:hidden}
+.settings-dialog>header,.settings-dialog>.settings-tabs,.settings-dialog>footer{flex-shrink:0}
+#settings-body{min-height:0;flex:1 1 auto}
+.settings-dialog>footer{flex-wrap:wrap;gap:12px 20px}
+.settings-error{flex:0 0 100%;min-width:0;max-height:20dvh;overflow:auto;overflow-wrap:anywhere;white-space:pre-wrap;background:#fbefeb;color:#7b352b;border:1px solid #d6a496;border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.5}
+.settings-error:focus-visible{outline:2px solid #965748;outline-offset:2px}
+#toast{width:max-content;max-width:min(560px,calc(100vw - 32px));max-height:30dvh;overflow:auto;overflow-wrap:anywhere;pointer-events:auto}
+#toast:not(.show){visibility:hidden}
