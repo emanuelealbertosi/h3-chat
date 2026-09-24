@@ -4,7 +4,7 @@ Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle 
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.9.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.9.0/H3-Chat-0.9.0-windows-x64.zip) dalla [release v0.9.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.9.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.9.1-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.9.1/H3-Chat-0.9.1-windows-x64.zip) dalla [release v0.9.1](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.9.1), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 
@@ -267,3 +267,9 @@ Chat CPU, streaming, canvas separato, gestione conversazioni, rendering e API so
 Font e layout derivano dai riferimenti locali H3-Music e H3-Comics. Motori: [llama.cpp](https://github.com/ggml-org/llama.cpp), [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp). Riferimenti: [multimodalità llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md), [FLUX.2 nel motore immagini](https://github.com/leejet/stable-diffusion.cpp/blob/master/docs/flux2.md), [FLUX.2 ufficiale](https://github.com/black-forest-labs/flux2), [Python integrato](https://www.python.org/downloads/release/python-31315/).
 
 Implementazione thinking verificata sulla [API llama.cpp b10809](https://github.com/ggml-org/llama.cpp/blob/b10809/tools/server/README.md); rilevamento memoria tramite [DXGI](https://learn.microsoft.com/en-us/windows/win32/api/dxgi/ns-dxgi-dxgi_adapter_desc) e [GlobalMemoryStatusEx](https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-globalmemorystatusex).
+
+### Versione del motore all’avvio
+
+L’avvio controlla tutte le istanze di questa installazione sulle porte locali dell’app. Se trova un motore precedente, lo riavvia con il codice installato quando non ci sono generazioni o download in corso. Una vecchia istanza attiva viene lasciata lavorare: termina il lavoro e riapri H3-Chat. **Ferma-H3-Chat.bat** chiude tutte le istanze della stessa installazione. Le altre installazioni non vengono toccate.
+
+Le impostazioni richiedono uno stato aggiornato dal motore prima di aprirsi; se la versione è incompatibile viene mostrata una spiegazione, senza perdere i valori salvati.

@@ -30,15 +30,57 @@ class LauncherTests(unittest.TestCase):
     def test_existing_server_reuses_process_and_keeps_log_view_open(self):
         with tempfile.TemporaryDirectory() as temp:
             data=Path(temp);(data/'port.json').write_text(json.dumps(8790))
-            with patch.object(launcher,'DATA',data),patch.object(launcher,'get',return_value={'app':'h3-chat','instance':launcher.INSTANCE}),patch.object(launcher.subprocess,'Popen') as spawn,patch.object(launcher,'follow_logs') as follow,patch.object(launcher.sys,'argv',['launcher.py','--logs-only']):
+            with patch.object(launcher,'DATA',data),patch.object(launcher,'running_servers',return_value=[(8790,{'version':launcher.__version__})]),patch.object(launcher.subprocess,'Popen') as spawn,patch.object(launcher,'follow_logs') as follow,patch.object(launcher.sys,'argv',['launcher.py','--logs-only']):
                 launcher.main()
             spawn.assert_not_called()
             follow.assert_called_once_with(8790)
 
-    def test_stop_does_not_open_a_console_monitor(self):
+    def test_stop_closes_every_instance_of_this_installation(self):
         with tempfile.TemporaryDirectory() as temp:
-            values=[{'app':'h3-chat','instance':launcher.INSTANCE},{'token':'test-token'}]
-            with patch.object(launcher,'DATA',Path(temp)),patch.object(launcher,'get',side_effect=values),patch.object(launcher.urllib.request,'urlopen') as request,patch.object(launcher,'follow_logs') as follow,patch.object(launcher.sys,'argv',['launcher.py','--stop']):
+            with patch.object(launcher,'DATA',Path(temp)),patch.object(launcher,'running_servers',return_value=[(8787,{}),(8788,{})]),patch.object(launcher,'shutdown_server') as stop,patch.object(launcher,'follow_logs') as follow,patch.object(launcher.sys,'argv',['launcher.py','--stop']):
                 launcher.main()
-            self.assertEqual(request.call_args.args[0].full_url,'http://127.0.0.1:8787/api/shutdown')
+            self.assertEqual([call.args[0] for call in stop.call_args_list],[8787,8788])
             follow.assert_not_called()
+
+    def test_scan_ignores_other_installations_and_finds_old_second_port(self):
+        def get(port,path):
+            if port==8787:return {'app':'h3-chat','instance':'another-installation','version':'old'}
+            if port==8788:return {'app':'h3-chat','instance':launcher.INSTANCE,'version':'0.8.0'}
+            raise OSError('closed')
+        with patch.object(launcher,'get',side_effect=get):
+            self.assertEqual([p for p,_ in launcher.running_servers(8787)],[8788])
+
+    def test_idle_old_server_is_replaced_and_current_server_reused(self):
+        old={'token':'test','jobs':[],'downloads':[]}
+        servers=[(8788,{'version':'0.8.0'}),(8787,{'version':launcher.__version__})]
+        with patch.object(launcher,'get',return_value=old),patch.object(launcher,'shutdown_server') as stop:
+            self.assertEqual(launcher.upgrade_servers(servers),[servers[1]])
+        stop.assert_called_once_with(8788,old)
+
+    def test_active_jobs_or_downloads_prevent_any_automatic_shutdown(self):
+        for busy in ({'jobs':[{'status':'running'}]},{'jobs':[{'status':'queued'}]},{'downloads':[{'status':'running'}]}):
+            with self.subTest(busy=busy),patch.object(launcher,'get',side_effect=[{'jobs':[],'downloads':[]},busy]),patch.object(launcher,'shutdown_server') as stop:
+                with self.assertRaisesRegex(RuntimeError,'sta ancora lavorando'):
+                    launcher.upgrade_servers([(8787,{'version':'old'}),(8788,{'version':'old'})])
+                stop.assert_not_called()
+
+    def test_shutdown_waits_for_the_owned_server_to_exit(self):
+        with patch.object(launcher,'get',return_value={'token':'test-token'}),patch.object(launcher.urllib.request,'urlopen') as request,patch.object(launcher.socket,'socket') as socket,patch.object(launcher.time,'sleep'):
+            socket.return_value.__enter__.return_value.bind.side_effect=[OSError('still closing'),None]
+            launcher.shutdown_server(8788)
+            self.assertEqual(socket.return_value.__enter__.return_value.bind.call_count,2)
+        req=request.call_args.args[0]
+        self.assertEqual(req.full_url,'http://127.0.0.1:8788/api/shutdown')
+        self.assertEqual(req.get_header('X-h3-token'),'test-token')
+
+    def test_start_after_upgrade_preserves_the_old_window_port(self):
+        with tempfile.TemporaryDirectory() as temp:
+            data=Path(temp)
+            def get(port,path):
+                return {'jobs':[],'downloads':[],'token':'test'} if path=='state' else {'instance':launcher.INSTANCE,'version':launcher.__version__}
+            with patch.object(launcher,'DATA',data),patch.object(launcher,'running_servers',return_value=[(8788,{'version':'0.8.0'})]),patch.object(launcher,'get',side_effect=get),patch.object(launcher,'shutdown_server') as stop,patch.object(launcher.socket,'socket'),patch.object(launcher.subprocess,'Popen') as spawn,patch.object(launcher,'follow_logs') as follow,patch.object(launcher.sys,'argv',['launcher.py','--logs-only']):
+                launcher.main()
+            stop.assert_called_once()
+            self.assertEqual(spawn.call_args.args[0][-2:],['--port','8788'])
+            self.assertEqual(json.loads((data/'port.json').read_text()),8788)
+            follow.assert_called_once_with(8788)

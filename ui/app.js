@@ -1,4 +1,4 @@
-import {renderLlmPreferences,selectLlmPreferencesModel,syncLlmDraft} from './llm-settings.js';
+import {renderLlmPreferences,selectLlmPreferencesModel,syncLlmDraft,llmOptions} from './llm-settings.js';
 import {renderMusicSettings,appendMusicDetails,selectMusicPreferencesModel} from './music-settings.js';
 import {renderRich,appendMedia,escape as esc,saveBlob} from './render.js';
 import {exportPdf,exportDocx,exportPng} from './exports.js';
@@ -14,7 +14,7 @@ let loading=false,pollTimer,lastSidebar='',lastCanvas='',renderQueue=Promise.res
 const drafts=new Map();
 let assessmentTimer,assessmentRequest=0,lastAssessment=0,thinkSaving=false;
 const api=async(path,body,method='POST')=>{
-  const response=await fetch('/api'+path,{method:body===undefined?'GET':method,headers:body===undefined?{}:{'Content-Type':'application/json','X-H3-Token':state?.token||''},body:body===undefined?undefined:JSON.stringify(body)});
+  const response=await fetch('/api'+path,{cache:'no-store',method:body===undefined?'GET':method,headers:body===undefined?{}:{'Content-Type':'application/json','X-H3-Token':state?.token||''},body:body===undefined?undefined:JSON.stringify(body)});
   const data=await response.json();if(!response.ok)throw Error(data.error||'Operazione non riuscita.');return data;
 };
 function toast(text,error=false){
@@ -221,7 +221,13 @@ function collectSettings(){
 function options(items,value){return items.map(([id,label])=>`<option value="${id}" ${id===value?'selected':''}>${esc(label)}</option>`).join('');}
 function settingSelect(key,label,items,hint=''){return `<label class="field"><span>${label}</span><select data-setting="${key}">${options(items,settingsDraft[key])}</select>${hint?`<small>${hint}</small>`:''}</label>`;}
 function numberField(key,label,min,max,step=1){return `<label class="field"><span>${label}</span><input type="number" data-setting="${key}" value="${settingsDraft[key]}" min="${min}" max="${max}" step="${step}"></label>`;}
-async function openSettings(tab='setup'){if(!state)return;settingsDraft=structuredClone(state.settings);selectLlmPreferencesModel(settingsDraft.chat_model);selectImagePreferencesModel(settingsDraft.create_model||settingsDraft.edit_model);settingsTab=tab;settingsError();$('#settings').showModal();renderSettings();}
+async function openSettings(tab='setup'){
+ if(!state)return;
+ try{
+  const fresh=await api('/state');llmOptions(fresh);state=fresh;
+  settingsDraft=structuredClone(state.settings);selectLlmPreferencesModel(settingsDraft.chat_model);selectImagePreferencesModel(settingsDraft.create_model||settingsDraft.edit_model);settingsTab=tab;settingsError();$('#settings').showModal();renderSettings();
+ }catch(e){toast(e.message,true);}
+}
 function scheduleAssessment(){
   clearTimeout(assessmentTimer);assessmentRequest++;
   assessmentTimer=setTimeout(act(updateAssessment),300);

@@ -11,6 +11,8 @@ import time
 import urllib.request
 import webbrowser
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
+from h3chat import __version__
 
 ROOT=Path(__file__).resolve().parent
 DATA=ROOT/'data'
@@ -20,6 +22,47 @@ INSTANCE=hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]
 
 def get(port,path):
     with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/{path}',timeout=2) as r:return json.load(r)
+
+
+def running_servers(preferred):
+    ports=list(dict.fromkeys([preferred]+list(range(8787,8798))))
+    def probe(port):
+        try:
+            health=get(port,'health')
+            if health.get('app')=='h3-chat' and health.get('instance')==INSTANCE:
+                return port,health
+        except (OSError,ValueError):pass
+        return None
+    # Bound startup delay even when unused loopback ports time out on Windows.
+    with ThreadPoolExecutor(max_workers=len(ports)) as pool:
+        return [server for server in pool.map(probe,ports) if server is not None]
+
+
+def shutdown_server(port, state=None):
+    state=state if state is not None else get(port,'state')
+    req=urllib.request.Request(f'http://127.0.0.1:{port}/api/shutdown',data=b'{}',headers={'Content-Type':'application/json','X-H3-Token':state['token']})
+    with urllib.request.urlopen(req,timeout=15):pass
+    deadline=time.monotonic()+30
+    while time.monotonic()<deadline:
+        with socket.socket() as sock:
+            try:
+                sock.bind(('127.0.0.1',port))
+                return
+            except OSError:pass
+        time.sleep(.15)
+    raise RuntimeError("Il vecchio motore non si è ancora chiuso. Attendi e riapri H3-Chat.")
+
+
+def upgrade_servers(servers):
+    stale=[(port,get(port,'state')) for port,health in servers if health.get('version')!=__version__]
+    # Check every old instance before stopping any, so active work is preserved.
+    for port,state in stale:
+        if any(job.get('status') in ('queued','running') for job in state.get('jobs',[])) or any(d.get('status') in ('queued','running') for d in state.get('downloads',[])):
+            raise RuntimeError("Una versione precedente sta ancora lavorando. Attendi la fine della generazione o del download, poi riapri H3-Chat per completare l'aggiornamento.")
+    for port,state in stale:
+        print(f'Aggiornamento del motore H3-Chat sulla porta {port}…',flush=True)
+        shutdown_server(port,state)
+    return [(port,health) for port,health in servers if health.get('version')==__version__]
 
 
 def follow_logs(port):
@@ -59,19 +102,13 @@ def main():
     try:preferred=json.loads(port_file.read_text()) if port_file.exists() else 8787
     except (OSError,ValueError):preferred=8787
     if type(preferred) is not int or not 8787<=preferred<=8797:preferred=8787
-    port=None
-    for candidate in dict.fromkeys([preferred]+list(range(8787,8798))):
-        try:
-            health=get(candidate,'health')
-            if health.get('app')=='h3-chat' and health.get('instance')==INSTANCE:
-                port=candidate;break
-        except (OSError,ValueError):pass
+    servers=running_servers(preferred)
     if args.stop:
-        if port:
-            token=get(port,'state')['token']
-            req=urllib.request.Request(f'http://127.0.0.1:{port}/api/shutdown',data=b'{}',headers={'Content-Type':'application/json','X-H3-Token':token})
-            with urllib.request.urlopen(req,timeout=15):pass
+        for port,health in servers:shutdown_server(port)
         return
+    if servers:preferred=servers[0][0]
+    servers=upgrade_servers(servers)
+    port=servers[0][0] if servers else None
     if port is None:
         for candidate in dict.fromkeys([preferred]+list(range(8787,8798))):
             with socket.socket() as sock:
@@ -88,7 +125,7 @@ def main():
             if child.poll() is not None:raise RuntimeError('Avvio non riuscito. Consulta data/server.log.')
             time.sleep(.15)
         else:raise RuntimeError('Avvio non riuscito. Consulta data/server.log.')
-        port_file.write_text(json.dumps(port))
+    port_file.write_text(json.dumps(port))
     url=f'http://127.0.0.1:{port}'
     candidates=[Path(os.environ.get('PROGRAMFILES(X86)','C:/Program Files (x86)'))/'Microsoft/Edge/Application/msedge.exe',
                 Path(os.environ.get('PROGRAMFILES','C:/Program Files'))/'Microsoft/Edge/Application/msedge.exe']

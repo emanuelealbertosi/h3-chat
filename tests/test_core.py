@@ -28,6 +28,15 @@ class CoreTests(unittest.TestCase):
     def tearDown(self):
         self.app.close();self.tmp.cleanup()
 
+    def test_ui_files_are_not_cached_across_server_updates(self):
+        server=ThreadingHTTPServer(('127.0.0.1',0),Handler);server.app=self.app
+        thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+        try:
+            for path in ('/','/static/style.css'):
+                with urllib.request.urlopen(f'http://127.0.0.1:{server.server_port}'+path) as response:
+                    self.assertEqual(response.headers['Cache-Control'],'no-store')
+        finally:server.shutdown();server.server_close();thread.join()
+
     def test_chat_lifecycle_and_collection_cascade(self):
         s=self.app.store
         s.execute('INSERT INTO collections VALUES (?,?)',('work','Lavoro'))
