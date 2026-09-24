@@ -1,10 +1,10 @@
 # H3-Chat
 
-Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle app H3. Una sola conversazione per testo, codice, immagini, formule, grafici e diagrammi. I motori sono gestiti dall'app; non servono Ollama, LM Studio, ComfyUI, chiavi API o abbonamenti.
+Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle app H3. Una sola conversazione per testo, codice, immagini, canzoni, formule, grafici e diagrammi. I motori sono gestiti dall'app; non servono Ollama, LM Studio, ComfyUI, chiavi API o abbonamenti.
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.7.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.7.0/H3-Chat-0.7.0-windows-x64.zip) dalla [release v0.7.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.7.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.8.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.8.0/H3-Chat-0.8.0-windows-x64.zip) dalla [release v0.8.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.8.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 **Primo avvio:** apri **Impostazioni → Setup**, scegli hardware e modelli. Il catalogo scarica i pesi e tutti i componenti richiesti, controllando dimensione e SHA-256. I backend GPU si installano dallo stesso setup. Dopo i download, inferenza, interfaccia e documenti funzionano offline.
 
@@ -19,10 +19,27 @@ La finestra desktop usa Microsoft Edge in modalità app, normalmente già presen
 - «Combina queste quattro foto in una scena…» → motore di modifica, con i riferimenti numerati nell'ordine degli allegati.
 - «Leggi questo grafico e ricostruiscilo…» → modello vision, dati e renderer numerico.
 - «Spiegami questa formula…» → testo e LaTeX.
+- «Crea una canzone rock…» oppure il pulsante **Music** → motore musicale YuE2.
 
 La chat resta unica. Nel composer puoi lasciare Immagini su Automatico oppure selezionare esplicitamente il modello immagini. Le richieste esplicite più comuni sono riconosciute direttamente; quelle ambigue sono classificate dal modello chat con uno schema JSON vincolato. I modelli piccoli possono interpretare male richieste complesse: per codice, routing e analisi densa scegli un modello più capace dal setup.
 
 Le selezioni principali nelle impostazioni sono **chat/router/vision**, **creazione immagini** e **modifica immagini**. Un solo modello è assegnato a ciascun ruolo. La modalità A richiesta conserva il modello corrente e lo scarica prima di caricarne uno diverso; Residenti conserva i modelli scelti. Le due modalità sono selezionabili dal Setup. La coda è globale e seriale, con interruzione del lavoro e registrazione degli errori.
+
+## Canzoni e musica · YuE2
+
+Premi **Music** nella chat oppure chiedi «Crea una canzone», «Genera musica» o «Componi un brano». Il router riconosce la richiesta audio; parlare di musica o chiedere solo un testo resta una risposta testuale. Il routing automatico musicale può essere disattivato nelle impostazioni; il pulsante Music continua a funzionare.
+
+**Assistant On** prepara stile e testo con lo stesso LLM della chat, riutilizzandolo se già caricato. **Assistant Off** usa i tuoi campi titolo, stile, testo e, facoltativamente, spartito ABC: non richiede un LLM installato per richieste musicali esplicite. Puoi scrivere i campi anche nel messaggio dopo `Titolo:`, `Stile:` e `Testo:`. Per musica senza parole attiva **Strumentale**. L’app ricorda Music, Assistant e campi per ciascuna chat.
+
+In **Impostazioni → Musica · YuE2**, scegli i GGUF principale e VAE con **Sfoglia e collega YuE2**. Il tokenizer e le tre configurazioni sono rilevati nella sottocartella `sidecars` accanto ai pesi principali, con i nomi originali YuE2. Il VAE può trovarsi altrove. I file restano nei percorsi originali. In alternativa **Scarica YuE2 Q8** installa modello e tutti i componenti dal catalogo verificato.
+
+Il modello iniziale è **YuE2-3B Q8**, con i preset di H3-Music: **Melodia e accordi, 32 passi, CFG 1, seed 831001**, 8 thread CPU. **Avanzate** nelle preferenze modifica i parametri per modello; **Avanzate** in chat mostra i parametri effettivi. I limiti dei token non indicano una durata esatta: se vengono raggiunti, la chat avverte che la fine può essere troncata.
+
+Il risultato ha un player con avanzamento e download **WAV stereo 48 kHz**. Con canvas attivo, player e testo sono nel canvas e in chat resta il messaggio di accompagnamento. Il testo del canvas può essere esportato nei formati già disponibili; il WAV si scarica separatamente. La chat conserva la composizione per revisioni successive, ma non ascolta né analizza l’audio generato.
+
+Il motore musicale CPU è incluso nel pacchetto Windows; il motore NVIDIA CUDA si installa dal Setup e poi funziona offline. Non occorre H3-Music, un server esterno o il CUDA Toolkit. AMD/Intel possono usare CPU per YuE2; questo motore non supporta Vulkan. **A richiesta** libera l’LLM prima della musica e YuE2 prima di tornare alla chat. **Residenti** conserva i processi; YuE2 alterna comunque internamente pianificazione, sintesi e decodifica per contenere la VRAM. Le stime RAM/VRAM sono prudenziali: su poca VRAM si può scegliere CPU, senza promessa di offload GPU parziale.
+
+Il canto italiano è sperimentale. I pesi YuE2 sono soggetti a **CC BY-NC 4.0**; non sono inclusi nell’archivio dell’app. Dettagli, build e provenienza: [motore musicale](docs/music-engine.md).
 
 ## Vision e modelli locali
 

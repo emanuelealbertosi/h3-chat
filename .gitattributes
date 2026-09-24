@@ -3,3 +3,5 @@
 *.ps1 text eol=crlf
 *.ttf binary
 *.png binary
+
+*.patch text eol=lf

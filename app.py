@@ -14,6 +14,7 @@ from pathlib import Path
 from h3chat.downloads import safe_join
 from h3chat.service import Service
 from h3chat import __version__
+from h3chat.media_http import send_audio
 from h3chat.external_models import browse, suggest
 from h3chat.pdf_export import export_pdf
 from h3chat.store import uid
@@ -69,6 +70,7 @@ class Handler(BaseHTTPRequestHandler):
         if not path.is_file():
             self.json({"error": "File non trovato."}, 404)
             return
+        if path.suffix.lower()==".wav":return send_audio(self,path)
         body = path.read_bytes()
         self.send_response(200)
         mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
@@ -76,7 +78,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'self'")
+        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'self'")
         self.end_headers()
         self.wfile.write(body)
 
@@ -112,7 +114,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.file(safe_join(self.app.data / "exports", relative))
                 if path.startswith("/media/"):
                     relative = path[len("/media/"):]
-                    if not relative.startswith(("uploads/", "outputs/")) or Path(relative).suffix not in (".png", ".jpg"):
+                    if not relative.startswith(("uploads/", "outputs/")) or Path(relative).suffix not in (".png", ".jpg", ".wav"):
                         raise PermissionError("File non disponibile.")
                     return self.file(safe_join(self.app.data, relative))
                 return self.json({"error": "Risorsa non trovata."}, 404)
@@ -188,7 +190,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("Canvas troppo grande o non valido.")
                 if self.app.store.one("SELECT id FROM jobs WHERE chat_id=? AND status IN ('queued','running') AND json_extract(payload,'$.canvas')=1", (parts[2],)):
                     raise ValueError("Il motore sta scrivendo nel canvas. Attendi o interrompilo prima di modificare.")
-                media = self.app.validate_media(body.get("media", []))
+                media = self.app.validate_media(body.get("media", []),canvas=True)
                 self.app.store.execute("INSERT OR REPLACE INTO canvases VALUES (?,?,?,?,?)", (parts[2], title, content, json.dumps(media), time.time()))
                 return self.json({"ok": True})
             if path == "/api/shutdown" and method == "POST":

@@ -12,6 +12,9 @@ from pathlib import Path
 from .downloads import Cancelled, Downloads, model_ready, safe_join
 from .engine import CREATE_NO_WINDOW, Engine, runtime_executable, explicit_route
 from .visual_routing import visual_route
+from .music_routing import route as music_route
+from .music_options import validate as validate_music_options, validate_fields as validate_music_fields, NUMBERS as MUSIC_NUMBERS, DEFAULTS as MUSIC_DEFAULTS, INTEGER as MUSIC_INTEGER
+from .music_runtime import status as music_status
 from .vision_runtime import status as vision_status, SAMPLERS as VISION_SAMPLERS, SCHEDULERS as VISION_SCHEDULERS
 from .store import DEFAULTS, PROFILES, Store, uid
 from .models import discover_local, inspect_model, THINK_LEVELS, thinking_parameters, mtp_tokens
@@ -59,8 +62,9 @@ class Service:
     def state(self):
         models = self.refresh_models()
         return {"token": self.token, "version": __version__, "settings": self.store.settings(), "profiles": PROFILES,
+                "music_runtime":music_status(self.root), "music_options":{"defaults":MUSIC_DEFAULTS,"numbers":MUSIC_NUMBERS,"integers":sorted(MUSIC_INTEGER)},
                 "vision_runtime":vision_status(self.root), "models": models,"image_options":{"samplers":NATIVE_SAMPLERS,"schedulers":NATIVE_SCHEDULERS,"vision_samplers":VISION_SAMPLERS,"vision_schedulers":VISION_SCHEDULERS,"defaults":{k:DEFAULTS[k] for k in IMAGE_DEFAULT_KEYS}},"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
-                "runtimes": {key: {"ready": vision_status(self.root)["ready"] if key=="vision" else all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
+                "runtimes": {key: {"ready": vision_status(self.root)["ready"] if key=="vision" else music_status(self.root).get(key.removeprefix("music_"),{}).get("ready",False) if key.startswith("music_") else all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
                                     "size": sum(f["size"] for f in r["files"])} for key, r in self.runtimes.items()},
                 "chats": self.store.all("SELECT * FROM chats ORDER BY pinned DESC,updated DESC"),
                 "collections": self.store.all("SELECT * FROM collections ORDER BY name"),
@@ -79,7 +83,7 @@ class Service:
             self.refresh_models()
             model=self.catalog[config['id']]
             settings=self.store.settings()
-            self.store.save_settings({key:'' for key,cap in (('chat_model','chat'),('create_model','create'),('edit_model','edit'),('diagram_model','create')) if settings[key]==config['id'] and (cap not in model['capabilities'] or (key=='diagram_model' and model.get('architecture')!='ming'))})
+            self.store.save_settings({key:'' for key,cap in (('chat_model','chat'),('create_model','create'),('edit_model','edit'),('diagram_model','create'),('music_model','music')) if settings[key]==config['id'] and (cap not in model['capabilities'] or (key=='diagram_model' and model.get('architecture')!='ming'))})
             self.engine.configure(self.store.settings())
             self.engine.cache.clear()
             return model | inspect_model(self.root,model)
@@ -92,7 +96,7 @@ class Service:
                 raise ValueError('Attendi o interrompi i lavori prima di scollegare il modello.')
             self.store.execute('DELETE FROM external_models WHERE id=?',(model_id,))
             settings=self.store.settings()
-            self.store.save_settings({key:'' for key in ('chat_model','create_model','edit_model','diagram_model') if settings[key]==model_id})
+            self.store.save_settings({key:'' for key in ('chat_model','create_model','edit_model','diagram_model','music_model') if settings[key]==model_id})
             self.refresh_models()
             self.engine.configure(self.store.settings())
             self.engine.cache.clear()
@@ -130,11 +134,19 @@ class Service:
             raise ValueError("MTP: scegli attivato o disattivato.")
         if type(s["setup_done"]) is not bool:
             raise ValueError("setup_done non valido.")
-        for key, capability in (("chat_model", "chat"), ("create_model", "create"), ("edit_model", "edit"), ("diagram_model", "create")):
+        for key, capability in (("chat_model", "chat"), ("create_model", "create"), ("edit_model", "edit"), ("diagram_model", "create"), ("music_model", "music")):
             if s[key] and (s[key] not in self.catalog or capability not in self.catalog[s[key]]["capabilities"]):
                 raise ValueError(f"Modello incompatibile con {capability}.")
         if s['diagram_model'] and self.catalog[s['diagram_model']].get('architecture') != 'ming':
             raise ValueError('Per il routing dei grafici scegli un modello Ming.')
+        if type(s['music_auto']) is not bool or type(s['music_advanced']) is not bool:raise ValueError('Musica: opzione non valida.')
+        if s['music_backend'] not in ('auto','cpu','cuda'):raise ValueError('Musica: scegli CPU o CUDA.')
+        if type(s['music_threads']) is not int or not 1<=s['music_threads']<=64:raise ValueError('Thread musica: scegli da 1 a 64.')
+        if type(s['music_prompt_max_tokens']) is not int or not 256<=s['music_prompt_max_tokens']<=8192:raise ValueError('Token Assistant musica: scegli da 256 a 8192.')
+        if not isinstance(s['music_overrides'],dict) or len(s['music_overrides'])>100:raise ValueError('Preset musica non validi.')
+        for key,value in s['music_overrides'].items():
+            if not isinstance(key,str) or len(key)>150:raise ValueError('Identificativo preset musicale non valido.')
+            validate_music_options(value)
         if type(s['vision_enabled']) is not bool:raise ValueError('Vision: scegli On oppure Off.')
         if type(s['diagram_auto']) is not bool:raise ValueError('Routing grafici non valido.')
         if type(s['prompt_max_tokens']) is not int or not 256 <= s['prompt_max_tokens'] <= 8192:
@@ -173,7 +185,7 @@ class Service:
         chosen_loras=self.loras.capture(body.get("loras",[]),settings["lora_dirs"],self.catalog)
         selected = []
         selected_models = []
-        for key in ("chat_model", "create_model", "edit_model", "diagram_model"):
+        for key in ("chat_model", "create_model", "edit_model", "diagram_model", "music_model"):
             model = next((m for m in models if m["id"] == settings[key]), None)
             if model:
                 model=model|{"active_lora_bytes":sum(l["size"] for l in chosen_loras if l["model_id"]==model["id"] and l["weight"]!=0)}
@@ -206,7 +218,7 @@ class Service:
         target.with_suffix(".json").write_text(json.dumps(result), encoding="utf-8")
         return result
 
-    def validate_media(self, media):
+    def validate_media(self, media, *, canvas=False):
         if not isinstance(media, list) or len(media) > 4:
             raise ValueError("Allega fino a quattro immagini per messaggio.")
         resolved = []
@@ -222,6 +234,7 @@ class Service:
                 found = next((m for row in matches for m in json.loads(row["media"]) if m["id"] == image_id), None)
                 if not found:
                     raise ValueError("Immagine non trovata.")
+                if not canvas and not str(found.get("mime","")).startswith("image/"):raise ValueError("Il motore immagini richiede un riferimento PNG o JPEG, non un brano audio.")
                 resolved.append(found)
         return resolved
 
@@ -231,14 +244,19 @@ class Service:
             raise ValueError("Scrivi una richiesta tra 1 e 24.000 caratteri.")
         media = self.validate_media(body.get("media", []))
         settings = self.validate_settings({"think_level":body.get("think_level", self.store.settings()["think_level"])})
-        self.engine.require_model(settings["chat_model"], "chat")
         selection = body.get('image_model','')
         if not isinstance(selection,str):raise ValueError('Selezione modello immagini non valida.')
         if selection:
             self.engine.require_model(selection,'edit' if media else 'create')
         assistant = body.get('assistant',True)
         if type(assistant) is not bool:raise ValueError('Assistant: scegli On oppure Off.')
-        settings = settings | {'_image_model':selection,'_assistant':assistant}
+        music=body.get('music',False)
+        if type(music) is not bool:raise ValueError('Music: scegli attivo o disattivo.')
+        if music and selection:raise ValueError('Scegli Music oppure un modello immagini esplicito.')
+        fields=validate_music_fields(body.get('music_fields',{}))
+        settings = settings | {'_image_model':selection,'_assistant':assistant,'_music':music,'_music_fields':fields}
+        if not (not assistant and music_route([{'content':prompt}],settings)):
+            self.engine.require_model(settings["chat_model"], "chat")
         canvas = body.get("canvas", False)
         if type(canvas) is not bool:
             raise ValueError("Destinazione canvas non valida.")
@@ -291,6 +309,8 @@ class Service:
             settings = DEFAULTS | payload["settings"]
             history = self.store.messages(job["chat_id"], payload["until"])
             for previous in history:
+                composition=previous.get("meta",{}).get("music_composition")
+                if composition:previous["content"] += "\nComposizione del brano (non ascolto audio):\n"+json.dumps(composition,ensure_ascii=False)
                 artifact = previous.get("meta", {}).get("artifact")
                 if artifact:
                     previous["content"] += "\nArtefatto nel canvas:\n" + artifact["content"]
@@ -299,14 +319,16 @@ class Service:
             if snapshot:
                 history.insert(-1, {"role":"user", "content":"Canvas attuale da modificare se richiesto:\n" + snapshot["content"],
                                    "media":json.loads(snapshot["media"]), "status":"done", "seq":-1})
-            model = self.engine.require_model(settings["chat_model"], "chat")
             log_path = self.data / "logs" / (job["id"] + ".log")
             log_path.parent.mkdir(parents=True, exist_ok=True)
             def stage(label):
                 self.store.execute("UPDATE jobs SET stage=? WHERE id=?", (label, job["id"]))
             self.engine.prepare(settings, cancel, stage)
-            selected_route = visual_route(history,settings)
-            direct = explicit_route(history)
+            visual_history=[m|{"media":[x for x in m["media"] if x.get("mime", "").startswith("image/")]} for m in history]
+            selected_route = music_route(history,settings) or visual_route(visual_history,settings)
+            direct = explicit_route(visual_history)
+            direct_music=selected_route and selected_route['intent']=='music' and not settings.get('_assistant',True)
+            model={} if direct_music else self.engine.require_model(settings["chat_model"], "chat")
             if selected_route:
                 route = selected_route
             elif direct in ('create', 'edit'):
@@ -317,8 +339,8 @@ class Service:
                 stage("Comprensione della richiesta")
                 route = self.engine.route(history, settings, cancel)
             intent = route["intent"]
-            meta = {"intent": intent, "model": model["name"], "settings": settings, "prompt": payload["prompt"], "canvas": payload.get("canvas", False)}
-            meta.update(vision=settings.get("vision_enabled",True) and model.get("vision",{}).get("enabled",False),
+            meta = {"intent": intent, "model": model.get("name", ""), "settings": settings, "prompt": payload["prompt"], "canvas": payload.get("canvas", False)}
+            if model:meta.update(vision=settings.get("vision_enabled",True) and model.get("vision",{}).get("enabled",False),
                         model_warning=model.get("vision",{}).get("warning","") if settings.get("vision_enabled",True) else "Vision Off · il proiettore non è caricato.",
                         think_level=settings.get("think_level","off") if model.get("thinking",{}).get("supported") else "off",
                         think_budget=thinking_parameters(model, settings)["reasoning_budget_tokens"],
@@ -345,7 +367,7 @@ class Service:
                     if not reason_started:
                         stage("Thinking · " + meta["think_level"])
                         reason_started = True
-                messages = self.engine.chat_messages(history, model, settings)
+                messages = self.engine.chat_messages(visual_history, model, settings)
                 schema = None
                 if payload.get("canvas"):
                     messages[0]["content"] += CANVAS_INSTRUCTIONS
@@ -367,11 +389,27 @@ class Service:
                     meta["artifact"] = {"title":saved["title"],"content":saved["content"],"media":json.loads(saved["media"])}
                 self.store.update_answer(job, text, "done", meta=meta)
                 stage("Risposta completata" if finish != "length" else "Limite di risposta raggiunto: puoi chiedere di continuare")
+            elif intent == "music":
+                music_model=self.engine.require_model(settings['music_model'],'music')
+                composition,assistant_info=self.engine.refine_music(history,payload['prompt'],settings.get('_music_fields',{}),settings,cancel,log_path,stage)
+                media=self.engine.generate_music(music_model,settings,composition,job['id'],cancel,stage)
+                meta.update(model=music_model['name'],assistant_on=settings.get('_assistant',True),assistant=assistant_info,
+                            music_composition=composition,music_parameters=media['generation'],music_selection=route.get('selection','auto'))
+                meta.pop('model_warning',None);meta.pop('think_level',None)
+                warning=' Il brano ha raggiunto il limite di token: la fine può essere troncata.' if media['generation'].get('audio_truncated') or media['generation'].get('abc_truncated') else ''
+                if payload.get('canvas'):
+                    content='## '+composition['title']+'\n\n'+composition['lyrics'].replace('\n','  \n')
+                    self.save_artifact(job['chat_id'],composition['title'],content,[media])
+                    meta['artifact']={'title':composition['title'],'content':content,'media':[media]}
+                    self.store.update_answer(job,'Ho creato il brano nel canvas.'+warning,'done',[],meta)
+                else:
+                    self.store.update_answer(job,'Ecco il brano «'+composition['title']+'».'+warning,'done',[media],meta)
+                stage('Brano pronto')
             else:
                 image_model = self.engine.require_model(route.get("image_model") or settings[intent + "_model"], intent)
-                refs = payload["media"]
+                refs = [m for m in payload["media"] if m.get("mime", "").startswith("image/")]
                 if intent == "edit" and not refs:
-                    refs = next((m["media"] for m in reversed(history) if m["media"]), [])
+                    refs = next(([x for x in m["media"] if x.get("mime", "").startswith("image/")] for m in reversed(history) if any(x.get("mime", "").startswith("image/") for x in m["media"])), [])
                 if intent == "edit" and not refs:
                     raise ValueError("Per modificare un'immagine, allegala o generala prima in questa chat.")
                 if intent == "create" and refs:

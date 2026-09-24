@@ -99,15 +99,15 @@ class Session:
             if cancel.is_set():raise Cancelled()
             try:event=self.events.get(timeout=.15)
             except queue.Empty:
-                if not self.alive():raise RuntimeError('Il motore immagini si è arrestato. Consulta il registro.')
+                if not self.alive():raise RuntimeError('Il motore si è arrestato. Consulta il registro.')
                 continue
             if event.get('event')==target:return event
-            if event.get('event') in ('exit','error'):raise RuntimeError(event.get('message','Il motore immagini si è arrestato.'))
+            if event.get('event') in ('exit','error'):raise RuntimeError(event.get('message','Il motore si è arrestato.'))
             if event.get('event')=='stage' and stage:
                 stage(event.get('message','Motore immagini'))
             if event.get('event')=='progress' and stage:
                 stage(f"Generazione immagine · {event.get('step',0)}/{event.get('steps',0)} passi")
-        raise RuntimeError('Tempo massimo del motore immagini superato.')
+        raise RuntimeError('Tempo massimo del motore superato.')
 
     def stop(self):
         self.ready=False
@@ -125,9 +125,12 @@ class Session:
 
     def snapshot(self):
         gpu=self.settings['profile']!='cpu' and self.settings['backend']!='cpu'
+        if self.kind=='music':
+            from .music_runtime import backend
+            gpu=backend(self.settings)!='cpu'
         return {'id':self.model['id'],'name':self.model['name'],'kind':self.kind,
                 'ready':self.ready and self.alive(),'pid':self.process.pid if self.alive() else None,
-                'location':'VRAM · Vision CPU' if gpu and self.kind=='chat' and 'mmproj' in self.files and self.settings.get('memory_policy')=='resident' else 'VRAM' if gpu and self.settings.get('memory_policy')=='resident' else 'RAM / VRAM' if gpu else 'RAM',
+                'location':('RAM / VRAM · componenti a richiesta' if gpu else 'RAM') if self.kind=='music' else 'VRAM · Vision CPU' if gpu and self.kind=='chat' and 'mmproj' in self.files and self.settings.get('memory_policy')=='resident' else 'VRAM' if gpu and self.settings.get('memory_policy')=='resident' else 'RAM / VRAM' if gpu else 'RAM',
                 'mtp_tokens':next((v for k,v in self.key[2] if k=='mtp_tokens'),0) if self.ready else 0,
                 'loras':getattr(self,'active_loras',[]),
                 'uses':self.uses,'started':self.started}

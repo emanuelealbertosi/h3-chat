@@ -18,6 +18,8 @@ from .residency import Session, FileCache
 from .image_options import options as image_options
 from .vision_runtime import status as vision_status
 from .visual_routing import VISUAL_BRIEF
+from .music_engine import MusicEngine
+from .music_runtime import backend as music_backend
 
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
@@ -58,7 +60,7 @@ def runtime_executable(root, backend, engine):
     return matches[0] if matches else None
 
 
-class Engine:
+class Engine(MusicEngine):
     """A serial inference worker owns a pool of persistent local model processes."""
     def __init__(self, root, data, catalog):
         self.root, self.data, self.catalog = Path(root), Path(data), catalog
@@ -119,6 +121,7 @@ class Engine:
             keys += ('context', 'gpu_layers', 'vision_enabled')
         runtime_options=tuple((k,settings.get(k, 'on_demand' if k=='memory_policy' else None)) for k in keys)
         if kind=='image':runtime_options+=(('image_engine',model.get('engine','native')),('architecture',model.get('architecture')))
+        if kind=='music':runtime_options=(('music_backend',music_backend(settings)),('music_threads',settings['music_threads']),('memory_policy',settings.get('memory_policy','on_demand')))
         if kind=='chat': runtime_options+=(('mtp_tokens',mtp_tokens(model,settings)),)
         return (kind, tuple(fingerprint), runtime_options)
 
@@ -127,7 +130,7 @@ class Engine:
             self.policy = settings.get('memory_policy', 'on_demand')
             self.cache.configure(settings.get('ram_cache_gb', 0))
             wanted = set()
-            for field,kind in (('chat_model','chat'),('create_model','image'),('edit_model','image'),('diagram_model','image'),('_image_model','image')):
+            for field,kind in (('chat_model','chat'),('create_model','image'),('edit_model','image'),('diagram_model','image'),('_image_model','image'),('music_model','music')):
                 model = self.catalog.get(settings.get(field))
                 if model:
                     wanted.add(self.session_key(kind,model,settings))
@@ -171,7 +174,7 @@ class Engine:
         if self.policy != 'resident':
             return
         seen = set()
-        for field,capability in (('chat_model','chat'),('create_model','create'),('edit_model','edit'),('diagram_model','create'),('_image_model','create')):
+        for field,capability in (('chat_model','chat'),('create_model','create'),('edit_model','edit'),('diagram_model','create'),('_image_model','create'),('music_model','music')):
             model = self.catalog.get(settings.get(field))
             if not model or model['id'] in seen:
                 continue
@@ -183,6 +186,8 @@ class Engine:
             log_path = self.data / 'logs' / (secrets.token_hex(12) + '.log')
             if capability == 'chat':
                 self.start_llama(model,settings,log_path,cancel)
+            elif capability=='music':
+                self.start_music(model,settings,log_path,cancel)
             else:
                 self.start_image(model,settings,log_path,cancel)
 
@@ -312,14 +317,16 @@ class Engine:
         direct = explicit_route(history)
         if direct:
             return {"intent": direct, "prompt": history[-1]["content"] if direct != "chat" else ""}
-        context = [{"role": m["role"], "text": m["content"][-2500:], "images": len(m["media"])} for m in history[-6:] if m["status"] == "done"]
+        context = [{"role": m["role"], "text": m["content"][-2500:], "images": len([x for x in m["media"] if x.get("mime", "").startswith("image/")])} for m in history[-6:] if m["status"] == "done"]
         # Always preserve the full current instruction; context is clearly separated.
         context[-1]["text"] = history[-1]["content"]
         diagrams = bool(settings.get('diagram_model') and settings.get('diagram_auto',True))
-        choices = ['chat','create','edit'] + (['diagram','diagram-edit'] if diagrams else [])
-        router_prompt = ROUTER_PROMPT
+        choices = ['chat','create','edit'] + (['music'] if settings.get('music_auto',True) else []) + (['diagram','diagram-edit'] if diagrams else [])
+        router_prompt = ROUTER_PROMPT.replace("chat|create|edit", "|".join(choices))
         if diagrams:
             router_prompt += '\nEccezione attiva: usa intent diagram quando si chiede di CREARE o MODIFICARE un grafico, grafo, diagramma, schema o mappa concettuale come immagine. Usa diagram-edit se devi modificare o ricostruire un riferimento allegato o già presente nella conversazione. Semplici spiegazioni restano chat. Richieste esplicite di codice, Mermaid, SVG, Chart, dati esatti o grafici interattivi restano chat. Le negazioni non sono richieste di generazione.'
+        if settings.get('music_auto',True):
+            router_prompt += '\nUsa intent music quando viene richiesta adesso la GENERAZIONE AUDIO di una canzone, brano, musica, jingle o colonna sonora. Discutere di musica o scrivere solo un testo, uno spartito o codice resta chat. Il contenuto delle immagini non è audio.'
         schema = {"type": "object", "properties": {"intent": {"type": "string", "enum": choices},
                   "prompt": {"type": "string"}}, "required": ["intent", "prompt"], "additionalProperties": False}
         value = self.completion([{"role": "system", "content": router_prompt}, {"role": "user", "content": json.dumps(context, ensure_ascii=False)}], settings, cancel, schema=schema)
@@ -327,7 +334,7 @@ class Engine:
             result = json.loads(value)
             if result['intent'] in ('diagram','diagram-edit') and diagrams:
                 result.update(intent='edit' if result['intent']=='diagram-edit' or history[-1].get('media') else 'create',image_model=settings['diagram_model'],selection='diagram')
-            if result["intent"] not in ("chat", "create", "edit"):
+            if result["intent"] not in choices and result["intent"] not in ("create","edit"):
                 raise ValueError()
             return result
         except (ValueError, KeyError, TypeError) as exc:

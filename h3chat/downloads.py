@@ -93,6 +93,34 @@ def extract_zip(archive, destination):
         bundle.extractall(destination)
 
 
+def extract_members(archive, destination, members, cancel=None):
+    """Extract a manifest allowlist, preserving no archive paths or links."""
+    if not isinstance(members,dict) or not members:
+        raise ValueError("Elenco dei componenti runtime non valido.")
+    with zipfile.ZipFile(archive) as bundle:
+        pending=[]; seen=set()
+        for source,relative in members.items():
+            target=safe_join(destination,relative)
+            key=os.path.normcase(str(target))
+            if key in seen:raise ValueError("Componente runtime duplicato.")
+            seen.add(key)
+            item=bundle.getinfo(source)
+            if item.is_dir() or (item.external_attr >> 16) & 0o170000 == 0o120000:
+                raise ValueError("Componente runtime non consentito.")
+            pending.append((item,target))
+        for item,target in pending:
+            target.parent.mkdir(parents=True,exist_ok=True)
+            part=target.with_name(target.name+'.extracting')
+            try:
+                with bundle.open(item) as src,part.open('wb') as dst:
+                    while block:=src.read(1024*1024):
+                        if cancel is not None and cancel.is_set():raise Cancelled()
+                        dst.write(block)
+                os.replace(part,target)
+            finally:
+                part.unlink(missing_ok=True)
+
+
 class Downloads:
     def __init__(self, root, catalog, runtimes):
         self.root, self.catalog, self.runtimes = Path(root), catalog, runtimes
@@ -132,7 +160,11 @@ class Downloads:
                         task.update(received=current, total=total)
                 download(entry["url"], target, entry["sha256"], entry["size"], task["cancel"], progress)
                 if entry.get("extract_to"):
-                    extract_zip(target, safe_join(self.root, entry["extract_to"]))
+                    destination=safe_join(self.root, entry["extract_to"])
+                    if entry.get("extract_members"):
+                        extract_members(target,destination,entry["extract_members"],task["cancel"])
+                    else:
+                        extract_zip(target,destination)
             # Marker is only written after every model component has been verified.
             if task["kind"] == "model":
                 marker = self.root / "models" / (task["id"] + ".ready.json")

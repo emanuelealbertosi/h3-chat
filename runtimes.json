@@ -92,5 +92,50 @@
         "sha256": "b02020528937bd8d47bfb95516aca101803858a8d882717ad3b4a91cbbcf8fe7"
       }
     ]
+  },
+  "music_cpu": {
+    "files": [
+      {
+        "path": "runtime/archives/H3-Chat-music-cpu-0.8.0-windows-x64.zip",
+        "url": "https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.8.0/H3-Chat-music-cpu-0.8.0-windows-x64.zip",
+        "size": 1387805,
+        "sha256": "0097f8d487cb4530d7556bc39be85006e275cd9af608be616899cb2d56c56196",
+        "extract_to": "runtime/music/cpu"
+      }
+    ]
+  },
+  "music_cuda": {
+    "files": [
+      {
+        "path": "runtime/archives/H3-Chat-music-cuda-0.8.0-windows-x64.zip",
+        "url": "https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.8.0/H3-Chat-music-cuda-0.8.0-windows-x64.zip",
+        "size": 45117335,
+        "sha256": "c17c2556774379418943838003a17c499ed6cf7b66c38aa321756e70b75269ba",
+        "extract_to": "runtime/music/cuda"
+      },
+      {
+        "path": "runtime/archives/cuda_cudart-windows-x86_64-12.8.90-archive.zip",
+        "url": "https://developer.download.nvidia.com/compute/cuda/redist/cuda_cudart/windows-x86_64/cuda_cudart-windows-x86_64-12.8.90-archive.zip",
+        "size": 3037735,
+        "sha256": "4a39058fd8519444a81cfc7ae055d136f48d1a31ffa41ae255b35b2edd61e13b",
+        "extract_to": "runtime/music/cuda",
+        "extract_members": {
+          "cuda_cudart-windows-x86_64-12.8.90-archive/bin/cudart64_12.dll": "cudart64_12.dll",
+          "cuda_cudart-windows-x86_64-12.8.90-archive/LICENSE": "cuda_cudart-LICENSE.txt"
+        }
+      },
+      {
+        "path": "runtime/archives/libcublas-windows-x86_64-12.8.4.1-archive.zip",
+        "url": "https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-12.8.4.1-archive.zip",
+        "size": 563660944,
+        "sha256": "57a470112cec7e112c95253dde8b3c7184d795dbd92b0bde77a4cb7f8c94c8aa",
+        "extract_to": "runtime/music/cuda",
+        "extract_members": {
+          "libcublas-windows-x86_64-12.8.4.1-archive/bin/cublas64_12.dll": "cublas64_12.dll",
+          "libcublas-windows-x86_64-12.8.4.1-archive/bin/cublasLt64_12.dll": "cublasLt64_12.dll",
+          "libcublas-windows-x86_64-12.8.4.1-archive/LICENSE": "libcublas-LICENSE.txt"
+        }
+      }
+    ]
   }
 }

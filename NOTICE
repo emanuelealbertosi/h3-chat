@@ -27,3 +27,12 @@ The optional vision runtime includes Microsoft Visual C++ Redistributable CRT
 libraries. These unmodified system libraries retain their Microsoft license.
 See runtime/vision/dlls/NOTICE.txt. They are not covered by the application MIT
 license or the image worker GPL license.
+
+The private YuE2 music workers use audio.cpp (Apache-2.0) at commit
+13c4192a28d6a212f075c4cbefc5e4983e6ed52a, with the H3 artifact patch.
+See docs/music-engine.md, native/music/h3-artifacts.patch and each runtime's
+SOURCES.json and retained upstream license files. GGML is MIT licensed;
+SentencePiece and its dependencies retain their individual notices.
+Microsoft Visual C++ redistributables and NVIDIA CUDA redistributables retain
+their separate vendor licenses; neither is relicensed under MIT.
+YuE2 model weights are not bundled and are licensed CC BY-NC 4.0.

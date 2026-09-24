@@ -61,7 +61,7 @@ def _metadata(path, size, stamp):
                 for _ in range(dims):
                     if number('Q')<=0: raise ValueError('Tensore GGUF vuoto.')
                 number('I'); max_offset=max(max_offset,number('Q'))
-                if name in ('token_embd.weight','blk.0.attn_norm.weight') or '.nextn.' in name: names.append(name)
+                if name.removeprefix('model_weights/').removeprefix('vae_weights/') in ('token_embd.weight','blk.0.attn_norm.weight','model.embed_tokens.weight','vae2llm.weight','llm2vae.weight','decoder.layers.0.weight','decoder.layers.0.weight_g') or '.nextn.' in name: names.append(name)
             alignment=result.get('general.alignment',32)
             if type(alignment) is not int or not 1<=alignment<=4096: raise ValueError('Allineamento GGUF non valido.')
             data_start=(f.tell()+alignment-1)//alignment*alignment
@@ -86,7 +86,8 @@ def model_path(root, model, value):
     # Downloads, uploads, media and exports continue to use safe_join exclusively.
     if model.get('external'):
         path=Path(value)
-        if not path.is_absolute() or path.suffix.lower() not in ('.gguf','.safetensors'):
+        sidecar=model.get('engine')=='music' and any(f['path']==value and f['role'] in ('tokenizer','model_config','generation_config','vae_config') for f in model['files'])
+        if not path.is_absolute() or (path.suffix.lower() not in ('.gguf','.safetensors') and not sidecar):
             raise ValueError('Percorso del modello esterno non valido.')
         return path.resolve()
     return safe_join(root,value)

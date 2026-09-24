@@ -14,6 +14,8 @@ PROFILES = {
 }
 DEFAULTS = {
     "profile": "low", "backend": "vulkan", "chat_model": "", "create_model": "",
+    "music_model": "yue2-q8", "music_auto": True, "music_backend": "cuda", "music_threads": 8,
+    "music_advanced": False, "music_overrides": {}, "music_prompt_max_tokens": 2200,
     "edit_model": "", "diagram_model": "", "diagram_auto": True, "vision_enabled": True, "prompt_max_tokens": 2200, "context": 4096, "gpu_layers": 20, "max_tokens": 1024,
     "image_advanced": False, "chat_advanced": False, "image_overrides": {}, "image_cfg": 7,
     "lora_dirs": [], "image_sampler": "auto", "image_scheduler": "auto", "seed": -1, "negative_prompt": "",
@@ -114,7 +116,7 @@ class Store:
     def enqueue(self, chat_id, prompt, media, settings, canvas=False, loras=None):
         job_id, user_id, answer_id, now = uid(), uid(), uid(), time.time()
         loras=loras or []
-        lora_meta={"image_model":settings.get("_image_model",""),"assistant":settings.get("_assistant",True),"loras":[{k:l[k] for k in ("id","name","weight","model_id","model_name")} for l in loras]}
+        lora_meta={"music":settings.get("_music",False),"music_fields":settings.get("_music_fields",{}),"image_model":settings.get("_image_model",""),"assistant":settings.get("_assistant",True),"loras":[{k:l[k] for k in ("id","name","weight","model_id","model_name")} for l in loras]}
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             chat = db.execute("SELECT * FROM chats WHERE id=?", (chat_id,)).fetchone()

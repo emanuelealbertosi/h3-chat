@@ -11,6 +11,8 @@ from .models import metadata
 from .image_options import SAMPLERS, SCHEDULERS
 
 PROFILES = {
+    'yue2': {'label':'YuE2 · canzoni e musica','main':'model','required':['model','vae'],'optional':[],
+             'architecture':'yue2','engine':'music','capabilities':['music'],'max_refs':0},
     'ming': {'label':'Ming Image 0.1 Design · grafici, crea e modifica','main':'diffusion','required':['diffusion','llm','vae'],'optional':[],
              'architecture':'ming','engine':'vision','capabilities':['create','edit'],'max_refs':4,'steps':12,'cfg':1,'width':1024,'height':1024,'sampler':'euler','scheduler':'simple','strength':1},
     'qwen21': {'label':'Qwen Image 2.1 · crea e modifica','main':'diffusion','required':['diffusion','llm','vae'],'optional':[],
@@ -31,6 +33,7 @@ PROFILES = {
                   'architecture':'qwen-edit','capabilities':['create','edit'],'max_refs':3,'cfg':2.5},
 }
 ROLE_LABELS = {'model':'Pesi del modello','diffusion':'Diffusore','mmproj':'Proiettore vision (mmproj)',
+               'tokenizer':'Tokenizer musicale','model_config':'Configurazione YuE2','generation_config':'Preset YuE2','vae_config':'Configurazione VAE audio',
                'vae':'VAE','llm':'Encoder del modello immagini','llm_vision':'Encoder vision'}
 EXTENSIONS = {'.gguf','.safetensors'}
 
@@ -87,10 +90,16 @@ def build_model(config):
     if config['profile']=='chat' and shard:
         for i in range(2,int(shard[2])+1):
             files.append(entry('shard',main.with_name(main.name[:shard.start()]+f'-{i:05d}-of-{int(shard[2]):05d}.gguf')))
+    if config['profile']=='yue2':
+        from .music_models import sidecar_entries
+        files += sidecar_entries(main.parent)
     problems=[]
     for f in files:
         if not f['valid'] and f['role']!='mmproj':
             problems.append(f"{ROLE_LABELS.get(f['role'],'Parte GGUF')}: file assente, non leggibile o formato non valido ({f['path']}).")
+    if config['profile']=='yue2':
+        from .music_models import weight_problems
+        problems += weight_problems(config['files'])
     if config['profile']=='chat' and info.get('general.architecture')=='clip':
         problems.append('Il file principale è un proiettore/encoder, non un modello chat.')
     if config['profile']=='chat' and int(info.get('split.count',1))>sum(f['role'] in ('model','shard') for f in files):
@@ -134,6 +143,7 @@ def validate_config(body, model_id=None):
         p=absolute_path(value)
         if not valid_weight(p):raise ValueError(f'{ROLE_LABELS[role]}: scegli un file GGUF o safetensors leggibile e valido.')
         if profile.get('engine')=='vision' and p.suffix.lower()!='.safetensors':raise ValueError('Ming e Qwen Image 2.1 richiedono i tre componenti safetensors; GGUF non supportato da questo motore.')
+        if kind=='yue2' and p.suffix.lower()!='.gguf':raise ValueError('YuE2 richiede pesi e VAE in formato GGUF.')
         if kind=='chat' and p.suffix.lower()!='.gguf':raise ValueError('Il motore chat richiede file GGUF.')
         if role=='mmproj' and metadata(p).get('general.architecture')!='clip':raise ValueError('Il mmproj non contiene metadati di un proiettore vision.')
         resolved[role]=str(p)
@@ -143,7 +153,7 @@ def validate_config(body, model_id=None):
         raise ValueError('Seleziona la prima parte GGUF (00001); sono supportate fino a 256 parti.')
     ident=model_id or 'external-'+hashlib.sha256((kind+'\0'+os.path.normcase(str(main))).encode()).hexdigest()[:20]
     config={'id':ident,'profile':kind,'name':name.strip(),'files':resolved,'projector_mode':mode}
-    if kind!='chat':
+    if kind not in ('chat','yue2'):
         steps=body.get('steps',profile.get('steps',0));cfg=body.get('cfg',profile.get('cfg',7))
         if type(steps) is not int or not 0<=steps<=100 or type(cfg) not in (int,float) or not 0<=cfg<=30:
             raise ValueError('Passi o CFG non validi.')
