@@ -1,4 +1,5 @@
 import io
+import os
 import json
 import struct
 import tempfile
@@ -31,7 +32,12 @@ def mtp_gguf(path, arch='qwen35', heads=1, blocks=5, names=None, extra=None):
     for i,name in enumerate(names):
         data+=string(name)+struct.pack('<IQIQ',1,1,0,i*32)
     data+=b'\0'*((-len(data))%32)+b'\0'*(32*len(names))
-    path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
+    path.parent.mkdir(parents=True,exist_ok=True)
+    previous=path.stat().st_mtime_ns if path.exists() else 0
+    path.write_bytes(data)
+    stamp=path.stat()
+    # Virtual Windows runners can give rapid same-size rewrites the same timestamp.
+    if stamp.st_mtime_ns<=previous:os.utime(path,ns=(stamp.st_atime_ns,previous+1_000_000))
     return path
 
 

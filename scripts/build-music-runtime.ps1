@@ -10,7 +10,7 @@ if (-not $AudioSource) {
  $taskSources=Join-Path $taskRoot 'work\music-source'
  New-Item -ItemType Directory -Path $taskSources -Force | Out-Null
  $taskArchive=Join-Path $taskSources 'audio-source.zip'
- if (-not (Test-Path -LiteralPath $taskArchive)) { Invoke-WebRequest -Uri ('https://codeload.github.com/0xShug0/audio.cpp/zip/'+$taskCommit) -OutFile $taskArchive }
+ if (-not (Test-Path -LiteralPath $taskArchive)) { Invoke-WebRequest -UseBasicParsing -Uri ('https://codeload.github.com/0xShug0/audio.cpp/zip/'+$taskCommit) -OutFile $taskArchive }
  if ((Get-FileHash -LiteralPath $taskArchive -Algorithm SHA256).Hash.ToLowerInvariant() -ne '7bdd528f8f0ec176823fb478ee7f03dbb8fdbd628f63f669ff281fe100b5a2dd') { throw 'audio.cpp source checksum mismatch.' }
  $AudioSource=Join-Path $taskSources ('audio.cpp-'+$taskCommit)
  if (-not (Test-Path -LiteralPath $AudioSource)) { Expand-Archive -LiteralPath $taskArchive -DestinationPath $taskSources }
