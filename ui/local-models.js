@@ -51,9 +51,9 @@ export function initLocalModels({api,getState,onChange,notify}){
       if(draft.profile!=='chat')$('#local-model-hint').textContent+=' Controlla i componenti proposti; puoi sceglierli anche da cartelle diverse.';
     }catch(e){if(ticket===suggestTicket)$('#local-model-hint').textContent=e.message;}
   }
-  function open(model=null){
+  function open(model=null,profile='chat'){
     suggestTicket++;
-    draft=model?structuredClone(model.external_config):{profile:'chat',name:'',files:{},projector_mode:'auto'};
+    draft=model?structuredClone(model.external_config):{profile,name:'',files:{},projector_mode:'auto'};
     $('#local-model-title').textContent=model?'Modifica collegamento':'Collega un modello';
     $('#local-model-kind').innerHTML=Object.entries(getState().external_profiles).map(([id,p])=>`<option value="${id}">${esc(p.label)}</option>`).join('');
     $('#local-model-kind').value=draft.profile;$('#local-model-name').value=draft.name;

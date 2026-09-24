@@ -11,6 +11,10 @@ from .models import metadata
 from .image_options import SAMPLERS, SCHEDULERS
 
 PROFILES = {
+    'ming': {'label':'Ming Image 0.1 Design · grafici, crea e modifica','main':'diffusion','required':['diffusion','llm','vae'],'optional':[],
+             'architecture':'ming','engine':'vision','capabilities':['create','edit'],'max_refs':4,'steps':12,'cfg':1,'width':1024,'height':1024,'sampler':'euler','scheduler':'simple','strength':1},
+    'qwen21': {'label':'Qwen Image 2.1 · crea e modifica','main':'diffusion','required':['diffusion','llm','vae'],'optional':[],
+             'architecture':'qwen21','engine':'vision','capabilities':['create','edit'],'max_refs':4,'steps':25,'cfg':1,'width':1024,'height':1024,'sampler':'euler','scheduler':'simple','strength':1},
     'chat': {'label':'Chat / vision · GGUF','main':'model','required':['model'],'optional':['mmproj'],
              'capabilities':['chat'],'max_refs':4},
     'sd': {'label':'Stable Diffusion / SDXL · checkpoint completo','main':'model','required':['model'],'optional':['vae'],
@@ -27,7 +31,7 @@ PROFILES = {
                   'architecture':'qwen-edit','capabilities':['create','edit'],'max_refs':3,'cfg':2.5},
 }
 ROLE_LABELS = {'model':'Pesi del modello','diffusion':'Diffusore','mmproj':'Proiettore vision (mmproj)',
-               'vae':'VAE','llm':'Encoder testo (LLM)','llm_vision':'Encoder vision'}
+               'vae':'VAE','llm':'Encoder del modello immagini','llm_vision':'Encoder vision'}
 EXTENSIONS = {'.gguf','.safetensors'}
 
 
@@ -92,7 +96,7 @@ def build_model(config):
     if config['profile']=='chat' and int(info.get('split.count',1))>sum(f['role'] in ('model','shard') for f in files):
         problems.append('Mancano alcune parti del modello GGUF suddiviso.')
     size=sum(f['size'] for f in files)
-    defaults={k:v for k,v in profile.items() if k in ('capabilities','architecture','max_refs','steps','cfg')}
+    defaults={k:v for k,v in profile.items() if k in ('capabilities','architecture','max_refs','steps','cfg','engine','width','height','sampler','scheduler','strength')}
     if 'steps' in config:
         defaults.pop('steps',None)
         if config['steps']:defaults['steps']=config['steps']
@@ -129,6 +133,7 @@ def validate_config(body, model_id=None):
             continue
         p=absolute_path(value)
         if not valid_weight(p):raise ValueError(f'{ROLE_LABELS[role]}: scegli un file GGUF o safetensors leggibile e valido.')
+        if profile.get('engine')=='vision' and p.suffix.lower()!='.safetensors':raise ValueError('Ming e Qwen Image 2.1 richiedono i tre componenti safetensors; GGUF non supportato da questo motore.')
         if kind=='chat' and p.suffix.lower()!='.gguf':raise ValueError('Il motore chat richiede file GGUF.')
         if role=='mmproj' and metadata(p).get('general.architecture')!='clip':raise ValueError('Il mmproj non contiene metadati di un proiettore vision.')
         resolved[role]=str(p)
@@ -142,7 +147,7 @@ def validate_config(body, model_id=None):
         steps=body.get('steps',profile.get('steps',0));cfg=body.get('cfg',profile.get('cfg',7))
         if type(steps) is not int or not 0<=steps<=100 or type(cfg) not in (int,float) or not 0<=cfg<=30:
             raise ValueError('Passi o CFG non validi.')
-        sampler=body.get('sampler','auto');scheduler=body.get('scheduler','auto')
+        sampler=body.get('sampler',profile.get('sampler','auto'));scheduler=body.get('scheduler',profile.get('scheduler','auto'))
         if sampler not in SAMPLERS or scheduler not in SCHEDULERS:raise ValueError('Sampler o scheduler non supportato dal motore integrato.')
         config.update(steps=steps,cfg=cfg,sampler=sampler,scheduler=scheduler)
     model=build_model(config)

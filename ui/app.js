@@ -2,7 +2,8 @@ import {renderRich,appendMedia,escape as esc,saveBlob} from './render.js';
 import {exportPdf,exportDocx,exportPng} from './exports.js';
 import {initLocalModels} from './local-models.js';
 import {initLoras} from './loras.js';
-import {renderImagePreferences} from './image-settings.js';
+import {initVisualControls,renderVisualSetup} from './visual-controls.js';
+import {renderImagePreferences,selectImagePreferencesModel} from './image-settings.js';
 
 const $=s=>document.querySelector(s);
 let state=null,current=null,chat=null,filter='all',collection=null,attachments=[],settingsTab='setup',settingsDraft=null;
@@ -17,10 +18,13 @@ const api=async(path,body,method='POST')=>{
 function toast(text,error=false){$('#toast').textContent=text;$('#toast').className='show'+(error?' error':'');clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').className='',5000);}
 const act=fn=>(...args)=>{try{return Promise.resolve(fn(...args)).catch(e=>toast(e.message,true));}catch(e){toast(e.message,true);}};
 const gb=n=>(n/1e9).toLocaleString('it-IT',{maximumFractionDigits:2})+' GB';
+const visualControls=initVisualControls({getState:()=>state,getChatId:()=>current});
 const localModels=initLocalModels({api,getState:()=>state,notify:toast,onChange:async(model,removed)=>{
   collectSettings();state=await api('/state');
-  if(model)for(const [key,cap] of [['chat_model','chat'],['create_model','create'],['edit_model','edit']])if(settingsDraft[key]===model.id&&!model.capabilities.includes(cap))settingsDraft[key]='';
-  if(removed)for(const key of ['chat_model','create_model','edit_model'])if(settingsDraft[key]===removed)settingsDraft[key]='';
+  if(model)for(const [key,cap] of [['chat_model','chat'],['create_model','create'],['edit_model','edit'],['diagram_model','create']])if(settingsDraft[key]===model.id&&!model.capabilities.includes(cap))settingsDraft[key]='';
+  if(removed)for(const key of ['chat_model','create_model','edit_model','diagram_model'])if(settingsDraft[key]===removed)settingsDraft[key]='';
+  if(model&&settingsDraft.diagram_model===model.id&&model.architecture!=='ming')settingsDraft.diagram_model='';
+  if(model?.architecture==='ming'&&!settingsDraft.diagram_model)settingsDraft.diagram_model=model.id;
   renderSettings();renderStatus();
 }});
 const loraUI=initLoras({api,getState:()=>state,getChatId:()=>current,pickDirectory:(path,callback)=>localModels.pickDirectory(path,callback),openPreferences:()=>openSettings('advanced'),notify:toast,onChange:()=>scheduleAssessment()});
@@ -53,7 +57,7 @@ function renderSidebar(){
   $('#chat-list').innerHTML=chats.map(c=>`<div class="chat-row ${current===c.id?'active':''}"><button class="chat-link" data-chat="${c.id}">${c.pinned?'<span class="pin-mark">⌖</span>':''}${esc(c.title)}</button><button class="chat-options" data-chat-menu="${c.id}" aria-label="Opzioni ${esc(c.title)}">⋯</button></div>`).join('')||'<div class="side-empty">Le tue conversazioni appariranno qui.</div>';
 }
 function renderStatus(){
-  loraUI.render();
+  loraUI.render();visualControls.render();
   $('#chat-advanced').checked=!!state.settings.chat_advanced;
   const job=activeJob(),any=state.jobs.some(j=>j.status==='running');
   $('#engine-badge').classList.toggle('busy',any);$('#engine-badge').innerHTML=`<i></i> ${any?'Motore al lavoro':'Motore locale'}`;
@@ -64,7 +68,8 @@ function renderStatus(){
   const release=$('#release-memory');if(release)release.disabled=state.jobs.some(j=>['running','queued'].includes(j.status));
   $('#model-name').textContent=modelName(state.settings.chat_model);
   const model=state.models.find(m=>m.id===state.settings.chat_model),vision=model?.vision,thinking=model?.thinking;
-  $('#vision-badge').textContent=vision?.enabled?'Vision attiva':model?'Non vision':'Vision da configurare';
+  $('#vision-enabled').checked=state.settings.vision_enabled;$('#vision-toggle-label').textContent='Vision '+(state.settings.vision_enabled?'On':'Off');
+  $('#vision-badge').textContent=vision?.enabled?(state.settings.vision_enabled?'Vision · CPU':'Vision disattivata'):model?'Non vision':'Vision da configurare';
   $('#vision-badge').className='badge '+(vision?.enabled?'ready':'warning');
   $('#vision-badge').title=vision?.projector?'Proiettore automatico: '+vision.projector:vision?.warning||'Scegli un modello nelle impostazioni.';
   $('#vision-warning').hidden=!model||!!vision?.enabled;
@@ -111,6 +116,7 @@ async function renderChat(){
     if(message.meta.loras?.length&&(message.role==='user'||state.settings.chat_advanced)){const row=document.createElement('div');row.className='message-loras';row.textContent=message.meta.loras.map(l=>'◇ '+l.name+' × '+l.weight+' · '+l.model_name).join(' / ');content.append(row);}
     if(message.meta.loras_skipped?.length){const note=document.createElement('p');note.className='small-note';note.textContent=message.meta.loras_skipped.length+' LoRA non applicati: associati a un altro modello o con peso 0.';content.append(note);}
     if(message.meta.image_parameters&&state.settings.chat_advanced){const p=message.meta.image_parameters,details=document.createElement('details');details.className='image-parameters';const title=document.createElement('summary');title.textContent='Parametri immagine';const values=document.createElement('p');values.textContent=p.width+' × '+p.height+' · '+p.steps+' step · CFG '+p.cfg+' · '+p.sampler+' / '+p.scheduler+' · Seed '+p.seed+' · Intensità '+p.strength;details.append(title,values);if(p.negative_prompt){const negative=document.createElement('p');negative.textContent='Negative prompt: '+p.negative_prompt;details.append(negative);}content.append(details);}
+    if(message.meta.image_parameters&&state.settings.chat_advanced){const d=document.createElement('details'),summary=document.createElement('summary'),prompt=document.createElement('pre');summary.textContent='Assistant '+(message.meta.assistant_on?'On · '+message.meta.assistant?.model:'Off')+' · prompt immagini';prompt.textContent=message.meta.image_prompt;prompt.style.whiteSpace='pre-wrap';d.append(summary,prompt);content.append(d);}
     if(message.role==='assistant'&&message.meta.model_warning){const note=document.createElement('div');note.className='vision-warning';note.textContent=message.meta.model_warning;content.append(note);}
     if(message.role==='assistant'&&message.meta.mtp_tokens){const badge=document.createElement('span');badge.className='badge';badge.textContent='MTP · '+message.meta.mtp_tokens;article.querySelector('.message-head').append(badge);}
     if(message.role==='assistant'&&message.meta.think_level){const badge=document.createElement('span');badge.className='badge';badge.textContent='Think '+message.meta.think_level;badge.title=message.meta.think_budget+' token massimi di ragionamento';article.querySelector('.message-head').append(badge);}
@@ -121,7 +127,7 @@ async function renderChat(){
       const toCanvas=document.createElement('button');toCanvas.className='text-button';toCanvas.textContent=message.meta.canvas?'Apri canvas':'Apri nel canvas';toCanvas.onclick=act(async()=>{if(!message.meta.canvas||message.meta.artifact){if(canvas.content||canvas.media.length){if(!await ask('Sostituire il canvas?',{description:'Il contenuto attuale verrà sostituito da questa risposta.',confirm:true}))return;}await setCanvas(message.meta.artifact||{title:chat.title,content:message.content,media:message.media});canvasDirty=true;await persistCanvas();}await toggleCanvas(true);});actions.append(toCanvas);
       if(message.meta.finish_reason==='length'){const note=document.createElement('span');note.textContent='Limite di risposta raggiunto';actions.append(note);}
     }
-    if(message.role==='user'){const repeat=document.createElement('button');repeat.className='text-button';repeat.textContent='Riutilizza';repeat.onclick=()=>{$('#prompt').value=message.content;attachments=[...message.media];loraUI.setSelections(message.meta.loras||[]);renderAttachments();$('#prompt').focus();};actions.append(repeat);}
+    if(message.role==='user'){const repeat=document.createElement('button');repeat.className='text-button';repeat.textContent='Riutilizza';repeat.onclick=()=>{$('#prompt').value=message.content;attachments=[...message.media];loraUI.setSelections(message.meta.loras||[]);visualControls.set({image_model:message.meta.image_model||'',assistant:message.meta.assistant??true});renderAttachments();$('#prompt').focus();};actions.append(repeat);}
   }
   if(atBottom)scroll.scrollTop=scroll.scrollHeight;
 }
@@ -141,8 +147,8 @@ async function uploadFiles(files){
 }
 async function send(event){event.preventDefault();if(activeJob())return;const prompt=$('#prompt').value.trim();if(!prompt)return;
   $('#send').disabled=true;
-  try{if(!current){const fresh=await api('/chats',{collection_id:collection});loraUI.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
-    await persistCanvas();await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,think_level:$('#think-level').value,loras:loraUI.getSelections()});
+  try{if(!current){const fresh=await api('/chats',{collection_id:collection});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
+    await persistCanvas();await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,...visualControls.read(),think_level:$('#think-level').value,loras:loraUI.getSelections()});
     $('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);await refresh();
   }finally{$('#send').disabled=false;}
 }
@@ -174,7 +180,7 @@ async function renderCanvas(){
   $('#canvas-preview-tab').classList.toggle('active',!canvasEditing);$('#canvas-source-tab').classList.toggle('active',canvasEditing);
   if(!canvasEditing){const value={...canvas,media:[...canvas.media]};renderQueue=renderQueue.then(async()=>{await renderRich($('#canvas-preview'),value.content,{final:!activeJob()?.canvas});appendMedia($('#canvas-preview'),value.media);});await renderQueue;}
 }
-async function persistCanvas(){clearTimeout(canvasSaveTimer);if(!canvasDirty)return;if(!current){const fresh=await api('/chats',{});loraUI.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
+async function persistCanvas(){clearTimeout(canvasSaveTimer);if(!canvasDirty)return;if(!current){const fresh=await api('/chats',{});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
   const id=current,value={...canvas};await api('/canvas/'+id,value,'PUT');canvasDirty=false;$('#canvas-save-status').textContent='Salvato sul computer';}
 function canvasChanged(){canvas.title=$('#canvas-title').value;canvas.content=$('#canvas-source').value;canvasDirty=true;$('#canvas-save-status').textContent='Modifiche da salvare';clearTimeout(canvasSaveTimer);canvasSaveTimer=setTimeout(act(persistCanvas),800);}
 
@@ -199,7 +205,7 @@ async function updateAssessment(){
     const summary=`${h.cpu_name} · ${h.cpu_threads} thread · RAM ${mem(h.ram.total_mb)}, libera ${mem(h.ram.free_mb)}`;
     const gpus=h.gpu.map(g=>`${g.name} · VRAM ${mem(g.total_mb)}, libera ${mem(g.free_mb)}`).join(' / ');
     const info=$('#hardware-info');if(info)info.textContent=summary+(gpus?' · '+gpus:' · Nessuna GPU rilevata');
-    const roles={chat_model:'Chat / vision',create_model:'Creazione immagini',edit_model:'Modifica immagini'};
+    const roles={chat_model:'Chat / vision',create_model:'Creazione immagini',edit_model:'Modifica immagini',diagram_model:'Grafici e diagrammi'};
     box.innerHTML=`<div class="assessment-head"><h3>Memoria per i modelli scelti</h3><button type="button" id="refresh-hardware" class="text-button">Aggiorna</button></div><p class="small-note">${esc(summary)}${gpus?'<br>'+esc(gpus):''}</p><p class="small-note">Stime per ${report.references} riferiment${report.references===1?'o':'i'}, contesto ${settingsDraft.context} e immagini ${settingsDraft.width} × ${settingsDraft.height}. ${esc(report.overall.note)}</p><article class="memory-total ${report.overall.status}"><strong>${esc(report.overall.title)} · ${report.overall.unique_models} modelli distinti</strong><p>${esc(report.overall.advice)}</p><small>Totale stimato RAM ${report.overall.ram_gb} GiB · VRAM ${report.overall.vram_gb} GiB</small></article>${report.memory.models.length?'<p class="small-note">Ci sono modelli già caricati: la memoria libera ne include l’occupazione. Per una previsione a freddo premi Libera memoria e Aggiorna.</p>':''}`+report.models.map((m,i)=>`<article class="memory-result ${m.status}"><div><strong>${roles[m.role]} · ${esc(m.name)}</strong><span class="badge">${esc(m.title)}</span></div><p>${esc(m.advice)}</p><small>Stima RAM ${m.ram_gb} GiB · VRAM ${m.vram_gb} GiB${m.gpu_name?' · '+esc(m.gpu_name):''}</small>${m.assumptions.length?`<details><summary>Come viene stimata</summary><p>${esc(m.assumptions.join(' '))}</p></details>`:''}${Object.keys(m.recommended_patch).length?`<button type="button" class="btn small" data-memory-patch="${i}">Applica suggerimento</button>`:''}</article>`).join('')+(!report.models.length?'<p class="small-note">Seleziona i modelli per vedere la stima prima di scaricarli.</p>':'')+`<p class="small-note">${esc(h.note)}</p>`;
     $('#refresh-hardware').onclick=scheduleAssessment;
     box.querySelectorAll('[data-memory-patch]').forEach(b=>b.onclick=()=>{collectSettings();Object.assign(settingsDraft,report.models[Number(b.dataset.memoryPatch)].recommended_patch);renderSettings();});
@@ -212,7 +218,12 @@ function renderSettings(){
   if(settingsTab==='setup'){
     const modelSelect=(key,label,cap)=>settingSelect(key,label,[['','Scegli dal catalogo…'],...state.models.filter(m=>m.capabilities.includes(cap)).map(m=>[m.id,m.name+(cap==='chat'?(m.vision?.enabled?' · Vision':m.vision?.expected?' · Vision da completare':' · Non vision'):'')+(m.ready?'':m.external?' · percorso non disponibile':' · da scaricare')])]);
     body.innerHTML=`<div class="hardware-note" id="hardware-info">Scegli l'hardware. CPU, NVIDIA, AMD e Intel condividono la stessa interfaccia.</div><div class="settings-grid"><section class="card"><h3>01 · Il tuo computer</h3>${settingSelect('profile','Profilo memoria',[['cpu','Solo CPU / nessuna GPU'],['low','GPU · 4–8 GB VRAM'],['balanced','GPU · 12–24 GB VRAM']],'Il profilo imposta valori iniziali modificabili nelle Preferenze.')}${settingSelect('backend','Motore di calcolo',[['cpu','CPU · massima compatibilità'],['vulkan','Vulkan · NVIDIA / AMD / Intel'],['cuda','CUDA · NVIDIA']],'Il profilo Solo CPU usa sempre il backend CPU.')}<div class="runtime-actions"><button id="install-runtime" class="btn">Installa motori</button><span class="small-note" id="runtime-ready"></span></div><div id="runtime-downloads"></div></section><section class="card"><h3>02 · I tuoi modelli</h3>${modelSelect('chat_model','Chat, router e visione','chat')}<p id="setup-vision-note" class="vision-warning"></p>${modelSelect('create_model','Creazione immagini','create')}${modelSelect('edit_model','Modifica e riferimenti','edit')}<p>Un'unica chat. Il router sceglie cosa fare dal prompt; la modalità memoria decide quali modelli conservare.</p><button id="go-catalog" class="text-button">Catalogo e modelli già scaricati →</button></section></div><div class="note">Con 4–8 GB scegli modelli quantizzati e pochi riferimenti. FLUX usa anche la RAM di sistema; CPU e offload riducono la VRAM ma aumentano i tempi. Il video sarà aggiunto in una versione futura.</div>`;
-    body.insertAdjacentHTML('beforeend',`<section class="card memory-settings"><h3>03 · Modelli in memoria</h3><div class="settings-grid">${settingSelect('memory_policy','Caricamento dei modelli',[['on_demand','A richiesta · un modello alla volta'],['resident','Residenti · tutti i modelli scelti']],'A richiesta conserva il modello corrente e lo scarica prima di caricarne uno diverso. Residenti carica i modelli installati al prossimo messaggio e li mantiene in VRAM (o RAM con CPU).')}${settingSelect('ram_cache_gb','Cache file in RAM recuperabile',[[0,'Disattivata'],[2,'Fino a 2 GiB'],[4,'Fino a 4 GiB'],[8,'Fino a 8 GiB'],[16,'Fino a 16 GiB'],[32,'Fino a 32 GiB']],'Conserva disponibili i pesi usati di recente, senza copie né RAM bloccata. Windows può recuperarne le pagine: aiuta i ricaricamenti se restano in cache, ma il trasferimento alla GPU resta necessario.')}</div><p>Se creazione ed editing usano lo stesso modello, condividono il caricamento. In Residenti tutti i layer LLM e il proiettore usano la GPU; il numero di layer nelle Preferenze vale per A richiesta. Le modifiche si applicano dopo il lavoro in corso.</p><div class="memory-live"><span id="resident-models"></span><button type="button" id="release-memory" class="btn small">Libera memoria</button></div></section>`);
+    body.insertAdjacentHTML('beforeend',`<section class="card memory-settings"><h3>03 · Modelli in memoria</h3><div class="settings-grid">${settingSelect('memory_policy','Caricamento dei modelli',[['on_demand','A richiesta · un modello alla volta'],['resident','Residenti · tutti i modelli scelti']],'A richiesta conserva il modello corrente e lo scarica prima di caricarne uno diverso. Residenti carica i modelli installati al prossimo messaggio e li mantiene in VRAM (o RAM con CPU).')}${settingSelect('ram_cache_gb','Cache file in RAM recuperabile',[[0,'Disattivata'],[2,'Fino a 2 GiB'],[4,'Fino a 4 GiB'],[8,'Fino a 8 GiB'],[16,'Fino a 16 GiB'],[32,'Fino a 32 GiB']],'Conserva disponibili i pesi usati di recente, senza copie né RAM bloccata. Windows può recuperarne le pagine: aiuta i ricaricamenti se restano in cache, ma il trasferimento alla GPU resta necessario.')}</div><p>Se creazione ed editing usano lo stesso modello, condividono il caricamento. In Residenti tutti i layer LLM usano la GPU; il proiettore vision resta sempre sulla CPU; il numero di layer nelle Preferenze vale per A richiesta. Le modifiche si applicano dopo il lavoro in corso.</p><div class="memory-live"><span id="resident-models"></span><button type="button" id="release-memory" class="btn small">Libera memoria</button></div></section>`);
+    const visuals=document.createElement('section');visuals.className='visual-setup';body.append(visuals);
+    renderVisualSetup(visuals,{state,draft:settingsDraft,link:kind=>localModels.open(null,kind),edit:localModels.open,
+      preferences:id=>{collectSettings();selectImagePreferencesModel(id);settingsTab='advanced';renderSettings();},
+      changed:()=>{for(const key of ['create_model','edit_model'])body.querySelector('[data-setting="'+key+'"]').value=settingsDraft[key];scheduleAssessment();toast('Modello selezionato. Salva le impostazioni.');},
+      install:act(async()=>{await api('/downloads',{id:'vision',kind:'runtime'});await refresh();})});
     $('#release-memory').onclick=act(async()=>{await api('/memory/release',{});await refresh();scheduleAssessment();toast('Modelli scaricati e cache file liberata.');});
     renderStatus();
     $('#install-runtime').onclick=act(async()=>{collectSettings();const backend=settingsDraft.profile==='cpu'?'cpu':settingsDraft.backend;await api('/downloads',{id:backend,kind:'runtime'});await refresh();});
@@ -249,12 +260,14 @@ function updateDownloads(){
   for(const m of state.models){const ready=document.getElementById('ready-'+m.id);if(ready){ready.textContent=m.complete?'Installato':m.ready?'Solo testo · completa mmproj':'Non installato';ready.classList.toggle('ready',m.ready);}const b=document.querySelector(`[data-download="${m.id}"]`);if(b){b.disabled=m.complete||m.local||state.downloads.some(t=>t.status==='running');b.textContent=m.local?'Locale pronto':m.complete?'Verificato':'Scarica · '+gb(m.size);}}
   const backend=settingsDraft?.profile==='cpu'?'cpu':settingsDraft?.backend;
   if($('#runtime-ready')){$('#runtime-ready').textContent=state.runtimes[backend]?.ready?'Motori installati':gb(state.runtimes[backend]?.size||0);$('#install-runtime').disabled=state.downloads.some(t=>t.status==='running');}
+  if($('#vision-runtime-status')){$('#vision-runtime-status').textContent=state.vision_runtime?.ready?'Installato · autonomo':gb(state.runtimes.vision?.size||0);$('#install-vision').disabled=!!state.vision_runtime?.ready||state.downloads.some(t=>t.status==='running');}
   if($('#runtime-downloads'))$('#runtime-downloads').innerHTML=state.downloads.filter(d=>d.kind==='runtime').map(progress).join('');
   document.querySelectorAll('[data-cancel-download]').forEach(b=>b.onclick=act(async()=>{await api('/downloads/'+b.dataset.cancelDownload+'/cancel',{});await refresh();}));
 }
 
 $('#chat-advanced').onchange=act(async()=>{const value=$('#chat-advanced').checked;state.settings=await api('/settings',{chat_advanced:value});renderStatus();await renderChat();});
 $('#generation-settings').onclick=()=>openSettings('advanced');
+$('#vision-enabled').onchange=act(async()=>{state.settings=await api('/settings',{vision_enabled:$('#vision-enabled').checked});renderStatus();toast('Vision '+(state.settings.vision_enabled?'On · CPU':'Off')+' dal prossimo messaggio.');});
 $('#think-level').onchange=act(async()=>{const level=$('#think-level').value;thinkSaving=true;try{state.settings=await api('/settings',{think_level:level});}finally{thinkSaving=false;renderStatus();}});
 $('#composer').onsubmit=act(send);
 $('#prompt').onkeydown=act(async e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();await send(e);}});

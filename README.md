@@ -4,7 +4,7 @@ Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle 
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.6.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.6.0/H3-Chat-0.6.0-windows-x64.zip) dalla [release v0.6.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.6.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.7.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.7.0/H3-Chat-0.7.0-windows-x64.zip) dalla [release v0.7.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.7.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 **Primo avvio:** apri **Impostazioni → Setup**, scegli hardware e modelli. Il catalogo scarica i pesi e tutti i componenti richiesti, controllando dimensione e SHA-256. I backend GPU si installano dallo stesso setup. Dopo i download, inferenza, interfaccia e documenti funzionano offline.
 
@@ -20,15 +20,17 @@ La finestra desktop usa Microsoft Edge in modalità app, normalmente già presen
 - «Leggi questo grafico e ricostruiscilo…» → modello vision, dati e renderer numerico.
 - «Spiegami questa formula…» → testo e LaTeX.
 
-Non ci sono modalità da selezionare nel composer. Le richieste esplicite più comuni sono riconosciute direttamente; quelle ambigue sono classificate dal modello chat con uno schema JSON vincolato. I modelli piccoli possono interpretare male richieste complesse: per codice, routing e analisi densa scegli un modello più capace dal setup.
+La chat resta unica. Nel composer puoi lasciare Immagini su Automatico oppure selezionare esplicitamente il modello immagini. Le richieste esplicite più comuni sono riconosciute direttamente; quelle ambigue sono classificate dal modello chat con uno schema JSON vincolato. I modelli piccoli possono interpretare male richieste complesse: per codice, routing e analisi densa scegli un modello più capace dal setup.
 
-Le tre selezioni nelle impostazioni sono **chat/router/vision**, **creazione immagini** e **modifica immagini**. Un solo modello è assegnato a ciascun ruolo. La modalità A richiesta conserva il modello corrente e lo scarica prima di caricarne uno diverso; Residenti conserva i modelli scelti. Le due modalità sono selezionabili dal Setup. La coda è globale e seriale, con interruzione del lavoro e registrazione degli errori.
+Le selezioni principali nelle impostazioni sono **chat/router/vision**, **creazione immagini** e **modifica immagini**. Un solo modello è assegnato a ciascun ruolo. La modalità A richiesta conserva il modello corrente e lo scarica prima di caricarne uno diverso; Residenti conserva i modelli scelti. Le due modalità sono selezionabili dal Setup. La coda è globale e seriale, con interruzione del lavoro e registrazione degli errori.
 
 ## Vision e modelli locali
 
-Il composer indica sempre **Vision attiva** oppure **Non vision**, con un avviso se manca il proiettore. Il nome commerciale del modello non basta: l'app verifica la presenza del `mmproj`. Nei modelli del catalogo usa esclusivamente il componente associato; non prende proiettori di altri modelli dalla cache condivisa. Se il proiettore viene rimosso da un modello già installato, i pesi verificati restano utilizzabili per il testo e il catalogo permette di completare di nuovo il download.
+Il composer offre **Vision On / Off** (On di default) e indica **Vision · CPU**, **Vision disattivata** oppure **Non vision**, con un avviso se manca il proiettore. Il nome commerciale del modello non basta: l'app verifica la presenza del `mmproj`. Nei modelli del catalogo usa esclusivamente il componente associato; non prende proiettori di altri modelli dalla cache condivisa. Se il proiettore viene rimosso da un modello già installato, i pesi verificati restano utilizzabili per il testo e il catalogo permette di completare di nuovo il download.
 
 Per usare un GGUF già scaricato, apri **Catalogo modelli → Collega un modello → Chat / vision** e scegli il file con **Sfoglia** oppure incolla il suo percorso completo. Non serve copiarlo in H3-Chat. In modalità mmproj Automatico l’app cerca il proiettore nella stessa cartella: se ne trova uno lo usa, se ne trova più di uno segnala l’ambiguità e puoi sceglierlo manualmente. Le vecchie cartelle `models/local/NomeModello/` continuano a essere rilevate. I metadati GGUF vengono letti senza eseguire codice; il proiettore presente nella stessa cartella viene passato automaticamente al motore. Se ci sono più proiettori non viene scelto arbitrariamente. La presenza del file non certifica l'abbinamento: un proiettore incompatibile viene rifiutato dal motore. Il GGUF deve essere supportato dalla versione integrata di llama.cpp. I file locali non sono scaricati né verificati contro un hash del catalogo.
+
+Il proiettore vision usa sempre la CPU, anche con modelli Residenti. Vision Off evita di caricarlo e libera la sua RAM; i token delle immagini continuano a occupare contesto LLM quando Vision è On.
 
 Senza vision, la chat testuale continua a funzionare e le risposte conservano l'indicazione. Una richiesta di lettura delle immagini viene fermata con un messaggio esplicito; creazione e modifica artistica continuano a usare il proprio motore immagini.
 
@@ -53,6 +55,33 @@ In **Preferenze → Impostazioni immagini** trovi i valori predefiniti per model
 
 **Anima Turbo 1.1 Q4** è scaricabile con encoder Qwen3-0.6B Base e VAE Qwen Image. Puoi anche collegare Anima Base/Aesthetic o Turbo dalle cartelle originali. In **Preferenze → Cartelle LoRA** scegli una o più cartelle; in chat, **LoRA** permette di selezionare fino a otto adapter con peso e modello destinatario. I file restano dove si trovano. [Guida a preset, parametri e LoRA](docs/images-and-loras.md).
 
+## Ming, Qwen Image 2.1 e Assistant
+
+Nel Setup trovi sezioni dedicate a **Ming Image 0.1 Design** e **Qwen Image 2.1**.
+Collega diffusore, encoder e VAE safetensors con **Sfoglia e collega**, senza copiare
+i pesi. Ming: preset 1024×1024 / 12 step / CFG 1 / Euler-Simple; Qwen 2.1:
+1024×1024 / 25 step / CFG 1 / Euler-Simple. Entrambi creano e modificano immagini,
+con fino a quattro riferimenti. I parametri restano personalizzabili per modello.
+
+**Ming automatico per grafici** instrada le richieste di creazione di grafici, grafi,
+schemi e diagrammi al Ming scelto. Spiegazioni e richieste esplicite di Mermaid,
+Chart, SVG, codice o grafici esatti continuano a usare il renderer strutturato.
+Il menu Immagini in chat permette una scelta esplicita che prevale sul routing.
+Qwen 2.1 può essere impostato come predefinito per crea e modifica.
+
+**Assistant On / Off**, attivo di default in chat, prepara le istruzioni per questi
+due modelli usando **lo stesso LLM della chat**, riutilizzato se già caricato.
+Con Off il prompt passa direttamente. Vision On consente anche ad Assistant di
+leggere i riferimenti tramite il proiettore sulla CPU; Vision Off lascia comunque
+passare i riferimenti al modello immagini per l'editing. Scelte, prompt effettivo,
+parametri e destinazione canvas sono conservati con ogni lavoro.
+
+Il motore aggiuntivo si installa una sola volta dal Setup (circa **2,1 GB** di
+download, circa 4 GB estratti). È privato all'app: non richiede ComfyUI o LM Studio
+installati o avviati. Usa una libreria ComfyUI incorporata, con Python e PyTorch
+isolati. NVIDIA CUDA oppure CPU; Vulkan resta per gli altri motori.
+[Dettagli, sorgenti e licenze del motore](docs/vision-engine.md).
+
 ## MTP e max token
 
 In chat, accanto a Think, il pulsante **MTP · Max token** mostra lo stato e il limite di risposta e apre le **Preferenze**. **Max token di risposta** era già disponibile e mantiene il valore salvato: 64–8192 token, fino a metà del contesto, comprendendo il thinking e gli artefatti nel canvas.
@@ -74,7 +103,7 @@ La scelta è salvata e fotografata in ogni richiesta, anche con canvas attivo. I
 In **Impostazioni → Setup → Modelli in memoria** scegli:
 
 - **A richiesta** (predefinito): conserva il modello corrente fra i messaggi. Prima di usarne uno diverso, termina il processo precedente per liberare RAM/VRAM. Chat → creazione → editing → chat comporta i cambi necessari; se crea ed edit condividono lo stesso modello, il processo e i pesi vengono riutilizzati. Le richieste immagini esplicite non caricano inutilmente il router LLM; quelle ambigue possono richiederlo.
-- **Residenti**: al prossimo messaggio carica tutti i modelli selezionati e già installati, poi li conserva fino al cambio di configurazione, al rilascio manuale o alla chiusura. Sulla GPU richiede tutti i layer LLM e il mmproj, più i componenti dei modelli immagini; con CPU conserva tutto in RAM. I modelli non scaricati non vengono caricati automaticamente. Il numero di layer GPU nelle Preferenze vale per A richiesta.
+- **Residenti**: al prossimo messaggio carica tutti i modelli selezionati e già installati, poi li conserva fino al cambio di configurazione, al rilascio manuale o alla chiusura. Sulla GPU richiede tutti i layer LLM e i componenti dei modelli immagini; il mmproj resta sulla CPU; con CPU conserva tutto in RAM. I modelli non scaricati non vengono caricati automaticamente. Il numero di layer GPU nelle Preferenze vale per A richiesta.
 
 Il pulsante memoria sotto la chat mostra quanti modelli sono caricati e apre il setup. **Libera memoria** scarica tutti i modelli e chiude la cache quando non ci sono lavori; i file su disco e le chat restano disponibili. Un cambio di modello, backend, contesto o modalità ricarica i contesti interessati. Think, temperatura e dimensioni dell'immagine non obbligano a ricaricare i pesi. Le impostazioni cambiate durante un lavoro si applicano dopo quel lavoro; ogni richiesta conserva la propria configurazione.
 
@@ -135,7 +164,7 @@ Sono supportati `line`, `bar`, `scatter`, `pie` e `doughnut`. Per `scatter` i da
 
 Vulkan copre NVIDIA, AMD e Intel con driver compatibili. CUDA è per NVIDIA; la release dei motori fissa il proprio runtime CUDA. I profili sono modificabili. Il setup rileva CPU, RAM e GPU e stima il rischio di memoria per i modelli selezionati, usando anche la memoria attualmente libera; non garantisce un consumo massimo. Memoria occupata da altre applicazioni, modello, risoluzione e numero di riferimenti possono richiedere CPU, meno layer GPU o dimensioni inferiori.
 
-Le immagini usano batch singolo e VAE a tasselli. In A richiesta i pesi sono conservati in RAM, la diffusione usa la GPU a segmenti ed encoder/VAE usano CPU; Residenti mantiene anche questi componenti sulla GPU. FLUX.2 klein e quattro riferimenti richiedono più RAM e tempo dei modelli di base. La CPU permette di lavorare senza VRAM, con prestazioni inferiori.
+Il motore immagini C++ usa batch singolo e VAE a tasselli. In A richiesta i pesi sono conservati in RAM, la diffusione usa la GPU a segmenti ed encoder/VAE usano CPU; Residenti mantiene anche questi componenti sulla GPU. Ming e Qwen 2.1 usano invece offload dinamico e spostano encoder/VAE a richiesta; il proiettore vision dell’LLM resta sempre sulla CPU. FLUX.2 klein e quattro riferimenti richiedono più RAM e tempo dei modelli di base. La CPU permette di lavorare senza VRAM, con prestazioni inferiori.
 
 ## Catalogo iniziale
 

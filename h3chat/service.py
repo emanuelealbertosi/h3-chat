@@ -10,12 +10,14 @@ import time
 from pathlib import Path
 from .downloads import Cancelled, Downloads, model_ready, safe_join
 from .engine import CREATE_NO_WINDOW, Engine, runtime_executable, explicit_route
+from .visual_routing import visual_route
+from .vision_runtime import status as vision_status, SAMPLERS as VISION_SAMPLERS, SCHEDULERS as VISION_SCHEDULERS
 from .store import DEFAULTS, PROFILES, Store, uid
 from .models import discover_local, inspect_model, THINK_LEVELS, thinking_parameters, mtp_tokens
 from .external_models import PROFILES as EXTERNAL_PROFILES, ROLE_LABELS, build_model, validate_config
 from .hardware import detect_hardware, assess_model, assess_selection
 from .loras import LoraLibrary, validate_directories, for_model as loras_for_model, public as public_loras
-from .image_options import SAMPLERS, SCHEDULERS, IMAGE_DEFAULT_KEYS, validate_overrides, options as image_options
+from .image_options import SAMPLERS, SCHEDULERS, NATIVE_SAMPLERS, NATIVE_SCHEDULERS, IMAGE_DEFAULT_KEYS, validate_overrides, options as image_options
 
 
 class Service:
@@ -55,9 +57,9 @@ class Service:
 
     def state(self):
         models = self.refresh_models()
-        return {"token": self.token, "version": "0.6.0", "settings": self.store.settings(), "profiles": PROFILES,
-                "models": models,"image_options":{"samplers":SAMPLERS,"schedulers":SCHEDULERS,"defaults":{k:DEFAULTS[k] for k in IMAGE_DEFAULT_KEYS}},"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
-                "runtimes": {key: {"ready": all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
+        return {"token": self.token, "version": "0.7.0", "settings": self.store.settings(), "profiles": PROFILES,
+                "vision_runtime":vision_status(self.root), "models": models,"image_options":{"samplers":NATIVE_SAMPLERS,"schedulers":NATIVE_SCHEDULERS,"vision_samplers":VISION_SAMPLERS,"vision_schedulers":VISION_SCHEDULERS,"defaults":{k:DEFAULTS[k] for k in IMAGE_DEFAULT_KEYS}},"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
+                "runtimes": {key: {"ready": vision_status(self.root)["ready"] if key=="vision" else all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
                                     "size": sum(f["size"] for f in r["files"])} for key, r in self.runtimes.items()},
                 "chats": self.store.all("SELECT * FROM chats ORDER BY pinned DESC,updated DESC"),
                 "collections": self.store.all("SELECT * FROM collections ORDER BY name"),
@@ -76,7 +78,7 @@ class Service:
             self.refresh_models()
             model=self.catalog[config['id']]
             settings=self.store.settings()
-            self.store.save_settings({key:'' for key,cap in (('chat_model','chat'),('create_model','create'),('edit_model','edit')) if settings[key]==config['id'] and cap not in model['capabilities']})
+            self.store.save_settings({key:'' for key,cap in (('chat_model','chat'),('create_model','create'),('edit_model','edit'),('diagram_model','create')) if settings[key]==config['id'] and (cap not in model['capabilities'] or (key=='diagram_model' and model.get('architecture')!='ming'))})
             self.engine.configure(self.store.settings())
             self.engine.cache.clear()
             return model | inspect_model(self.root,model)
@@ -89,7 +91,7 @@ class Service:
                 raise ValueError('Attendi o interrompi i lavori prima di scollegare il modello.')
             self.store.execute('DELETE FROM external_models WHERE id=?',(model_id,))
             settings=self.store.settings()
-            self.store.save_settings({key:'' for key in ('chat_model','create_model','edit_model') if settings[key]==model_id})
+            self.store.save_settings({key:'' for key in ('chat_model','create_model','edit_model','diagram_model') if settings[key]==model_id})
             self.refresh_models()
             self.engine.configure(self.store.settings())
             self.engine.cache.clear()
@@ -100,7 +102,7 @@ class Service:
         if not isinstance(patch, dict) or set(patch) - set(DEFAULTS):
             raise ValueError("Impostazione sconosciuta.")
         s = self.store.settings() | patch
-        if s["profile"] not in PROFILES or s["backend"] not in self.runtimes:
+        if s["profile"] not in PROFILES or s["backend"] not in ("cpu","cuda","vulkan"):
             raise ValueError("Profilo hardware non valido.")
         for key, lo, hi in (("context", 1024, 32768), ("gpu_layers", 0, 999), ("max_tokens", 64, 8192),
                             ("width", 256, 1536), ("height", 256, 1536), ("steps", 1, 100), ("threads", 1, 64), ("ram_cache_gb", 0, 32), ("mtp_draft_tokens", 1, 8)):
@@ -110,7 +112,7 @@ class Service:
         validate_overrides(s['image_overrides'])
         if type(s['image_advanced']) is not bool or type(s['chat_advanced']) is not bool:raise ValueError('Avanzate: usa un valore booleano.')
         if type(s['image_cfg']) not in (int,float) or not 0<=s['image_cfg']<=30:raise ValueError('CFG fuori intervallo.')
-        if s['image_sampler'] not in SAMPLERS or s['image_scheduler'] not in SCHEDULERS:
+        if s['image_sampler'] not in NATIVE_SAMPLERS or s['image_scheduler'] not in NATIVE_SCHEDULERS:
             raise ValueError('Sampler o scheduler non supportato dal motore integrato.')
         if type(s['seed']) is not int or not -1<=s['seed']<=2147483647:raise ValueError('Seed: usa -1 per casuale oppure un intero da 0 a 2147483647.')
         if not isinstance(s['negative_prompt'],str) or len(s['negative_prompt'])>8000:raise ValueError('Negative prompt: massimo 8000 caratteri.')
@@ -127,9 +129,18 @@ class Service:
             raise ValueError("MTP: scegli attivato o disattivato.")
         if type(s["setup_done"]) is not bool:
             raise ValueError("setup_done non valido.")
-        for key, capability in (("chat_model", "chat"), ("create_model", "create"), ("edit_model", "edit")):
+        for key, capability in (("chat_model", "chat"), ("create_model", "create"), ("edit_model", "edit"), ("diagram_model", "create")):
             if s[key] and (s[key] not in self.catalog or capability not in self.catalog[s[key]]["capabilities"]):
                 raise ValueError(f"Modello incompatibile con {capability}.")
+        if s['diagram_model'] and self.catalog[s['diagram_model']].get('architecture') != 'ming':
+            raise ValueError('Per il routing dei grafici scegli un modello Ming.')
+        if type(s['vision_enabled']) is not bool:raise ValueError('Vision: scegli On oppure Off.')
+        if type(s['diagram_auto']) is not bool:raise ValueError('Routing grafici non valido.')
+        if type(s['prompt_max_tokens']) is not int or not 256 <= s['prompt_max_tokens'] <= 8192:
+            raise ValueError('Token Assistant: scegli tra 256 e 8192.')
+        for model in self.catalog.values():
+            if model.get('id') in s['image_overrides']:
+                image_options(model,s)
         if s["memory_policy"] not in ("on_demand", "resident"):
             raise ValueError("Memoria: scegli A richiesta o Residenti.")
         if s.get("think_level") not in THINK_LEVELS:
@@ -161,7 +172,7 @@ class Service:
         chosen_loras=self.loras.capture(body.get("loras",[]),settings["lora_dirs"],self.catalog)
         selected = []
         selected_models = []
-        for key in ("chat_model", "create_model", "edit_model"):
+        for key in ("chat_model", "create_model", "edit_model", "diagram_model"):
             model = next((m for m in models if m["id"] == settings[key]), None)
             if model:
                 model=model|{"active_lora_bytes":sum(l["size"] for l in chosen_loras if l["model_id"]==model["id"] and l["weight"]!=0)}
@@ -220,6 +231,13 @@ class Service:
         media = self.validate_media(body.get("media", []))
         settings = self.validate_settings({"think_level":body.get("think_level", self.store.settings()["think_level"])})
         self.engine.require_model(settings["chat_model"], "chat")
+        selection = body.get('image_model','')
+        if not isinstance(selection,str):raise ValueError('Selezione modello immagini non valida.')
+        if selection:
+            self.engine.require_model(selection,'edit' if media else 'create')
+        assistant = body.get('assistant',True)
+        if type(assistant) is not bool:raise ValueError('Assistant: scegli On oppure Off.')
+        settings = settings | {'_image_model':selection,'_assistant':assistant}
         canvas = body.get("canvas", False)
         if type(canvas) is not bool:
             raise ValueError("Destinazione canvas non valida.")
@@ -286,8 +304,11 @@ class Service:
             def stage(label):
                 self.store.execute("UPDATE jobs SET stage=? WHERE id=?", (label, job["id"]))
             self.engine.prepare(settings, cancel, stage)
+            selected_route = visual_route(history,settings)
             direct = explicit_route(history)
-            if direct in ('create', 'edit'):
+            if selected_route:
+                route = selected_route
+            elif direct in ('create', 'edit'):
                 route = {'intent':direct,'prompt':history[-1]['content']}
             else:
                 stage("Caricamento / riuso del modello chat")
@@ -296,8 +317,8 @@ class Service:
                 route = self.engine.route(history, settings, cancel)
             intent = route["intent"]
             meta = {"intent": intent, "model": model["name"], "settings": settings, "prompt": payload["prompt"], "canvas": payload.get("canvas", False)}
-            meta.update(vision=model.get("vision",{}).get("enabled",False),
-                        model_warning=model.get("vision",{}).get("warning",""),
+            meta.update(vision=settings.get("vision_enabled",True) and model.get("vision",{}).get("enabled",False),
+                        model_warning=model.get("vision",{}).get("warning","") if settings.get("vision_enabled",True) else "Vision Off · il proiettore non è caricato.",
                         think_level=settings.get("think_level","off") if model.get("thinking",{}).get("supported") else "off",
                         think_budget=thinking_parameters(model, settings)["reasoning_budget_tokens"],
                         mtp_tokens=mtp_tokens(model,settings) if intent=="chat" else 0, max_tokens=settings["max_tokens"])
@@ -346,20 +367,27 @@ class Service:
                 self.store.update_answer(job, text, "done", meta=meta)
                 stage("Risposta completata" if finish != "length" else "Limite di risposta raggiunto: puoi chiedere di continuare")
             else:
-                image_model = self.engine.require_model(settings[intent + "_model"], intent)
+                image_model = self.engine.require_model(route.get("image_model") or settings[intent + "_model"], intent)
                 refs = payload["media"]
                 if intent == "edit" and not refs:
                     refs = next((m["media"] for m in reversed(history) if m["media"]), [])
                 if intent == "edit" and not refs:
                     raise ValueError("Per modificare un'immagine, allegala o generala prima in questa chat.")
                 if intent == "create" and refs:
-                    image_model = self.engine.require_model(settings["edit_model"], "edit")
+                    image_model = self.engine.require_model(route.get("image_model") or settings["edit_model"], "edit")
                     intent = "edit"
                 if len(refs) > image_model.get("max_refs", 1):
                     raise ValueError(f"Il modello accetta fino a {image_model.get('max_refs', 1)} riferimenti. Seleziona un modello compatibile nelle impostazioni.")
                 meta.update(intent=intent, model=image_model["name"], image_prompt=route["prompt"] or payload["prompt"], references=refs)
+                meta['image_selection'] = route.get('selection','auto')
+                meta['assistant_on'] = bool(settings.get('_assistant',True) and image_model.get('engine')=='vision')
+                if image_model.get('engine')=='vision':meta['image_prompt']=payload['prompt']
+                if meta['assistant_on']:
+                    meta['original_image_prompt'] = meta['image_prompt']
+                    meta['image_prompt'],meta['assistant'] = self.engine.refine_image_prompt(
+                        history,meta['image_prompt'],refs,settings,cancel,log_path,stage)
                 selected_loras=loras_for_model(payload.get('loras',[]),image_model)
-                generation_settings=settings|{'_loras':selected_loras,'_image_options':image_options(image_model,settings)}
+                generation_settings=settings|{'_image_model':image_model['id'],'_loras':selected_loras,'_image_options':image_options(image_model,settings)}
                 meta['loras']=public_loras(selected_loras)
                 meta['image_parameters']=generation_settings['_image_options']
                 meta['loras_skipped']=public_loras([l for l in payload.get('loras',[]) if l not in selected_loras])

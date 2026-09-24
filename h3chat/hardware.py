@@ -118,6 +118,7 @@ def assess_model(model, settings, hardware, references=1):
     projector=sizes.get('mmproj',0)
     if model.get('vision',{}).get('projector_size'): projector=model['vision']['projector_size']/GIB
     elif model.get('ready') and not model.get('vision',{}).get('enabled'): projector=0
+    if not settings.get('vision_enabled',True):projector=0
     weights=sum(sizes.values())-sizes.get('mmproj',0)
     backend='cpu' if settings['profile']=='cpu' else settings['backend']
     resident=settings.get('memory_policy')=='resident'
@@ -134,14 +135,12 @@ def assess_model(model, settings, hardware, references=1):
         kd=p.get('key_length') or (emb//heads if p.get('embedding') else default[4]);vd=p.get('value_length') or kd
         kv=settings['context']*layers*kv_heads*(kd+vd)*2/GIB
         frac=(1 if resident else min(1,settings['gpu_layers']/(layers+1))) if backend!='cpu' else 0
-        vision=projector>0 or model.get('vision',{}).get('expected',False)
+        vision=settings.get('vision_enabled',True) and (projector>0 or model.get('vision',{}).get('expected',False))
         workspace=.65+(references*.2*settings['context']/4096 if vision else 0)
         all_gpu=weights*1.15+kv
         vram=all_gpu*frac+(.45 if frac else 0)
         needed_ram=weights*(1-frac)*1.15+weights*.15+projector*1.2+kv*(1-frac)+workspace
-        if resident and backend!='cpu':
-            vram+=projector*1.2+workspace
-            needed_ram=max(.5,needed_ram-projector*1.2)
+        if vision:assumptions.append('Il proiettore vision usa sempre CPU e RAM; i token immagine continuano a occupare il contesto LLM.')
         cpu_ram=weights*1.3+projector*1.2+kv+workspace
         draft=mtp_tokens(model,settings)
         if draft:
@@ -165,9 +164,14 @@ def assess_model(model, settings, hardware, references=1):
         if resident and backend!='cpu':
             vram=weights*1.25+workspace
             needed_ram=weights*.15+1
+        if model.get('engine')=='vision' and not resident and backend!='cpu':
+            needed_ram=weights*1.1+workspace+3
+            vram=max(vram,sizes.get('llm',0)*1.15+2)
         cpu_ram=weights*1.3+workspace+1
         frac=1
-        assumptions.append('Picco immagini stimato da pesi, risoluzione e riferimenti. '+('Pesi, VAE ed encoder restano sulla GPU.' if resident and backend!='cpu' else 'Pesi in RAM recuperati dalla GPU a segmenti; VAE ed encoder usano la CPU.' if backend!='cpu' else 'Tutti i componenti usano la RAM.'))
+        assumptions.append('Picco immagini stimato da pesi, risoluzione e riferimenti. '+('Pesi, VAE ed encoder restano sulla GPU.' if resident and backend!='cpu' else 'Componenti immagini trasferiti sulla GPU a richiesta.' if model.get('engine')=='vision' and backend!='cpu' else 'Pesi in RAM recuperati dalla GPU a segmenti; VAE ed encoder usano la CPU.' if backend!='cpu' else 'Tutti i componenti usano la RAM.'))
+    if model.get('engine')=='vision':
+        assumptions.append('Motore Ming / Qwen 2.1: encoder e VAE passano sulla GPU a richiesta con offload dinamico; le stime non garantiscono assenza di OOM.')
     lora_gb=model.get('active_lora_bytes',0)/GIB
     if lora_gb:
         needed_ram+=lora_gb*2+.1;cpu_ram+=lora_gb*2+.1
@@ -202,6 +206,8 @@ def assess_model(model, settings, hardware, references=1):
                 status='oom';title='Rischio OOM';advice='La VRAM non basta e neppure la RAM libera offre spazio sufficiente per un passaggio completo alla CPU.'
         elif status=='ok' and chat and frac<1:
             status='offload';title='Offload previsto';advice='I layer selezionati entrano nella VRAM stimata; i rimanenti usano la RAM e rallentano la risposta.'
+    if model.get('engine')=='vision' and backend not in ('cpu','cuda'):
+        status='unknown';title='Backend incompatibile';advice='Questo modello richiede CUDA NVIDIA oppure CPU; Vulkan non è supportato.';patches={'backend':'cuda'} if any(g.get('vendor')=='NVIDIA' for g in hardware['gpu']) else {'profile':'cpu','backend':'cpu'}
     return {'id':model['id'],'name':model['name'],'status':status,'title':title,'advice':advice,
             'oom_risk':risk,'ram_gb':round(needed_ram,2),'vram_gb':round(vram,2),'cpu_ram_gb':round(cpu_ram,2),
             'gpu_name':gpu['name'] if gpu else None,'assumptions':assumptions,'recommended_patch':patches}

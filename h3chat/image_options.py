@@ -1,5 +1,6 @@
 """Image controls supported by the pinned stable-diffusion.cpp 7f410a3 ABI."""
 import secrets
+from .vision_runtime import SAMPLERS as VISION_SAMPLERS, SCHEDULERS as VISION_SCHEDULERS, validate_options
 
 SAMPLERS = ('auto','euler','euler_a','heun','dpm2','dpm++2s_a','dpm++2m','dpm++2mv2',
             'ipndm','ipndm_v','lcm','ddim_trailing','tcd','res_multistep','res_2s','er_sde',
@@ -7,6 +8,10 @@ SAMPLERS = ('auto','euler','euler_a','heun','dpm2','dpm++2s_a','dpm++2m','dpm++2
 SCHEDULERS = ('auto','discrete','karras','exponential','ays','gits','sgm_uniform','simple',
               'smoothstep','kl_optimal','lcm','bong_tangent','logit_normal','flux2','flux','beta')
 
+
+NATIVE_SAMPLERS, NATIVE_SCHEDULERS = SAMPLERS, SCHEDULERS
+SAMPLERS = tuple(dict.fromkeys(SAMPLERS + VISION_SAMPLERS))
+SCHEDULERS = tuple(dict.fromkeys(SCHEDULERS + VISION_SCHEDULERS))
 
 IMAGE_DEFAULT_KEYS=('width','height','steps','image_cfg','image_sampler','image_scheduler','seed','negative_prompt','strength')
 OVERRIDE_KEYS=('width','height','steps','cfg','sampler','scheduler','seed','negative_prompt','strength')
@@ -17,10 +22,10 @@ def configured(model, settings):
     scheduler=model.get('scheduler','auto')
     if sampler=='auto':sampler=settings.get('image_sampler','auto')
     if scheduler=='auto':scheduler=settings.get('image_scheduler','auto')
-    result={'width':settings['width'],'height':settings['height'],'steps':model.get('steps',settings['steps']),
+    result={'width':model.get('width',settings['width']),'height':model.get('height',settings['height']),'steps':model.get('steps',settings['steps']),
             'cfg':model.get('cfg',settings.get('image_cfg',7)),'sampler':sampler,'scheduler':scheduler,
             'seed':settings.get('seed',-1),'negative_prompt':settings.get('negative_prompt',''),
-            'strength':settings['strength']}
+            'strength':model.get('strength',settings['strength'])}
     if model.get('architecture')=='qwen-edit':result['flow_shift']=3
     result.update(settings.get('image_overrides',{}).get(model.get('id',''),{}))
     return result
@@ -29,6 +34,12 @@ def configured(model, settings):
 def options(model, settings):
     result=configured(model,settings)
     if result['sampler']=='auto' and model.get('architecture') in ('flux2','qwen-edit','anima'):result['sampler']='euler'
+    if model.get('engine')=='vision':
+        if result['sampler']=='auto':result['sampler']='euler'
+        if result['scheduler']=='auto':result['scheduler']='simple'
+    validate_options(model,result)
+    if model.get('engine')!='vision' and (result['sampler'] not in NATIVE_SAMPLERS or result['scheduler'] not in NATIVE_SCHEDULERS):
+        raise ValueError('Sampler o scheduler non supportato dal motore immagini selezionato.')
     if result['seed']<0:result['seed']=secrets.randbits(31)
     return result
 

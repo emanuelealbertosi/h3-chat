@@ -16,6 +16,8 @@ from .downloads import Cancelled, safe_join
 from .models import inspect_model, thinking_parameters, model_path, mtp_tokens
 from .residency import Session, FileCache
 from .image_options import options as image_options
+from .vision_runtime import status as vision_status
+from .visual_routing import VISUAL_BRIEF
 
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
@@ -104,7 +106,7 @@ class Engine:
                     "cache":self.cache.snapshot()}
 
     def session_key(self, kind, model, settings):
-        files = self.model_files(model)
+        files = self.model_files(model,settings)
         fingerprint = []
         for role, path in sorted(files.items()):
             try:
@@ -114,8 +116,9 @@ class Engine:
                 fingerprint.append((role, path, None, None))
         keys = ('profile', 'backend', 'threads', 'memory_policy')
         if kind == 'chat':
-            keys += ('context', 'gpu_layers')
+            keys += ('context', 'gpu_layers', 'vision_enabled')
         runtime_options=tuple((k,settings.get(k, 'on_demand' if k=='memory_policy' else None)) for k in keys)
+        if kind=='image':runtime_options+=(('image_engine',model.get('engine','native')),('architecture',model.get('architecture')))
         if kind=='chat': runtime_options+=(('mtp_tokens',mtp_tokens(model,settings)),)
         return (kind, tuple(fingerprint), runtime_options)
 
@@ -124,10 +127,18 @@ class Engine:
             self.policy = settings.get('memory_policy', 'on_demand')
             self.cache.configure(settings.get('ram_cache_gb', 0))
             wanted = set()
-            for field,kind in (('chat_model','chat'),('create_model','image'),('edit_model','image')):
+            for field,kind in (('chat_model','chat'),('create_model','image'),('edit_model','image'),('diagram_model','image'),('_image_model','image')):
                 model = self.catalog.get(settings.get(field))
                 if model:
                     wanted.add(self.session_key(kind,model,settings))
+            # Keep an explicitly selected extra image model between messages,
+            # including after the queue returns to the saved global settings.
+            if self.active and self.active.kind=='image':
+                previous = self.active.settings
+                extra = previous.get('_image_model') and self.active.model['id'] not in [previous.get(k) for k in ('create_model','edit_model','diagram_model')]
+                current = self.catalog.get(self.active.model['id'])
+                if extra and current and self.session_key('image',current,settings)==self.active.key:
+                    wanted.add(self.active.key)
             for key,session in list(self.sessions.items()):
                 if key not in wanted or not session.alive():
                     self._drop(key)
@@ -149,7 +160,7 @@ class Engine:
                         self._drop(old)
             session = self.sessions.get(key)
             if not session:
-                session = Session(key,kind,model,self.model_files(model),settings,log_path)
+                session = Session(key,kind,model,self.model_files(model,settings),settings,log_path)
                 self.cache.forget(session.files.values())
                 self.sessions[key] = session
             self.active = session
@@ -160,7 +171,7 @@ class Engine:
         if self.policy != 'resident':
             return
         seen = set()
-        for field,capability in (('chat_model','chat'),('create_model','create'),('edit_model','edit')):
+        for field,capability in (('chat_model','chat'),('create_model','create'),('edit_model','edit'),('diagram_model','create'),('_image_model','create')):
             model = self.catalog.get(settings.get(field))
             if not model or model['id'] in seen:
                 continue
@@ -186,12 +197,12 @@ class Engine:
             raise ValueError(f"Scarica tutti i componenti di {model['name']} nelle impostazioni.")
         return model
 
-    def model_files(self, model):
+    def model_files(self, model, settings=None):
         files = {(entry["role"] if entry["role"]!="shard" else f"shard_{i}"): str(model_path(self.root, model, entry["path"])) for i,entry in enumerate(model["files"])}
         if "chat" in model["capabilities"]:
             traits = inspect_model(self.root, model)
             files.pop("mmproj", None)
-            if traits["vision"]["projector"]:
+            if traits["vision"]["projector"] and (settings or {}).get("vision_enabled",True):
                 files["mmproj"] = str(model_path(self.root, model, traits["vision"]["projector"]))
         return files
 
@@ -205,7 +216,7 @@ class Engine:
         exe = runtime_executable(self.root, backend, "llama")
         if not exe:
             raise ValueError(f"Installa il motore {backend.upper()} dal setup.")
-        files = self.model_files(model)
+        files = self.model_files(model,settings)
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             session.port = sock.getsockname()[1]
@@ -220,7 +231,7 @@ class Engine:
         if draft: args += ["--spec-draft-n-max", draft, "--slots"]
         if "mmproj" in files:
             args += ["--mmproj", files["mmproj"], "--image-max-tokens", 512 if settings["context"] <= 4096 else 1024]
-        if "mmproj" in files and (backend == "cpu" or settings.get("memory_policy") != "resident"):
+        if "mmproj" in files:
             args += ["--no-mmproj-offload"]
         with self.process_lock:
             if cancel.is_set():
@@ -304,11 +315,18 @@ class Engine:
         context = [{"role": m["role"], "text": m["content"][-2500:], "images": len(m["media"])} for m in history[-6:] if m["status"] == "done"]
         # Always preserve the full current instruction; context is clearly separated.
         context[-1]["text"] = history[-1]["content"]
-        schema = {"type": "object", "properties": {"intent": {"type": "string", "enum": ["chat", "create", "edit"]},
+        diagrams = bool(settings.get('diagram_model') and settings.get('diagram_auto',True))
+        choices = ['chat','create','edit'] + (['diagram','diagram-edit'] if diagrams else [])
+        router_prompt = ROUTER_PROMPT
+        if diagrams:
+            router_prompt += '\nEccezione attiva: usa intent diagram quando si chiede di CREARE o MODIFICARE un grafico, grafo, diagramma, schema o mappa concettuale come immagine. Usa diagram-edit se devi modificare o ricostruire un riferimento allegato o già presente nella conversazione. Semplici spiegazioni restano chat. Richieste esplicite di codice, Mermaid, SVG, Chart, dati esatti o grafici interattivi restano chat. Le negazioni non sono richieste di generazione.'
+        schema = {"type": "object", "properties": {"intent": {"type": "string", "enum": choices},
                   "prompt": {"type": "string"}}, "required": ["intent", "prompt"], "additionalProperties": False}
-        value = self.completion([{"role": "system", "content": ROUTER_PROMPT}, {"role": "user", "content": json.dumps(context, ensure_ascii=False)}], settings, cancel, schema=schema)
+        value = self.completion([{"role": "system", "content": router_prompt}, {"role": "user", "content": json.dumps(context, ensure_ascii=False)}], settings, cancel, schema=schema)
         try:
             result = json.loads(value)
+            if result['intent'] in ('diagram','diagram-edit') and diagrams:
+                result.update(intent='edit' if result['intent']=='diagram-edit' or history[-1].get('media') else 'create',image_model=settings['diagram_model'],selection='diagram')
             if result["intent"] not in ("chat", "create", "edit"):
                 raise ValueError()
             return result
@@ -322,11 +340,11 @@ class Engine:
         result = [{"role": "system", "content": settings["system_prompt"] + "\n" + instructions}]
         # Current uploaded references, or the latest visual turn for follow-up vision questions.
         latest_media_seq = next((m["seq"] for m in reversed(history) if m["media"]), None)
-        has_vision = model.get("vision", inspect_model(self.root, model).get("vision", {})).get("enabled", False)
+        has_vision = settings.get("vision_enabled",True) and model.get("vision", inspect_model(self.root, model).get("vision", {})).get("enabled", False)
         if latest_media_seq and not has_vision:
             result[0]["content"] += "\nNon puoi vedere le immagini della chat: non inventarne il contenuto. Per analizzarle chiedi di scegliere un modello vision."
         if latest_media_seq and not has_vision and history[-1]["media"]:
-            raise ValueError("Per leggere immagini scegli un modello Vision nel menu Modello chat.")
+            raise ValueError("Vision è Off: attivala in chat per leggere o descrivere le immagini." if not settings.get("vision_enabled",True) else "Per leggere immagini scegli un modello Vision nel menu Modello chat.")
         for message in history:
             if message["status"] != "done":
                 continue
@@ -354,6 +372,8 @@ class Engine:
         session = self._activate('image',model,settings,log_path,cancel)
         if session.ready and session.alive():
             return session
+        if model.get('engine') == 'vision':
+            return self.start_vision(session,model,settings,log_path,cancel)
         backend = 'cpu' if settings['profile']=='cpu' else settings['backend']
         cli = runtime_executable(self.root,backend,'sd')
         dll = cli.parent/'stable-diffusion.dll' if cli else None
@@ -379,6 +399,54 @@ class Engine:
             raise RuntimeError(self.failure(log_path,str(exc))) from exc
         session.ready = True
         return session
+
+    def start_vision(self, session, model, settings, log_path, cancel):
+        if not vision_status(self.root)['ready']:
+            raise ValueError('Installa il motore Ming / Qwen Image 2.1 dal Setup.')
+        backend = 'cpu' if settings['profile']=='cpu' else settings['backend']
+        if backend not in ('cpu','cuda'):
+            raise ValueError('Ming e Qwen Image 2.1 usano CPU oppure CUDA NVIDIA. Scegli il motore adatto nel Setup.')
+        python = self.root / 'runtime/python/python.exe'
+        worker = self.root / 'native/vision-worker.py'
+        with self.process_lock:
+            if cancel.is_set():raise Cancelled()
+            session.start([python,'-I','-X','utf8',worker],ipc=True,cwd=self.root)
+        session.wait('hello',cancel,30)
+        session.send({'op':'load','architecture':model['architecture'],'backend':backend,
+                      'files':session.files,'threads':settings['threads'],
+                      'resident':settings.get('memory_policy')=='resident'})
+        try:
+            session.wait('ready',cancel,900)
+        except RuntimeError as exc:
+            raise RuntimeError(self.failure(log_path,str(exc))) from exc
+        session.ready = True
+        return session
+
+    def refine_image_prompt(self, history, prompt, refs, settings, cancel, log_path, stage):
+        model = self.require_model(settings['chat_model'], 'chat')
+        stage('Assistant · preparazione delle istruzioni')
+        self.start_llama(model, settings, log_path, cancel)
+        visual = settings.get('vision_enabled',True) and model.get('vision',{}).get('enabled',False)
+        context = [{'role':m['role'],'text':m['content'][-4000:]} for m in history[-6:] if m['status']=='done']
+        brief = json.dumps({'conversation':context,'request':prompt,'reference_count':len(refs),
+                            'references_visible_to_assistant':bool(refs and visual)},ensure_ascii=False)
+        content = [{'type':'text','text':brief}]
+        if visual:
+            for ref in refs:
+                raw = safe_join(self.data,ref['path']).read_bytes()
+                content.append({'type':'image_url','image_url':{'url':f"data:{ref['mime']};base64,"+base64.b64encode(raw).decode()}})
+        schema = {'type':'object','properties':{'prompt':{'type':'string'}},'required':['prompt'],'additionalProperties':False}
+        tuning = settings | {'temperature':0.2,'think_level':'off','max_tokens':min(settings['prompt_max_tokens'],settings['context']//2)}
+        raw, finish = self.completion([{'role':'system','content':VISUAL_BRIEF},{'role':'user','content':content if visual and refs else brief}],
+                                      tuning,cancel,on_text=lambda text:None,schema=schema)
+        if finish == 'length':
+            raise ValueError('Assistant ha raggiunto il limite di token. Aumenta contesto o token Assistant nelle Preferenze, oppure disattiva Assistant in chat.')
+        try:
+            result = json.loads(raw)['prompt']
+            if not isinstance(result,str) or not result.strip():raise ValueError()
+        except (KeyError,TypeError,ValueError) as exc:
+            raise ValueError('Assistant non ha prodotto istruzioni valide. Riprova o disattiva Assistant in chat.') from exc
+        return result.strip(), {'model':model['name'],'vision':bool(visual and refs),'max_tokens':tuning['max_tokens']}
 
     def image_request(self, model, settings, prompt, refs, output):
         if len(refs)>model.get('max_refs',1):

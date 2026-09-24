@@ -103,6 +103,8 @@ class Session:
                 continue
             if event.get('event')==target:return event
             if event.get('event') in ('exit','error'):raise RuntimeError(event.get('message','Il motore immagini si è arrestato.'))
+            if event.get('event')=='stage' and stage:
+                stage(event.get('message','Motore immagini'))
             if event.get('event')=='progress' and stage:
                 stage(f"Generazione immagine · {event.get('step',0)}/{event.get('steps',0)} passi")
         raise RuntimeError('Tempo massimo del motore immagini superato.')
@@ -125,7 +127,7 @@ class Session:
         gpu=self.settings['profile']!='cpu' and self.settings['backend']!='cpu'
         return {'id':self.model['id'],'name':self.model['name'],'kind':self.kind,
                 'ready':self.ready and self.alive(),'pid':self.process.pid if self.alive() else None,
-                'location':'VRAM' if gpu and self.settings.get('memory_policy')=='resident' else 'RAM / VRAM' if gpu else 'RAM',
+                'location':'VRAM · Vision CPU' if gpu and self.kind=='chat' and 'mmproj' in self.files and self.settings.get('memory_policy')=='resident' else 'VRAM' if gpu and self.settings.get('memory_policy')=='resident' else 'RAM / VRAM' if gpu else 'RAM',
                 'mtp_tokens':next((v for k,v in self.key[2] if k=='mtp_tokens'),0) if self.ready else 0,
                 'loras':getattr(self,'active_loras',[]),
                 'uses':self.uses,'started':self.started}

@@ -17,3 +17,13 @@ The H3 image worker vendors the stable-diffusion.cpp C API header at commit 7f41
 nlohmann/json (MIT), stb_image and stb_image_write (MIT/public-domain dual license).
 Source URLs and SHA-256 hashes are recorded in native/vendor/SOURCES.json.
 Each vendored header retains its upstream copyright and license notice.
+
+The optional Ming / Qwen 2.1 worker (native/vision-worker.py) and its ComfyUI
+inference library are GPL-3.0-or-later. The optional runtime includes complete
+unmodified core source, licenses and Python distribution notices. See
+docs/vision-engine.md and runtime/vision/SOURCES.json. No model weights are bundled.
+
+The optional vision runtime includes Microsoft Visual C++ Redistributable CRT
+libraries. These unmodified system libraries retain their Microsoft license.
+See runtime/vision/dlls/NOTICE.txt. They are not covered by the application MIT
+license or the image worker GPL license.

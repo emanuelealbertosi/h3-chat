@@ -74,5 +74,23 @@
         "version": "master-859-7f410a3"
       }
     ]
+  },
+  "vision": {
+    "files": [
+      {
+        "path": "runtime/downloads/H3-Chat-vision-engine-0.7.0-windows-x64.zip",
+        "extract_to": "runtime/vision",
+        "url": "https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.7.0/H3-Chat-vision-engine-0.7.0-windows-x64.zip",
+        "size": 2102578819,
+        "sha256": "fade7e0ab9f9433a6d20850b7b2b2bc6a23ad27b3c97e3aab3631e3b51e609c4"
+      },
+      {
+        "path": "runtime/downloads/H3-Chat-vision-crt-0.7.0-windows-x64.zip",
+        "extract_to": "runtime/vision/dlls",
+        "url": "https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.7.0/H3-Chat-vision-crt-0.7.0-windows-x64.zip",
+        "size": 708131,
+        "sha256": "6c6a9bf24ecbf394ca54f7b5def83f7f01391e567a9c18e6ab1e390bc41b88fa"
+      }
+    ]
   }
 }

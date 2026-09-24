@@ -35,7 +35,7 @@ export function initLoras({api,getState,getChatId,pickDirectory,openPreferences,
  }
  async function load(refresh=false){const current=++ticket;$('#lora-status').textContent='Scansione delle cartelle LoRA…';const result=await api('/loras',{refresh});if(current!==ticket||!$('#lora-dialog').open)return;library=result;renderList();}
  async function open(){
-  const state=getState(),ids=[...new Set([state.settings.create_model,state.settings.edit_model].filter(Boolean))];
+  const state=getState(),ids=state.models.filter(m=>m.ready&&m.capabilities.some(c=>['create','edit'].includes(c))).map(m=>m.id);
   const models=ids.map(id=>state.models.find(m=>m.id===id)).filter(Boolean);
   if(!models.length){notify('Scegli prima un modello immagini nel Setup.',true);return;}
   if(!models.some(m=>m.id===target))target=models[0].id;

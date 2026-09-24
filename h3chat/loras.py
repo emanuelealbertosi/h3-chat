@@ -49,7 +49,9 @@ def _inspect(path,size,stamp):
         if not isinstance(meta,dict):meta={}
         evidence=' '.join(str(meta.get(k,'')) for k in ('ss_base_model_version','modelspec.architecture','base_model','ss_model_type')).lower()
         family=''
-        if 'anima' in evidence:family='anima'
+        if 'ming' in evidence:family='ming'
+        elif re.search(r'qwen[ _-]?image[ _-]?2[._ -]?1',evidence):family='qwen21'
+        elif 'anima' in evidence:family='anima'
         elif 'qwen' in evidence and 'image' in evidence:family='qwen-image'
         elif re.search(r'flux[._ -]?2',evidence):family='flux2'
         elif 'flux' in evidence:family='flux1'
