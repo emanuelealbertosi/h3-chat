@@ -34,9 +34,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $existing = gh release view $env:GITHUB_REF_NAME --json id 2>$null
+          $existing = gh release view $env:GITHUB_REF_NAME --json isDraft 2>$null
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "Release already exists; verified build retained as workflow artifact."
+            $release = $existing | ConvertFrom-Json
+            if ($release.isDraft) {
+              gh release upload $env:GITHUB_REF_NAME dist/* --clobber
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            } else {
+              Write-Host "Published release preserved; verified build retained as workflow artifact."
+            }
           } else {
             gh release create $env:GITHUB_REF_NAME dist/* --draft --generate-notes
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

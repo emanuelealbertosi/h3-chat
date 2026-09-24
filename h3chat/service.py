@@ -1,4 +1,5 @@
 from __future__ import annotations
+from . import __version__
 import base64
 import json
 import os
@@ -57,7 +58,7 @@ class Service:
 
     def state(self):
         models = self.refresh_models()
-        return {"token": self.token, "version": "0.7.0", "settings": self.store.settings(), "profiles": PROFILES,
+        return {"token": self.token, "version": __version__, "settings": self.store.settings(), "profiles": PROFILES,
                 "vision_runtime":vision_status(self.root), "models": models,"image_options":{"samplers":NATIVE_SAMPLERS,"schedulers":NATIVE_SCHEDULERS,"vision_samplers":VISION_SAMPLERS,"vision_schedulers":VISION_SCHEDULERS,"defaults":{k:DEFAULTS[k] for k in IMAGE_DEFAULT_KEYS}},"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
                 "runtimes": {key: {"ready": vision_status(self.root)["ready"] if key=="vision" else all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
                                     "size": sum(f["size"] for f in r["files"])} for key, r in self.runtimes.items()},

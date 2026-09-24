@@ -13,6 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from h3chat.downloads import safe_join
 from h3chat.service import Service
+from h3chat import __version__
 from h3chat.external_models import browse, suggest
 from h3chat.pdf_export import export_pdf
 from h3chat.store import uid
@@ -87,7 +88,7 @@ class Handler(BaseHTTPRequestHandler):
             method = self.command
             if method == "GET":
                 if path == "/api/health":
-                    return self.json({"app": "h3-chat", "version": "0.6.0", "instance": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]})
+                    return self.json({"app": "h3-chat", "version": __version__, "instance": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]})
                 if path == "/api/state":
                     return self.json(self.app.state())
                 if path == "/api/hardware":
