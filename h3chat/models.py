@@ -9,6 +9,9 @@ from pathlib import Path
 from .downloads import safe_join, model_ready
 from .mtp import inspect_mtp, mtp_tokens
 
+# llama.cpp's explicit context size is a signed 32-bit integer.
+MAX_CONTEXT = 2**31 - 1
+
 THINK_LEVELS = ('off', 'low', 'med', 'high', 'xhigh')
 _FORMATS = {0:'B', 1:'b', 2:'H', 3:'h', 4:'I', 5:'i', 6:'f', 7:'?', 10:'Q', 11:'q', 12:'d'}
 
@@ -162,7 +165,10 @@ def inspect_model(root, model):
     arch=info.get('general.architecture','')
     params={key:info.get(arch+'.'+suffix) for key,suffix in {
         'layers':'block_count','embedding':'embedding_length','heads':'attention.head_count',
-        'kv_heads':'attention.head_count_kv','key_length':'attention.key_length','value_length':'attention.value_length'}.items()}
+        'kv_heads':'attention.head_count_kv','key_length':'attention.key_length','value_length':'attention.value_length',
+        'context_length':'context_length'}.items()}
+    if type(params['context_length']) is not int or not 1 <= params['context_length'] <= MAX_CONTEXT:
+        params['context_length']=None
     if model.get('local') and int(info.get('split.count',1))>sum(e['role'] in ('model','shard') for e in model['files']): ready=False
     if model.get('external') and model.get('external_problems'): ready=False
     return {'ready':ready, 'complete':ready if model.get('local') else model_ready(root,model), 'vision':{'enabled':bool(projector),'expected':expected,

@@ -106,7 +106,7 @@ class Session:
             if event.get('event')=='stage' and stage:
                 stage(event.get('message','Motore immagini'))
             if event.get('event')=='progress' and stage:
-                stage(f"Generazione immagine · {event.get('step',0)}/{event.get('steps',0)} passi")
+                stage(f"{'Generazione musica' if self.kind=='music' else 'Generazione immagine'} · {event.get('step',0)}/{event.get('steps',0)} passi")
         raise RuntimeError('Tempo massimo del motore superato.')
 
     def stop(self):

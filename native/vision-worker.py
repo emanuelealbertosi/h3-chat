@@ -143,7 +143,7 @@ class Worker:
             def condition(text):
                 return clip.encode_from_tokens_scheduled(clip.tokenize(text, images=vision, keep_vision=not refs, prevent_empty_text=True))
             positive = condition(prompt)
-            neg = condition(negative)
+            neg = [[torch.zeros_like(value), info.copy()] for value, info in positive] if request.get('cfg')==1 else condition(negative)
             if refs:
                 positive, neg = self.references(positive, refs), self.references(neg, refs)
             latent = torch.zeros([1, 64, height // 16, width // 16], device=comfy.model_management.intermediate_device())

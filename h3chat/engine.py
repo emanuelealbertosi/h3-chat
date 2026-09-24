@@ -17,7 +17,7 @@ from .models import inspect_model, thinking_parameters, model_path, mtp_tokens
 from .residency import Session, FileCache
 from .image_options import options as image_options
 from .vision_runtime import status as vision_status
-from .visual_routing import VISUAL_BRIEF
+from .visual_routing import assistant_format, image_brief
 from .music_engine import MusicEngine
 from .music_runtime import backend as music_backend
 
@@ -151,7 +151,7 @@ class Engine(MusicEngine):
                     if key != keep:
                         self._drop(key)
 
-    def _activate(self, kind, model, settings, log_path, cancel):
+    def _activate(self, kind, model, settings, log_path, cancel, stage=None):
         with self.process_lock:
             if cancel.is_set():
                 raise Cancelled()
@@ -160,6 +160,7 @@ class Engine(MusicEngine):
             if self.policy == 'on_demand':
                 for old in list(self.sessions):
                     if old != key:
+                        if stage:stage('Rilascio memoria · '+self.sessions[old].model['name'])
                         self._drop(old)
             session = self.sessions.get(key)
             if not session:
@@ -167,6 +168,7 @@ class Engine(MusicEngine):
                 self.cache.forget(session.files.values())
                 self.sessions[key] = session
             self.active = session
+            if stage:stage(('Riutilizzo modello · ' if session.ready and session.alive() else 'Caricamento modello · ')+model['name'])
             return session
 
     def prepare(self, settings, cancel, stage):
@@ -185,11 +187,11 @@ class Engine(MusicEngine):
             stage('Modelli residenti · ' + model['name'])
             log_path = self.data / 'logs' / (secrets.token_hex(12) + '.log')
             if capability == 'chat':
-                self.start_llama(model,settings,log_path,cancel)
+                self.start_llama(model,settings,log_path,cancel,stage=stage)
             elif capability=='music':
-                self.start_music(model,settings,log_path,cancel)
+                self.start_music(model,settings,log_path,cancel,stage=stage)
             else:
-                self.start_image(model,settings,log_path,cancel)
+                self.start_image(model,settings,log_path,cancel,stage=stage)
 
     def require_model(self, model_id, capability):
         model = self.catalog.get(model_id)
@@ -211,8 +213,8 @@ class Engine(MusicEngine):
                 files["mmproj"] = str(model_path(self.root, model, traits["vision"]["projector"]))
         return files
 
-    def start_llama(self, model, settings, log_path, cancel):
-        session = self._activate("chat", model, settings, log_path, cancel)
+    def start_llama(self, model, settings, log_path, cancel, stage=None):
+        session = self._activate("chat", model, settings, log_path, cancel, stage=stage)
         self.active_model = model
         if session.ready and session.alive():
             session.uses += 1
@@ -375,12 +377,12 @@ class Engine(MusicEngine):
                 result.append({"role": message["role"], "content": content or "[Immagine nella conversazione]"})
         return result
 
-    def start_image(self, model, settings, log_path, cancel):
-        session = self._activate('image',model,settings,log_path,cancel)
+    def start_image(self, model, settings, log_path, cancel, stage=None):
+        session = self._activate('image',model,settings,log_path,cancel,stage=stage)
         if session.ready and session.alive():
             return session
         if model.get('engine') == 'vision':
-            return self.start_vision(session,model,settings,log_path,cancel)
+            return self.start_vision(session,model,settings,log_path,cancel,stage=stage)
         backend = 'cpu' if settings['profile']=='cpu' else settings['backend']
         cli = runtime_executable(self.root,backend,'sd')
         dll = cli.parent/'stable-diffusion.dll' if cli else None
@@ -401,13 +403,13 @@ class Engine(MusicEngine):
                       'backend':placement,'params_backend':device if resident else 'cpu',
                       'mmap':True,'diffusion_fa':model.get('architecture') in ('flux2','qwen-edit','anima')})
         try:
-            session.wait('ready',cancel,600)
+            session.wait('ready',cancel,600,stage)
         except RuntimeError as exc:
             raise RuntimeError(self.failure(log_path,str(exc))) from exc
         session.ready = True
         return session
 
-    def start_vision(self, session, model, settings, log_path, cancel):
+    def start_vision(self, session, model, settings, log_path, cancel, stage=None):
         if not vision_status(self.root)['ready']:
             raise ValueError('Installa il motore Ming / Qwen Image 2.1 dal Setup.')
         backend = 'cpu' if settings['profile']=='cpu' else settings['backend']
@@ -423,16 +425,17 @@ class Engine(MusicEngine):
                       'files':session.files,'threads':settings['threads'],
                       'resident':settings.get('memory_policy')=='resident'})
         try:
-            session.wait('ready',cancel,900)
+            session.wait('ready',cancel,900,stage)
         except RuntimeError as exc:
             raise RuntimeError(self.failure(log_path,str(exc))) from exc
         session.ready = True
         return session
 
-    def refine_image_prompt(self, history, prompt, refs, settings, cancel, log_path, stage):
+    def refine_image_prompt(self, history, prompt, refs, settings, cancel, log_path, stage, *, image_model):
         model = self.require_model(settings['chat_model'], 'chat')
-        stage('Assistant · preparazione delle istruzioni')
-        self.start_llama(model, settings, log_path, cancel)
+        prompt_format = assistant_format(image_model)
+        self.start_llama(model, settings, log_path, cancel, stage=stage)
+        stage('Assistant · tag in inglese' if prompt_format == 'tags' else 'Assistant · preparazione delle istruzioni')
         visual = settings.get('vision_enabled',True) and model.get('vision',{}).get('enabled',False)
         context = [{'role':m['role'],'text':m['content'][-4000:]} for m in history[-6:] if m['status']=='done']
         brief = json.dumps({'conversation':context,'request':prompt,'reference_count':len(refs),
@@ -442,18 +445,25 @@ class Engine(MusicEngine):
             for ref in refs:
                 raw = safe_join(self.data,ref['path']).read_bytes()
                 content.append({'type':'image_url','image_url':{'url':f"data:{ref['mime']};base64,"+base64.b64encode(raw).decode()}})
-        schema = {'type':'object','properties':{'prompt':{'type':'string'}},'required':['prompt'],'additionalProperties':False}
+        instructions, schema = image_brief(image_model)
         tuning = settings | {'temperature':0.2,'think_level':'off','max_tokens':min(settings['prompt_max_tokens'],settings['context']//2)}
-        raw, finish = self.completion([{'role':'system','content':VISUAL_BRIEF},{'role':'user','content':content if visual and refs else brief}],
+        raw, finish = self.completion([{'role':'system','content':instructions},{'role':'user','content':content if visual and refs else brief}],
                                       tuning,cancel,on_text=lambda text:None,schema=schema)
         if finish == 'length':
             raise ValueError('Assistant ha raggiunto il limite di token. Aumenta contesto o token Assistant nelle Preferenze, oppure disattiva Assistant in chat.')
         try:
-            result = json.loads(raw)['prompt']
+            value = json.loads(raw)
+            if prompt_format == 'tags':
+                tags = value['tags']
+                if not isinstance(tags,list) or not tags or any(not isinstance(tag,str) or not tag.strip() or '\n' in tag or '\r' in tag for tag in tags):raise ValueError()
+                result = ', '.join(tag.strip() for tag in tags)
+            else:
+                result = value['prompt']
             if not isinstance(result,str) or not result.strip():raise ValueError()
         except (KeyError,TypeError,ValueError) as exc:
             raise ValueError('Assistant non ha prodotto istruzioni valide. Riprova o disattiva Assistant in chat.') from exc
-        return result.strip(), {'model':model['name'],'vision':bool(visual and refs),'max_tokens':tuning['max_tokens']}
+        return result.strip(), {'model':model['name'],'vision':bool(visual and refs),'max_tokens':tuning['max_tokens'],
+                                'prompt_format':prompt_format,'image_model':image_model['name']}
 
     def image_request(self, model, settings, prompt, refs, output):
         if len(refs)>model.get('max_refs',1):
@@ -475,7 +485,7 @@ class Engine(MusicEngine):
             existing=self.sessions.get(self.session_key('image',model,settings))
             if existing and any(p in getattr(existing,'lora_stamps',{}) and existing.lora_stamps[p]!=stamp for p,stamp in stamps.items()):self._drop(existing.key)
         stage('Caricamento / riuso · ' + model['name'])
-        session = self.start_image(model,settings,log_path,cancel)
+        session = self.start_image(model,settings,log_path,cancel,stage=stage)
         stage('Generazione immagine')
         session.send(request)
         try:

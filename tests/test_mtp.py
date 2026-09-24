@@ -126,12 +126,13 @@ class MtpTests(unittest.TestCase):
                 with patch('h3chat.engine.runtime_executable',return_value='llama-server.exe'),patch('h3chat.residency.Session.start',start),patch('h3chat.engine.urllib.request.urlopen',side_effect=response):
                     if enabled and not active:
                         with self.assertRaisesRegex(RuntimeError,'non ha attivato MTP'):
-                            engine.start_llama(self.model,self.settings|{'mtp_enabled':enabled},self.root/'engine.log',threading.Event())
+                            engine.start_llama(self.model,self.settings|{'mtp_enabled':enabled,'context':65536},self.root/'engine.log',threading.Event())
                     else:
-                        engine.start_llama(self.model,self.settings|{'mtp_enabled':enabled},self.root/'engine.log',threading.Event())
+                        engine.start_llama(self.model,self.settings|{'mtp_enabled':enabled,'context':65536},self.root/'engine.log',threading.Event())
                         self.assertEqual(engine.snapshot()['models'][0]['mtp_tokens'],3 if enabled else 0)
                 args=commands[0]
                 self.assertEqual(args[args.index('--spec-type')+1],'draft-mtp' if enabled else 'none')
+                self.assertEqual(args[args.index('--ctx-size')+1],65536)
                 self.assertNotIn('--model-draft',args)
                 self.assertEqual(any(p.endswith('/slots') for p in requests),enabled)
             finally:engine.stop()

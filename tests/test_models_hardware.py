@@ -31,6 +31,14 @@ class ModelTests(unittest.TestCase):
             'qwen3.block_count':28,'tokenizer.chat_template':'{% if enable_thinking %}<think>{% endif %}'})
     def tearDown(self): self.tmp.cleanup()
 
+    def test_declared_context_comes_from_the_model_architecture(self):
+        gguf(self.base,**{'general.architecture':'qwen35','qwen35.context_length':262144,'qwen3.context_length':32768})
+        model=discover_local(self.root)[0]
+        self.assertEqual(inspect_model(self.root,model)['parameters']['context_length'],262144)
+        for value in (None,True,0,-1,'262144',2**31):
+            with patch('h3chat.models.metadata',return_value={'general.architecture':'qwen35','qwen35.context_length':value}):
+                self.assertIsNone(inspect_model(self.root,model)['parameters']['context_length'])
+
     def test_projector_auto_detection_is_folder_scoped_and_rechecked(self):
         model=discover_local(self.root)[0]
         self.assertTrue(inspect_model(self.root,model)['ready'])
@@ -131,6 +139,17 @@ class MemoryTests(unittest.TestCase):
         self.assertEqual(assess_model(model,self.settings|{'backend':'cuda'},amd)['status'],'unknown')
         multiple=self.hardware|{'gpu':self.hardware['gpu']*2}
         self.assertEqual(assess_model(model,self.settings,multiple)['status'],'unknown')
+
+    def test_long_context_updates_memory_risk_and_reports_extrapolation(self):
+        hw=self.hardware|{'gpu':[self.hardware['gpu'][0]|{'free_mb':9000}]}
+        model=self.model|{'parameters':self.model['parameters']|{'context_length':32768}}
+        short=assess_model(model,self.settings|{'context':16384},hw)
+        long=assess_model(model,self.settings|{'context':65536},hw)
+        self.assertEqual(short['status'],'ok')
+        self.assertTrue(long['oom_risk'])
+        self.assertGreater(long['vram_gb'],short['vram_gb'])
+        self.assertTrue(any('65.536' in text for text in long['assumptions']))
+        self.assertTrue(any('superiore ai 32768' in text for text in long['assumptions']))
 
     def test_diffusion_resolution_and_cpu_ram_shortage(self):
         model={'id':'image','name':'Image','architecture':'flux2','capabilities':['create','edit'],

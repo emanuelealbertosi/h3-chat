@@ -32,3 +32,10 @@
 .settings-error:focus-visible{outline:2px solid #965748;outline-offset:2px}
 #toast{width:max-content;max-width:min(560px,calc(100vw - 32px));max-height:30dvh;overflow:auto;overflow-wrap:anywhere;pointer-events:auto}
 #toast:not(.show){visibility:hidden}
+
+.generation-activity{display:flex;align-items:flex-start;gap:14px;padding:12px 0;color:var(--green);font-size:13px;line-height:1.5}
+.generation-activity .thinking{flex-shrink:0;padding:7px 0}
+.generation-activity strong,.activity-stage,.activity-elapsed{display:block}
+.generation-activity .activity-stage{margin-top:4px;color:#607477}
+.activity-elapsed{margin-top:5px;color:#73827e;font-size:11px}
+@media(prefers-reduced-motion:reduce){.thinking i{animation:none}}

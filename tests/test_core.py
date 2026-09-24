@@ -64,6 +64,19 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(s.one('SELECT status FROM jobs WHERE id=?',(job,))['status'],'interrupted')
         self.assertEqual(s.chat(c['id'])['messages'][-1]['status'],'interrupted')
 
+    def test_long_context_is_saved_and_snapshotted_independently_of_output_limits(self):
+        for size in (65536,131072,262144):
+            saved=self.app.save_settings({'context':size,'max_tokens':6000,'prompt_max_tokens':2200})
+            self.assertEqual(saved['context'],size)
+            self.assertEqual((saved['max_tokens'],saved['prompt_max_tokens']),(6000,2200))
+        chat=self.app.store.create_chat()
+        job=self.app.store.enqueue(chat['id'],'ciao',[],saved)
+        payload=json.loads(self.app.store.one('SELECT payload FROM jobs WHERE id=?',(job,))['payload'])
+        self.app.save_settings({'context':65536})
+        self.assertEqual(payload['settings']['context'],262144)
+        for invalid in (True,65536.5,'64k',1023,2**31):
+            with self.assertRaises(ValueError):self.app.validate_settings({'context':invalid})
+
     def test_bad_settings_and_attachment_limits(self):
         for p in ({'backend':'remote'},{'context':True},{'width':510},{'temperature':float('nan')},{'chat_model':'sd15'},{'profile':'nope'},{'think_level':'extreme'}):
             with self.assertRaises(ValueError):self.app.save_settings(p)

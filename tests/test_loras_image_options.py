@@ -145,7 +145,7 @@ class ImageOptionsTests(unittest.TestCase):
         item=self.app.loras.scan(dirs)['items'][0]
         selection={'id':item['id'],'weight':.8,'model_id':self.model['id']}
         captured=self.app.loras.capture([selection],dirs,self.app.catalog)
-        chat=self.app.store.create_chat();settings=DEFAULTS|{'create_model':self.model['id'],'seed':42}
+        chat=self.app.store.create_chat();settings=DEFAULTS|{'create_model':self.model['id'],'seed':42,'_assistant':False}
         jid=self.app.store.enqueue(chat['id'],'Crea una immagine di un gatto',[],settings,loras=captured)
         job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(jid,))
         self.assertEqual(json.loads(job['payload'])['loras'][0]['path'],str(path))

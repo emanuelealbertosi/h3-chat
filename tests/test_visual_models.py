@@ -89,6 +89,66 @@ class VisualModelsTests(unittest.TestCase):
             self.assertEqual(answer['meta']['artifact']['media'],[media])
             self.assertEqual(answer['meta']['assistant_on'],assistant)
 
+    def test_assistant_formats_follow_actual_target_and_reuse_chat_llm(self):
+        from h3chat.visual_routing import image_brief
+        for arch in ('anima','sd','sdxl','ming','qwen21','flux2','qwen-edit'):
+            with self.subTest(architecture=arch):
+                target={'id':'chosen-image','name':arch,'architecture':arch}
+                tags=arch in ('anima','sd','sdxl')
+                generated={'tags':['black cat','sitting','soft light']} if tags else {'prompt':'A black cat sitting in soft light.'}
+                with patch.object(self.app.engine,'start_llama') as start, patch.object(self.app.engine,'completion',return_value=(json.dumps(generated),'stop')) as completion:
+                    prompt,info=self.app.engine.refine_image_prompt([], 'un gatto nero seduto', [], self.settings, threading.Event(), self.base/'log', lambda _:None,image_model=target)
+                self.assertEqual(start.call_args.args[0]['id'],self.llm['id'])
+                self.assertEqual(prompt,'black cat, sitting, soft light' if tags else generated['prompt'])
+                self.assertEqual(info['prompt_format'],'tags' if tags else 'prose')
+                self.assertEqual(info['image_model'],arch)
+                self.assertEqual(completion.call_args.kwargs['schema']['required'],['tags' if tags else 'prompt'])
+                self.assertEqual(completion.call_args.args[0][0]['content'],image_brief(target)[0])
+                self.assertEqual(completion.call_args.args[1]['think_level'],'off')
+
+    def test_tag_assistant_rejects_wrong_shape_empty_or_multiline_tags(self):
+        for value in ({'prompt':'A cat.'},{'tags':[]},{'tags':'cat'},{'tags':['cat',3]},{'tags':['cat\nparagraph']},{'tags':[' ']}):
+            with self.subTest(value=value), patch.object(self.app.engine,'start_llama'), patch.object(self.app.engine,'completion',return_value=(json.dumps(value),'stop')):
+                with self.assertRaisesRegex(ValueError,'istruzioni valide'):
+                    self.app.engine.refine_image_prompt([], 'cat', [], self.settings, threading.Event(), self.base/'log', lambda _:None,image_model={'name':'Anima','architecture':'anima'})
+
+    def test_native_assistant_on_targets_selected_model_and_off_needs_no_llm(self):
+        for profile in ('anima','sdxl'):
+            files=self.ming['external_config']['files'] if profile=='anima' else {'model':self.ming['external_config']['files']['diffusion']}
+            target=self.app.external_model({'profile':profile,'files':files})
+            for assistant in (True,False):
+                self.app.save_settings({'chat_model':self.llm['id'] if assistant else '', 'create_model':self.qwen['id']})
+                chat=self.app.store.create_chat()
+                original='un gatto nero, luce morbida'
+                response=self.app.send(chat['id'],{'prompt':original,'image_model':target['id'],'assistant':assistant})
+                job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(response['job_id'],))
+                media={'id':job['id'],'name':'image.png','path':'image.png','mime':'image/png'}
+                with patch.object(self.app.engine,'start_llama'), patch.object(self.app.engine,'completion',return_value=(json.dumps({'tags':['black cat','soft light']}),'stop')) as completion, patch.object(self.app.engine,'generate',return_value=media) as generate:
+                    self.app.execute_job(job,threading.Event())
+                answer=self.app.store.messages(chat['id'])[-1]
+                self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
+                self.assertEqual(completion.call_count,int(assistant))
+                self.assertEqual(generate.call_args.args[0]['id'],target['id'])
+                self.assertEqual(generate.call_args.args[2],'black cat, soft light' if assistant else original)
+                if assistant:self.assertEqual(answer['meta']['assistant']['prompt_format'],'tags')
+
+    def test_pending_image_exposes_activity_before_generation_completes(self):
+        chat=self.app.store.create_chat();result=self.app.send(chat['id'],{'prompt':'Crea una immagine','image_model':self.qwen['id'],'assistant':False})
+        job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(result['job_id'],))
+        def generate(*args):
+            pending=self.app.store.messages(chat['id'])[-1]
+            self.assertEqual(pending['status'],'running')
+            self.assertEqual(pending['meta']['intent'],'create')
+            self.assertEqual(pending['meta']['model'],self.qwen['name'])
+            self.assertNotIn('think_level',pending['meta'])
+            args[-1]('Generazione immagine · 3/25 passi')
+            public=self.app.state()['jobs'][0]
+            self.assertEqual(public['message_id'],pending['id'])
+            self.assertIn('3/25',public['stage'])
+            return {'id':job['id'],'name':'image.png','path':'outputs/image.png','mime':'image/png'}
+        with patch.object(self.app.engine,'generate',side_effect=generate):self.app.execute_job(job,threading.Event())
+        self.assertEqual(self.app.store.messages(chat['id'])[-1]['status'],'done')
+
     def test_assistant_off_and_invalid_values_rejected_before_queue(self):
         for body in ({'assistant':'off'},{'image_model':self.llm['id']}):
             with self.assertRaises(ValueError):self.app.send(self.app.store.create_chat()['id'],{'prompt':'Crea immagine',**body})

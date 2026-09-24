@@ -6,6 +6,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
+from .llm_options import KEYS as LLM_KEYS, merge as merge_llm_settings
 
 PROFILES = {
     "cpu": {"context": 4096, "gpu_layers": 0, "width": 512, "height": 512},
@@ -13,6 +14,7 @@ PROFILES = {
     "balanced": {"context": 8192, "gpu_layers": 99, "width": 768, "height": 768},
 }
 DEFAULTS = {
+    "llm_overrides": {},
     "profile": "low", "backend": "vulkan", "chat_model": "", "create_model": "",
     "music_model": "yue2-q8", "music_auto": True, "music_backend": "cuda", "music_threads": 8,
     "music_advanced": False, "music_overrides": {}, "music_prompt_max_tokens": 2200,
@@ -60,6 +62,11 @@ class Store:
                     title TEXT NOT NULL DEFAULT 'Canvas', content TEXT NOT NULL DEFAULT '',
                     media TEXT NOT NULL DEFAULT '[]', updated REAL NOT NULL);
             """)
+            # One-time migration preserves the user's existing active model settings.
+            if not db.execute("SELECT 1 FROM settings WHERE key='llm_overrides'").fetchone():
+                existing=DEFAULTS|{r['key']:json.loads(r['value']) for r in db.execute('SELECT * FROM settings')}
+                presets={existing['chat_model']:{k:existing[k] for k in LLM_KEYS}} if existing['chat_model'] else {}
+                db.execute("INSERT INTO settings VALUES ('llm_overrides',?)",(json.dumps(presets),))
             db.execute("UPDATE messages SET status='interrupted' WHERE status IN ('queued','running')")
             db.execute("UPDATE jobs SET status='interrupted',error='Applicazione riavviata. Puoi riprovare.' WHERE status IN ('queued','running')")
 
@@ -90,6 +97,7 @@ class Store:
         return DEFAULTS | {r["key"]: json.loads(r["value"]) for r in self.all("SELECT * FROM settings")}
 
     def save_settings(self, patch):
+        patch=merge_llm_settings(self.settings(),patch)
         with self.connect() as db:
             for key, value in patch.items():
                 db.execute("INSERT OR REPLACE INTO settings VALUES (?,?)", (key, json.dumps(value)))

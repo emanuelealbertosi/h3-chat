@@ -4,7 +4,7 @@
 
 In **Impostazioni → Preferenze → Impostazioni immagini** scegli il modello. La vista normale mostra il riepilogo dei valori; **Avanzate** apre risoluzione, step, CFG, sampler, scheduler, seed, negative prompt e intensità img2img di Stable Diffusion.
 
-Le personalizzazioni sono salvate **per modello** e hanno precedenza sui preset del profilo e sui valori generali. I valori generali sono usati dove il modello non dichiara un proprio valore. **Ripristina predefiniti del modello** elimina le sue personalizzazioni. Nascondere Avanzate conserva i valori salvati; non ripristina nulla. Le modifiche valgono per i messaggi successivi: i lavori già inviati mantengono la loro configurazione.
+Le personalizzazioni sono salvate **per modello**: alla modifica viene conservato un preset completo. Cambiare il modello da configurare non cambia il modello predefinito di creazione o editing. I valori iniziali seguono il profilo del modello e, dove assenti, quelli del profilo hardware. **Ripristina predefiniti del modello** elimina le sue personalizzazioni. Nascondere Avanzate conserva i valori salvati; non ripristina nulla. Le modifiche valgono per i messaggi successivi: i lavori già inviati mantengono la loro configurazione.
 
 | Profilo | Step iniziali | CFG iniziale | Sampler automatico |
 |---|---:|---:|---|
@@ -17,6 +17,12 @@ Le personalizzazioni sono salvate **per modello** e hanno precedenza sui preset 
 La risoluzione iniziale segue il profilo hardware (512 × 512 nel profilo low VRAM), con personalizzazione per modello. Scheduler iniziale automatico, seed `-1` casuale, negative prompt vuoto; intensità img2img SD `0,65`. L'intensità non controlla l'editing semantico di FLUX/Qwen. Alcuni parametri hanno effetto solo nelle modalità supportate dal modello; per esempio CFG 1 normalmente non usa il ramo negative.
 
 Il flag **Avanzate sotto il composer della chat** mostra i parametri registrati per le immagini: risoluzione, step, CFG, sampler, scheduler, seed effettivo e LoRA applicati. Il seed casuale viene risolto prima dell'inferenza e salvato; sampler e scheduler automatici sono riportati dal motore nativo. Il flag vale anche per i messaggi precedenti che possiedono questi dati. Le vecchie immagini senza metadati non vengono ricostruite artificialmente. La ripetibilità dipende anche da pesi, backend, versione e riferimenti.
+
+## Formato del prompt Assistant
+
+Con **Assistant On**, Anima e SDXL/Stable Diffusion ricevono **tag in inglese separati da virgole**. Il LLM restituisce un elenco strutturato di tag brevi; l’app lo converte nel prompt del motore. Ming, Qwen Image e FLUX ricevono istruzioni descrittive. La scelta dipende dal modello che esegue davvero la generazione, compreso un modello selezionato esplicitamente in chat. Con **Assistant Off** il prompt originale passa invariato. Le istruzioni usano il LLM della chat, riutilizzandolo se già caricato.
+
+In Avanzate in chat puoi leggere il prompt effettivamente inviato, con il formato tag indicato quando presente. Il testo visibile richiesto nell’immagine conserva la lingua indicata dall’utente.
 
 ## Anima
 

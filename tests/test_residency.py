@@ -68,7 +68,7 @@ class ResidencyTests(unittest.TestCase):
         llm=self.loaded('chat','llm')
         changed=self.settings|{'think_level':'high','temperature':1.2,'max_tokens':512}
         self.assertIs(self.loaded('chat','llm',changed),llm)
-        larger=self.loaded('chat','llm',changed|{'context':8192})
+        larger=self.loaded('chat','llm',changed|{'context':65536})
         self.assertFalse(llm.alive());self.assertIsNot(larger,llm)
         resident=self.loaded('chat','llm',changed|{'memory_policy':'resident'})
         self.assertFalse(larger.alive());self.assertIsNot(resident,larger)
@@ -97,11 +97,11 @@ class ResidencyTests(unittest.TestCase):
         self.assertEqual(demand['status'],'ok');self.assertEqual(resident['status'],'oom')
         self.assertGreater(resident['ram_gb'],demand['ram_gb'])
 
-    def test_direct_image_route_never_loads_llm_and_keeps_context_after_job(self):
+    def test_direct_image_assistant_off_never_loads_llm_and_keeps_context_after_job(self):
         app=Service(ROOT,self.root/'service',start_worker=False)
         try:
             c=app.store.create_chat()
-            jid=app.store.enqueue(c['id'],'Crea una foto di un gatto',[],DEFAULTS|{'chat_model':'qwen3-06','create_model':'sd15'})
+            jid=app.store.enqueue(c['id'],'Crea una foto di un gatto',[],DEFAULTS|{'chat_model':'qwen3-06','create_model':'sd15','_assistant':False})
             job=app.store.one('SELECT * FROM jobs WHERE id=?',(jid,))
             with patch.object(app.engine,'start_llama') as start,patch.object(app.engine,'require_model',side_effect=lambda mid,cap:app.catalog[mid]),patch.object(app.engine,'generate',return_value={'id':jid,'path':'test.png','mime':'image/png','name':'test.png'}),patch.object(app.engine,'stop') as stop:
                 app.execute_job(job,threading.Event())

@@ -156,6 +156,9 @@ def assess_model(model, settings, hardware, references=1):
             if frac: vram+=extra; needed_ram+=.1
             else: needed_ram+=extra
             assumptions.append('MTP: pesi condivisi, ma KV cache e spazio di lavoro aggiuntivi inclusi nella stima prudente. La velocità dipende dal modello e dai token accettati.')
+        assumptions.append(f"Stima della KV cache per {settings['context']:,} token di contesto LLM, indipendente dal limite di risposta.".replace(',', '.'))
+        declared=p.get('context_length')
+        if declared and settings['context']>declared:assumptions.append(f"Contesto richiesto superiore ai {declared} token dichiarati nel GGUF: la stima di memoria non certifica il supporto dell'estensione.")
         if not p.get('layers'): assumptions.append('KV cache stimata dai parametri del catalogo o da valori conservativi; sarà affinata dopo il download.')
         if frac<1 and backend!='cpu': assumptions.append('Parte dei layer resta in RAM con le impostazioni attuali.')
     elif music:

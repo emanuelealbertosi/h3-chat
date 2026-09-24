@@ -17,8 +17,9 @@ from .music_routing import route as music_route
 from .music_options import validate as validate_music_options, validate_fields as validate_music_fields, NUMBERS as MUSIC_NUMBERS, DEFAULTS as MUSIC_DEFAULTS, INTEGER as MUSIC_INTEGER
 from .music_runtime import status as music_status
 from .vision_runtime import status as vision_status, SAMPLERS as VISION_SAMPLERS, SCHEDULERS as VISION_SCHEDULERS
+from .llm_options import KEYS as LLM_KEYS, defaults as llm_defaults, merge as merge_llm_settings, validate_presets as validate_llm_presets
 from .store import DEFAULTS, PROFILES, Store, uid
-from .models import discover_local, inspect_model, THINK_LEVELS, thinking_parameters, mtp_tokens
+from .models import MAX_CONTEXT, discover_local, inspect_model, THINK_LEVELS, thinking_parameters, mtp_tokens
 from .external_models import PROFILES as EXTERNAL_PROFILES, ROLE_LABELS, build_model, validate_config
 from .hardware import detect_hardware, assess_model, assess_selection
 from .loras import LoraLibrary, validate_directories, for_model as loras_for_model, public as public_loras
@@ -66,13 +67,14 @@ class Service:
     def state(self):
         models = self.refresh_models()
         return {"token": self.token, "version": __version__, "settings": self.store.settings(), "profiles": PROFILES,
+                "llm_options":{"keys":LLM_KEYS,"defaults":{profile:llm_defaults(profile) for profile in PROFILES},"max_context":MAX_CONTEXT},
                 "music_runtime":music_status(self.root), "music_options":{"defaults":MUSIC_DEFAULTS,"numbers":MUSIC_NUMBERS,"integers":sorted(MUSIC_INTEGER)},
                 "vision_runtime":vision_status(self.root), "models": models,"image_options":{"samplers":NATIVE_SAMPLERS,"schedulers":NATIVE_SCHEDULERS,"vision_samplers":VISION_SAMPLERS,"vision_schedulers":VISION_SCHEDULERS,"defaults":{k:DEFAULTS[k] for k in IMAGE_DEFAULT_KEYS}},"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
                 "runtimes": {key: {"ready": vision_status(self.root)["ready"] if key=="vision" else music_status(self.root).get(key.removeprefix("music_"),{}).get("ready",False) if key.startswith("music_") else all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
                                     "size": sum(f["size"] for f in r["files"])} for key, r in self.runtimes.items()},
                 "chats": self.store.all("SELECT * FROM chats ORDER BY pinned DESC,updated DESC"),
                 "collections": self.store.all("SELECT * FROM collections ORDER BY name"),
-                "jobs": self.store.all("SELECT id,chat_id,status,stage,error,created,json_extract(payload,'$.canvas') AS canvas FROM jobs ORDER BY created DESC LIMIT 100"),
+                "jobs": self.store.all("SELECT id,chat_id,message_id,status,stage,error,created,json_extract(payload,'$.canvas') AS canvas FROM jobs ORDER BY created DESC LIMIT 100"),
                 "downloads": self.downloads.snapshot(), "memory": self.engine.snapshot()}
 
     def external_model(self, body):
@@ -110,10 +112,13 @@ class Service:
         self.refresh_models()
         if not isinstance(patch, dict) or set(patch) - set(DEFAULTS):
             raise ValueError("Impostazione sconosciuta.")
-        s = self.store.settings() | patch
+        current=self.store.settings()
+        if 'llm_overrides' in patch:validate_llm_presets(patch['llm_overrides'],patch.get('profile',current['profile']))
+        s = merge_llm_settings(current,patch)
+        validate_llm_presets(s['llm_overrides'],s['profile'])
         if s["profile"] not in PROFILES or s["backend"] not in ("cpu","cuda","vulkan"):
             raise ValueError("Profilo hardware non valido.")
-        for key, lo, hi in (("context", 1024, 32768), ("gpu_layers", 0, 999), ("max_tokens", 64, 8192),
+        for key, lo, hi in (("context", 1024, MAX_CONTEXT), ("gpu_layers", 0, 999), ("max_tokens", 64, 8192),
                             ("width", 256, 1536), ("height", 256, 1536), ("steps", 1, 100), ("threads", 1, 64), ("ram_cache_gb", 0, 32), ("mtp_draft_tokens", 1, 8)):
             if type(s[key]) is not int or not lo <= s[key] <= hi:
                 raise ValueError(f"{key}: inserisci un intero tra {lo} e {hi}.")
@@ -259,7 +264,9 @@ class Service:
         if music and selection:raise ValueError('Scegli Music oppure un modello immagini esplicito.')
         fields=validate_music_fields(body.get('music_fields',{}))
         settings = settings | {'_image_model':selection,'_assistant':assistant,'_music':music,'_music_fields':fields}
-        if not (not assistant and music_route([{'content':prompt}],settings)):
+        request_history=[{'content':prompt,'media':media}]
+        direct_media=music_route(request_history,settings) or visual_route(request_history,settings) or explicit_route(request_history) in ('create','edit')
+        if assistant or not direct_media:
             self.engine.require_model(settings["chat_model"], "chat")
         canvas = body.get("canvas", False)
         if type(canvas) is not bool:
@@ -332,15 +339,15 @@ class Service:
             visual_history=[m|{"media":[x for x in m["media"] if x.get("mime", "").startswith("image/")]} for m in history]
             selected_route = music_route(history,settings) or visual_route(visual_history,settings)
             direct = explicit_route(visual_history)
-            direct_music=selected_route and selected_route['intent']=='music' and not settings.get('_assistant',True)
-            model={} if direct_music else self.engine.require_model(settings["chat_model"], "chat")
+            direct_media=(selected_route or direct in ('create','edit')) and not settings.get('_assistant',True)
+            model={} if direct_media else self.engine.require_model(settings["chat_model"], "chat")
             if selected_route:
                 route = selected_route
             elif direct in ('create', 'edit'):
                 route = {'intent':direct,'prompt':history[-1]['content']}
             else:
                 stage("Caricamento / riuso del modello chat")
-                self.engine.start_llama(model, settings, log_path, cancel)
+                self.engine.start_llama(model, settings, log_path, cancel, stage=stage)
                 stage("Comprensione della richiesta")
                 route = self.engine.route(history, settings, cancel)
             intent = route["intent"]
@@ -350,6 +357,9 @@ class Service:
                         think_level=settings.get("think_level","off") if model.get("thinking",{}).get("supported") else "off",
                         think_budget=thinking_parameters(model, settings)["reasoning_budget_tokens"],
                         mtp_tokens=mtp_tokens(model,settings) if intent=="chat" else 0, max_tokens=settings["max_tokens"])
+            if intent!='chat':
+                for key in ('think_level','think_budget','model_warning'):meta.pop(key,None)
+            self.store.update_answer(job,text,meta=meta)
             if intent == "chat":
                 stage("Scrittura della risposta")
                 last_update = 0
@@ -396,6 +406,7 @@ class Service:
                 stage("Risposta completata" if finish != "length" else "Limite di risposta raggiunto: puoi chiedere di continuare")
             elif intent == "music":
                 music_model=self.engine.require_model(settings['music_model'],'music')
+                meta['model']=music_model['name'];self.store.update_answer(job,text,meta=meta)
                 composition,assistant_info=self.engine.refine_music(history,payload['prompt'],settings.get('_music_fields',{}),settings,cancel,log_path,stage)
                 media=self.engine.generate_music(music_model,settings,composition,job['id'],cancel,stage)
                 meta.update(model=music_model['name'],assistant_on=settings.get('_assistant',True),assistant=assistant_info,
@@ -422,14 +433,14 @@ class Service:
                     intent = "edit"
                 if len(refs) > image_model.get("max_refs", 1):
                     raise ValueError(f"Il modello accetta fino a {image_model.get('max_refs', 1)} riferimenti. Seleziona un modello compatibile nelle impostazioni.")
-                meta.update(intent=intent, model=image_model["name"], image_prompt=route["prompt"] or payload["prompt"], references=refs)
+                meta.update(intent=intent, model=image_model["name"], image_prompt=payload["prompt"], references=refs)
+                meta['model']=image_model['name'];self.store.update_answer(job,text,meta=meta)
                 meta['image_selection'] = route.get('selection','auto')
-                meta['assistant_on'] = bool(settings.get('_assistant',True) and image_model.get('engine')=='vision')
-                if image_model.get('engine')=='vision':meta['image_prompt']=payload['prompt']
+                meta['assistant_on'] = bool(settings.get('_assistant',True))
                 if meta['assistant_on']:
                     meta['original_image_prompt'] = meta['image_prompt']
                     meta['image_prompt'],meta['assistant'] = self.engine.refine_image_prompt(
-                        history,meta['image_prompt'],refs,settings,cancel,log_path,stage)
+                        history,meta['image_prompt'],refs,settings,cancel,log_path,stage,image_model=image_model)
                 selected_loras=loras_for_model(payload.get('loras',[]),image_model)
                 generation_settings=settings|{'_image_model':image_model['id'],'_loras':selected_loras,'_image_options':image_options(image_model,settings)}
                 meta['loras']=public_loras(selected_loras)

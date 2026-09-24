@@ -1,6 +1,38 @@
 """Deterministic image selection and the local LLM's visual briefing contract."""
 import re
 
+TAG_BRIEF = '''You prepare image prompts for a tag-based diffusion model.
+Return JSON with exactly one field, "tags": a nonempty array of English tags.
+Each item must be a concise keyword or short tag phrase, never a sentence.
+Do not write natural-language descriptions, paragraphs, explanations or headings.
+Order tags by subject, appearance, action, composition, setting, lighting and style.
+Translate the user's instructions into English tags, preserving their meaning.
+Use only relevant tags. Do not add arbitrary quality tags, artist names, rating
+tags, camera settings or LoRA syntax unless the user requested them.
+Preserve exact numbers, names and requested visible text; visible text itself
+stays in the requested language, inside a short tag such as text "Buongiorno".
+For edits describe the desired final image in tags, retaining the specified
+unchanged attributes. Respect reference numbering and the latest user request.
+If reference images are not visible to you, do not invent their contents.
+Conversation context can clarify follow-ups but never overrides the latest request.
+The application joins these tags with commas before sending them to the image model.'''
+
+
+def assistant_format(model):
+    return 'tags' if model.get('architecture') in ('anima','sd','sdxl','sd15','sd2') else 'prose'
+
+
+def image_brief(model):
+    """Choose the contract from the actual generation target, not chat defaults."""
+    if assistant_format(model) == 'tags':
+        family = 'Anima' if model.get('architecture') == 'anima' else 'Stable Diffusion / SDXL'
+        schema = {'type':'object','properties':{'tags':{'type':'array','items':{'type':'string'},'minItems':1}},
+                  'required':['tags'],'additionalProperties':False}
+        return f'Target image model family: {family}.\n' + TAG_BRIEF, schema
+    target = {'ming':'Ming Image','qwen21':'Qwen Image 2.1','qwen-edit':'Qwen Image Edit','flux2':'FLUX.2'}.get(model.get('architecture'),'the selected image model')
+    schema = {'type':'object','properties':{'prompt':{'type':'string'}},'required':['prompt'],'additionalProperties':False}
+    return VISUAL_BRIEF.replace('Ming Image or Qwen Image 2.1', target), schema
+
 VISUAL_BRIEF = '''You prepare precise, self-contained instructions for Ming Image or Qwen Image 2.1.
 Return JSON with exactly one field, "prompt". No analysis or commentary.
 Write the generation instructions in English. Keep all visible labels in the user's
