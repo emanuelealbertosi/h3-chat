@@ -67,7 +67,7 @@ class NativeRuntimeTests(unittest.TestCase):
             for backend in ('cpu','cuda','vulkan'):
                 for engine in ('llama','sd'):
                     dest=root/'runtime'/backend/engine
-                    paths=install_redist(root,dest);self.assertEqual(paths,[dest/'vcruntime140.dll'])
+                    paths=install_redist(root,dest);self.assertEqual(paths,[(dest/'vcruntime140.dll').resolve()])
                     timestamp=paths[0].stat().st_mtime_ns
                     install_redist(root,dest);self.assertEqual(paths[0].stat().st_mtime_ns,timestamp)
                     paths[0].write_bytes(b'broken');install_redist(root,dest)
