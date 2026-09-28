@@ -106,7 +106,14 @@ class Session:
             if event.get('event')=='stage' and stage:
                 stage(event.get('message','Motore immagini'))
             if event.get('event')=='progress' and stage:
-                stage(f"{'Generazione musica' if self.kind=='music' else 'Generazione immagine'} · {event.get('step',0)}/{event.get('steps',0)} passi")
+                phase=event.get('phase');step=event.get('step',0);steps=event.get('steps',0)
+                if phase in ('encode','decode'):
+                    device=('CPU' if event['backend']=='cpu' else 'GPU')+' · ' if phase=='decode' and event.get('backend') else ''
+                    stage(f"{'Decodifica immagine' if phase=='decode' else 'Preparazione riferimenti'} · {device}{step}/{steps} blocchi")
+                elif phase=='sample' and step==0:
+                    stage(f'Preparazione del primo passo · {steps} passi previsti')
+                else:
+                    stage(f"{'Generazione musica' if self.kind=='music' else 'Generazione immagine'} · {step}/{steps} passi")
         raise RuntimeError('Tempo massimo del motore superato.')
 
     def stop(self):

@@ -178,17 +178,14 @@ def assess_model(model, settings, hardware, references=1):
         workspace=(1.4 if model.get('architecture')=='sd' else 2.5)*pixels**.7+references*.3
         vram=main*1.15+workspace if backend!='cpu' else 0
         needed_ram=weights*1.25+2 if backend!='cpu' else weights*1.3+workspace+1
-        if resident and backend!='cpu':
+        if backend!='cpu':
             vram=weights*1.25+workspace
             needed_ram=weights*.15+1
-        if model.get('engine')=='vision' and not resident and backend!='cpu':
-            needed_ram=weights*1.1+workspace+3
-            vram=max(vram,sizes.get('llm',0)*1.15+2)
         cpu_ram=weights*1.3+workspace+1
         frac=1
-        assumptions.append('Picco immagini stimato da pesi, risoluzione e riferimenti. '+('Pesi, VAE ed encoder restano sulla GPU.' if resident and backend!='cpu' else 'Componenti immagini trasferiti sulla GPU a richiesta.' if model.get('engine')=='vision' and backend!='cpu' else 'Pesi in RAM recuperati dalla GPU a segmenti; VAE ed encoder usano la CPU.' if backend!='cpu' else 'Tutti i componenti usano la RAM.'))
+        assumptions.append('Picco immagini stimato da pesi, risoluzione e riferimenti. '+('Pesi, VAE ed encoder usano la GPU anche a richiesta.' if backend!='cpu' else 'Tutti i componenti usano la RAM.'))
     if model.get('engine')=='vision':
-        assumptions.append('Motore Ming / Qwen 2.1: encoder e VAE passano sulla GPU a richiesta con offload dinamico; le stime non garantiscono assenza di OOM.')
+        assumptions.append('Motore Ming / Qwen 2.1: CUDA usa encoder, diffusore e VAE sulla GPU; le stime non garantiscono assenza di OOM.')
     lora_gb=model.get('active_lora_bytes',0)/GIB
     if lora_gb:
         needed_ram+=lora_gb*2+.1;cpu_ram+=lora_gb*2+.1
@@ -218,7 +215,8 @@ def assess_model(model, settings, hardware, references=1):
                     advice=f'Con i layer attuali rischi OOM sulla GPU. Riduci a circa {patches["gpu_layers"]} layer GPU; il resto userà la RAM.'
                 else:
                     patches={'profile':'cpu','backend':'cpu','gpu_layers':0}
-                    advice='La VRAM libera non basta alla stima. Offload e tiling sono già attivi: usa CPU o un modello/risoluzione più piccoli.'
+                    status='oom';title='Rischio OOM immagini'
+                    advice='La VRAM libera non basta alla stima. Usa un modello o una risoluzione più piccoli, libera la GPU oppure scegli esplicitamente CPU.'
             else:
                 status='oom';title='Rischio OOM';advice='La VRAM non basta e neppure la RAM libera offre spazio sufficiente per un passaggio completo alla CPU.'
         elif status=='ok' and chat and frac<1:

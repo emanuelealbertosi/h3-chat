@@ -38,7 +38,8 @@ class Worker:
         args.cpu = request['backend'] == 'cpu'
         if request['backend'] not in ('cpu', 'cuda'):
             raise ValueError('Ming e Qwen Image 2.1 richiedono il motore CPU oppure NVIDIA CUDA.')
-        args.highvram = bool(request.get('resident')) and not args.cpu
+        # Model lifetime is managed by H3-Chat; CUDA components stay on GPU.
+        args.highvram = not args.cpu
         args.disable_dynamic_vram = args.cpu or args.highvram
         args.reserve_vram = 1.0
         if not args.disable_dynamic_vram:

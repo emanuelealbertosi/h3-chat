@@ -391,16 +391,16 @@ class Engine(MusicEngine):
             raise ValueError(f'Installa il motore immagini {backend.upper()} nelle impostazioni.')
         if not worker.exists():
             raise ValueError('Worker immagini mancante: reinstalla il pacchetto H3-Chat completo.')
-        resident = settings.get('memory_policy')=='resident'
         device = 'cpu' if backend=='cpu' else backend+'0'
-        placement = device if resident or backend=='cpu' else f'diffusion={device},te=cpu,vae=cpu'
+        # Residency controls model lifetime, never CPU/GPU placement.
+        placement = device
         with self.process_lock:
             if cancel.is_set():
                 raise Cancelled()
             session.start([worker],ipc=True,cwd=dll.parent)
         session.wait('hello',cancel,15)
         session.send({'op':'load','dll':str(dll),'files':session.files,'threads':settings['threads'],
-                      'backend':placement,'params_backend':device if resident else 'cpu',
+                      'backend':placement,'params_backend':device,'vae_backend':device,
                       'mmap':True,'diffusion_fa':model.get('architecture') in ('flux2','qwen-edit','anima')})
         try:
             session.wait('ready',cancel,600,stage)

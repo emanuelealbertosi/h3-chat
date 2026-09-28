@@ -4,13 +4,17 @@ Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle 
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.9.1-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.9.1/H3-Chat-0.9.1-windows-x64.zip) dalla [release v0.9.1](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.9.1), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.9.2-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.9.2/H3-Chat-0.9.2-windows-x64.zip) dalla [release v0.9.2](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.9.2), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 
 **Primo avvio:** apri **Impostazioni → Setup**, scegli hardware e modelli. Il catalogo scarica i pesi e tutti i componenti richiesti, controllando dimensione e SHA-256. I backend GPU si installano dallo stesso setup. Dopo i download, inferenza, interfaccia e documenti funzionano offline.
 
-**Dai sorgenti:** `Installa-H3-Chat.bat` prepara Python integrato e il launcher. Se manca il bundle dell'interfaccia, servono Node.js 22+ e npm per compilarlo. Usa la release ZIP per evitare questo passaggio.
+**Da GitHub, come H3-Music:** su Windows x64 esegui `git clone https://github.com/emanuelealbertosi/h3-chat.git`, entra nella cartella e apri **`install.bat`**. L'installatore prepara Python privato, estrae interfaccia e launcher precompilati, scarica i motori CPU chat/immagini/musica dalle revisioni fissate e verifica gli SHA-256. Non richiede Python di sistema, Node.js, Visual Studio o compilatori. Poi usa **`start.bat`** e **`stop.bat`**; restano disponibili anche i nomi italiani Installa/Avvia/Ferma. Modelli e GPU si scelgono dal Setup: i pesi non vengono copiati da un altro PC e non vengono scaricati automaticamente dall'installatore.
+
+L'installazione è ripetibile: conserva chat, preferenze, percorsi dei modelli e motori GPU già presenti; i motori verificati vengono riutilizzati e i download dei motori interrotti riprendono dal file parziale. Per aggiornare: termina i lavori, esegui `stop.bat`, `git pull`, `install.bat`. La connessione serve per i componenti mancanti e i modelli; in seguito l'app funziona offline. Un portatile Windows x64 senza GPU dedicata può usare il profilo **Solo CPU**, con tempi maggiori e RAM sufficiente ai modelli scelti.
+
+Per chi modifica i sorgenti dell'interfaccia o del worker: ricostruisci il bundle seguendo [la procedura per sviluppatori](docs/build.md). L'installatore rileva un bundle non allineato ai sorgenti invece di avviare silenziosamente una vecchia interfaccia.
 
 La finestra desktop usa Microsoft Edge in modalità app, normalmente già presente in Windows 10/11. Se Edge manca, la chat si apre nel browser predefinito; l'export PDF richiede Edge. Chiudere la finestra lascia finire il lavoro corrente. `H3-Chat.exe` e `Avvia-H3-Chat.bat` lasciano aperta una console con i log in tempo reale: avvio, errori delle operazioni e fasi di generazione. Chiudere la console (o Ctrl+C) chiude soltanto la vista dei log. `Ferma-H3-Chat.bat` arresta il servizio e i processi di inferenza posseduti dall'app. I log restano in `data/server.log`, con i dettagli dei motori in `data/logs/`.
 
@@ -25,7 +29,7 @@ La finestra desktop usa Microsoft Edge in modalità app, normalmente già presen
 
 La chat resta unica. Nel composer puoi lasciare Immagini su Automatico oppure selezionare esplicitamente il modello immagini. Le richieste esplicite più comuni sono riconosciute direttamente; quelle ambigue sono classificate dal modello chat con uno schema JSON vincolato. I modelli piccoli possono interpretare male richieste complesse: per codice, routing e analisi densa scegli un modello più capace dal setup.
 
-Le selezioni principali nelle impostazioni sono **chat/router/vision**, **creazione immagini** e **modifica immagini**. Un solo modello è assegnato a ciascun ruolo. La modalità A richiesta conserva il modello corrente e lo scarica prima di caricarne uno diverso; Residenti conserva i modelli scelti. Le due modalità sono selezionabili dal Setup. La coda è globale e seriale, con interruzione del lavoro e registrazione degli errori.
+Le selezioni principali nelle impostazioni sono **chat/router/vision**, **creazione immagini** e **modifica immagini**. Un solo modello è assegnato a ciascun ruolo. La modalità A richiesta conserva il modello corrente e lo scarica prima di caricarne uno diverso; Residenti conserva i modelli scelti. Le due modalità sono selezionabili dal Setup. La coda è globale e seriale, con interruzione del lavoro e registrazione degli errori. Con backend GPU, diffusore, encoder e VAE immagini usano la GPU anche in **A richiesta**: questa opzione scarica un modello quando si passa a un altro, senza spostarne il calcolo sulla CPU. Soltanto il mmproj della chat resta sulla CPU. Se la VRAM non basta, il setup segnala rischio OOM; scegli pesi o risoluzioni inferiori oppure seleziona esplicitamente CPU. La decodifica VAE viene mostrata come fase separata: i suoi blocchi non sono ulteriori step di generazione.
 
 ## Canzoni e musica · YuE2
 

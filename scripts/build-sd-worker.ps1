@@ -1,3 +1,4 @@
+param([string]$OutputPath)
 $ErrorActionPreference = 'Stop'
 $taskRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $taskVsWhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -7,7 +8,7 @@ $taskVc = Join-Path $taskVs 'VC\Auxiliary\Build\vcvars64.bat'
 $taskBuild = Join-Path $taskRoot 'work\native-build'
 New-Item -ItemType Directory -Path $taskBuild -Force | Out-Null
 $taskSource = Join-Path $taskRoot 'native\sd-worker.cpp'
-$taskExe = Join-Path $taskRoot 'native\h3-sd-worker.exe'
+$taskExe = if ($OutputPath) { [IO.Path]::GetFullPath($OutputPath) } else { Join-Path $taskRoot 'native\h3-sd-worker.exe' }
 $taskObj = Join-Path $taskBuild 'sd-worker.obj'
 $taskBatch = Join-Path $taskBuild 'compile.cmd'
 @"

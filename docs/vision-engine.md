@@ -46,8 +46,9 @@ non riceve le immagini e non deve inventarne il contenuto. I token immagine
 continuano a occupare contesto LLM; CPU vision può essere più lenta.
 
 Con A richiesta il processo LLM termina prima di caricare il modello immagini;
-creazione e modifica con gli stessi pesi riutilizzano il processo. Il worker usa
-l'offload dinamico della libreria. Residenti mantiene più processi e richiede più
+creazione e modifica con gli stessi pesi riutilizzano il processo. Con CUDA,
+encoder, diffusore e VAE usano la GPU anche a richiesta. Residenti mantiene più
+processi e richiede più
 memoria; il proiettore dell'LLM resta comunque sulla CPU. Le stime di memoria sono
 indicative. Non è garantita l'assenza di OOM per ogni modello/risoluzione/hardware.
 

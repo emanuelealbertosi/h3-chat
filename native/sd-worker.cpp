@@ -5,6 +5,8 @@
 #include <io.h>
 #include <fcntl.h>
 #include <cstdio>
+#include <atomic>
+#include <mutex>
 #include <cmath>
 #include <filesystem>
 #include <iostream>
@@ -24,7 +26,11 @@
 #include "vendor/stb_image_write.h"
 using json=nlohmann::json;
 static FILE* protocol=nullptr;
-static void emit(const json& value){std::string line=value.dump()+"\n";fwrite(line.data(),1,line.size(),protocol);fflush(protocol);}
+static std::mutex protocol_lock;
+static std::string vae_backend="cpu";
+static int vae_blocks=0;
+static std::atomic<int> image_phase{0}; // 0 prepare, 1 sample, 2 decode
+static void emit(const json& value){std::lock_guard<std::mutex> guard(protocol_lock);std::string line=value.dump()+"\n";fwrite(line.data(),1,line.size(),protocol);fflush(protocol);}
 static std::wstring wide(const std::string& s){int n=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s.data(),(int)s.size(),nullptr,0);if(!n)throw std::runtime_error("Invalid UTF-8 path");std::wstring out(n,L' ');MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s.data(),(int)s.size(),out.data(),n);return out;}
 
 struct Api {
@@ -32,7 +38,7 @@ struct Api {
 #define FN(name) decltype(&::name) p_##name=nullptr;
  FN(sd_commit) FN(sd_ctx_params_init) FN(new_sd_ctx) FN(free_sd_ctx)
  FN(sd_img_gen_params_init) FN(generate_image) FN(free_sd_images)
- FN(sd_set_progress_callback) FN(sd_get_default_sample_method) FN(sd_get_default_scheduler)
+ FN(sd_set_log_callback) FN(sd_set_progress_callback) FN(sd_get_default_sample_method) FN(sd_get_default_scheduler)
  FN(sd_list_devices) FN(str_to_sample_method) FN(str_to_scheduler) FN(sd_sample_method_name) FN(sd_scheduler_name)
 #undef FN
  void open(const std::string& path){
@@ -43,7 +49,7 @@ struct Api {
 #define LOAD(name) p_##name=reinterpret_cast<decltype(p_##name)>(GetProcAddress(dll,#name));if(!p_##name)throw std::runtime_error("Missing native function: " #name);
   LOAD(sd_commit) LOAD(sd_ctx_params_init) LOAD(new_sd_ctx) LOAD(free_sd_ctx)
   LOAD(sd_img_gen_params_init) LOAD(generate_image) LOAD(free_sd_images)
-  LOAD(sd_set_progress_callback) LOAD(sd_get_default_sample_method) LOAD(sd_get_default_scheduler)
+  LOAD(sd_set_log_callback) LOAD(sd_set_progress_callback) LOAD(sd_get_default_sample_method) LOAD(sd_get_default_scheduler)
   LOAD(sd_list_devices) LOAD(str_to_sample_method) LOAD(str_to_scheduler) LOAD(sd_sample_method_name) LOAD(sd_scheduler_name)
 #undef LOAD
   std::string commit=p_sd_commit();
@@ -62,7 +68,18 @@ struct InputImage {
  }
  ~InputImage(){stbi_image_free(value.data);}
 };
-static void progress(int step,int steps,float seconds,void*){emit({{"event","progress"},{"step",step},{"steps",steps},{"seconds",seconds}});}
+static void native_log(sd_log_level_t level,const char* text,void*){
+ if(!text)return;
+ if(level>=SD_LOG_INFO){SYSTEMTIME now;GetLocalTime(&now);fprintf(stderr,"%02d:%02d:%02d.%03d %s",now.wHour,now.wMinute,now.wSecond,now.wMilliseconds,text);if(*text&&text[strlen(text)-1]!='\n')fputc('\n',stderr);fflush(stderr);}
+ std::string line(text);
+ if(line.find("generating image: ")!=std::string::npos){image_phase=1;emit({{"event","stage"},{"message","Preparazione del primo passo"}});}
+ else if(line.find("decoding ")!=std::string::npos&&line.find("latents")!=std::string::npos){image_phase=2;emit({{"event","stage"},{"message",std::string("Decodifica immagine · VAE su ")+(vae_backend=="cpu"?"CPU":"GPU")}});}
+}
+static void progress(int step,int steps,float seconds,void*){
+ if(image_phase==2)vae_blocks=steps;
+ const char* phase=image_phase==2?"decode":image_phase==1?"sample":"encode";
+ emit({{"event","progress"},{"phase",phase},{"backend",vae_backend},{"step",step},{"steps",steps},{"seconds",seconds}});
+}
 static void write_png(const std::string& path,const sd_image_t& image){
  FILE* f=_wfopen(wide(path).c_str(),L"wb");if(!f)throw std::runtime_error("Cannot write output image");
  auto writer=[](void* context,void* data,int size){fwrite(data,1,size,static_cast<FILE*>(context));};
@@ -91,7 +108,9 @@ int main(){
     }
     if(op=="load"){
      if(context)throw std::runtime_error("Worker already has a model");
-     api.open(r.at("dll"));sd_ctx_params_t p{};api.p_sd_ctx_params_init(&p);
+     emit({{"event","stage"},{"message","Caricamento librerie del motore immagini"}});
+     api.open(r.at("dll"));api.p_sd_set_log_callback(native_log,nullptr);sd_ctx_params_t p{};api.p_sd_ctx_params_init(&p);
+     vae_backend=r.value("vae_backend",std::string("cpu"));
      auto files=r.at("files");
 #define PATH(role,field) if(files.contains(role))p.field=text(role,files[role].get<std::string>());
      PATH("model",model_path) PATH("diffusion",diffusion_model_path) PATH("vae",vae_path)
@@ -102,11 +121,12 @@ int main(){
      p.backend=text("backend",r.at("backend"));p.params_backend=text("params_backend",r.at("params_backend"));
      p.lora_apply_mode=LORA_APPLY_AT_RUNTIME;
      p.auto_fit=false;p.diffusion_flash_attn=r.value("diffusion_fa",false);
+     emit({{"event","stage"},{"message","Lettura pesi e preparazione del modello immagini"}});
      context=api.p_new_sd_ctx(&p);if(!context)throw std::runtime_error("Model initialization failed");
      api.p_sd_set_progress_callback(progress,nullptr);emit({{"event","ready"},{"commit",api.p_sd_commit()}});continue;
     }
     if(op!="generate"||!context)throw std::runtime_error("No model loaded");
-    sd_img_gen_params_t p{};api.p_sd_img_gen_params_init(&p);
+    sd_img_gen_params_t p{};api.p_sd_img_gen_params_init(&p);p.hires.enabled=false;image_phase=0;vae_blocks=0;
     std::string prompt=r.at("prompt"),negative=r.value("negative_prompt",std::string());p.prompt=prompt.c_str();p.negative_prompt=negative.c_str();
     p.width=r.at("width");p.height=r.at("height");p.batch_count=1;p.seed=r.at("seed");p.strength=r.value("strength",.65f);
     p.sample_params.sample_steps=r.at("steps");p.sample_params.guidance.txt_cfg=r.at("cfg");p.sample_params.guidance.img_cfg=r.at("cfg");
@@ -134,13 +154,15 @@ int main(){
     if(r.value("init_image",false)&&!refs.empty())p.init_image=refs[0];
     else if(!refs.empty()){p.ref_images=refs.data();p.ref_images_count=(int)refs.size();}
     sd_image_t* result=nullptr;int count=0;
+    emit({{"event","stage"},{"message","Preparazione prompt e riferimenti"}});
     bool ok=api.p_generate_image(context,&p,&result,&count);
     try{
      if(!ok||!result||count<1)throw std::runtime_error("Image generation returned no result");
+     emit({{"event","stage"},{"message","Salvataggio immagine"}});
      write_png(r.at("output"),result[0]);
     }catch(...){if(result)api.p_free_sd_images(result,count);throw;}
     api.p_free_sd_images(result,count);emit({{"event","done"},{"output",r.at("output")},
-      {"parameters",{{"seed",p.seed},{"sampler",api.p_sd_sample_method_name(p.sample_params.sample_method)},{"scheduler",api.p_sd_scheduler_name(p.sample_params.scheduler)}}}});
+      {"parameters",{{"steps",p.sample_params.sample_steps},{"hires",p.hires.enabled},{"vae_backend",vae_backend},{"vae_blocks",vae_blocks},{"seed",p.seed},{"sampler",api.p_sd_sample_method_name(p.sample_params.sample_method)},{"scheduler",api.p_sd_scheduler_name(p.sample_params.scheduler)}}}});
    }catch(const std::exception& error){emit({{"event","error"},{"message",error.what()}});}
   }
  }catch(const std::exception& error){emit({{"event","error"},{"message",error.what()}});}
