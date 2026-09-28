@@ -54,3 +54,24 @@ class InstallTests(unittest.TestCase):
             (root/'runtime/installed-cpu.json').write_text(json.dumps({'manifest':manifest,'files':{'runtime/test.dll':installer.file_hash(p)}}))
             with patch.object(installer,'download') as download:installer.install_runtime('cpu',root)
             download.assert_not_called()
+
+
+class NativeRuntimeTests(unittest.TestCase):
+    def test_crt_is_local_verified_repeatable_and_restored_after_damage(self):
+        from h3chat.native_runtime import install_redist
+        import hashlib
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);source=root/'native/redist';source.mkdir(parents=True)
+            (source/'vcruntime140.dll').write_bytes(b'signed-fixture')
+            (source/'SOURCES.json').write_text(json.dumps({'files':{'vcruntime140.dll':hashlib.sha256(b'signed-fixture').hexdigest()}}))
+            for backend in ('cpu','cuda','vulkan'):
+                for engine in ('llama','sd'):
+                    dest=root/'runtime'/backend/engine
+                    paths=install_redist(root,dest);self.assertEqual(paths,[dest/'vcruntime140.dll'])
+                    timestamp=paths[0].stat().st_mtime_ns
+                    install_redist(root,dest);self.assertEqual(paths[0].stat().st_mtime_ns,timestamp)
+                    paths[0].write_bytes(b'broken');install_redist(root,dest)
+                    self.assertEqual(paths[0].read_bytes(),b'signed-fixture')
+            self.assertEqual(install_redist(root,root/'runtime/vision'),[])
+            (source/'vcruntime140.dll').write_bytes(b'tampered')
+            with self.assertRaisesRegex(ValueError,'danneggiata'):install_redist(root,root/'runtime/cpu/sd')

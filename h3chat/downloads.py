@@ -165,6 +165,8 @@ class Downloads:
                         extract_members(target,destination,entry["extract_members"],task["cancel"])
                     else:
                         extract_zip(target,destination)
+                    from .native_runtime import install_redist
+                    install_redist(self.root,destination)
             # Marker is only written after every model component has been verified.
             if task["kind"] == "model":
                 marker = self.root / "models" / (task["id"] + ".ready.json")

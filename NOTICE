@@ -36,3 +36,7 @@ SentencePiece and its dependencies retain their individual notices.
 Microsoft Visual C++ redistributables and NVIDIA CUDA redistributables retain
 their separate vendor licenses; neither is relicensed under MIT.
 YuE2 model weights are not bundled and are licensed CC BY-NC 4.0.
+
+The CPU/CUDA/Vulkan native engines also use app-local Microsoft Visual C++ CRT
+libraries. See native/redist/NOTICE.txt and SOURCES.json for version, origin and
+checksums. These Microsoft libraries are not relicensed under MIT.

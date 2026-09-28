@@ -1,0 +1,6 @@
+Microsoft Visual C++ Runtime, x64, 14.44.35112.
+Copyright Microsoft Corporation. All rights reserved.
+Unmodified redistributable files from Visual Studio 2022 VC Redist.
+https://visualstudio.microsoft.com/license-terms/vs2022-cruntime/
+https://learn.microsoft.com/cpp/windows/redistributing-visual-cpp-files
+These runtime libraries retain their Microsoft license; they are not under the H3-Chat MIT or image worker GPL license.

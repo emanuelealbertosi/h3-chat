@@ -14,6 +14,9 @@ INCLUDE=('native','h3chat','static','licenses','docs','scripts/Launcher.cs','scr
 def main():
     for required in ('runtime/python/python.exe','H3-Chat.exe','static/app.js','native/h3-sd-worker.exe','runtime/music/cpu/h3-music-worker.exe','runtime/cpu/llama/llama-server.exe','runtime/cpu/sd/stable-diffusion.dll','README.md'):
         if not (ROOT/required).exists():raise SystemExit('Missing: '+required)
+    from h3chat.native_runtime import install_redist
+    for backend in ('cpu',):
+        for engine in ('llama','sd'):install_redist(ROOT,ROOT/'runtime'/backend/engine)
     from bootstrap_bundle import verify_sources
     verify_sources(ROOT,json.loads((ROOT/'distribution/windows-bootstrap.json').read_text(encoding='utf-8')))
     files=[]

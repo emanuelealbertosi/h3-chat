@@ -1,7 +1,7 @@
 ﻿# Developer/CI only. End users run install.bat.
 . (Join-Path $PSScriptRoot 'bootstrap-python.ps1')
 if (-not (Test-Path -LiteralPath (Join-Path $taskRoot 'static\app.js'))) {
-    Write-Host 'Build dai sorgenti: Node.js richiesto soltanto per compilare l’interfaccia.'
+    Write-Host 'Build per sviluppatori: Node.js richiesto per compilare la UI.'
     Push-Location $taskRoot
     try { & npm.cmd ci; if ($LASTEXITCODE -ne 0) { throw 'npm ci non riuscito.' }; & npm.cmd run build; if ($LASTEXITCODE -ne 0) { throw 'Build non riuscita.' } } finally { Pop-Location }
 }

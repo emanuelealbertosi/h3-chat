@@ -11,6 +11,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'scripts')]
 from h3chat.downloads import download, extract_zip, file_hash, safe_join
 from bootstrap_bundle import verify_sources
+from h3chat.native_runtime import install_redist
 
 
 def install_bundle(root=ROOT):
@@ -36,6 +37,8 @@ def install_bundle(root=ROOT):
 
 def install_runtime(key,root=ROOT):
     manifest=json.loads((root/'runtimes.json').read_text(encoding='utf-8'))[key]
+    for entry in manifest['files']:
+        if entry.get('extract_to'):install_redist(root,safe_join(root,entry['extract_to']))
     marker=root/'runtime'/('installed-'+key+'.json')
     try:
         previous=json.loads(marker.read_text(encoding='utf-8'))
