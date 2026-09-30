@@ -137,5 +137,237 @@
         }
       }
     ]
+  },
+  "tools_documents": {
+    "files": [
+      {
+        "url": "https://files.pythonhosted.org/packages/c0/28/e46a7702bd95e9043291f7c3539b6184cba66f96cea9936f20939b284eeb/lxml-6.1.3-cp313-cp313-win_amd64.whl",
+        "path": "runtime/downloads/tools/documents/lxml-6.1.3-cp313-cp313-win_amd64.whl",
+        "size": 4004091,
+        "sha256": "e477aca0bc0d19f3b4ae9e4f2a1cfd687c31bf772d78734910658186b40b2477",
+        "extract_to": "runtime/tools/documents"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/3f/eb/b0834ad8b583d7d9d42b80becff092082a1c3c156bb582590fcc973f1c7c/pillow-12.1.1-cp313-cp313-win_amd64.whl",
+        "path": "runtime/downloads/tools/documents/pillow-12.1.1-cp313-cp313-win_amd64.whl",
+        "size": 7040108,
+        "sha256": "344cf1e3dab3be4b1fa08e449323d98a2a3f819ad20f4b22e77a0ede31f0faa1",
+        "extract_to": "runtime/tools/documents"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/3c/2c/c43c03eaf630435f023f1dc61ec4a4a78951ad5530a62c71cc89bde307b7/pypdf-6.19.0-py3-none-any.whl",
+        "path": "runtime/downloads/tools/documents/pypdf-6.19.0-py3-none-any.whl",
+        "size": 395480,
+        "sha256": "7e5d6e730e7dae87d560a2cee218b852f6498c8be61966f3cd02ead971e48d14",
+        "extract_to": "runtime/tools/documents"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/5d/99/a37b6b902457569468ed5908c94e56cb6c4032541f02cf89f723d42a9148/pypdfium2-5.13.0-py3-none-win_amd64.whl",
+        "path": "runtime/downloads/tools/documents/pypdfium2-5.13.0-py3-none-win_amd64.whl",
+        "size": 3885553,
+        "sha256": "47dcca2a8d507b5fd24f94c3c9d48fb379430f097bc20f01beff6c963ffbcedb",
+        "extract_to": "runtime/tools/documents"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/d0/00/1e03a4989fa5795da308cd774f05b704ace555a70f9bf9d3be057b680bcf/python_docx-1.2.0-py3-none-any.whl",
+        "path": "runtime/downloads/tools/documents/python_docx-1.2.0-py3-none-any.whl",
+        "size": 252987,
+        "sha256": "3fd478f3250fbbbfd3b94fe1e985955737c145627498896a8a6bf81f4baf66c7",
+        "extract_to": "runtime/tools/documents"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl",
+        "path": "runtime/downloads/tools/documents/typing_extensions-4.16.0-py3-none-any.whl",
+        "size": 45571,
+        "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
+        "extract_to": "runtime/tools/documents"
+      }
+    ]
+  },
+  "tools_asr": {
+    "files": [
+      {
+        "url": "https://files.pythonhosted.org/packages/12/b8/4bd346e22b28902df4d651910f5242c28d84e4a5c2435ca5c3f797ed7e2e/anyio-4.15.1-py3-none-any.whl",
+        "path": "runtime/downloads/tools/asr/anyio-4.15.1-py3-none-any.whl",
+        "size": 132079,
+        "sha256": "6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/38/21/81eefc2224ce5e44131552333a703346f55f0e23cae7db20961931b9d298/av-19.0.0-cp312-abi3-win_amd64.whl",
+        "path": "runtime/downloads/tools/asr/av-19.0.0-cp312-abi3-win_amd64.whl",
+        "size": 28158185,
+        "sha256": "96e4c0981ec21cadfef4c0b840d04a5e3c3be821894aa6a7d7a8ee870ba6b727",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl",
+        "path": "runtime/downloads/tools/asr/certifi-2026.7.22-py3-none-any.whl",
+        "size": 136983,
+        "sha256": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/58/50/6c0d534c5f134586a8e1ba4e330569e32f057e33372ae556463212fb4cd3/click-8.5.0-py3-none-any.whl",
+        "path": "runtime/downloads/tools/asr/click-8.5.0-py3-none-any.whl",
+        "size": 125251,
+        "sha256": "255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl",
+        "path": "runtime/downloads/tools/asr/colorama-0.4.6-py2.py3-none-any.whl",
+        "size": 25335,
+        "sha256": "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/c2/fc/a9e9e0ce1c0a29bc4c17bf56ccb4274293c0bbb2b8aae561727d82fcb0ca/ctranslate2-4.8.2-cp313-cp313-win_amd64.whl",
+        "path": "runtime/downloads/tools/asr/ctranslate2-4.8.2-cp313-cp313-win_amd64.whl",
+        "size": 19222061,
+        "sha256": "399c20a7336b6358f69ce3c615e090eabc08f29735a079fd1ac1e464119e0861",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/8a/0e/97c33bf5009bdbac74fd2beace167cab3f978feb69cc36f1ef79360d6c4e/exceptiongroup-1.3.1-py3-none-any.whl",
+        "path": "runtime/downloads/tools/asr/exceptiongroup-1.3.1-py3-none-any.whl",
+        "size": 16740,
+        "sha256": "a7a39a3bd276781e98394987d3a5701d0c4edffb633bb7a5144577f82c773598",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/05/99/49ee85903dee060d9f08297b4a342e5e0bcfca2f027a07b4ee0a38ab13f9/faster_whisper-1.2.1-py3-none-any.whl",
+        "path": "runtime/downloads/tools/asr/faster_whisper-1.2.1-py3-none-any.whl",
+        "size": 1118909,
+        "sha256": "79a66ad50688c0b794dd501dc340a736992a6342f7f95e5811be60b5224a26a7",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/06/cf/1731c0dd182ee35f80a39e63afb3d03056ea0dd561b7498932b10b2e34d9/filelock-4.0.7-py3-none-any.whl",
+        "path": "runtime/downloads/tools/asr/filelock-4.0.7-py3-none-any.whl",
+        "size": 109242,
+        "sha256": "a93c4d93269b339a6af4848342c7e940d0f9928ad95eff64764699e5f1bf8a6a",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl",
+        "path": "runtime/downloads/tools/asr/flatbuffers-25.12.19-py2.py3-none-any.whl",
+        "size": 26661,
+        "sha256": "7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/6c/c0/a98505f18594f1bce828bb159cec0fcf9860562f1a2c85913409fc8f3d9e/fsspec-2026.9.0-py3-none-any.whl",
+        "path": "runtime/downloads/tools/asr/fsspec-2026.9.0-py3-none-any.whl",
+        "size": 221738,
+        "sha256": "8dd6e646e99ea382bd85f97a45e6b526a442d79423a7dc673f1e2756d05fcb5f",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl",
+        "path": "runtime/downloads/tools/asr/h11-0.16.0-py3-none-any.whl",
+        "size": 37515,
+        "sha256": "63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/98/b7/8c59a66d15205024662f1d66968136f13893f96df1ddc5087e2e281fc95f/hf_xet-1.6.0-cp38-abi3-win_amd64.whl",
+        "path": "runtime/downloads/tools/asr/hf_xet-1.6.0-cp38-abi3-win_amd64.whl",
+        "size": 4033128,
+        "sha256": "fb4fadde1b2b70bf4c0c14a6dccbe7194b1c28947fefd5bbe3fed9d940676c3b",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/7e/f5/f66802a942d491edb555dd61e3a9961140fd64c90bce1eafd741609d334d/httpcore-1.0.9-py3-none-any.whl",
+        "path": "runtime/downloads/tools/asr/httpcore-1.0.9-py3-none-any.whl",
+        "size": 78784,
+        "sha256": "2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/2a/39/e50c7c3a983047577ee07d2a9e53faf5a69493943ec3f6a384bdc792deb2/httpx-0.28.1-py3-none-any.whl",
+        "path": "runtime/downloads/tools/asr/httpx-0.28.1-py3-none-any.whl",
+        "size": 73517,
+        "sha256": "d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/fc/16/963096d224b80909432dc16561a615fd33d2d13beef3ce4c63fa25e40867/huggingface_hub-1.33.0-py3-none-any.whl",
+        "path": "runtime/downloads/tools/asr/huggingface_hub-1.33.0-py3-none-any.whl",
+        "size": 846435,
+        "sha256": "04e434b06e100eddbce9a6e817d72693a7884b10a79bd67ab48080d5c07eb899",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/58/a2/bb081bab032533a855d44de1d56f8e8426114ff1ba5d1f07a438a0a654f8/idna-3.20-py3-none-any.whl",
+        "path": "runtime/downloads/tools/asr/idna-3.20-py3-none-any.whl",
+        "size": 69583,
+        "sha256": "ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/f3/ec/100f2b1794ede74a9b3d7ec6b9736927f56713414c1dfe19ab6c383494bf/numpy-2.5.3-cp313-cp313-win_amd64.whl",
+        "path": "runtime/downloads/tools/asr/numpy-2.5.3-cp313-cp313-win_amd64.whl",
+        "size": 12560965,
+        "sha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/3c/dd/c57c529dbc6dd55eca24b12cfbeab1b6a690de72083824eca689085f55b0/onnxruntime-1.30.0-cp313-cp313-win_amd64.whl",
+        "path": "runtime/downloads/tools/asr/onnxruntime-1.30.0-cp313-cp313-win_amd64.whl",
+        "size": 14311378,
+        "sha256": "4b63041bd623a9a9ac5e353948436c6fa7f43edd12d6b4a4ebc340bca959ba93",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl",
+        "path": "runtime/downloads/tools/asr/packaging-26.3-py3-none-any.whl",
+        "size": 129956,
+        "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/8a/55/b77bda4e5e5f5971fb51b07663694690e9afdb9402136c16a522bd621cad/protobuf-7.36.2-cp310-abi3-win_amd64.whl",
+        "path": "runtime/downloads/tools/asr/protobuf-7.36.2-cp310-abi3-win_amd64.whl",
+        "size": 456514,
+        "sha256": "a300819d441e078a5608c0d3c709796bb548136058fda017ae51d425b44fd353",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/97/c9/39d5b874e8b28845e4ec2202b5da735d0199dbe5b8fb85f91398814a9a46/pyyaml-6.0.3-cp313-cp313-win_amd64.whl",
+        "path": "runtime/downloads/tools/asr/pyyaml-6.0.3-cp313-cp313-win_amd64.whl",
+        "size": 154090,
+        "sha256": "79005a0d97d5ddabfeeea4cf676af11e647e41d81c9a7722a193022accdb6b7c",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/db/f7/0a69ac6b82dbccf3f71add938a161c497952749294b8dd6dfe03a819dc40/tokenizers-0.23.2-cp310-abi3-win_amd64.whl",
+        "path": "runtime/downloads/tools/asr/tokenizers-0.23.2-cp310-abi3-win_amd64.whl",
+        "size": 2863236,
+        "sha256": "2e96f5699d5249c9c64aa8412e044f727aae3a4098cf830f9901ec1afc361cde",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/6a/1e/71dfd96bcc1c775420cb8befe7a9d35f2e5b1309798f009dca17b7708c1e/tomli-2.4.1-cp313-cp313-win_amd64.whl",
+        "path": "runtime/downloads/tools/asr/tomli-2.4.1-cp313-cp313-win_amd64.whl",
+        "size": 108755,
+        "sha256": "8d65a2fbf9d2f8352685bc1364177ee3923d6baf5e7f43ea4959d7d8bc326a36",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/a7/03/921a3d3c75785aca9ebfbfcabfbc3a1be12e2ab5265deb026d55a5a3f83e/tqdm-4.70.1-py3-none-any.whl",
+        "path": "runtime/downloads/tools/asr/tqdm-4.70.1-py3-none-any.whl",
+        "size": 80199,
+        "sha256": "c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73",
+        "extract_to": "runtime/tools/asr"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl",
+        "path": "runtime/downloads/tools/asr/typing_extensions-4.16.0-py3-none-any.whl",
+        "size": 45571,
+        "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
+        "extract_to": "runtime/tools/asr"
+      }
+    ]
   }
 }

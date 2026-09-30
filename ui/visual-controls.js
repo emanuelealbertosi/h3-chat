@@ -4,7 +4,7 @@ import {escape as esc} from './render.js';
 export function initVisualControls({getState,getChatId}){
  const model=document.querySelector('#image-model'),assistant=document.querySelector('#image-assistant');
  const key=id=>'h3.visual-options.'+(id||'new');
- const read=()=>{try{return {image_model:'',assistant:true,music:false,video:false,music_fields:{},...JSON.parse(localStorage.getItem(key(getChatId()))||'{}')};}catch{return {image_model:'',assistant:true,music:false,video:false,music_fields:{}};}};
+ const read=()=>{try{return {image_model:'',assistant:true,music:false,video:false,web:false,transcribe:false,music_fields:{},...JSON.parse(localStorage.getItem(key(getChatId()))||'{}')};}catch{return {image_model:'',assistant:true,music:false,video:false,web:false,transcribe:false,music_fields:{}};}};
  function save(value){localStorage.setItem(key(getChatId()),JSON.stringify(value));render();}
  function render(){
   const state=getState();if(!state)return;
@@ -18,14 +18,17 @@ export function initVisualControls({getState,getChatId}){
   model.value=value.image_model;assistant.checked=value.assistant;
   document.querySelector('#music-toggle').setAttribute('aria-pressed',!!value.music);
   document.querySelector('#video-toggle').setAttribute('aria-pressed',!!value.video);
+  document.querySelector('#web-toggle').setAttribute('aria-pressed',!!value.web);document.querySelector('#transcribe-toggle').setAttribute('aria-pressed',!!value.transcribe);
   document.querySelector('#video-hint').hidden=!value.video;
   document.querySelector('#music-inputs').hidden=!value.music;
   for(const input of document.querySelectorAll('[data-music-field]'))if(document.activeElement!==input){const field=value.music_fields?.[input.dataset.musicField];if(input.type==='checkbox')input.checked=!!field;else input.value=field||'';}
   document.querySelector('#image-assistant-label').textContent='Assistant '+(value.assistant?'On':'Off');
  }
- model.onchange=()=>save({...read(),image_model:model.value,music:false,video:false});
- document.querySelector('#music-toggle').onclick=()=>save({...read(),music:!read().music,image_model:'',video:false});
- document.querySelector('#video-toggle').onclick=()=>save({...read(),video:!read().video,image_model:'',music:false});
+ model.onchange=()=>save({...read(),image_model:model.value,music:false,video:false,transcribe:false});
+ document.querySelector('#music-toggle').onclick=()=>save({...read(),music:!read().music,image_model:'',video:false,transcribe:false});
+ document.querySelector('#video-toggle').onclick=()=>save({...read(),video:!read().video,image_model:'',music:false,transcribe:false});
+ document.querySelector('#web-toggle').onclick=()=>save({...read(),web:!read().web});
+ document.querySelector('#transcribe-toggle').onclick=()=>save({...read(),transcribe:!read().transcribe,image_model:'',music:false,video:false});
  for(const input of document.querySelectorAll('[data-music-field]'))input.oninput=()=>save({...read(),music_fields:{...read().music_fields,[input.dataset.musicField]:input.type==='checkbox'?input.checked:input.value}});
  assistant.onchange=()=>save({...read(),assistant:assistant.checked});
  return {render,read,set:save,migrateNew(id){const value=read();localStorage.setItem(key(id),JSON.stringify(value));localStorage.removeItem(key(null));}};

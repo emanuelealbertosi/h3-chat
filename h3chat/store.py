@@ -14,6 +14,8 @@ PROFILES = {
     "balanced": {"context": 8192, "gpu_layers": 99, "width": 768, "height": 768},
 }
 DEFAULTS = {
+    "web_auto": True, "web_provider": "duckduckgo", "web_searxng_url": "", "web_max_results": 3,
+    "transcribe_auto": True, "asr_model": "whisper-small", "asr_language": "auto", "asr_threads": 4, "asr_beam": 3,
     "video_model": "", "video_auto": True, "video_advanced": False, "video_overrides": {}, "video_prompt_max_tokens": 3000,
     "llm_overrides": {},
     "profile": "low", "backend": "vulkan", "chat_model": "", "create_model": "",
@@ -125,7 +127,7 @@ class Store:
     def enqueue(self, chat_id, prompt, media, settings, canvas=False, loras=None):
         job_id, user_id, answer_id, now = uid(), uid(), uid(), time.time()
         loras=loras or []
-        lora_meta={"video":settings.get("_video",False),"music":settings.get("_music",False),"music_fields":settings.get("_music_fields",{}),"image_model":settings.get("_image_model",""),"assistant":settings.get("_assistant",True),"loras":[{k:l[k] for k in ("id","name","weight","model_id","model_name")} for l in loras]}
+        lora_meta={"web":settings.get("_web",False),"transcribe":settings.get("_transcribe",False),"video":settings.get("_video",False),"music":settings.get("_music",False),"music_fields":settings.get("_music_fields",{}),"image_model":settings.get("_image_model",""),"assistant":settings.get("_assistant",True),"loras":[{k:l[k] for k in ("id","name","weight","model_id","model_name")} for l in loras]}
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             chat = db.execute("SELECT * FROM chats WHERE id=?", (chat_id,)).fetchone()

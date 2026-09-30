@@ -1,5 +1,13 @@
 H3-Chat includes open-source components with their own licenses.
 
+Document import includes pinned pypdf, python-docx, lxml, pypdfium2/PDFium,
+Pillow and typing-extensions wheels. Speech transcription optionally installs
+Faster Whisper, CTranslate2, PyAV, ONNX Runtime and their pinned dependencies.
+Upstream provenance is in scripts/tools-sources.json; original licenses/notices
+remain in runtime/tools package folders. Private Microsoft CRT files retain
+the license and provenance in native/redist/NOTICE.txt and SOURCES.json.
+Whisper model weights are MIT-licensed upstream and are not bundled.
+
 llama.cpp and stable-diffusion.cpp: MIT; copyright their respective contributors.
 Python: Python Software Foundation License, included in runtime/python/LICENSE.txt.
 Manrope and Cormorant: SIL Open Font License 1.1.

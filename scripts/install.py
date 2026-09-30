@@ -43,6 +43,9 @@ def install_runtime(key,root=ROOT):
     try:
         previous=json.loads(marker.read_text(encoding='utf-8'))
         if previous['manifest']==manifest and previous['files'] and all(safe_join(root,n).is_file() and file_hash(safe_join(root,n))==h for n,h in previous['files'].items()):
+            if key.startswith('tools_'):
+                from h3chat.tools_runtime import mark_ready
+                mark_ready(root,key.removeprefix('tools_'))
             print(key+': gia installato e verificato.',flush=True);return
     except (OSError,ValueError,KeyError):pass
     installed={}
@@ -69,16 +72,20 @@ def install_runtime(key,root=ROOT):
             with zipfile.ZipFile(archive) as z: targets=[safe_join(destination,i.filename) for i in z.infolist() if not i.is_dir()]
         installed.update({p.relative_to(root).as_posix():file_hash(p) for p in targets})
     marker.write_text(json.dumps({'manifest':manifest,'files':installed},indent=2),encoding='utf-8')
+    if key.startswith('tools_'):
+        from h3chat.tools_runtime import mark_ready
+        mark_ready(root,key.removeprefix('tools_'))
 
 
 def main():
     if sys.platform!='win32' or sys.maxsize<=2**32: raise ValueError('Questo pacchetto richiede Windows x64.')
     from launcher import running_servers
     if running_servers(8787): raise ValueError('H3-Chat e aperto. Termina i lavori, esegui stop.bat e rilancia install.bat.')
-    print('[1/4] Interfaccia e launcher precompilati',flush=True);install_bundle()
-    print('[2/4] Motori chat e immagini CPU',flush=True);install_runtime('cpu')
-    print('[3/4] Motore musicale CPU',flush=True);install_runtime('music_cpu')
-    print('[4/4] Verifica motori',flush=True)
+    print('[1/5] Interfaccia e launcher precompilati',flush=True);install_bundle()
+    print('[2/5] Motori chat e immagini CPU',flush=True);install_runtime('cpu')
+    print('[3/5] Motore musicale CPU',flush=True);install_runtime('music_cpu')
+    print('[4/5] Lettura PDF e Word',flush=True);install_runtime('tools_documents')
+    print('[5/5] Verifica motori',flush=True)
     subprocess.run([sys.executable,'-X','utf8',str(ROOT/'scripts/check_native.py')],check=True)
     worker=ROOT/'runtime/music/cpu/h3-music-worker.exe'
     result=subprocess.run([str(worker)],input=b'',capture_output=True,cwd=worker.parent,timeout=30)

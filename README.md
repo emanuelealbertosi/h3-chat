@@ -4,7 +4,7 @@ Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle 
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.10.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.10.0/H3-Chat-0.10.0-windows-x64.zip) dalla [release v0.10.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.10.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.11.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.11.0/H3-Chat-0.11.0-windows-x64.zip) dalla [release v0.11.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.11.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 
@@ -57,6 +57,18 @@ Modello predefinito: **Hybrid**, selezionabile e sostituibile dall’admin trami
 Allega fino a **9 immagini e 3 audio** (WAV, MP3, FLAC, OGG). Scrivi, per esempio: «Immagine 1 come frame iniziale, immagine 2 a 7 secondi, immagine 3 come riferimento del personaggio. Usa audio 1 con lip-sync». **Assistant On** prepara istruzioni inglesi, ruoli e tempi usando lo stesso LLM chat; dialoghi e parole restano nella lingua richiesta. Vision On usa il mmproj chat sulla CPU quando disponibile. Assistant non trascrive audio; il motore video riceve la traccia originale. **Assistant Off** passa il prompt direttamente e riconosce indicazioni esplicite come `immagine 2 a 7 secondi`; [guida e limiti](docs/video-engine.md).
 
 Il lip-sync usa l’audio per condizionare la generazione con denoise audio zero e almeno 8 passi standard, poi conserva la traccia sorgente nel MP4. La sincronizzazione visiva dipende dal modello. Una traccia da conservare deve coprire la durata scelta; i brevi riferimenti di voce o stile non devono coprire tutto il video. Il limite di output dell’Assistant si salva per ciascun LLM. **Avanzate in chat** mostra istruzioni, ruoli e parametri effettivi del video.
+
+## PDF, Word, web e trascrizione
+
+Allega **PDF o Word .docx** alla chat (fino a tre documenti, 25 MB ciascuno; PDF fino a 300 pagine). L’app estrae testo e tabelle localmente e conserva riferimenti a pagine/blocchi. Per documenti lunghi passa all’LLM estratti pertinenti e lo indica nella risposta. I file restano disponibili per domande successive. Per scansioni o figure PDF abilita Vision e indica le pagine: vengono fornite fino al limite di immagini del modello, massimo quattro pagine per lettura. Le altre pagine non vengono dichiarate lette. Word legacy `.doc`, macro e PDF protetti da password non sono supportati.
+
+**Web** forza una ricerca per il messaggio; “cerca sul web…” viene riconosciuto automaticamente se abilitato nelle preferenze. Default DuckDuckGo con fallback Bing; Bing e una propria istanza SearXNG sono selezionabili. L’app legge le fonti pubbliche e aggiunge link reali alla risposta o al canvas. Se una pagina blocca l’accesso, la fonte è indicata come solo estratto. Se non recupera risultati pertinenti, mostra un errore: non simula una ricerca. Solo il messaggio di ricerca viene inviato al provider, non i file allegati.
+
+Gli **audio allegati a una richiesta chat** vengono trascritti localmente; puoi chiedere un riassunto o fare domande sul parlato usando il tuo LLM. **Trascrivi** oppure “trascrivi questo audio” restituisce la trascrizione anche senza LLM, con download **TXT/SRT**. Il pulsante Canvas porta testo e download nel pannello laterale. Gli audio usati come riferimenti Video restano originali e non attivano automaticamente la trascrizione.
+
+In **Setup → Documenti, ricerca e trascrizione**, installa il motore opzionale e scarica **Whisper Small multilingue** (default) oppure **Tiny**. Puoi scegliere una cartella Faster Whisper/CTranslate2 già presente altrove con `model.bin`, `config.json` e `tokenizer.json`; nessun peso viene copiato. Imposta lingua, thread e beam. Inferenza **CPU INT8**, processo liberato dopo la richiesta, nessuna VRAM aggiuntiva; massimo tre audio, 64 MB e 30 minuti ciascuno. Non è un motore di analisi musicale, rumori, emozioni o identità vocale. I risultati possono contenere errori.
+
+I componenti PDF/Word sono inclusi nello ZIP Windows e preparati da `install.bat` nei clone; il runtime audio e i pesi si installano dal Setup con SHA-256 e revisioni fissate. Dopo l’installazione, documenti e trascrizione funzionano offline. [Guida e limiti](docs/chat-tools.md).
 
 ## Vision e modelli locali
 
@@ -219,7 +231,7 @@ Sono supportati `line`, `bar`, `scatter`, `pie` e `doughnut`. Per `scatter` i da
 
 Vulkan copre NVIDIA, AMD e Intel con driver compatibili. CUDA è per NVIDIA; la release dei motori fissa il proprio runtime CUDA. I profili sono modificabili. Il setup rileva CPU, RAM e GPU e stima il rischio di memoria per i modelli selezionati, usando anche la memoria attualmente libera; non garantisce un consumo massimo. Memoria occupata da altre applicazioni, modello, risoluzione e numero di riferimenti possono richiedere CPU, meno layer GPU o dimensioni inferiori.
 
-Il motore immagini C++ usa batch singolo e VAE a tasselli. In A richiesta i pesi sono conservati in RAM, la diffusione usa la GPU a segmenti ed encoder/VAE usano CPU; Residenti mantiene anche questi componenti sulla GPU. Ming e Qwen 2.1 usano invece offload dinamico e spostano encoder/VAE a richiesta; il proiettore vision dell’LLM resta sempre sulla CPU. FLUX.2 klein e quattro riferimenti richiedono più RAM e tempo dei modelli di base. La CPU permette di lavorare senza VRAM, con prestazioni inferiori.
+Il motore immagini C++ usa batch singolo e VAE a tasselli. Con backend GPU, diffusore, encoder e VAE usano la GPU; A richiesta cambia la durata di permanenza dei modelli, non il dispositivo di calcolo. Ming e Qwen 2.1 usano invece offload dinamico e spostano encoder/VAE a richiesta; il proiettore vision dell’LLM resta sempre sulla CPU. FLUX.2 klein e quattro riferimenti richiedono più RAM e tempo dei modelli di base. La CPU permette di lavorare senza VRAM, con prestazioni inferiori.
 
 ## Catalogo iniziale
 
@@ -277,7 +289,7 @@ Preset, controlli Avanzate e LoRA sono descritti nelle [verifiche della 0.6](doc
 
 I collegamenti esterni sono verificati anche con un modello vision reale caricato fuori dalla cartella dell’app, senza copie dei pesi: [Verifica 0.4](docs/validation-v0.4.md).
 
-Chat CPU, streaming, canvas separato, gestione conversazioni, rendering e API sono implementati e collaudati. Creazione, editing e riuso dei processi immagini sono stati eseguiti su CPU con SD 1.5; i dettagli sono in [Verifica 0.3](docs/validation-v0.3.md). Il collaudo di questa versione non equivale a una certificazione di tutte le combinazioni di GPU, driver e modelli: in particolare CUDA/Vulkan e FLUX multi-riferimento richiedono ancora una prova di inferenza sulle rispettive configurazioni hardware. Video, audio, esecuzione del codice generato, ricerca web, importazione PDF/Word in ingresso e plugin non sono inclusi.
+Chat CPU, streaming, canvas separato, gestione conversazioni, rendering e API sono implementati e collaudati. Creazione, editing e riuso dei processi immagini sono stati eseguiti su CPU con SD 1.5; i dettagli sono in [Verifica 0.3](docs/validation-v0.3.md). Il collaudo di questa versione non equivale a una certificazione di tutte le combinazioni di GPU, driver e modelli: in particolare CUDA/Vulkan e FLUX multi-riferimento richiedono ancora una prova di inferenza sulle rispettive configurazioni hardware. Video e musica sono inclusi; la versione 0.11 aggiunge ricerca web, importazione PDF/Word e trascrizione del parlato. Esecuzione del codice generato, analisi generale di musica/rumori, identificazione dei parlanti e plugin non sono inclusi.
 
 Font e layout derivano dai riferimenti locali H3-Music e H3-Comics. Motori: [llama.cpp](https://github.com/ggml-org/llama.cpp), [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp). Riferimenti: [multimodalità llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md), [FLUX.2 nel motore immagini](https://github.com/leejet/stable-diffusion.cpp/blob/master/docs/flux2.md), [FLUX.2 ufficiale](https://github.com/black-forest-labs/flux2), [Python integrato](https://www.python.org/downloads/release/python-31315/).
 

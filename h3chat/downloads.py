@@ -126,6 +126,8 @@ class Downloads:
         self.root, self.catalog, self.runtimes = Path(root), catalog, runtimes
         self.lock = threading.Lock()
         self.tasks = {}
+        model_manifest=self.root/'tools-models.json'
+        self.tool_models=json.loads(model_manifest.read_text(encoding='utf-8')) if model_manifest.exists() else {}
 
     def snapshot(self):
         with self.lock:
@@ -142,6 +144,8 @@ class Downloads:
                 files = model["files"]
             elif kind == "runtime" and key in self.runtimes:
                 files = self.runtimes[key]["files"]
+            elif kind == 'tool_model' and key in self.tool_models:
+                files=self.tool_models[key]['files']
             else:
                 raise ValueError("Download sconosciuto.")
             task = {"id": key, "kind": kind, "status": "running", "file": "", "received": 0, "total": 0, "error": "", "cancel": threading.Event()}
@@ -168,7 +172,10 @@ class Downloads:
                     from .native_runtime import install_redist
                     install_redist(self.root,destination)
             # Marker is only written after every model component has been verified.
-            if task["kind"] == "model":
+            if task['kind']=='runtime' and task['id'].startswith('tools_'):
+                from .tools_runtime import mark_ready
+                mark_ready(self.root,task['id'].removeprefix('tools_'))
+            if task["kind"] in ("model","tool_model"):
                 marker = self.root / "models" / (task["id"] + ".ready.json")
                 marker.parent.mkdir(parents=True, exist_ok=True)
                 marker.write_text(json.dumps({"files": [{"path": e["path"], "size": e["size"], "sha256": e["sha256"]} for e in files]}), encoding="utf-8")

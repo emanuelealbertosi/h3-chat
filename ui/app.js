@@ -1,3 +1,4 @@
+import {renderToolsSettings,appendToolsDetails} from './tools-settings.js';
 import {renderLlmPreferences,selectLlmPreferencesModel,syncLlmDraft,llmOptions} from './llm-settings.js';
 import {renderVideoSettings,appendVideoDetails,selectVideoPreferencesModel} from './video-settings.js';
 import {renderMusicSettings,appendMusicDetails,selectMusicPreferencesModel} from './music-settings.js';
@@ -133,13 +134,13 @@ async function renderChat(){
     if(message.role==='user')content.textContent=message.content;
     else if(message.content)await renderRich(content,message.content,{final:message.status==='done'});
     if(pending){
-      const title=({create:'Creazione immagine',edit:'Modifica immagine',video:'Generazione video',music:'Generazione musica',chat:message.meta.canvas?'Scrittura nel canvas':'Risposta in corso'})[message.meta.intent]||(job?.status==='queued'?'In attesa':'Preparazione della risposta');
+      const title=({create:'Creazione immagine',edit:'Modifica immagine',video:'Generazione video',music:'Generazione musica',transcribe:'Trascrizione audio',chat:message.meta.canvas?'Scrittura nel canvas':'Risposta in corso'})[message.meta.intent]||(job?.status==='queued'?'In attesa':'Preparazione della risposta');
       const activity=document.createElement('div');activity.className='generation-activity';activity.setAttribute('role','status');
       const duration=elapsed<60?elapsed+' s':Math.floor(elapsed/60)+' min '+elapsed%60+' s';
       activity.innerHTML=`<div class="thinking" aria-hidden="true"><i></i><i></i><i></i></div><div><strong>${esc(title)}</strong><span class="activity-stage">${esc(job?.stage||'Preparazione del motore…')}</span><small class="activity-elapsed">Tempo trascorso: ${duration}</small></div>`;
       content.append(activity);
     }
-    appendMedia(content,message.media);appendMusicDetails(content,message,state.settings.chat_advanced);appendVideoDetails(content,message,state.settings.chat_advanced);
+    appendMedia(content,message.media);appendMusicDetails(content,message,state.settings.chat_advanced);appendVideoDetails(content,message,state.settings.chat_advanced);appendToolsDetails(content,message,state.settings.chat_advanced);
     if(message.meta.loras?.length&&(message.role==='user'||state.settings.chat_advanced)){const row=document.createElement('div');row.className='message-loras';row.textContent=message.meta.loras.map(l=>'◇ '+l.name+' × '+l.weight+' · '+l.model_name).join(' / ');content.append(row);}
     if(message.meta.loras_skipped?.length){const note=document.createElement('p');note.className='small-note';note.textContent=message.meta.loras_skipped.length+' LoRA non applicati: associati a un altro modello o con peso 0.';content.append(note);}
     if(message.meta.image_parameters&&state.settings.chat_advanced){const p=message.meta.image_parameters,details=document.createElement('details');details.className='image-parameters';const title=document.createElement('summary');title.textContent='Parametri immagine';const values=document.createElement('p');values.textContent=p.width+' × '+p.height+' · '+p.steps+' step · CFG '+p.cfg+' · '+p.sampler+' / '+p.scheduler+' · Seed '+p.seed+' · Intensità '+p.strength+(p.vae_backend?' · VAE '+(p.vae_backend==='cpu'?'CPU':'GPU'):'');details.append(title,values);if(p.negative_prompt){const negative=document.createElement('p');negative.textContent='Negative prompt: '+p.negative_prompt;details.append(negative);}content.append(details);}
@@ -154,23 +155,24 @@ async function renderChat(){
       const toCanvas=document.createElement('button');toCanvas.className='text-button';toCanvas.textContent=message.meta.canvas?'Apri canvas':'Apri nel canvas';toCanvas.onclick=act(async()=>{if(!message.meta.canvas||message.meta.artifact){if(canvas.content||canvas.media.length){if(!await ask('Sostituire il canvas?',{description:'Il contenuto attuale verrà sostituito da questa risposta.',confirm:true}))return;}await setCanvas(message.meta.artifact||(message.meta.music_composition?{title:message.meta.music_composition.title,content:'## '+message.meta.music_composition.title+'\n\n'+message.meta.music_composition.lyrics.replaceAll('\n','  \n'),media:message.media}:{title:chat.title,content:message.content,media:message.media}));canvasDirty=true;await persistCanvas();}await toggleCanvas(true);});actions.append(toCanvas);
       if(message.meta.finish_reason==='length'){const note=document.createElement('span');note.textContent='Limite di risposta raggiunto';actions.append(note);}
     }
-    if(message.role==='user'){const repeat=document.createElement('button');repeat.className='text-button';repeat.textContent='Riutilizza';repeat.onclick=()=>{$('#prompt').value=message.content;attachments=[...message.media];loraUI.setSelections(message.meta.loras||[]);visualControls.set({image_model:message.meta.image_model||'',assistant:message.meta.assistant??true,video:message.meta.video||false,music:message.meta.music||false,music_fields:message.meta.music_fields||{}});renderAttachments();$('#prompt').focus();};actions.append(repeat);}
+    if(message.role==='user'){const repeat=document.createElement('button');repeat.className='text-button';repeat.textContent='Riutilizza';repeat.onclick=()=>{$('#prompt').value=message.content;attachments=[...message.media];loraUI.setSelections(message.meta.loras||[]);visualControls.set({image_model:message.meta.image_model||'',assistant:message.meta.assistant??true,video:message.meta.video||false,web:message.meta.web||false,transcribe:message.meta.transcribe||false,music:message.meta.music||false,music_fields:message.meta.music_fields||{}});renderAttachments();$('#prompt').focus();};actions.append(repeat);}
   }
   if(atBottom)scroll.scrollTop=scroll.scrollHeight;
 }
 function renderAttachments(){
- let image=0,audio=0;
- $('#attachments').innerHTML=attachments.map((m,i)=>{const sound=m.mime?.startsWith('audio/'),label=sound?'Audio '+(++audio):'Immagine '+(++image);return `<div class="attachment" title="${esc(m.name)}">${sound?'<span class="audio-attachment">♫</span>':`<img src="/media/${esc(m.path)}" alt="${esc(m.name)}">`}<small>${label}</small><button data-remove-attachment="${i}" aria-label="Rimuovi ${label}">×</button></div>`;}).join('');
+ let image=0,audio=0,document=0;
+ $('#attachments').innerHTML=attachments.map((m,i)=>{const sound=m.mime?.startsWith('audio/'),doc=m.mime?.startsWith('application/'),label=doc?'Documento '+(++document):sound?'Audio '+(++audio):'Immagine '+(++image);return `<div class="attachment" title="${esc(m.name)}">${doc?'<span class="audio-attachment">▤</span>':sound?'<span class="audio-attachment">♫</span>':`<img src="/media/${esc(m.path)}" alt="${esc(m.name)}">`}<small>${label}</small><button data-remove-attachment="${i}" aria-label="Rimuovi ${label}">×</button></div>`;}).join('');
 }
 async function uploadFiles(files){
- if(attachments.length+files.length>12)throw Error('Massimo nove immagini e tre audio per video.');
+ if(attachments.length+files.length>12)throw Error('Massimo 12 allegati per messaggio.');
  for(const file of files){
-  const sound=file.type.startsWith('audio/')||/\.(wav|mp3|flac|ogg)$/i.test(file.name);
-  if(attachments.filter(x=>x.mime.startsWith(sound?'audio/':'image/')).length>=(sound?3:9))throw Error(sound?'Massimo tre audio.':'Massimo nove immagini per video; gli altri modelli mantengono il loro limite.');
-  if(!sound&&!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Scegli PNG, JPEG, WebP oppure audio WAV, MP3, FLAC, OGG.');
-  if(file.size>(sound?64:12)*1024*1024)throw Error(sound?'Audio: massimo 64 MB.':'Immagini: massimo 12 MB.');
+  const sound=file.type.startsWith('audio/')||/\.(wav|mp3|flac|ogg)$/i.test(file.name),doc=/\.(pdf|docx)$/i.test(file.name);
+  const category=doc?'application/':sound?'audio/':'image/';
+  if(attachments.filter(x=>x.mime.startsWith(category)).length>=(doc||sound?3:9))throw Error(doc?'Massimo tre documenti.':sound?'Massimo tre audio.':'Massimo nove immagini; il modello mantiene il proprio limite.');
+  if(!doc&&!sound&&!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Scegli immagini, audio WAV/MP3/FLAC/OGG, PDF o Word .docx.');
+  if(file.size>(doc?25:sound?64:12)*1024*1024)throw Error(doc?'Documenti: massimo 25 MB.':sound?'Audio: massimo 64 MB.':'Immagini: massimo 12 MB.');
   let source=file;
-  if(!sound){const bitmap=await createImageBitmap(file);if(Math.max(bitmap.width,bitmap.height)>8192){bitmap.close();throw Error('Massimo 8192 pixel.');}
+  if(!sound&&!doc){const bitmap=await createImageBitmap(file);if(Math.max(bitmap.width,bitmap.height)>8192){bitmap.close();throw Error('Massimo 8192 pixel.');}
    if(file.type==='image/webp'){const c=document.createElement('canvas');c.width=bitmap.width;c.height=bitmap.height;c.getContext('2d').drawImage(bitmap,0,0);source=await new Promise(r=>c.toBlob(r,'image/png'));}bitmap.close();}
   const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=reject;reader.readAsDataURL(source);});
   attachments.push(await api('/uploads',{name:file.name,data}));renderAttachments();
@@ -288,6 +290,7 @@ function renderSettings(){
     body.innerHTML=`<div class="settings-grid"><section class="card" id="llm-settings-card"></section><section class="card" id="image-settings-card"></section><section class="card full"><h3>Preferenze generali</h3>${numberField('threads','Thread CPU · motori chat e immagini',1,64)}<h3>Come vuoi che risponda</h3><label class="field"><span>Istruzioni personali</span><textarea data-setting="system_prompt">${esc(settingsDraft.system_prompt)}</textarea></label><p>Codice evidenziato, Markdown, LaTeX, diagrammi Mermaid e grafici numerici sono già abilitati. Il canvas esporta Word modificabile e PDF/PNG fedeli all'anteprima; formule e figure nel Word sono immagini.</p></section></div>`;
   }
   if(settingsTab==='setup'||settingsTab==='advanced'){
+    const tools=document.createElement('section');tools.className='card tools-settings';body.append(tools);renderToolsSettings(tools,{state,draft:settingsDraft,pickDirectory:localModels.pickDirectory,changed:scheduleAssessment,install:act(async kind=>{await api('/downloads',{id:'tools_'+kind,kind:'runtime'});await refresh();}),download:act(async id=>{await api('/downloads',{id,kind:'tool_model'});await refresh();})});
     const video=document.createElement('section');video.className='card video-settings';body.append(video);
     renderVideoSettings(video,{state,draft:settingsDraft,link:()=>localModels.open(null,'minimax-h3'),edit:localModels.open,changed:scheduleAssessment,install:act(async()=>{await api('/downloads',{id:'vision',kind:'runtime'});await refresh();})});
     const music=document.createElement('section');music.className='card music-settings';body.append(music);

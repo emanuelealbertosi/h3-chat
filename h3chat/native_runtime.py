@@ -7,7 +7,9 @@ from pathlib import Path
 
 def install_redist(root, destination):
     root=Path(root).resolve();destination=Path(destination).resolve()
-    if destination.parent.parent!=root/'runtime' or destination.parent.name not in ('cpu','cuda','vulkan') or destination.name not in ('llama','sd'):
+    inference=destination.parent.parent==root/'runtime' and destination.parent.name in ('cpu','cuda','vulkan') and destination.name in ('llama','sd')
+    tools=destination.parent==root/'runtime/tools' and destination.name in ('documents','asr')
+    if not inference and not tools:
         return []
     source=root/'native/redist'
     manifest=json.loads((source/'SOURCES.json').read_text(encoding='utf-8'))
