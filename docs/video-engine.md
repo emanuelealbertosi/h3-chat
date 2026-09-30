@@ -23,7 +23,7 @@ The app keeps the absolute paths and never copies or moves model weights. GGUF,
 PDD/Turbo banks, model conversion and external workflows are not supported by this
 worker. The worker validates the diffusion architecture, standard output heads
 and video/audio VAE channels before generation. Select the linked model as the
-video default. **Installa motore video** downloads the shared private runtime on
+video default. Hybrid is the preferred model and is selected automatically when linked if no video default exists. Administrators can choose another compatible model and edit each model’s preset; original paths remain local settings and are never embedded in the release. **Installa motore video** downloads the shared private runtime on
 first use; an already installed Ming/Qwen runtime is reused. Model license terms
 still apply and weights are not included in the application archive.
 
@@ -35,7 +35,7 @@ still apply and weights are not included in the application archive.
 | Resolution | 0.7 MP using H3's 1024² pixels/MP convention |
 | Aspect | 16:9, rounded to 1152×640 |
 | Frame rate | 24 fps |
-| Steps / CFG | 8 / 1 |
+| Steps / CFG | 12 / 1 |
 | Sampler / scheduler | Res Multistep / Simple |
 | Video / audio sigma shift | 12 / 3 |
 | Seed | Random |

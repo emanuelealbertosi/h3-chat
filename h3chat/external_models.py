@@ -11,7 +11,8 @@ from .models import metadata
 from .image_options import SAMPLERS, SCHEDULERS
 
 PROFILES = {
-    'minimax-h3': {'label':'MiniMax H3 · video, fotogrammi e audio','main':'diffusion','required':['diffusion','llm','vae','audio_vae'],'optional':[],
+    'minimax-h3': {'label':'MiniMax H3 · Hybrid, video e audio','main':'diffusion','required':['diffusion','llm','vae','audio_vae'],'optional':[],
+                   'default_files':{'diffusion':'minimax_h3_hybrid_fl2va_ref2va_b25-49-int8.safetensors','llm':'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors','vae':'minimax_h3_video_vae_int8_convrot.safetensors','audio_vae':'minimax_h3_audio_vae_fp32.safetensors'},
                    'architecture':'minimax-h3','engine':'video','capabilities':['video'],'max_refs':9},
     'yue2': {'label':'YuE2 · canzoni e musica','main':'model','required':['model','vae'],'optional':[],
              'architecture':'yue2','engine':'music','capabilities':['music'],'max_refs':0},

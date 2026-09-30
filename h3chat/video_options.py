@@ -3,7 +3,7 @@ import math
 import re
 import secrets
 
-DEFAULTS = {'duration':15, 'megapixels':.7, 'aspect':'16:9', 'steps':8, 'cfg':1,
+DEFAULTS = {'duration':15, 'megapixels':.7, 'aspect':'16:9', 'steps':12, 'cfg':1,
             'sampler':'res_multistep', 'scheduler':'simple', 'seed':-1,
             'shift_video':12, 'shift_audio':3, 'offload':True}
 ASPECTS = ('16:9','9:16','1:1','4:3','3:4')

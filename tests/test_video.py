@@ -28,6 +28,7 @@ class VideoTests(unittest.TestCase):
     def tearDown(self):self.app.close();self.tmp.cleanup()
     def test_defaults_and_invalid_numbers(self):
         opts=options(self.model,DEFAULTS,False)
+        self.assertEqual(opts['steps'],12)
         self.assertEqual((opts['duration'],opts['megapixels'],opts['frames'],opts['width'],opts['height']),(15,.7,360,1152,640))
         for bad in ({'duration':16},{'steps':True},{'megapixels':float('nan')},{'seed':False},{'offload':'yes'},{'sampler':'lcm'}):
             with self.subTest(bad=bad),self.assertRaises(ValueError):validate(bad)
@@ -47,6 +48,17 @@ class VideoTests(unittest.TestCase):
         self.app.remove_external_model(self.model['id'])
         self.assertEqual(self.app.store.settings()['video_model'],'')
         self.assertTrue(all(Path(p).exists() for p in self.files.values()))
+    def test_hybrid_default_selection_remains_editable(self):
+        from h3chat.external_models import PROFILES
+        hybrid=dict(self.files,diffusion=str(safetensors(self.folder/PROFILES['minimax-h3']['default_files']['diffusion'])))
+        self.app.save_settings({'video_model':''})
+        model=self.app.external_model({'profile':'minimax-h3','files':hybrid,'name':'Hybrid'})
+        self.assertEqual(self.app.store.settings()['video_model'],model['id'])
+        self.assertEqual(options(model,self.app.store.settings())['steps'],12)
+        self.app.save_settings({'video_model':self.model['id'],'video_overrides':{model['id']:{'steps':20}}})
+        self.app.external_model({'id':model['id'],'profile':'minimax-h3','files':hybrid,'name':'Hybrid'})
+        self.assertEqual(self.app.store.settings()['video_model'],self.model['id'])
+        self.assertEqual(options(model,self.app.store.settings())['steps'],20)
     def test_role_validation_and_direct_keyframes(self):
         refs=[{'mime':'image/png'},{'mime':'image/png'},{'mime':'audio/wav'}]
         plan=direct_plan('immagine 1 a 0 secondi; immagine 2 a 7 secondi; audio con lip-sync',refs,15)

@@ -93,6 +93,8 @@ class Service:
             model=self.catalog[config['id']]
             settings=self.store.settings()
             self.store.save_settings({key:'' for key,cap in (('chat_model','chat'),('create_model','create'),('edit_model','edit'),('diagram_model','create'),('music_model','music'),('video_model','video')) if settings[key]==config['id'] and (cap not in model['capabilities'] or (key=='diagram_model' and model.get('architecture')!='ming'))})
+            if not settings['video_model'] and config['profile']=='minimax-h3' and Path(config['files']['diffusion']).name.casefold()==EXTERNAL_PROFILES['minimax-h3']['default_files']['diffusion'].casefold():
+                self.store.save_settings({'video_model':model['id']})
             self.engine.configure(self.store.settings())
             self.engine.cache.clear()
             return model | inspect_model(self.root,model)

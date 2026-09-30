@@ -40,7 +40,7 @@ const localModels=initLocalModels({api,getState:()=>state,notify:toast,onChange:
   if(model)for(const [key,cap] of [['chat_model','chat'],['create_model','create'],['edit_model','edit'],['diagram_model','create'],['music_model','music'],['video_model','video']])if(settingsDraft[key]===model.id&&!model.capabilities.includes(cap))settingsDraft[key]='';
   if(removed)for(const key of ['chat_model','create_model','edit_model','diagram_model','music_model','video_model'])if(settingsDraft[key]===removed)settingsDraft[key]='';
   if(model&&settingsDraft.diagram_model===model.id&&model.architecture!=='ming')settingsDraft.diagram_model='';
-  if(model?.architecture==='minimax-h3')settingsDraft.video_model=model.id;
+  if(model?.architecture==='minimax-h3'&&!settingsDraft.video_model)settingsDraft.video_model=model.id;
   if(model?.architecture==='yue2')settingsDraft.music_model=model.id;
   if(model?.architecture==='ming'&&!settingsDraft.diagram_model)settingsDraft.diagram_model=model.id;
   renderSettings();renderStatus();

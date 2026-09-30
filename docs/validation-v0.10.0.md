@@ -5,7 +5,7 @@ usati i file originali dei modelli, con diffusore standard H3 pruned INT8 FL2VA,
 encoder Qwen3-VL H3 NVFP4/AWQ, VAE video INT8/ConvRot e VAE audio FP32. Nessun
 server ComfyUI o H3-Studio era necessario al processo di generazione.
 
-- **122 test Python** e **2 test JavaScript** superati. Coprono anche selezione
+- **123 test Python** e **2 test JavaScript** superati. Coprono anche selezione
   esplicita/automatica video, precedenza rispetto alla musica, negazioni e richieste
   testuali, percorsi esterni, preset per modello, token Assistant per LLM,
   snapshot dei lavori, annullamento/riuso del processo, validazione degli allegati,
@@ -42,3 +42,12 @@ I test del servizio usano dati temporanei e mock per le generazioni dove indicat
 le due generazioni descritte sopra sono inferenze reali. Il collaudo su un modello
 e una GPU non certifica ogni variante H3 o configurazione hardware. La qualità di
 dialoghi, suoni, riferimenti e sincronizzazione visiva resta dipendente dal modello.
+
+Il preset di rilascio è Hybrid a **12 passi**, modificabile dall’admin. Il test
+completo da 15 s descritto sopra è stato eseguito a 8 passi sul diffusore Pruned;
+non rappresenta un benchmark del nuovo preset Hybrid a 12 passi.
+
+Collaudo aggiuntivo del diffusore **Hybrid** originale dalla cartella Forge:
+clip GPU di 1 s / 0,2 MP / **12 passi**, 608×352, 24 frame esportati a 24 fps,
+audio AAC a 32 kHz, circa 224 s incluso il caricamento. Il modello e i quattro
+componenti restano nei percorsi originali; il preset amministrativo è modificabile.
