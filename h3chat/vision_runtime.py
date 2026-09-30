@@ -12,7 +12,7 @@ def status(root):
     try:
         marker = json.loads((folder / 'ready.json').read_text(encoding='utf-8'))
         ready = marker.get('core_revision') == REVISION and all((folder / name).is_file() for name in (
-            'core/comfy/sd.py', 'core/comfy/text_encoders/ming_image.py', 'packages/torch/__init__.py', 'packages.json', 'dlls/msvcp140.dll'))
+            'core/comfy/sd.py', 'core/comfy/text_encoders/ming_image.py', 'core/comfy_extras/nodes_minimax_h3.py', 'core/comfy/text_encoders/minimax.py', 'packages/torch/__init__.py', 'packages.json', 'dlls/msvcp140.dll'))
     except (OSError, ValueError):
         ready = False
     return {'ready':ready, 'backends':['cuda','cpu'], 'revision':REVISION,

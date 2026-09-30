@@ -66,7 +66,7 @@ class Handler(BaseHTTPRequestHandler):
         if "application/json" not in self.headers.get("Content-Type", ""):
             raise ValueError("È richiesto un corpo JSON.")
         length = int(self.headers.get("Content-Length", "0"))
-        if length < 0 or length > 18 * 1024 * 1024:
+        if length < 0 or length > 90 * 1024 * 1024:
             raise ValueError("Richiesta troppo grande.")
         body = json.loads(self.rfile.read(length) or b"{}")
         if not isinstance(body, dict):
@@ -77,7 +77,7 @@ class Handler(BaseHTTPRequestHandler):
         if not path.is_file():
             self.json({"error": "File non trovato."}, 404)
             return
-        if path.suffix.lower()==".wav":return send_audio(self,path)
+        if path.suffix.lower() in ('.wav','.mp3','.ogg','.flac','.mp4'):return send_audio(self,path)
         body = path.read_bytes()
         self.send_response(200)
         mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
@@ -123,7 +123,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.file(safe_join(self.app.data / "exports", relative))
                 if path.startswith("/media/"):
                     relative = path[len("/media/"):]
-                    if not relative.startswith(("uploads/", "outputs/")) or Path(relative).suffix not in (".png", ".jpg", ".wav"):
+                    if not relative.startswith(("uploads/", "outputs/")) or Path(relative).suffix not in (".png", ".jpg", ".wav", ".mp3", ".flac", ".ogg", ".mp4"):
                         raise PermissionError("File non disponibile.")
                     return self.file(safe_join(self.app.data, relative))
                 return self.json({"error": "Risorsa non trovata."}, 404)

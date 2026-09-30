@@ -75,7 +75,7 @@ class MusicTests(unittest.TestCase):
    self.assertEqual(answer['status'],'done',answer['meta']);self.assertNotIn('Sorge il sole',answer['content'])
    self.assertEqual(answer['media'],[] if canvas else [media])
    self.assertEqual(self.app.validate_media([{'id':job_id}],canvas=True),[media])
-   with self.assertRaisesRegex(ValueError,'audio'):self.app.validate_media([{'id':job_id}])
+   self.assertEqual(self.app.validate_media([{'id':job_id}]),[media])  # Audio can now condition video.
    if canvas:self.assertIn('Sorge il sole',answer['meta']['artifact']['content'])
  def test_assistant_on_uses_shared_chat_engine(self):
   engine=self.app.engine;result={'title':'Alba','style':'pop','lyrics':'[Verse]\nSorge il sole','abc':'','instrumental':False}

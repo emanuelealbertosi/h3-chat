@@ -114,7 +114,8 @@ def assess_model(model, settings, hardware, references=1):
     """Estimate one loaded context and its inference workspace, for the selected placement."""
     chat='chat' in model['capabilities']; files=model['files']; p=model.get('parameters',{})
     music='music' in model['capabilities']
-    if not chat and not music:settings=settings|image_configured(model,settings)
+    video='video' in model['capabilities']
+    if not chat and not music and not video:settings=settings|image_configured(model,settings)
     sizes={role:sum(f['size']/GIB for f in files if f['role']==role) for role in {f['role'] for f in files}}
     projector=sizes.get('mmproj',0)
     if model.get('vision',{}).get('projector_size'): projector=model['vision']['projector_size']/GIB
@@ -125,6 +126,7 @@ def assess_model(model, settings, hardware, references=1):
     if music:
         from .music_runtime import backend as music_backend
         backend=music_backend(settings)
+    if video:backend='cuda'
     resident=settings.get('memory_policy')=='resident'
     gpus=[g for g in hardware['gpu'] if backend!='cuda' or g.get('vendor')=='NVIDIA']
     # Do not add different GPUs together or claim an unverified device selection.
@@ -171,6 +173,21 @@ def assess_model(model, settings, hardware, references=1):
         frac=1
         assumptions.append('YuE2: contesto musicale, pianificazione, sintesi e VAE inclusi nel picco prudente. I componenti interni si alternano per ridurre la VRAM; il processo può restare caricato.')
         assumptions.append('Il motore musicale usa CPU o CUDA, senza offload parziale automatico. Con poca VRAM scegli CPU o pesi più piccoli.')
+    elif video:
+        from .video_options import options
+        opts=options(model,settings,False)
+        workspace=3+3.5*(opts['megapixels']/.7)*(opts['duration']/15)+references*.25
+        vram=weights*1.2+workspace
+        cpu_ram=weights*1.25+workspace+2
+        needed_ram=weights*.2+2
+        if opts['offload']:
+            active=min(weights,max(0,(gpu.get('free_mb') or 0)/1024-3)) if gpu else 0
+            decoded=opts['frames']*opts['width']*opts['height']*3*4/GIB
+            needed_ram=(weights-active)*1.1+decoded+2
+            vram=workspace+min(6,weights*.25)
+        frac=1
+        assumptions.append('MiniMax H3: stima prudente da pesi, durata, risoluzione e riferimenti; non è una garanzia contro OOM. Calcolo CUDA per encoder, diffusore e VAE.')
+        assumptions.append('Offload attivo: i pesi inattivi restano in RAM e vengono trasferiti alla GPU. Il processo residente non implica tutti i pesi in VRAM.' if opts['offload'] else 'Offload disattivo: tutti i componenti devono entrare in VRAM.')
     else:
         main=sizes.get('diffusion',sizes.get('model',0))
         companions=weights-main
@@ -222,6 +239,11 @@ def assess_model(model, settings, hardware, references=1):
         elif status=='ok' and chat and frac<1:
             status='offload';title='Offload previsto';advice='I layer selezionati entrano nella VRAM stimata; i rimanenti usano la RAM e rallentano la risposta.'
     if music and backend!='cpu' and not gpus:patches={'music_backend':'cpu'}
+    if video:
+        patches={}
+        if not gpus:status='unknown';title='NVIDIA CUDA richiesta';advice='MiniMax H3 richiede una GPU NVIDIA compatibile; non viene usato il calcolo CPU.'
+        elif status=='ok' and opts['offload']:status='offload';title='Offload video attivo';advice='Pesi inattivi in RAM, calcolo sulla GPU. I trasferimenti aumentano i tempi.'
+        elif status=='oom':title='Rischio OOM video';advice='Riduci durata, risoluzione o dimensione dei pesi, libera RAM/VRAM o attiva offload nel preset video.'
     if music and backend!='cpu' and gpu and gpu.get('free_mb') is not None and vram>max(0,gpu['free_mb']/1024-.5):
         status='oom';title='Rischio OOM musica';advice='La VRAM stimata non basta a YuE2: seleziona CPU nel motore Musica oppure pesi più piccoli.';risk=True;patches={'music_backend':'cpu'}
     if model.get('engine') in ('vision','music') and backend not in ('cpu','cuda'):
@@ -239,7 +261,7 @@ def assess_selection(models, settings, hardware, references=1):
     """
     unique = {}
     for model in models:
-        kind = 'chat' if 'chat' in model['capabilities'] else 'music' if 'music' in model['capabilities'] else 'image'
+        kind = 'chat' if 'chat' in model['capabilities'] else 'music' if 'music' in model['capabilities'] else 'video' if 'video' in model['capabilities'] else 'image'
         key = (kind,tuple(sorted((f['role'],f['path']) for f in model['files'])))
         unique[key] = model
     values = [assess_model(m,settings,hardware,references) for m in unique.values()]
@@ -251,6 +273,7 @@ def assess_selection(models, settings, hardware, references=1):
     if any('music' in m['capabilities'] for m in models):
         from .music_runtime import backend as music_backend
         if music_backend(settings)!='cpu':backend=music_backend(settings)
+    if any('video' in m['capabilities'] for m in models):backend='cuda'
     gpus = [g for g in hardware['gpu'] if backend!='cuda' or g.get('vendor')=='NVIDIA']
     free_ram = hardware['ram'].get('free_mb')
     status,title,advice = 'ok','OK stimato','I modelli scelti sembrano rientrare nella memoria libera.'

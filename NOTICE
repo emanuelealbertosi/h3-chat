@@ -18,7 +18,8 @@ nlohmann/json (MIT), stb_image and stb_image_write (MIT/public-domain dual licen
 Source URLs and SHA-256 hashes are recorded in native/vendor/SOURCES.json.
 Each vendored header retains its upstream copyright and license notice.
 
-The optional Ming / Qwen 2.1 worker (native/vision-worker.py) and its ComfyUI
+The optional Ming / Qwen 2.1 image worker (native/vision-worker.py), MiniMax H3
+video worker (native/video-worker.py) and their ComfyUI
 inference library are GPL-3.0-or-later. The optional runtime includes complete
 unmodified core source, licenses and Python distribution notices. See
 docs/vision-engine.md and runtime/vision/SOURCES.json. No model weights are bundled.

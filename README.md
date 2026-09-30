@@ -1,10 +1,10 @@
 # H3-Chat
 
-Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle app H3. Una sola conversazione per testo, codice, immagini, canzoni, formule, grafici e diagrammi. I motori sono gestiti dall'app; non servono Ollama, LM Studio, ComfyUI, chiavi API o abbonamenti.
+Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle app H3. Una sola conversazione per testo, codice, immagini, canzoni, video, formule, grafici e diagrammi. I motori sono gestiti dall'app; non servono Ollama, LM Studio, ComfyUI, chiavi API o abbonamenti.
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.9.4-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.9.4/H3-Chat-0.9.4-windows-x64.zip) dalla [release v0.9.4](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.9.4), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.10.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.10.0/H3-Chat-0.10.0-windows-x64.zip) dalla [release v0.10.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.10.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 
@@ -26,6 +26,7 @@ La finestra desktop usa Microsoft Edge in modalità app, normalmente già presen
 - «Leggi questo grafico e ricostruiscilo…» → modello vision, dati e renderer numerico.
 - «Spiegami questa formula…» → testo e LaTeX.
 - «Crea una canzone rock…» oppure il pulsante **Music** → motore musicale YuE2.
+- «Crea un video…», «Anima questa immagine» oppure **Video** → MiniMax H3, con default 15 secondi / 0,7 MP.
 
 La chat resta unica. Nel composer puoi lasciare Immagini su Automatico oppure selezionare esplicitamente il modello immagini. Le richieste esplicite più comuni sono riconosciute direttamente; quelle ambigue sono classificate dal modello chat con uno schema JSON vincolato. I modelli piccoli possono interpretare male richieste complesse: per codice, routing e analisi densa scegli un modello più capace dal setup.
 
@@ -46,6 +47,16 @@ Il risultato ha un player con avanzamento e download **WAV stereo 48 kHz**. Con 
 Il motore musicale CPU è incluso nel pacchetto Windows; il motore NVIDIA CUDA si installa dal Setup e poi funziona offline. Non occorre H3-Music, un server esterno o il CUDA Toolkit. AMD/Intel possono usare CPU per YuE2; questo motore non supporta Vulkan. **A richiesta** libera l’LLM prima della musica e YuE2 prima di tornare alla chat. **Residenti** conserva i processi; YuE2 alterna comunque internamente pianificazione, sintesi e decodifica per contenere la VRAM. Le stime RAM/VRAM sono prudenziali: su poca VRAM si può scegliere CPU, senza promessa di offload GPU parziale.
 
 Il canto italiano è sperimentale. I pesi YuE2 sono soggetti a **CC BY-NC 4.0**; non sono inclusi nell’archivio dell’app. Dettagli, build e provenienza: [motore musicale](docs/music-engine.md).
+
+## Video · MiniMax H3
+
+Nella stessa chat premi **Video** oppure chiedi «Crea un video», «Genera un filmato» o «Anima questa immagine». Il risultato è un MP4 con audio, player e download; con canvas attivo appare nel canvas. In **Setup → Video → Sfoglia e collega** scegli diffusore H3 standard FL2VA/REF2VA, encoder Qwen3-VL per H3, VAE video e VAE audio, tutti safetensors e nelle loro cartelle originali. Il motore privato si installa dallo stesso pannello, è condiviso con Ming/Qwen e poi funziona offline. Richiede NVIDIA CUDA; PDD/Turbo e GGUF non sono supportati.
+
+Default per modello: **15 secondi, 0,7 MP, 16:9 (1152×640), 24 fps, 8 step, CFG 1, Res Multistep/Simple**. In **Avanzate** puoi cambiare durata, risoluzione, formato, passi, sampler, scheduler, seed e shift. L’offload dei pesi inattivi in RAM è attivo per contenere la VRAM; il calcolo resta sulla GPU. Disattivarlo richiede memoria sufficiente per tutti i componenti. **A richiesta** libera l’altro motore prima del video; **Residenti** conserva il processo e rispetta comunque l’offload del preset.
+
+Allega fino a **9 immagini e 3 audio** (WAV, MP3, FLAC, OGG). Scrivi, per esempio: «Immagine 1 come frame iniziale, immagine 2 a 7 secondi, immagine 3 come riferimento del personaggio. Usa audio 1 con lip-sync». **Assistant On** prepara istruzioni inglesi, ruoli e tempi usando lo stesso LLM chat; dialoghi e parole restano nella lingua richiesta. Vision On usa il mmproj chat sulla CPU quando disponibile. Assistant non trascrive audio; il motore video riceve la traccia originale. **Assistant Off** passa il prompt direttamente e riconosce indicazioni esplicite come `immagine 2 a 7 secondi`; [guida e limiti](docs/video-engine.md).
+
+Il lip-sync usa l’audio per condizionare la generazione con denoise audio zero e almeno 8 passi standard, poi conserva la traccia sorgente nel MP4. La sincronizzazione visiva dipende dal modello. Una traccia da conservare deve coprire la durata scelta; i brevi riferimenti di voce o stile non devono coprire tutto il video. Il limite di output dell’Assistant si salva per ciascun LLM. **Avanzate in chat** mostra istruzioni, ruoli e parametri effettivi del video.
 
 ## Vision e modelli locali
 
@@ -114,7 +125,7 @@ isolati. NVIDIA CUDA oppure CPU; Vulkan resta per gli altri motori.
 
 Nel Setup scegli i modelli **predefiniti**. In **Preferenze** scegli invece il **Modello da configurare**: modificarne il preset non cambia quello predefinito. Dal Catalogo puoi aprire direttamente **Parametri del modello**. Salva per conservare i valori.
 
-- **LLM:** contesto, max token, temperatura, thinking, layer GPU, MTP e limiti di output dell’Assistant immagini/musica vengono ricordati per ciascun modello. Se cambi LLM ritrovi i suoi valori. La configurazione già salvata viene conservata come preset del LLM attuale.
+- **LLM:** contesto, max token, temperatura, thinking, layer GPU, MTP e limiti di output dell’Assistant immagini/musica/video vengono ricordati per ciascun modello. Se cambi LLM ritrovi i suoi valori. La configurazione già salvata viene conservata come preset del LLM attuale.
 - **Immagini:** risoluzione, step, CFG, sampler, scheduler, seed, negative prompt e intensità di editing appartengono al modello selezionato. Con **Avanzate** li modifichi; vengono usati tanto dalla scelta esplicita in chat quanto dal routing automatico.
 - **Musica:** ogni modello conserva il proprio preset di generazione.
 
@@ -124,7 +135,7 @@ Backend, profilo hardware, thread, politica di memoria e istruzioni personali ri
 
 In **Preferenze → Parametri dei modelli chat → Contesto LLM** puoi impostare 64k (65.536 token), 128k, 256k e altri valori manuali: non c’è più il precedente tetto di 32.768 token. L’app legge il contesto dichiarato dal GGUF del modello selezionato e lo mostra accanto al campo. Se lo superi compare un avviso: il supporto dell’estensione dipende dal modello e dal motore, non è garantito dall’app. Se il dato manca, l’app lo indica senza inventare un limite. La stima di memoria include la KV cache per l’intero contesto scelto; salvare un contesto maggiore non garantisce che entri nella RAM/VRAM disponibile. Il valore viene passato al motore al prossimo caricamento.
 
-Il **contesto totale** comprende istruzioni, cronologia, token delle immagini e risposta. **Max token di risposta** limita solo l’output della chat; **Max token Assistant** limita le istruzioni prodotte per immagini o musica e non modifica il contesto LLM.
+Il **contesto totale** comprende istruzioni, cronologia, token delle immagini e risposta. **Max token di risposta** limita solo l’output della chat; **Max token Assistant** limita le istruzioni prodotte per immagini, musica o video e non modifica il contesto LLM.
 
 In chat, accanto a Think, il pulsante **MTP · Max token** mostra lo stato e il limite di risposta e apre le **Preferenze**. **Max token di risposta** era già disponibile e mantiene il valore salvato: 64–8192 token, fino a metà del contesto, comprendendo il thinking e gli artefatti nel canvas.
 
@@ -147,7 +158,7 @@ In **Impostazioni → Setup → Modelli in memoria** scegli:
 - **A richiesta** (predefinito): conserva il modello corrente fra i messaggi. Prima di usarne uno diverso, termina il processo precedente per liberare RAM/VRAM. Chat → creazione → editing → chat comporta i cambi necessari; se crea ed edit condividono lo stesso modello, il processo e i pesi vengono riutilizzati. Le richieste immagini esplicite non caricano inutilmente il router LLM; quelle ambigue possono richiederlo.
 - **Residenti**: al prossimo messaggio carica tutti i modelli selezionati e già installati, poi li conserva fino al cambio di configurazione, al rilascio manuale o alla chiusura. Sulla GPU richiede tutti i layer LLM e i componenti dei modelli immagini; il mmproj resta sulla CPU; con CPU conserva tutto in RAM. I modelli non scaricati non vengono caricati automaticamente. Il numero di layer GPU nelle Preferenze vale per A richiesta.
 
-Durante il lavoro, l’animazione nella risposta distingue **creazione immagini, modifica immagini, musica e scrittura nel canvas**, con fase corrente e tempo trascorso. I motori comunicano caricamento o riuso del modello e avanzamento della generazione. Per Qwen Image 2.1 con CFG 1 viene evitata l’elaborazione della condizione negativa, che non partecipa al risultato.
+Durante il lavoro, l’animazione nella risposta distingue **creazione immagini, modifica immagini, musica, video e scrittura nel canvas**, con fase corrente e tempo trascorso. I motori comunicano caricamento o riuso del modello e avanzamento della generazione. Per Qwen Image 2.1 con CFG 1 viene evitata l’elaborazione della condizione negativa, che non partecipa al risultato.
 
 Il pulsante memoria sotto la chat mostra quanti modelli sono caricati e apre il setup. **Libera memoria** scarica tutti i modelli e chiude la cache quando non ci sono lavori; i file su disco e le chat restano disponibili. Un cambio di modello, backend, contesto o modalità ricarica i contesti interessati. Think, temperatura e dimensioni dell'immagine non obbligano a ricaricare i pesi. Le impostazioni cambiate durante un lavoro si applicano dopo quel lavoro; ogni richiesta conserva la propria configurazione.
 

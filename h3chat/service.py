@@ -14,6 +14,8 @@ from .downloads import Cancelled, Downloads, model_ready, safe_join
 from .engine import CREATE_NO_WINDOW, Engine, runtime_executable, explicit_route
 from .visual_routing import visual_route
 from .music_routing import route as music_route
+from .video_routing import route as video_route
+from .video_options import validate as validate_video_options, DEFAULTS as VIDEO_DEFAULTS, ASPECTS as VIDEO_ASPECTS
 from .music_options import validate as validate_music_options, validate_fields as validate_music_fields, NUMBERS as MUSIC_NUMBERS, DEFAULTS as MUSIC_DEFAULTS, INTEGER as MUSIC_INTEGER
 from .music_runtime import status as music_status
 from .vision_runtime import status as vision_status, SAMPLERS as VISION_SAMPLERS, SCHEDULERS as VISION_SCHEDULERS
@@ -69,6 +71,7 @@ class Service:
         return {"token": self.token, "version": __version__, "settings": self.store.settings(), "profiles": PROFILES,
                 "llm_options":{"keys":LLM_KEYS,"defaults":{profile:llm_defaults(profile) for profile in PROFILES},"max_context":MAX_CONTEXT},
                 "music_runtime":music_status(self.root), "music_options":{"defaults":MUSIC_DEFAULTS,"numbers":MUSIC_NUMBERS,"integers":sorted(MUSIC_INTEGER)},
+                "video_options":{"defaults":VIDEO_DEFAULTS,"aspects":VIDEO_ASPECTS},
                 "vision_runtime":vision_status(self.root), "models": models,"image_options":{"samplers":NATIVE_SAMPLERS,"schedulers":NATIVE_SCHEDULERS,"vision_samplers":VISION_SAMPLERS,"vision_schedulers":VISION_SCHEDULERS,"defaults":{k:DEFAULTS[k] for k in IMAGE_DEFAULT_KEYS}},"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
                 "runtimes": {key: {"ready": vision_status(self.root)["ready"] if key=="vision" else music_status(self.root).get(key.removeprefix("music_"),{}).get("ready",False) if key.startswith("music_") else all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
                                     "size": sum(f["size"] for f in r["files"])} for key, r in self.runtimes.items()},
@@ -89,7 +92,7 @@ class Service:
             self.refresh_models()
             model=self.catalog[config['id']]
             settings=self.store.settings()
-            self.store.save_settings({key:'' for key,cap in (('chat_model','chat'),('create_model','create'),('edit_model','edit'),('diagram_model','create'),('music_model','music')) if settings[key]==config['id'] and (cap not in model['capabilities'] or (key=='diagram_model' and model.get('architecture')!='ming'))})
+            self.store.save_settings({key:'' for key,cap in (('chat_model','chat'),('create_model','create'),('edit_model','edit'),('diagram_model','create'),('music_model','music'),('video_model','video')) if settings[key]==config['id'] and (cap not in model['capabilities'] or (key=='diagram_model' and model.get('architecture')!='ming'))})
             self.engine.configure(self.store.settings())
             self.engine.cache.clear()
             return model | inspect_model(self.root,model)
@@ -102,7 +105,7 @@ class Service:
                 raise ValueError('Attendi o interrompi i lavori prima di scollegare il modello.')
             self.store.execute('DELETE FROM external_models WHERE id=?',(model_id,))
             settings=self.store.settings()
-            self.store.save_settings({key:'' for key in ('chat_model','create_model','edit_model','diagram_model','music_model') if settings[key]==model_id})
+            self.store.save_settings({key:'' for key in ('chat_model','create_model','edit_model','diagram_model','music_model','video_model') if settings[key]==model_id})
             self.refresh_models()
             self.engine.configure(self.store.settings())
             self.engine.cache.clear()
@@ -143,7 +146,7 @@ class Service:
             raise ValueError("MTP: scegli attivato o disattivato.")
         if type(s["setup_done"]) is not bool:
             raise ValueError("setup_done non valido.")
-        for key, capability in (("chat_model", "chat"), ("create_model", "create"), ("edit_model", "edit"), ("diagram_model", "create"), ("music_model", "music")):
+        for key, capability in (("chat_model", "chat"), ("create_model", "create"), ("edit_model", "edit"), ("diagram_model", "create"), ("music_model", "music"), ("video_model", "video")):
             if s[key] and (s[key] not in self.catalog or capability not in self.catalog[s[key]]["capabilities"]):
                 raise ValueError(f"Modello incompatibile con {capability}.")
         if s['diagram_model'] and self.catalog[s['diagram_model']].get('architecture') != 'ming':
@@ -156,6 +159,12 @@ class Service:
         for key,value in s['music_overrides'].items():
             if not isinstance(key,str) or len(key)>150:raise ValueError('Identificativo preset musicale non valido.')
             validate_music_options(value)
+        if type(s['video_auto']) is not bool or type(s['video_advanced']) is not bool:raise ValueError('Video: opzione non valida.')
+        if type(s['video_prompt_max_tokens']) is not int or not 256<=s['video_prompt_max_tokens']<=8192:raise ValueError('Token Assistant video: scegli da 256 a 8192.')
+        if not isinstance(s['video_overrides'],dict) or len(s['video_overrides'])>100:raise ValueError('Preset video non validi.')
+        for key,value in s['video_overrides'].items():
+            if not isinstance(key,str) or len(key)>150:raise ValueError('Identificativo preset video non valido.')
+            validate_video_options(value)
         if type(s['vision_enabled']) is not bool:raise ValueError('Vision: scegli On oppure Off.')
         if type(s['diagram_auto']) is not bool:raise ValueError('Routing grafici non valido.')
         if type(s['prompt_max_tokens']) is not int or not 256 <= s['prompt_max_tokens'] <= 8192:
@@ -187,14 +196,14 @@ class Service:
     def assess(self, body):
         settings = self.validate_settings(body.get("settings", {}))
         refs = body.get("references", 1)
-        if type(refs) is not int or not 0 <= refs <= 4:
+        if type(refs) is not int or not 0 <= refs <= 12:
             raise ValueError("Numero di riferimenti non valido.")
         hardware = self.hardware()
         models = self.refresh_models()
         chosen_loras=self.loras.capture(body.get("loras",[]),settings["lora_dirs"],self.catalog)
         selected = []
         selected_models = []
-        for key in ("chat_model", "create_model", "edit_model", "diagram_model", "music_model"):
+        for key in ("chat_model", "create_model", "edit_model", "diagram_model", "music_model", "video_model"):
             model = next((m for m in models if m["id"] == settings[key]), None)
             if model:
                 model=model|{"active_lora_bytes":sum(l["size"] for l in chosen_loras if l["model_id"]==model["id"] and l["weight"]!=0)}
@@ -208,16 +217,21 @@ class Service:
             raw = base64.b64decode(body["data"], validate=True)
         except Exception as exc:
             raise ValueError("Allegato non valido.") from exc
-        if len(raw) > 12 * 1024 * 1024:
-            raise ValueError("Ogni immagine può occupare al massimo 12 MB.")
+        if len(raw) > 64 * 1024 * 1024:
+            raise ValueError("Ogni allegato può occupare al massimo 64 MB (immagini: 12 MB).")
         if raw.startswith(b"\x89PNG\r\n\x1a\n"):
             ext, mime = "png", "image/png"
             if len(raw) < 24 or max(int.from_bytes(raw[16:20], "big"), int.from_bytes(raw[20:24], "big")) > 8192:
                 raise ValueError("PNG troppo grande o non valido (massimo 8192 px).")
         elif raw.startswith(b"\xff\xd8\xff"):
             ext, mime = "jpg", "image/jpeg"
+        elif raw.startswith(b'RIFF') and raw[8:12]==b'WAVE':ext,mime='wav','audio/wav'
+        elif raw.startswith(b'fLaC'):ext,mime='flac','audio/flac'
+        elif raw.startswith(b'ID3') or len(raw)>2 and raw[0]==255 and raw[1]&224==224:ext,mime='mp3','audio/mpeg'
+        elif raw.startswith(b'OggS'):ext,mime='ogg','audio/ogg'
         else:
-            raise ValueError("Usa immagini PNG o JPEG.")
+            raise ValueError("Usa immagini PNG/JPEG o audio WAV, MP3, FLAC, OGG.")
+        if mime.startswith('image/') and len(raw)>12*1024**2:raise ValueError('Ogni immagine può occupare al massimo 12 MB.')
         image_id = uid()
         relative = f"uploads/{image_id}.{ext}"
         target = safe_join(self.data, relative)
@@ -228,8 +242,8 @@ class Service:
         return result
 
     def validate_media(self, media, *, canvas=False):
-        if not isinstance(media, list) or len(media) > 4:
-            raise ValueError("Allega fino a quattro immagini per messaggio.")
+        if not isinstance(media, list) or len(media) > 12:
+            raise ValueError("Per i video allega fino a nove immagini e tre tracce audio.")
         resolved = []
         for item in media:
             image_id = item.get("id", "") if isinstance(item, dict) else ""
@@ -243,8 +257,10 @@ class Service:
                 found = next((m for row in matches for m in json.loads(row["media"]) if m["id"] == image_id), None)
                 if not found:
                     raise ValueError("Immagine non trovata.")
-                if not canvas and not str(found.get("mime","")).startswith("image/"):raise ValueError("Il motore immagini richiede un riferimento PNG o JPEG, non un brano audio.")
+                if not canvas and not str(found.get("mime","")).startswith(('image/','audio/')):raise ValueError("Allega immagini o tracce audio come riferimenti video.")
                 resolved.append(found)
+        if not canvas and (sum(x['mime'].startswith('image/') for x in resolved)>9 or sum(x['mime'].startswith('audio/') for x in resolved)>3):raise ValueError('Massimo nove immagini e tre audio.')
+        if len({x['id'] for x in resolved})!=len(resolved):raise ValueError('Non allegare due volte lo stesso file.')
         return resolved
 
     def send(self, chat_id, body):
@@ -260,12 +276,14 @@ class Service:
         assistant = body.get('assistant',True)
         if type(assistant) is not bool:raise ValueError('Assistant: scegli On oppure Off.')
         music=body.get('music',False)
+        video=body.get('video',False)
+        if type(video) is not bool:raise ValueError('Video: scegli attivo o disattivo.')
         if type(music) is not bool:raise ValueError('Music: scegli attivo o disattivo.')
-        if music and selection:raise ValueError('Scegli Music oppure un modello immagini esplicito.')
+        if sum((bool(selection),music,video))>1:raise ValueError('Scegli Video, Music oppure un modello immagini esplicito.')
         fields=validate_music_fields(body.get('music_fields',{}))
-        settings = settings | {'_image_model':selection,'_assistant':assistant,'_music':music,'_music_fields':fields}
+        settings = settings | {'_image_model':selection,'_assistant':assistant,'_music':music,'_music_fields':fields,'_video':video}
         request_history=[{'content':prompt,'media':media}]
-        direct_media=music_route(request_history,settings) or visual_route(request_history,settings) or explicit_route(request_history) in ('create','edit')
+        direct_media=video_route(request_history,settings) or music_route(request_history,settings) or visual_route(request_history,settings) or explicit_route(request_history) in ('create','edit')
         if assistant or not direct_media:
             self.engine.require_model(settings["chat_model"], "chat")
         canvas = body.get("canvas", False)
@@ -337,7 +355,7 @@ class Service:
                 self.store.execute("UPDATE jobs SET stage=? WHERE id=?", (label, job["id"]))
             self.engine.prepare(settings, cancel, stage)
             visual_history=[m|{"media":[x for x in m["media"] if x.get("mime", "").startswith("image/")]} for m in history]
-            selected_route = music_route(history,settings) or visual_route(visual_history,settings)
+            selected_route = video_route(history,settings) or music_route(history,settings) or visual_route(visual_history,settings)
             direct = explicit_route(visual_history)
             direct_media=(selected_route or direct in ('create','edit')) and not settings.get('_assistant',True)
             model={} if direct_media else self.engine.require_model(settings["chat_model"], "chat")
@@ -360,6 +378,8 @@ class Service:
             if intent!='chat':
                 for key in ('think_level','think_budget','model_warning'):meta.pop(key,None)
             self.store.update_answer(job,text,meta=meta)
+            if intent!='video' and any(x['mime'].startswith('audio/') for x in payload['media']):
+                raise ValueError('Gli allegati audio servono alla generazione video. Seleziona Video o chiedi un video con questi riferimenti; la chat non trascrive audio.')
             if intent == "chat":
                 stage("Scrittura della risposta")
                 last_update = 0
@@ -404,6 +424,22 @@ class Service:
                     meta["artifact"] = {"title":saved["title"],"content":saved["content"],"media":json.loads(saved["media"])}
                 self.store.update_answer(job, text, "done", meta=meta)
                 stage("Risposta completata" if finish != "length" else "Limite di risposta raggiunto: puoi chiedere di continuare")
+            elif intent == "video":
+                video_model=self.engine.require_model(settings['video_model'],'video')
+                refs=payload['media']
+                if not refs and re.search(r'\b(questa|questo|allegat\w*|precedente|this|previous)\b',payload['prompt'],re.I):
+                    refs=next(([x for x in m['media'] if x['mime'].startswith(('image/','audio/'))] for m in reversed(history[:-1]) if any(x['mime'].startswith(('image/','audio/')) for x in m['media'])),[])
+                meta['model']=video_model['name'];self.store.update_answer(job,text,meta=meta)
+                plan,assistant_info=self.engine.refine_video(history,payload['prompt'],refs,video_model,settings,cancel,log_path,stage)
+                media=self.engine.generate_video(video_model,settings,plan,refs,job['id'],cancel,stage)
+                meta.update(assistant_on=settings.get('_assistant',True),assistant=assistant_info,video_plan=plan,video_parameters=media['generation'],references=refs,video_selection=route.get('selection','auto'))
+                meta['loras_skipped']=public_loras(payload.get('loras',[]))
+                if payload.get('canvas'):
+                    self.save_artifact(job['chat_id'],'Video MiniMax H3','',[media])
+                    meta['artifact']={'title':'Video MiniMax H3','content':'','media':[media]}
+                    self.store.update_answer(job,'Ho creato il video nel canvas.','done',[],meta)
+                else:self.store.update_answer(job,'Ecco il video.','done',[media],meta)
+                stage('Video pronto')
             elif intent == "music":
                 music_model=self.engine.require_model(settings['music_model'],'music')
                 meta['model']=music_model['name'];self.store.update_answer(job,text,meta=meta)

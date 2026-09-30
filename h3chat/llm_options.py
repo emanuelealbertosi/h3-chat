@@ -2,8 +2,8 @@
 import copy
 import math
 
-KEYS=('context','max_tokens','temperature','think_level','gpu_layers','mtp_enabled','mtp_draft_tokens','prompt_max_tokens','music_prompt_max_tokens')
-BASE={'context':4096,'max_tokens':1024,'temperature':.7,'think_level':'off','gpu_layers':20,'mtp_enabled':False,'mtp_draft_tokens':3,'prompt_max_tokens':2200,'music_prompt_max_tokens':2200}
+KEYS=('context','max_tokens','temperature','think_level','gpu_layers','mtp_enabled','mtp_draft_tokens','prompt_max_tokens','music_prompt_max_tokens','video_prompt_max_tokens')
+BASE={'context':4096,'max_tokens':1024,'temperature':.7,'think_level':'off','gpu_layers':20,'mtp_enabled':False,'mtp_draft_tokens':3,'prompt_max_tokens':2200,'music_prompt_max_tokens':2200,'video_prompt_max_tokens':3000}
 MAX_CONTEXT=2**31-1
 
 def defaults(profile):
@@ -11,7 +11,7 @@ def defaults(profile):
 
 def validate(values):
     if not isinstance(values,dict) or set(values)-set(KEYS):raise ValueError('Parametri del preset LLM non validi.')
-    for key,lo,hi in (('context',1024,MAX_CONTEXT),('max_tokens',64,8192),('gpu_layers',0,999),('mtp_draft_tokens',1,8),('prompt_max_tokens',256,8192),('music_prompt_max_tokens',256,8192)):
+    for key,lo,hi in (('context',1024,MAX_CONTEXT),('max_tokens',64,8192),('gpu_layers',0,999),('mtp_draft_tokens',1,8),('prompt_max_tokens',256,8192),('music_prompt_max_tokens',256,8192),('video_prompt_max_tokens',256,8192)):
         if key in values and (type(values[key]) is not int or not lo<=values[key]<=hi):raise ValueError(f'{key}: inserisci un intero tra {lo} e {hi}.')
     if 'temperature' in values and (type(values['temperature']) not in (int,float) or not math.isfinite(values['temperature']) or not 0<=values['temperature']<=2):raise ValueError('Temperatura LLM fuori intervallo.')
     if 'think_level' in values and values['think_level'] not in ('off','low','med','high','xhigh'):raise ValueError('Thinking LLM non valido.')

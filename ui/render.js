@@ -63,7 +63,8 @@ export async function renderRich(target,text,{final=true}={}) {
 export function appendMedia(target,media) {
   for(const m of media||[]){
     const figure=document.createElement('figure'),url='/media/'+escape(m.path);
-    if(m.mime?.startsWith('audio/')){figure.className='audio-output';figure.innerHTML=`<div class="audio-title">♫ ${escape(m.name)}</div><audio class="no-export" controls preload="metadata" src="${url}" aria-label="${escape(m.name)}"></audio><figcaption class="no-export"><a href="${url}" download="${escape(m.name)}">Scarica WAV originale</a></figcaption>`;}
+    if(m.mime?.startsWith('video/')){figure.className='video-output';figure.innerHTML=`<video controls playsinline preload="metadata" src="${url}" aria-label="${escape(m.name)}"></video><figcaption><a href="${url}" download="${escape(m.name)}">Scarica MP4</a></figcaption>`;}
+    else if(m.mime?.startsWith('audio/')){figure.className='audio-output';figure.innerHTML=`<div class="audio-title">♫ ${escape(m.name)}</div><audio class="no-export" controls preload="metadata" src="${url}" aria-label="${escape(m.name)}"></audio><figcaption class="no-export"><a href="${url}" download="${escape(m.name)}">Scarica audio originale</a></figcaption>`;}
     else{figure.className='image-output';figure.innerHTML=`<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="${escape(m.name)}" loading="lazy"></a><figcaption class="no-export">${escape(m.name)} <a href="${url}" download>Scarica originale</a></figcaption>`;}
     target.append(figure);
   }

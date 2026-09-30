@@ -11,6 +11,8 @@ from .models import metadata
 from .image_options import SAMPLERS, SCHEDULERS
 
 PROFILES = {
+    'minimax-h3': {'label':'MiniMax H3 · video, fotogrammi e audio','main':'diffusion','required':['diffusion','llm','vae','audio_vae'],'optional':[],
+                   'architecture':'minimax-h3','engine':'video','capabilities':['video'],'max_refs':9},
     'yue2': {'label':'YuE2 · canzoni e musica','main':'model','required':['model','vae'],'optional':[],
              'architecture':'yue2','engine':'music','capabilities':['music'],'max_refs':0},
     'ming': {'label':'Ming Image 0.1 Design · grafici, crea e modifica','main':'diffusion','required':['diffusion','llm','vae'],'optional':[],
@@ -34,7 +36,7 @@ PROFILES = {
 }
 ROLE_LABELS = {'model':'Pesi del modello','diffusion':'Diffusore','mmproj':'Proiettore vision (mmproj)',
                'tokenizer':'Tokenizer musicale','model_config':'Configurazione YuE2','generation_config':'Preset YuE2','vae_config':'Configurazione VAE audio',
-               'vae':'VAE','llm':'Encoder del modello immagini','llm_vision':'Encoder vision'}
+               'vae':'VAE immagini / video','audio_vae':'VAE audio MiniMax H3','llm':'Encoder testo / immagini del modello','llm_vision':'Encoder vision'}
 EXTENSIONS = {'.gguf','.safetensors'}
 
 
@@ -143,6 +145,7 @@ def validate_config(body, model_id=None):
         p=absolute_path(value)
         if not valid_weight(p):raise ValueError(f'{ROLE_LABELS[role]}: scegli un file GGUF o safetensors leggibile e valido.')
         if profile.get('engine')=='vision' and p.suffix.lower()!='.safetensors':raise ValueError('Ming e Qwen Image 2.1 richiedono i tre componenti safetensors; GGUF non supportato da questo motore.')
+        if kind=='minimax-h3' and p.suffix.lower()!='.safetensors':raise ValueError('MiniMax H3 richiede quattro componenti safetensors. Usa il modello standard FL2VA / REF2VA, non PDD/Turbo.')
         if kind=='yue2' and p.suffix.lower()!='.gguf':raise ValueError('YuE2 richiede pesi e VAE in formato GGUF.')
         if kind=='chat' and p.suffix.lower()!='.gguf':raise ValueError('Il motore chat richiede file GGUF.')
         if role=='mmproj' and metadata(p).get('general.architecture')!='clip':raise ValueError('Il mmproj non contiene metadati di un proiettore vision.')
@@ -153,7 +156,7 @@ def validate_config(body, model_id=None):
         raise ValueError('Seleziona la prima parte GGUF (00001); sono supportate fino a 256 parti.')
     ident=model_id or 'external-'+hashlib.sha256((kind+'\0'+os.path.normcase(str(main))).encode()).hexdigest()[:20]
     config={'id':ident,'profile':kind,'name':name.strip(),'files':resolved,'projector_mode':mode}
-    if kind not in ('chat','yue2'):
+    if kind not in ('chat','yue2','minimax-h3'):
         steps=body.get('steps',profile.get('steps',0));cfg=body.get('cfg',profile.get('cfg',7))
         if type(steps) is not int or not 0<=steps<=100 or type(cfg) not in (int,float) or not 0<=cfg<=30:
             raise ValueError('Passi o CFG non validi.')
@@ -199,7 +202,7 @@ def suggest(body):
         if i>=2000:break
         if p==main or not p.is_file() or p.suffix.lower() not in EXTENSIONS:continue
         name=p.name.lower()
-        role='mmproj' if 'mmproj' in name else 'llm_vision' if 'vision' in name and kind!='chat' else 'vae' if 'vae' in name else 'llm' if any(s in name for s in ('qwen','encoder','llm')) else None
+        role='audio_vae' if kind=='minimax-h3' and 'audio' in name and 'vae' in name else 'mmproj' if 'mmproj' in name else 'llm_vision' if 'vision' in name and kind!='chat' else 'vae' if 'vae' in name else 'llm' if any(s in name for s in ('qwen','encoder','llm')) else None
         if role in candidates and valid_weight(p):candidates[role].append(str(p.resolve()))
     info=metadata(main) if kind=='chat' else {}
     return {'name':str(info.get('general.name') or main.stem),'candidates':candidates,

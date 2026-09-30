@@ -14,6 +14,7 @@ PROFILES = {
     "balanced": {"context": 8192, "gpu_layers": 99, "width": 768, "height": 768},
 }
 DEFAULTS = {
+    "video_model": "", "video_auto": True, "video_advanced": False, "video_overrides": {}, "video_prompt_max_tokens": 3000,
     "llm_overrides": {},
     "profile": "low", "backend": "vulkan", "chat_model": "", "create_model": "",
     "music_model": "yue2-q8", "music_auto": True, "music_backend": "cuda", "music_threads": 8,
@@ -124,7 +125,7 @@ class Store:
     def enqueue(self, chat_id, prompt, media, settings, canvas=False, loras=None):
         job_id, user_id, answer_id, now = uid(), uid(), uid(), time.time()
         loras=loras or []
-        lora_meta={"music":settings.get("_music",False),"music_fields":settings.get("_music_fields",{}),"image_model":settings.get("_image_model",""),"assistant":settings.get("_assistant",True),"loras":[{k:l[k] for k in ("id","name","weight","model_id","model_name")} for l in loras]}
+        lora_meta={"video":settings.get("_video",False),"music":settings.get("_music",False),"music_fields":settings.get("_music_fields",{}),"image_model":settings.get("_image_model",""),"assistant":settings.get("_assistant",True),"loras":[{k:l[k] for k in ("id","name","weight","model_id","model_name")} for l in loras]}
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             chat = db.execute("SELECT * FROM chats WHERE id=?", (chat_id,)).fetchone()

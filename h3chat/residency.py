@@ -113,7 +113,7 @@ class Session:
                 elif phase=='sample' and step==0:
                     stage(f'Preparazione del primo passo · {steps} passi previsti')
                 else:
-                    stage(f"{'Generazione musica' if self.kind=='music' else 'Generazione immagine'} · {step}/{steps} passi")
+                    stage(f"{'Generazione video' if self.kind=='video' else 'Generazione musica' if self.kind=='music' else 'Generazione immagine'} · {step}/{steps} passi")
         raise RuntimeError('Tempo massimo del motore superato.')
 
     def stop(self):
