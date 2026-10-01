@@ -24,12 +24,14 @@ export function renderLlmPreferences(container,draft,state,onChange){
  for(const v of [4096,8192,16384,32768,65536,131072,262144,524288,1048576]){const option=document.createElement('option');option.value=v;option.label=(v/1024)+'k';list.append(option);}context.after(list);context.setAttribute('list',list.id);context.setAttribute('aria-describedby','context-model-note');
  const details=()=>{
   const note=container.querySelector('#context-model-note'),declared=model.parameters?.context_length,exceeds=declared&&values.context>declared;
-  note.textContent=declared?model.name+' dichiara '+Number(declared).toLocaleString('it-IT')+' token nel GGUF. '+(exceeds?'Il valore scelto supera il contesto dichiarato: compatibilità ed efficacia dell’estensione non sono garantite.':'64k corrispondono a 65.536 token.'):'Contesto massimo non rilevato: verifica le specifiche del modello. Puoi inserire il valore manualmente; 64k corrispondono a 65.536 token.';
+  note.textContent=model.api?'Modello via API: questo valore aiuta a dimensionare gli estratti documenti e web. Il contesto effettivo dipende dal servizio; non viene allocata KV cache sul PC.':declared?model.name+' dichiara '+Number(declared).toLocaleString('it-IT')+' token nel GGUF. '+(exceeds?'Il valore scelto supera il contesto dichiarato: compatibilità ed efficacia dell’estensione non sono garantite.':'64k corrispondono a 65.536 token.'):'Contesto massimo non rilevato: verifica le specifiche del modello. Puoi inserire il valore manualmente; 64k corrispondono a 65.536 token.';
+  container.querySelector('[data-llm-setting="gpu_layers"]').disabled=!!model.api;
   note.classList.toggle('vision-warning',!!exceeds);
   const mtp=model.mtp;container.querySelector('[data-llm-setting="mtp_enabled"]').disabled=!mtp?.supported;
   container.querySelector('[data-llm-setting="mtp_draft_tokens"]').disabled=!mtp?.supported||!values.mtp_enabled;
   container.querySelector('#mtp-model-note').textContent=mtp?.note||'MTP non supportato o non ancora rilevato.';
   container.querySelector('[data-llm-setting="think_level"]').disabled=!model.thinking?.supported;
+  let apiNote=container.querySelector('[data-api-thinking-note]');if(model.api&&!apiNote){apiNote=document.createElement('p');apiNote.dataset.apiThinkingNote='';apiNote.className='small-note';apiNote.textContent=model.thinking?.note||'';container.querySelector('#context-model-note').after(apiNote);}
  };
  const persist=()=>{draft.llm_overrides??={};draft.llm_overrides[selected]={...values};if(selected===draft.chat_model)Object.assign(draft,values);details();onChange?.();};
  for(const input of container.querySelectorAll('[data-llm-setting]'))input.oninput=()=>{values[input.dataset.llmSetting]=input.type==='checkbox'?input.checked:input.type==='number'?Number(input.value):input.value;persist();};

@@ -14,6 +14,8 @@ import time
 from pathlib import Path
 from .downloads import Cancelled, Downloads, model_ready, safe_join
 from .engine import CREATE_NO_WINDOW, Engine, runtime_executable, explicit_route
+from .providers import Providers,PRESETS as API_PRESETS,protect as api_secret
+from .remote_llm import Client as ApiClient
 from .visual_routing import visual_route
 from .music_routing import route as music_route
 from .video_routing import route as video_route
@@ -44,6 +46,8 @@ class Service:
         self.runtimes = json.loads((self.root / "runtimes.json").read_text(encoding="utf-8"))
         self.downloads = Downloads(self.root, self.catalog, self.runtimes)
         self.engine = Engine(self.root, self.data, self.catalog)
+        self.providers = Providers(self.store)
+        self.engine.api_credentials = self.providers.credentials
         self.loras = LoraLibrary()
         self.token = secrets.token_hex(32)
         self.wake, self.closed = threading.Event(), threading.Event()
@@ -62,6 +66,7 @@ class Service:
             for row in self.store.all("SELECT config FROM external_models"):
                 model=build_model(json.loads(row["config"]))
                 fresh[model["id"]]=model
+            fresh.update({p['id']:self.providers.model(p) for p in self.providers.list()})
             fresh={key:model|inspect_model(self.root,model) for key,model in fresh.items()}
             with self.engine.process_lock:
                 # Preserve the shared dictionary used by Engine and Downloads.
@@ -73,6 +78,7 @@ class Service:
     def state(self):
         models = self.refresh_models()
         return {"token": self.token, "version": __version__, "settings": self.store.settings(), "profiles": PROFILES,
+                "api_providers":self.providers.list(),"api_presets":API_PRESETS,
                 "llm_options":{"keys":LLM_KEYS,"defaults":{profile:llm_defaults(profile) for profile in PROFILES},"max_context":MAX_CONTEXT},
                 "music_runtime":music_status(self.root), "music_options":{"defaults":MUSIC_DEFAULTS,"numbers":MUSIC_NUMBERS,"integers":sorted(MUSIC_INTEGER)},
                 "video_options":{"defaults":VIDEO_DEFAULTS,"aspects":VIDEO_ASPECTS},
@@ -84,6 +90,31 @@ class Service:
                 "collections": self.store.all("SELECT * FROM collections ORDER BY name"),
                 "jobs": self.store.all("SELECT id,chat_id,message_id,status,stage,error,created,json_extract(payload,'$.canvas') AS canvas FROM jobs ORDER BY created DESC LIMIT 100"),
                 "downloads": self.downloads.snapshot(), "memory": self.engine.snapshot()}
+
+    def provider_request(self,body,operation='save'):
+        with self.lock:
+            if self.current_id or self.store.one("SELECT id FROM jobs WHERE status IN ('queued','running')"):
+                raise ValueError('Attendi o interrompi i lavori prima di cambiare o provare i provider API.')
+            if operation=='save':
+                if len(self.providers.list())>=100 and not body.get('id'):raise ValueError('Massimo cento collegamenti API.')
+                result=self.providers.save(body);self.refresh_models();self.engine.configure(self.store.settings());return result
+            config,secret=self.providers.resolve(body)
+        client=ApiClient();key=api_secret(secret,decode=True);cancel=threading.Event()
+        if operation=='models':
+            value=client.exchange(config,key,cancel,timeout=35)
+            ids=sorted({x['id'] for x in value.get('data',[]) if isinstance(x,dict) and isinstance(x.get('id'),str) and 1<=len(x['id'])<=200})[:2000]
+            if not ids:raise ValueError('Il provider non espone modelli. Inserisci manualmente l’ID modello.')
+            return {'models':ids}
+        client.completion(config,key,[{'role':'user','content':'Reply with OK.'}],DEFAULTS|{'max_tokens':64,'temperature':0,'think_level':'off'},cancel)
+        return {'ok':True,'message':'Connessione e modello verificati.'}
+
+    def remove_provider(self,ident):
+        with self.lock:
+            if self.current_id or self.store.one("SELECT id FROM jobs WHERE status IN ('queued','running')"):raise ValueError('Attendi o interrompi i lavori prima di rimuovere il provider.')
+            if not self.store.one('SELECT id FROM api_providers WHERE id=?',(ident,)):raise ValueError('Provider non trovato.')
+            self.store.execute('DELETE FROM api_providers WHERE id=?',(ident,))
+            if self.store.settings()['chat_model']==ident:self.store.save_settings({'chat_model':''})
+            self.refresh_models();self.engine.configure(self.store.settings());self.engine.remote_config=None;return {'ok':True}
 
     def external_model(self, body):
         with self.lock:
@@ -402,12 +433,16 @@ class Service:
                 route = self.engine.route(history, settings, cancel)
             intent = route["intent"]
             meta = {"intent": intent, "model": model.get("name", ""), "settings": settings, "prompt": payload["prompt"], "canvas": payload.get("canvas", False)}
+            if model.get('api'):meta['api']=True
             meta.update(tool_meta)
             if model:meta.update(vision=settings.get("vision_enabled",True) and model.get("vision",{}).get("enabled",False),
                         model_warning=model.get("vision",{}).get("warning","") if settings.get("vision_enabled",True) else "Vision Off · il proiettore non è caricato.",
                         think_level=settings.get("think_level","off") if model.get("thinking",{}).get("supported") else "off",
                         think_budget=thinking_parameters(model, settings)["reasoning_budget_tokens"],
                         mtp_tokens=mtp_tokens(model,settings) if intent=="chat" else 0, max_tokens=settings["max_tokens"])
+            if model.get('api'):
+                meta['think_budget']=None
+                meta['think_note']=model.get('thinking',{}).get('note','')
             if intent!='chat':
                 for key in ('think_level','think_budget','model_warning'):meta.pop(key,None)
             self.store.update_answer(job,text,meta=meta)

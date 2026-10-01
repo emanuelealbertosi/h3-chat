@@ -1,4 +1,5 @@
 import {renderToolsSettings,appendToolsDetails} from './tools-settings.js';
+import {renderProviders} from './api-providers.js';
 import {renderLlmPreferences,selectLlmPreferencesModel,syncLlmDraft,llmOptions} from './llm-settings.js';
 import {renderVideoSettings,appendVideoDetails,selectVideoPreferencesModel} from './video-settings.js';
 import {renderMusicSettings,appendMusicDetails,selectMusicPreferencesModel} from './music-settings.js';
@@ -79,7 +80,7 @@ function renderStatus(){
   loraUI.render();visualControls.render();
   $('#chat-advanced').checked=!!state.settings.chat_advanced;
   const job=activeJob(),any=state.jobs.some(j=>j.status==='running');
-  $('#engine-badge').classList.toggle('busy',any);$('#engine-badge').innerHTML=`<i></i> ${any?'Motore al lavoro':'Motore locale'}`;
+  $('#engine-badge').classList.toggle('busy',any);
   const loaded=state.memory?.models||[];
   $('#memory-status').textContent=(state.settings.memory_policy==='resident'?'Residenti':'A richiesta')+' · '+loaded.length+' caricati';
   $('#memory-status').title=loaded.map(m=>m.name+' · '+m.location+(m.ready?'':' · caricamento')).join('\n')||'Apri la gestione della memoria';
@@ -87,15 +88,17 @@ function renderStatus(){
   const release=$('#release-memory');if(release)release.disabled=state.jobs.some(j=>['running','queued'].includes(j.status));
   $('#model-name').textContent=modelName(state.settings.chat_model);
   const model=state.models.find(m=>m.id===state.settings.chat_model),vision=model?.vision,thinking=model?.thinking;
+  $('.local-badge').innerHTML='<i></i> '+(model?.api?'LLM tramite API':'Sul tuo computer');
+  $('#engine-badge').innerHTML='<i></i> '+(any?'Lavoro in corso':model?.api?'LLM tramite API':'Motore locale');
   $('#vision-enabled').checked=state.settings.vision_enabled;$('#vision-toggle-label').textContent='Vision '+(state.settings.vision_enabled?'On':'Off');
-  $('#vision-badge').textContent=vision?.enabled?(state.settings.vision_enabled?'Vision · CPU':'Vision disattivata'):model?'Non vision':'Vision da configurare';
+  $('#vision-badge').textContent=vision?.enabled?(state.settings.vision_enabled?(model.api?'Vision · API':'Vision · CPU'):'Vision disattivata'):model?'Non vision':'Vision da configurare';
   $('#vision-badge').className='badge '+(vision?.enabled?'ready':'warning');
   $('#vision-badge').title=vision?.projector?'Proiettore automatico: '+vision.projector:vision?.warning||'Scegli un modello nelle impostazioni.';
   $('#vision-warning').hidden=!model||!!vision?.enabled;
   $('#vision-warning').textContent=vision?.warning||'';
   $('#think-level').disabled=!thinking?.supported||thinkSaving;
   if(!thinkSaving)$('#think-level').value=thinking?.supported?state.settings.think_level:'off';
-  $('#think-note').textContent=thinking?.supported?'Budget di ragionamento':'Non supportato dal modello';
+  $('#think-note').textContent=thinking?.supported?(model.api?'Thinking · API':'Budget di ragionamento'):'Non supportato dal modello';
   $('#think-note').title=thinking?.note||'';
   const mtp=model?.mtp;
   const draft=mtp?.supported&&state.settings.mtp_enabled?Math.min(state.settings.mtp_draft_tokens,mtp.max_draft_tokens||8):0;
@@ -147,7 +150,7 @@ async function renderChat(){
     if(message.meta.image_parameters&&state.settings.chat_advanced){const d=document.createElement('details'),summary=document.createElement('summary'),prompt=document.createElement('pre');summary.textContent='Assistant '+(message.meta.assistant_on?'On · '+message.meta.assistant?.model+(message.meta.assistant?.prompt_format==='tags'?' · tag in inglese':''):'Off')+' · prompt immagini';prompt.textContent=message.meta.image_prompt;prompt.style.whiteSpace='pre-wrap';d.append(summary,prompt);content.append(d);}
     if(message.role==='assistant'&&message.meta.model_warning){const note=document.createElement('div');note.className='vision-warning';note.textContent=message.meta.model_warning;content.append(note);}
     if(message.role==='assistant'&&message.meta.mtp_tokens){const badge=document.createElement('span');badge.className='badge';badge.textContent='MTP · '+message.meta.mtp_tokens;article.querySelector('.message-head').append(badge);}
-    if(message.role==='assistant'&&message.meta.think_level){const badge=document.createElement('span');badge.className='badge';badge.textContent='Think '+message.meta.think_level;badge.title=message.meta.think_budget+' token massimi di ragionamento';article.querySelector('.message-head').append(badge);}
+    if(message.role==='assistant'&&message.meta.think_level){const badge=document.createElement('span');badge.className='badge';badge.textContent='Think '+message.meta.think_level;badge.title=message.meta.api?message.meta.think_note:message.meta.think_budget+' token massimi di ragionamento';article.querySelector('.message-head').append(badge);}
     if(['failed','interrupted','cancelled'].includes(message.status)){const err=document.createElement('div');err.className='message-error';err.textContent=message.meta.error||'Risposta interrotta. Puoi riprovare.';content.append(err);}
     const actions=article.querySelector('.message-actions');
     if(message.content){const copy=document.createElement('button');copy.className='text-button';copy.textContent='Copia';copy.onclick=act(async()=>{await navigator.clipboard.writeText(message.content);toast('Copiato.');});actions.append(copy);}
@@ -279,7 +282,7 @@ function renderSettings(){
     body.querySelector('[data-setting="profile"]').onchange=e=>{collectSettings();Object.assign(settingsDraft,{width:state.profiles[e.target.value].width,height:state.profiles[e.target.value].height});if(e.target.value==='cpu')settingsDraft.backend='cpu';renderSettings();};
     body.querySelector('[data-setting="backend"]').onchange=()=>{collectSettings();updateDownloads();};
   }else if(settingsTab==='models'){
-    body.innerHTML='<div class="hardware-note external-intro"><div><strong>Usa i modelli già presenti sul computer</strong><p>Collega GGUF e modelli immagini dalle loro cartelle originali, anche su altre unità. Il mmproj viene cercato accanto al GGUF; encoder e VAE possono essere scelti da cartelle diverse.</p></div><button type="button" id="add-external-model" class="btn primary">Collega un modello</button></div><p class="small-note">Restano disponibili anche le cartelle models/local. <button type="button" id="rescan-models" class="text-button">Aggiorna modelli e percorsi</button></p>'+state.models.filter(m=>m.external).map(localCard).join('')+'<p class="small-note">Catalogo scaricabile: pesi e componenti vengono verificati con SHA-256. I collegamenti esterni usano i file originali senza copiarli.</p>' +state.models.filter(m=>!m.external).map(m=>`<article class="model-card"><div class="model-top"><h3>${esc(m.name)}</h3><button class="btn small" data-download="${m.id}">${m.local?'Locale pronto':m.complete?'Verificato':'Scarica · '+gb(m.size)}</button></div><p>${esc(m.description)}</p><div class="model-meta">${m.local?'<span class="badge">LOCALE</span>':''}${m.thinking?.supported?'<span class="badge">THINK</span>':''}${m.mtp?.supported?'<span class="badge">MTP</span>':''}${m.vision?'<span class="badge '+(m.vision.enabled?'ready':'warning')+'">'+(m.vision.enabled?'Vision attiva':'Non vision / mmproj assente')+'</span>':''}${m.capabilities.map(c=>`<span class="badge">${({chat:'CHAT',vision:'VISION',create:'CREA',edit:'MODIFICA',music:'MUSICA',video:'VIDEO'})[c]}</span>`).join('')}<span class="badge">${m.max_refs?m.max_refs+' riferimenti':'Testo'}</span><span class="badge">RAM indicativa ≥ ${m.ram_gb} GB</span><span class="badge ${m.ready?'ready':''}" id="ready-${m.id}">${m.complete?'Installato':m.ready?'Solo testo · completa mmproj':'Non installato'}</span></div><details><summary>Componenti e licenza</summary><p>${esc(m.license)}</p>${m.files.map(f=>`<div class="component"><span>${esc(f.role)} · ${f.repo?`<a href="https://huggingface.co/${esc(f.repo)}/blob/${f.revision}/${esc(f.filename)}" target="_blank" rel="noopener noreferrer">${esc(f.filename)}</a>`:esc(f.filename)}</span><span>${gb(f.size)}</span></div>`).join('')}</details><div data-download-status="${m.id}"></div></article>`).join('');
+    body.innerHTML='<div class="hardware-note external-intro"><div><strong>Usa i modelli già presenti sul computer</strong><p>Collega GGUF e modelli immagini dalle loro cartelle originali, anche su altre unità. Il mmproj viene cercato accanto al GGUF; encoder e VAE possono essere scelti da cartelle diverse.</p></div><button type="button" id="add-external-model" class="btn primary">Collega un modello</button></div><p class="small-note">Restano disponibili anche le cartelle models/local. <button type="button" id="rescan-models" class="text-button">Aggiorna modelli e percorsi</button></p>'+state.models.filter(m=>m.external).map(localCard).join('')+'<p class="small-note">Catalogo scaricabile: pesi e componenti vengono verificati con SHA-256. I collegamenti esterni usano i file originali senza copiarli.</p>' +state.models.filter(m=>!m.external&&!m.api).map(m=>`<article class="model-card"><div class="model-top"><h3>${esc(m.name)}</h3><button class="btn small" data-download="${m.id}">${m.local?'Locale pronto':m.complete?'Verificato':'Scarica · '+gb(m.size)}</button></div><p>${esc(m.description)}</p><div class="model-meta">${m.local?'<span class="badge">LOCALE</span>':''}${m.thinking?.supported?'<span class="badge">THINK</span>':''}${m.mtp?.supported?'<span class="badge">MTP</span>':''}${m.vision?'<span class="badge '+(m.vision.enabled?'ready':'warning')+'">'+(m.vision.enabled?'Vision attiva':'Non vision / mmproj assente')+'</span>':''}${m.capabilities.map(c=>`<span class="badge">${({chat:'CHAT',vision:'VISION',create:'CREA',edit:'MODIFICA',music:'MUSICA',video:'VIDEO'})[c]}</span>`).join('')}<span class="badge">${m.max_refs?m.max_refs+' riferimenti':'Testo'}</span><span class="badge">RAM indicativa ≥ ${m.ram_gb} GB</span><span class="badge ${m.ready?'ready':''}" id="ready-${m.id}">${m.complete?'Installato':m.ready?'Solo testo · completa mmproj':'Non installato'}</span></div><details><summary>Componenti e licenza</summary><p>${esc(m.license)}</p>${m.files.map(f=>`<div class="component"><span>${esc(f.role)} · ${f.repo?`<a href="https://huggingface.co/${esc(f.repo)}/blob/${f.revision}/${esc(f.filename)}" target="_blank" rel="noopener noreferrer">${esc(f.filename)}</a>`:esc(f.filename)}</span><span>${gb(f.size)}</span></div>`).join('')}</details><div data-download-status="${m.id}"></div></article>`).join('');
     $('#add-external-model').onclick=()=>localModels.open();
     body.querySelectorAll('[data-model-parameters]').forEach(b=>b.onclick=()=>{collectSettings();const m=state.models.find(m=>m.id===b.dataset.modelParameters);if(m.capabilities.includes('chat'))selectLlmPreferencesModel(m.id);else if(m.capabilities.includes('video'))selectVideoPreferencesModel(m.id);else if(m.capabilities.includes('music'))selectMusicPreferencesModel(m.id);else selectImagePreferencesModel(m.id);settingsTab='advanced';renderSettings();document.querySelector(m.capabilities.includes('chat')?'#llm-settings-card':m.capabilities.includes('video')?'.video-settings':m.capabilities.includes('music')?'.music-settings':'#image-settings-card')?.scrollIntoView({block:'start'});});
     body.querySelectorAll('[data-edit-external]').forEach(b=>b.onclick=()=>localModels.open(state.models.find(m=>m.id===b.dataset.editExternal)));
@@ -288,6 +291,10 @@ function renderSettings(){
     body.querySelectorAll('[data-download]').forEach(b=>{const model=state.models.find(m=>m.id===b.dataset.download);b.disabled=model.complete||model.local;b.onclick=act(async()=>{await api('/downloads',{id:model.id,kind:'model'});await refresh();});});
   }else{
     body.innerHTML=`<div class="settings-grid"><section class="card" id="llm-settings-card"></section><section class="card" id="image-settings-card"></section><section class="card full"><h3>Preferenze generali</h3>${numberField('threads','Thread CPU · motori chat e immagini',1,64)}<h3>Come vuoi che risponda</h3><label class="field"><span>Istruzioni personali</span><textarea data-setting="system_prompt">${esc(settingsDraft.system_prompt)}</textarea></label><p>Codice evidenziato, Markdown, LaTeX, diagrammi Mermaid e grafici numerici sono già abilitati. Il canvas esporta Word modificabile e PDF/PNG fedeli all'anteprima; formule e figure nel Word sono immagini.</p></section></div>`;
+  }
+  if(['setup','advanced','models'].includes(settingsTab)){
+    const providers=document.createElement('section');providers.className='card api-providers';body.append(providers);
+    renderProviders(providers,{state,request:api,changed:async()=>{collectSettings();state=await api('/state');if(settingsDraft.chat_model&&!state.models.some(m=>m.id===settingsDraft.chat_model))syncLlmDraft(settingsDraft,state,'');renderSettings();renderStatus();toast('Collegamento API salvato. Sceglilo per la chat oppure premi Usa in chat.');},use:async id=>{collectSettings();syncLlmDraft(settingsDraft,state,id);state.settings=await api('/settings',settingsDraft);state=await api('/state');renderSettings();renderStatus();toast('Modello API selezionato per chat, router e Assistant.');}});
   }
   if(settingsTab==='setup'||settingsTab==='advanced'){
     const tools=document.createElement('section');tools.className='card tools-settings';body.append(tools);renderToolsSettings(tools,{state,draft:settingsDraft,pickDirectory:localModels.pickDirectory,changed:scheduleAssessment,install:act(async kind=>{await api('/downloads',{id:'tools_'+kind,kind:'runtime'});await refresh();}),download:act(async id=>{await api('/downloads',{id,kind:'tool_model'});await refresh();})});
@@ -302,9 +309,10 @@ function renderSettings(){
   if(settingsTab==='advanced')renderImagePreferences($('#image-settings-card'),settingsDraft,state,scheduleAssessment);
   if(settingsTab==='advanced'){const folders=document.createElement('section');folders.className='card lora-folder-settings';body.append(folders);loraUI.renderFolders(folders,settingsDraft);}
   body.insertAdjacentHTML('beforeend','<section id="memory-assessment" class="memory-assessment" aria-live="polite">Rilevamento del computer e stima della memoria…</section>');
-  const updateVision=()=>{const m=state.models.find(m=>m.id===settingsDraft.chat_model),el=$('#setup-vision-note');if(el){el.textContent=m?.vision?.enabled?'Vision attiva: mmproj caricato automaticamente.':m?.vision?.warning||'Scegli un modello vision per leggere immagini e grafici.';el.classList.toggle('vision-ok',!!m?.vision?.enabled);}};
+  const updateVision=()=>{const m=state.models.find(m=>m.id===settingsDraft.chat_model),el=$('#setup-vision-note');if(el){el.textContent=m?.api?(m.vision?.enabled?'Vision tramite API: le immagini vengono inviate al provider.':'LLM via API · solo testo. Conversazione ed estratti vengono inviati al provider.'):m?.vision?.enabled?'Vision attiva: mmproj caricato automaticamente.':m?.vision?.warning||'Scegli un modello vision per leggere immagini e grafici.';el.classList.toggle('vision-ok',!!m?.vision?.enabled);}};
   body.onchange=e=>{if(e.target.matches('[data-setting]:not([data-llm-setting])')){collectSettings();updateVision();updateDownloads();scheduleAssessment();}};
   updateVision();scheduleAssessment();updateDownloads();
+  $('#settings-note').textContent=state.models.find(m=>m.id===settingsDraft.chat_model)?.api?'LLM via API: i contenuti della richiesta vengono inviati al provider.':'Chat e file vengono salvati sul computer.';
 }
 function updateDownloads(){
   if(!$('#settings').open)return;
@@ -321,7 +329,7 @@ function updateDownloads(){
 
 $('#chat-advanced').onchange=act(async()=>{const value=$('#chat-advanced').checked;state.settings=await api('/settings',{chat_advanced:value});renderStatus();await renderChat();});
 $('#generation-settings').onclick=()=>openSettings('advanced');
-$('#vision-enabled').onchange=act(async()=>{state.settings=await api('/settings',{vision_enabled:$('#vision-enabled').checked});renderStatus();toast('Vision '+(state.settings.vision_enabled?'On · CPU':'Off')+' dal prossimo messaggio.');});
+$('#vision-enabled').onchange=act(async()=>{state.settings=await api('/settings',{vision_enabled:$('#vision-enabled').checked});renderStatus();toast('Vision '+(state.settings.vision_enabled?(state.models.find(m=>m.id===state.settings.chat_model)?.api?'On · API':'On · CPU'):'Off')+' dal prossimo messaggio.');});
 $('#think-level').onchange=act(async()=>{const level=$('#think-level').value;thinkSaving=true;try{state.settings=await api('/settings',{think_level:level});}finally{thinkSaving=false;renderStatus();}});
 $('#composer').onsubmit=act(send);
 $('#prompt').onkeydown=act(async e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();await send(e);}});

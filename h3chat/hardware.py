@@ -112,6 +112,9 @@ def detect_hardware(refresh=False):
 
 def assess_model(model, settings, hardware, references=1):
     """Estimate one loaded context and its inference workspace, for the selected placement."""
+    if model.get('api'):
+        return {'id':model['id'],'name':model['name'],'status':'ok','title':'LLM via API','advice':'I pesi LLM e il contesto sono gestiti dal provider. Nessun caricamento LLM nella RAM/VRAM locale.',
+                'oom_risk':False,'ram_gb':0,'vram_gb':0,'cpu_ram_gb':0,'gpu_name':None,'assumptions':['Non comprende la memoria dei motori locali immagini, musica, video e trascrizione.'],'recommended_patch':{}}
     chat='chat' in model['capabilities']; files=model['files']; p=model.get('parameters',{})
     music='music' in model['capabilities']
     video='video' in model['capabilities']
@@ -261,6 +264,7 @@ def assess_selection(models, settings, hardware, references=1):
     """
     unique = {}
     for model in models:
+        if model.get('api'):continue
         kind = 'chat' if 'chat' in model['capabilities'] else 'music' if 'music' in model['capabilities'] else 'video' if 'video' in model['capabilities'] else 'image'
         key = (kind,tuple(sorted((f['role'],f['path']) for f in model['files'])))
         unique[key] = model
@@ -277,12 +281,14 @@ def assess_selection(models, settings, hardware, references=1):
     gpus = [g for g in hardware['gpu'] if backend!='cuda' or g.get('vendor')=='NVIDIA']
     free_ram = hardware['ram'].get('free_mb')
     status,title,advice = 'ok','OK stimato','I modelli scelti sembrano rientrare nella memoria libera.'
-    if free_ram is None or (backend!='cpu' and (len(gpus)!=1 or gpus[0].get('free_mb') is None)):
+    if not unique and any(m.get('api') for m in models):
+        title='LLM via API';advice='Nessun peso LLM o contesto caricato sul PC; capacità e limiti dipendono dal provider.'
+    elif free_ram is None or (backend!='cpu' and (len(gpus)!=1 or gpus[0].get('free_mb') is None)):
         status,title,advice = 'unknown','Non determinabile','La memoria libera non è misurabile con sufficiente affidabilità.'
     elif ram>max(0,free_ram/1024-.75) or (backend!='cpu' and vram>max(0,gpus[0]['free_mb']/1024-.5)):
         status,title,advice = 'oom','Rischio OOM complessivo','La memoria libera non basta alla stima complessiva. '+('Passa ad A richiesta o scegli modelli più piccoli.' if resident else 'Riduci modello, contesto o risoluzione; valuta CPU o meno layer GPU.')
     elif any(v['status']=='offload' for v in values):
         status,title,advice = 'offload','Offload previsto','Alcuni componenti restano in RAM con le impostazioni attuali.'
-    return {'status':status,'title':title,'advice':advice,'ram_gb':ram,'vram_gb':vram,'unique_models':len(unique),
+    return {'status':status,'title':title,'advice':advice,'ram_gb':ram,'vram_gb':vram,'unique_models':len(unique)+len({m['id'] for m in models if m.get('api')}),
             'policy':settings.get('memory_policy','on_demand'),
             'note':('Somma prudente dei picchi dei modelli distinti; crea ed edit con gli stessi pesi contano una volta.' if resident else 'Picco massimo dei modelli distinti: viene conservato un solo contesto alla volta.')}

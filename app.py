@@ -128,6 +128,10 @@ class Handler(BaseHTTPRequestHandler):
                     return self.file(safe_join(self.app.data, relative))
                 return self.json({"error": "Risorsa non trovata."}, 404)
             body = self.read_body()
+            if path in ('/api/providers','/api/providers/models','/api/providers/test') and method=='POST':
+                return self.json(self.app.provider_request(body,'models' if path.endswith('/models') else 'test' if path.endswith('/test') else 'save'))
+            if len(parts)==3 and parts[:2]==['api','providers'] and method=='DELETE':
+                return self.json(self.app.remove_provider(parts[2]))
             if path == "/api/loras" and method == "POST":
                 return self.json(self.app.loras.scan(self.app.store.settings()["lora_dirs"],refresh=body.get("refresh") is True))
             if path == "/api/model-files/browse" and method == "POST":

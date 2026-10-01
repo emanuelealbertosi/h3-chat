@@ -24,6 +24,7 @@ from .video_options import options as video_options
 from .video_routing import route as video_route
 from .music_runtime import backend as music_backend
 from .tools_engine import ToolsEngine
+from .remote_llm import Client as ApiClient
 
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
@@ -74,6 +75,9 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         self.cache = FileCache()
         self.policy = "on_demand"
         self.tool_session = None
+        self.api_client = ApiClient()
+        self.api_credentials = None
+        self.remote_config = None
 
     @property
     def process(self):
@@ -97,6 +101,8 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                 self.active = None
 
     def stop(self):
+        self.api_client.abort()
+        self.remote_config = None
         with self.process_lock:
             if self.tool_session:self.tool_session.stop()
             for key in list(self.sessions):
@@ -104,6 +110,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
             self.cache.clear()
 
     def abort_active(self):
+        self.api_client.abort()
         if self.tool_session:self.tool_session.stop()
         with self.process_lock:
             if self.active:
@@ -140,7 +147,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
             wanted = set()
             for field,kind in (('chat_model','chat'),('create_model','image'),('edit_model','image'),('diagram_model','image'),('_image_model','image'),('music_model','music'),('video_model','video')):
                 model = self.catalog.get(settings.get(field))
-                if model:
+                if model and not model.get('api'):
                     wanted.add(self.session_key(kind,model,settings))
             # Keep an explicitly selected extra image model between messages,
             # including after the queue returns to the saved global settings.
@@ -186,7 +193,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         seen = set()
         for field,capability in (('chat_model','chat'),('create_model','create'),('edit_model','edit'),('diagram_model','create'),('_image_model','create'),('music_model','music'),('video_model','video')):
             model = self.catalog.get(settings.get(field))
-            if not model or model['id'] in seen:
+            if not model or model.get('api') or model['id'] in seen:
                 continue
             seen.add(model['id'])
             model = model | inspect_model(self.root, model)
@@ -224,6 +231,19 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         return files
 
     def start_llama(self, model, settings, log_path, cancel, stage=None):
+        if model.get('api'):
+            if cancel.is_set():raise Cancelled()
+            if not self.api_credentials:raise ValueError('Configurazione API non disponibile.')
+            config,key=self.api_credentials(model['id'])
+            self.configure(settings)
+            if self.policy=='on_demand':
+                with self.process_lock:
+                    for previous in list(self.sessions):self._drop(previous)
+            self.active_model=model
+            self.remote_config=(config,key)
+            if stage:stage('Connessione API · '+model['name'])
+            return
+        self.remote_config = None
         session = self._activate("chat", model, settings, log_path, cancel, stage=stage)
         self.active_model = model
         if session.ready and session.alive():
@@ -280,6 +300,10 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         raise RuntimeError("Caricamento del modello scaduto dopo 4 minuti. Consulta il registro del lavoro.")
 
     def completion(self, messages, settings, cancel, on_text=None, schema=None, on_reasoning=None):
+        if getattr(self,'active_model',{}).get('api'):
+            if not self.remote_config:raise ValueError('Connessione API da inizializzare.')
+            config,key=self.remote_config
+            return self.api_client.completion(config,key,messages,settings,cancel,on_text,schema,on_reasoning)
         body = {"messages": messages, "temperature": settings["temperature"], "max_tokens": settings["max_tokens"],
                 "stream": on_text is not None}
         body.update(thinking_parameters(getattr(self, "active_model", {}), settings, router=on_text is None))

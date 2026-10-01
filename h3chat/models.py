@@ -124,6 +124,9 @@ def discover_local(root):
 
 
 def inspect_model(root, model):
+    if model.get('api'):
+        from .providers import traits
+        return traits(model)
     files={e['role']:model_path(root,model,e['path']) for e in model['files']}
     if 'chat' not in model['capabilities']:
         ready=not model.get('external_problems') and all(e.get('valid',True) and model_path(root,model,e['path']).is_file() for e in model['files']) if model.get('external') else model_ready(root,model)

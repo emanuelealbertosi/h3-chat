@@ -1,10 +1,10 @@
 # H3-Chat
 
-Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle app H3. Una sola conversazione per testo, codice, immagini, canzoni, video, formule, grafici e diagrammi. I motori sono gestiti dall'app; non servono Ollama, LM Studio, ComfyUI, chiavi API o abbonamenti.
+Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle app H3. Una sola conversazione per testo, codice, immagini, canzoni, video, formule, grafici e diagrammi. I motori locali sono gestiti dall'app; non servono Ollama, LM Studio o ComfyUI. Gli LLM locali non richiedono chiavi API o abbonamenti; puoi scegliere anche un provider LLM tramite API.
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.11.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.11.0/H3-Chat-0.11.0-windows-x64.zip) dalla [release v0.11.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.11.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.12.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.12.0/H3-Chat-0.12.0-windows-x64.zip) dalla [release v0.12.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.12.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 
@@ -17,6 +17,12 @@ L'installazione è ripetibile: conserva chat, preferenze, percorsi dei modelli e
 Per chi modifica i sorgenti dell'interfaccia o del worker: ricostruisci il bundle seguendo [la procedura per sviluppatori](docs/build.md). L'installatore rileva un bundle non allineato ai sorgenti invece di avviare silenziosamente una vecchia interfaccia.
 
 La finestra desktop usa Microsoft Edge in modalità app, normalmente già presente in Windows 10/11. Se Edge manca, la chat si apre nel browser predefinito; l'export PDF richiede Edge. Chiudere la finestra lascia finire il lavoro corrente. `H3-Chat.exe` e `Avvia-H3-Chat.bat` lasciano aperta una console con i log in tempo reale: avvio, errori delle operazioni e fasi di generazione. Chiudere la console (o Ctrl+C) chiude soltanto la vista dei log. `Ferma-H3-Chat.bat` arresta il servizio e i processi di inferenza posseduti dall'app. I log restano in `data/server.log`, con i dettagli dei motori in `data/logs/`.
+
+## Provider LLM tramite API
+
+In **Setup → LLM tramite API** collega DeepSeek, OpenRouter o un servizio Chat Completions compatibile: indirizzo base, chiave e ID modello. Puoi caricare l’elenco modelli, provare la connessione, salvare più collegamenti e premere **Usa in chat**. Chat, router e Assistant usano il provider scelto; immagini, musica, video e trascrizione restano locali. Nessun peso LLM occupa RAM/VRAM sul PC.
+
+Le chiavi sono protette con Windows DPAPI e non vengono mostrate o registrate nelle chat. La conversazione, gli estratti dei documenti, le trascrizioni e le immagini fornite a Vision vengono inviati al servizio selezionato. Vision/thinking/JSON si configurano per collegamento; le tariffe e il limite effettivo di contesto dipendono dal provider. In chat compare **API**, anche per Vision. [Configurazione e limiti](docs/api-providers.md).
 
 ## Un unico prompt
 
