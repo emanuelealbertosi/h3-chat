@@ -14,6 +14,9 @@ PRESETS={
     'custom':{'name':'Personalizzato · Chat Completions','base_url':'','model':'','format':'json_object','thinking':'none'},
 }
 
+class Blob(C.Structure):
+    _fields_=[('size',C.c_ulong),('data',C.POINTER(C.c_ubyte))]
+
 def endpoint(value):
     if not isinstance(value,str) or len(value)>2000 or any(ord(c)<33 for c in value):raise ValueError('Indirizzo API non valido.')
     p=urlsplit(value)
@@ -33,7 +36,6 @@ def protect(value,decode=False):
     # This application is distributed for Windows: DPAPI binds keys to the OS user.
     if not value:return ''
     if os.name!='nt':raise ValueError('La protezione delle chiavi API richiede Windows.')
-    class Blob(C.Structure):_fields_=[('size',C.c_ulong),('data',C.POINTER(C.c_ubyte))]
     raw=base64.b64decode(value) if decode else value.encode('utf-8')
     buffer=C.create_string_buffer(raw);source=Blob(len(raw),C.cast(buffer,C.POINTER(C.c_ubyte)));target=Blob()
     function=C.windll.crypt32.CryptUnprotectData if decode else C.windll.crypt32.CryptProtectData

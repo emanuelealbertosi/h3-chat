@@ -1,10 +1,10 @@
-# Verifiche H3-Chat 0.12.0
+# Verifiche H3-Chat 0.12.1
 
 Windows x64, Python privato 3.13. Dati e chiavi di collaudo isolati in cartelle
 temporanee; nessuna modifica alle chat o ai modelli scelti dall’utente.
 
-- **164 test Python, 2 JavaScript**. 23 nuove prove dei provider API:
-  persistenza e roundtrip DPAPI, assenza di chiavi in stato UI/messaggi/job,
+- **165 test Python, 2 JavaScript**. 24 nuove prove dei provider API:
+  persistenza e roundtrip DPAPI, anche concorrenti, assenza di chiavi in stato UI/messaggi/job,
   modifica e rimozione, indirizzi, cambio endpoint, elenco modelli e probe,
   blocco modifiche durante i job, chat/router/SSE, canvas JSON, Vision On/Off,
   Assistant SDXL a tag inglesi, musica e video, livelli thinking, formati JSON,
@@ -21,7 +21,7 @@ temporanee; nessuna modifica alle chat o ai modelli scelti dall’utente.
   non esposta, risposta in chat, badge Vision/API, GPU e MTP disabilitati.
   Nessun errore JavaScript. Le schermate sono state controllate visivamente.
 - **Pacchetto portabile da cartella nuova**: SHA-256 di tutti i 920 file,
-  worker e stato della versione 0.12.0, componenti PDF/Word e lettura reale,
+  worker e stato della versione 0.12.1, componenti PDF/Word e lettura reale,
   salvataggio/lettura di una chiave DPAPI nell’app estratta. Nessuna chiave,
   chat, configurazione personale o peso modello nel pacchetto.
 

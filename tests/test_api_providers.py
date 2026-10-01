@@ -4,6 +4,7 @@ import tempfile
 import threading
 import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
@@ -66,6 +67,10 @@ class ApiTests(unittest.TestCase):
         encrypted=self.app.store.one('SELECT secret FROM api_providers')['secret'];self.assertNotIn('private-key-qa',encrypted);self.assertEqual(protect(encrypted,True),'private-key-qa')
         self.app.close();self.app=Service(ROOT,self.tmp.name,start_worker=False);self.app.refresh_models();self.assertEqual(self.app.providers.credentials(saved['id'])[1],'private-key-qa')
         self.assertTrue(self.app.engine.require_model(saved['id'],'chat')['ready'])
+    def test_parallel_dpapi_roundtrips(self):
+        def roundtrip(i):return protect(protect('parallel-qa-'+str(i)),True)
+        with ThreadPoolExecutor(max_workers=8) as pool:result=list(pool.map(roundtrip,range(64)))
+        self.assertEqual(result,['parallel-qa-'+str(i) for i in range(64)])
     def test_update_preserves_key_clear_and_remove_selected(self):
         p=self.save();edited=self.save(id=p['id'],name='Renamed',api_key='');self.assertTrue(edited['has_key'])
         self.app.save_settings({'chat_model':p['id']});self.assertFalse(self.save(id=p['id'],api_key='',clear_key=True)['has_key'])
