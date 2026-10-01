@@ -1,7 +1,7 @@
 {
   "archive": "windows-bootstrap.zip",
-  "size": 3423438,
-  "sha256": "4f57604c5fdc39a853fc8f06ab295baa355aed1fe3037ec18c0e8a08bbd1170c",
+  "size": 3423791,
+  "sha256": "4080fb577d732132b4849b918cc11cb99413c5b62ccaf420e9aedf59d31edaf2",
   "sources": {
     "ui/api-providers.js": "e655a70bf19b32109cb8ba889601a28d7e2372c9a54eb5a255ac7a3c7924ad90",
     "ui/app.js": "7418111e794eeee657cc6f1955f7379182426f233d645f8489598349aa38bbc9",
@@ -18,9 +18,9 @@
     "ui/tools-settings.js": "f11926a041cdcb931e395189c9668ab85751f5c6e8949272c2bc60c729fb5c3a",
     "ui/video-settings.js": "95fcea9ad020fe6d16809ee31e1ae3074fe679514686d49cb43e05bbdaf62c1b",
     "ui/visual-controls.js": "bdaa144712a476c0c2e2895f8bf271a2fdd8e00ce35c5327d91532b6c51abd18",
-    "ui/workspace-settings.js": "5737b6970861d62991620603330e6015766d48381bff4f5285037d487c14b4c0",
-    "package.json": "a39b6af47a65662fea63b5ac741e381793061dea3343dc46c28e4b2dedbfc7ce",
-    "package-lock.json": "492d8616724060566ea519fdfb06d4357e8fc17698af1c0bc1a98538343616e2",
+    "ui/workspace-settings.js": "4a103fc1faf4c5511f427921daf612756bfcb77e27dff7196f40f88b591a1086",
+    "package.json": "cf09128194253dec3b95c8190436c4e6420bae335b9251b3aec0734ae7f96f3b",
+    "package-lock.json": "36ca770e688054011aeed28aee00961488e185c25ff8836bae39b1650f8d3879",
     "scripts/build-ui.mjs": "1aa3d19b42d71b0544001b6075b98289d1b13fbc572af033d0bd3b818e59d468",
     "scripts/Launcher.cs": "806ae2fed5c690ba6d2680883ab103ed22b99dff9a74ab46ef5970b8238bca87",
     "native/sd-worker.cpp": "6c3b306db0db2d0f7597b73adbe46864a0438bf5782f02d11dd4884d45dc94bb",
@@ -34,7 +34,7 @@
   "files": {
     "H3-Chat.exe": "776a15737dda9bc9fd90575430869e79def535989fa69c43f2a06df5e5eb0da9",
     "native/h3-sd-worker.exe": "8c29e2eacd15fa9a704b977cb69ed345d06495c2ec7e2702087d0278ba29fb00",
-    "static/app.js": "7dc13a738c96ddfcfae7c87cd84dbc50cdafaeff2815451fa63301986ec952ed",
+    "static/app.js": "f5dc4795d95e3c8fc0af170348cfe63f01bdfaf541d01ed38253cfec779035ad",
     "static/vendor/fonts/KaTeX_AMS-Regular.ttf": "68534840bcfdd2bffb6f0e8deb48684dd01e7f04ea2813267577afb906de1d13",
     "static/vendor/fonts/KaTeX_AMS-Regular.woff": "30da91e84c893f875e252689faebdc590b2871145e8adc7f9a9d4dbd8ce0b251",
     "static/vendor/fonts/KaTeX_AMS-Regular.woff2": "0cdd387c9590a1a9f9794560022dbb59654a7d86f187aa0c81495ad42d3a7308",

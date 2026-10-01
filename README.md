@@ -4,7 +4,7 @@ Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle 
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.13.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.13.0/H3-Chat-0.13.0-windows-x64.zip) dalla [release v0.13.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.13.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.13.1-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.13.1/H3-Chat-0.13.1-windows-x64.zip) dalla [release v0.13.1](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.13.1), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 
@@ -273,7 +273,11 @@ I limiti degli allegati sono quattro immagini, 12 MB ciascuna e 8192 px per lato
 - `runtime/`: Python e motori CPU/Vulkan/CUDA isolati dall'ambiente di sistema.
 - `data/logs/`: registri dei lavori; `data/server.log`: avvio, operazioni, errori e fasi di generazione.
 
-Il servizio ascolta solo su `127.0.0.1`. Host e Origin sono verificati, le modifiche richiedono il token di sessione e il server LLM privato usa una propria chiave. La UI non esegue HTML o JavaScript generato dal modello. I download vengono scritti in `.part` e pubblicati solo dopo la verifica completa. Gli archivi con percorsi esterni o symlink sono rifiutati. Dopo un arresto inatteso le risposte incomplete sono marcate come interrotte.
+Il servizio ascolta solo su `127.0.0.1`. Con Tailscale installato e connesso, H3-Chat configura automaticamente **Tailscale Serve** per accedere all’intera app via HTTPS dagli altri dispositivi autorizzati della propria rete. L’indirizzo compare nei log di avvio e in **Impostazioni → Accesso da Tailscale**, con copia e riprova. Non vengono sovrascritti servizi esistenti: la porta HTTPS è scelta tra 8787 e 8797, riutilizzando solo il proxy privato corrispondente. Host e Origin accettano soltanto gli indirizzi locali e l’HTTPS verificato di quel proxy; le modifiche richiedono sempre il token di sessione. L’accesso riguarda anche impostazioni, modelli e file selezionabili dell’app: limita i dispositivi autorizzati con le regole della tua rete Tailscale. Senza Tailscale, H3-Chat continua a funzionare localmente.
+
+La configurazione Serve resta salvata in Tailscale: con H3-Chat spento il motore non risponde. Non viene attivato Funnel né aperta una porta sulla LAN o sul router. MagicDNS e HTTPS devono essere disponibili nella tailnet; se manca un requisito, l’app mostra il motivo e permette di riprovare dopo averlo abilitato. [Documentazione ufficiale Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve).
+
+Il server LLM privato usa una propria chiave. La UI non esegue HTML o JavaScript generato dal modello. I download vengono scritti in `.part` e pubblicati solo dopo la verifica completa. Gli archivi con percorsi esterni o symlink sono rifiutati. Dopo un arresto inatteso le risposte incomplete sono marcate come interrotte.
 
 Per un backup completo arresta H3-Chat e copia `data/`. Puoi escludere `data/window-profile/` e i profili temporanei degli export per ridurre lo spazio. Per liberare gli allegati orfani occorre una pulizia manuale; non sono eliminati automaticamente per evitare di rimuovere file riutilizzati.
 

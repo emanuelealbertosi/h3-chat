@@ -1,4 +1,4 @@
-"""Loopback-only HTTP host for H3-Chat. No Python packages required."""
+"""Loopback HTTP host with optional private Tailscale HTTPS access."""
 from __future__ import annotations
 import argparse
 import hashlib
@@ -19,6 +19,7 @@ from h3chat.media_http import send_audio
 from h3chat.external_models import browse, suggest
 from h3chat.pdf_export import export_pdf
 from h3chat.store import uid
+from h3chat.tailscale_access import TailscaleAccess
 
 ROOT = Path(__file__).resolve().parent
 LOG = logging.getLogger("h3chat.http")
@@ -51,10 +52,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def guard(self):
         allowed = {f"127.0.0.1:{self.server.server_port}", f"localhost:{self.server.server_port}"}
+        origins = {"http://" + host for host in allowed}
+        network = getattr(self.server, 'network', None)
+        if network:
+            origins.update(network.origins)
+            allowed.update(urllib.parse.urlsplit(url).netloc for url in network.origins)
         if self.headers.get("Host") not in allowed:
             raise PermissionError("Host non consentito.")
         origin = self.headers.get("Origin")
-        if origin and origin not in {"http://" + host for host in allowed}:
+        if origin and origin not in origins:
             raise PermissionError("Origine non consentita.")
         if self.headers.get("Sec-Fetch-Site") == "cross-site":
             raise PermissionError("Richiesta da un altro sito non consentita.")
@@ -101,9 +107,9 @@ class Handler(BaseHTTPRequestHandler):
                 if len(parts)==3 and parts[:2]==['api','projects']:
                     return self.json(self.app.knowledge.project(parts[2]))
                 if path == "/api/health":
-                    return self.json({"app": "h3-chat", "version": __version__, "instance": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]})
+                    return self.json({"app": "h3-chat", "version": __version__, "instance": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16], 'network': getattr(self.server, 'network', None).status if getattr(self.server, 'network', None) else {}})
                 if path == "/api/state":
-                    return self.json(self.app.state())
+                    return self.json(self.app.state() | {'network': getattr(self.server, 'network', None).status if getattr(self.server, 'network', None) else {}})
                 if path == "/api/hardware":
                     return self.json(self.app.hardware())
                 if len(parts) == 3 and parts[:2] == ["api", "chats"]:
@@ -130,6 +136,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.file(safe_join(self.app.data, relative))
                 return self.json({"error": "Risorsa non trovata."}, 404)
             body = self.read_body()
+            if path == '/api/network/refresh' and method == 'POST':
+                return self.json(self.server.network.refresh())
             if path=='/api/server/start' and method=='POST':return self.json(self.app.media_server.start(body))
             if path=='/api/server/stop' and method=='POST':
                 self.app.media_server.close();return self.json({'ok':True})
@@ -260,6 +268,9 @@ def main():
     app = Service(ROOT, args.data)
     try:
         server.app = app
+        server.network = TailscaleAccess(server.server_port)
+        network = server.network.refresh()
+        LOG.info('Tailscale: %s', network.get('url') or network['message'])
         server.daemon_threads = True
         LOG.info("H3-Chat %s pronto: http://127.0.0.1:%s", __version__, args.port)
         server.serve_forever()

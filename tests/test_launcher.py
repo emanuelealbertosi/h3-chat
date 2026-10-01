@@ -42,6 +42,27 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual([call.args[0] for call in stop.call_args_list],[8787,8788])
             follow.assert_not_called()
 
+    def test_reopening_retries_tailscale_without_restarting_the_app(self):
+        with tempfile.TemporaryDirectory() as temp:
+            def get(port, path):
+                return {'token': 'session'} if path == 'state' else {'network': {'ready': False}}
+            output = io.StringIO()
+            with patch.object(launcher, 'DATA', Path(temp)), \
+                    patch.object(launcher, 'running_servers', return_value=[(8788, {'version': launcher.__version__})]), \
+                    patch.object(launcher, 'get', side_effect=get), \
+                    patch.object(launcher.urllib.request, 'urlopen') as request, \
+                    patch.object(launcher, 'follow_logs'), \
+                    patch.object(launcher.subprocess, 'Popen') as spawn, \
+                    patch.object(launcher.sys, 'argv', ['launcher.py', '--logs-only']), \
+                    contextlib.redirect_stdout(output):
+                request.return_value.__enter__.return_value.read.return_value = b'{"ready":true,"url":"https://pc.tail123.ts.net:8788"}'
+                launcher.main()
+            spawn.assert_not_called()
+            req = request.call_args.args[0]
+            self.assertEqual(req.full_url, 'http://127.0.0.1:8788/api/network/refresh')
+            self.assertEqual(req.get_header('X-h3-token'), 'session')
+            self.assertIn('https://pc.tail123.ts.net:8788', output.getvalue())
+
     def test_scan_ignores_other_installations_and_finds_old_second_port(self):
         def get(port,path):
             if port==8787:return {'app':'h3-chat','instance':'another-installation','version':'old'}

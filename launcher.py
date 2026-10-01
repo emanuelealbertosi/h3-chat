@@ -126,6 +126,18 @@ def main():
             time.sleep(.15)
         else:raise RuntimeError('Avvio non riuscito. Consulta data/server.log.')
     port_file.write_text(json.dumps(port))
+    try:
+        network = get(port, 'health').get('network', {})
+        if network and not network.get('ready'):
+            state = get(port, 'state')
+            request = urllib.request.Request(f'http://127.0.0.1:{port}/api/network/refresh', data=b'{}',
+                headers={'Content-Type': 'application/json', 'X-H3-Token': state['token']})
+            with urllib.request.urlopen(request, timeout=40) as response:
+                network = json.load(response)
+        if network:
+            print('Tailscale · ' + (network.get('url') or network.get('message', 'Non disponibile')), flush=True)
+    except (OSError, ValueError, KeyError):
+        print('Tailscale: consulta Impostazioni per verificare il collegamento.', flush=True)
     url=f'http://127.0.0.1:{port}'
     candidates=[Path(os.environ.get('PROGRAMFILES(X86)','C:/Program Files (x86)'))/'Microsoft/Edge/Application/msedge.exe',
                 Path(os.environ.get('PROGRAMFILES','C:/Program Files'))/'Microsoft/Edge/Application/msedge.exe']
