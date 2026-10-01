@@ -16,7 +16,7 @@ export function initLocalModels({api,getState,onChange,notify}){
       <nav><button id="model-browser-roots" class="text-button">Unità</button><button id="model-browser-up" class="text-button">↑ Cartella superiore</button></nav>
       <div id="model-browser-list"></div><p id="model-browser-error" class="local-error" role="alert"></p>
       <footer><button id="model-browser-close" class="btn">Annulla</button><button id="model-browser-choose-directory" class="btn primary" hidden>Usa questa cartella</button></footer></dialog>`);
-  let draft=null,selectedInput=null,parent='',browseTicket=0,suggestTicket=0,directoryCallback=null,currentDirectory='';
+  let draft=null,selectedInput=null,parent='',browseTicket=0,suggestTicket=0,directoryCallback=null,fileCallback=null,currentDirectory='';
   const guarded=fn=>async(...args)=>{try{await fn(...args);}catch(e){notify(e.message,true);}};
   const read=()=>{draft.name=$('#local-model-name').value;for(const f of $('#local-model-files').querySelectorAll('[data-local-role]'))draft.files[f.dataset.localRole]=f.value;
     draft.projector_mode=$('#local-projector-mode')?.value||'auto';};
@@ -67,7 +67,7 @@ export function initLocalModels({api,getState,onChange,notify}){
     catch(error){$('#local-model-error').textContent=error.message;}
     finally{$('#local-model-save').disabled=false;}
   };
-  async function openBrowser(input){$('#model-browser-title').textContent='Scegli un file modello';$('#model-browser-description').textContent='GGUF o safetensors · il file viene usato dove si trova.';suggestTicket++;directoryCallback=null;$('#model-browser-choose-directory').hidden=true;selectedInput=input;$('#model-browser').showModal();await showDirectory(input.value||parent||'');}
+  async function openBrowser(input){$('#model-browser-title').textContent='Scegli un file modello';$('#model-browser-description').textContent='GGUF o safetensors · il file viene usato dove si trova.';suggestTicket++;directoryCallback=null;fileCallback=null;$('#model-browser-choose-directory').hidden=true;selectedInput=input;$('#model-browser').showModal();await showDirectory(input.value||parent||'');}
   async function showDirectory(path){
     const ticket=++browseTicket;currentDirectory='';$('#model-browser-choose-directory').disabled=true;$('#model-browser-path').value=path;$('#model-browser-error').textContent='';$('#model-browser-list').textContent='Lettura della cartella…';
     try{
@@ -79,6 +79,7 @@ export function initLocalModels({api,getState,onChange,notify}){
       for(const button of $('#model-browser-list').querySelectorAll('[data-file-index]'))button.onclick=guarded(async()=>{
         const entry=value.entries[Number(button.dataset.fileIndex)];
         if(entry.directory)await showDirectory(entry.path);
+        else if(fileCallback){const callback=fileCallback;fileCallback=null;$('#model-browser').close();callback(entry.path);}
         else{selectedInput.value=entry.path;$('#model-browser').close();selectedInput.dispatchEvent(new Event('change',{bubbles:true}));read();}
       });
       if(value.truncated)$('#model-browser-error').textContent='Elenco limitato. Apri una sottocartella o incolla direttamente il percorso del file.';
@@ -88,6 +89,7 @@ export function initLocalModels({api,getState,onChange,notify}){
   $('#model-browser-roots').onclick=()=>showDirectory('');$('#model-browser-up').onclick=()=>showDirectory(parent||'');
   $('#model-browser-close').onclick=()=>{$('#model-browser').close();browseTicket++;};
   $('#model-browser-choose-directory').onclick=()=>{if(directoryCallback&&currentDirectory){const callback=directoryCallback;directoryCallback=null;$('#model-browser').close();browseTicket++;callback(currentDirectory);}};
-  const pickDirectory=async(path,callback)=>{$('#model-browser-title').textContent='Scegli una cartella LoRA';$('#model-browser-description').textContent='Puoi collegare cartelle su più unità, senza spostare i file.';directoryCallback=callback;currentDirectory='';$('#model-browser-choose-directory').hidden=false;$('#model-browser-choose-directory').disabled=true;$('#model-browser').showModal();await showDirectory(path||'');};
-  return {open,pickDirectory,remove:guarded(async model=>{await api('/external-models/'+model.id,{},'DELETE');await onChange(null,model.id);notify('Collegamento rimosso. I file originali restano al loro posto.');})};
+  const pickDirectory=async(path,callback)=>{$('#model-browser-title').textContent='Scegli una cartella';$('#model-browser-description').textContent='Puoi collegare cartelle su più unità, senza spostare i file.';fileCallback=null;directoryCallback=callback;currentDirectory='';$('#model-browser-choose-directory').hidden=false;$('#model-browser-choose-directory').disabled=true;$('#model-browser').showModal();await showDirectory(path||'');};
+  const pickFile=async(path,callback)=>{fileCallback=callback;directoryCallback=null;$('#model-browser-title').textContent='Scegli un modello GGUF';$('#model-browser-description').textContent='Il file resta nella cartella originale.';$('#model-browser-choose-directory').hidden=true;$('#model-browser').showModal();await showDirectory(path||'');};
+  return {open,pickDirectory,pickFile,remove:guarded(async model=>{await api('/external-models/'+model.id,{},'DELETE');await onChange(null,model.id);notify('Collegamento rimosso. I file originali restano al loro posto.');})};
 }

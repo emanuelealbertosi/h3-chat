@@ -43,6 +43,7 @@ class VideoEngine:
         return plan,{'model':llm['name'],'max_tokens':tuning['max_tokens']}
 
     def generate_video(self,model,settings,plan,refs,job_id,cancel,stage):
+        if model.get('remote_media'):return self.remote_generate(model,settings,'',refs,job_id,cancel,stage,plan=plan)
         opts=options(model,settings)
         plan=validate_plan(plan,refs,opts['duration'])
         if any(a['role']=='lipsync' for a in plan['audios']) and opts['steps']<8:

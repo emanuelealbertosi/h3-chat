@@ -72,6 +72,8 @@ class NativeRuntimeTests(unittest.TestCase):
                     install_redist(root,dest);self.assertEqual(paths[0].stat().st_mtime_ns,timestamp)
                     paths[0].write_bytes(b'broken');install_redist(root,dest)
                     self.assertEqual(paths[0].read_bytes(),b'signed-fixture')
+            for kind in ('documents','asr','lab'):
+                dest=root/'runtime/tools'/kind;self.assertEqual(len(install_redist(root,dest)),1);self.assertEqual((dest/'vcruntime140.dll').read_bytes(),b'signed-fixture')
             self.assertEqual(install_redist(root,root/'runtime/vision'),[])
             (source/'vcruntime140.dll').write_bytes(b'tampered')
             with self.assertRaisesRegex(ValueError,'danneggiata'):install_redist(root,root/'runtime/cpu/sd')

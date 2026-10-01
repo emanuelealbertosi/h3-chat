@@ -25,9 +25,11 @@ def endpoint(value):
     if p.scheme not in ('http','https') or not p.hostname or p.username or p.password or p.query or p.fragment or port==0:
         raise ValueError('Usa un indirizzo base API http/https, senza credenziali o query.')
     local=p.hostname.lower()=='localhost'
-    try:local=local or ipaddress.ip_address(p.hostname).is_loopback
+    try:
+        address=ipaddress.ip_address(p.hostname)
+        local=local or address.is_loopback or any(address in ipaddress.ip_network(net) for net in ('10.0.0.0/8','172.16.0.0/12','192.168.0.0/16') if address.version==4)
     except ValueError:pass
-    if p.scheme=='http' and not local:raise ValueError('Per servizi esterni usa HTTPS. HTTP è consentito solo per server sullo stesso PC.')
+    if p.scheme=='http' and not local:raise ValueError('Per servizi esterni usa HTTPS. HTTP è consentito per localhost o indirizzi IP della rete privata.')
     path=p.path.rstrip('/')
     if path.endswith('/chat/completions'):path=path[:-len('/chat/completions')]
     return urlunsplit((p.scheme,p.netloc,path,'',''))

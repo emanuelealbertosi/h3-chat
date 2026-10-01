@@ -1,4 +1,4 @@
-"""CPU INT8 speech-to-text; entirely offline and released after each request."""
+"""CPU INT8 or CUDA FP16 speech-to-text; offline, released after each request."""
 import json
 import os
 from pathlib import Path
@@ -32,13 +32,17 @@ def audio(path):
 
 emit('hello',engine='transcription')
 model=None;key=None
+cuda_dlls=[]
 for line in sys.stdin:
     try:
-        request=json.loads(line);opts=request['settings'];wanted=(request['model'],opts['asr_threads'])
+        request=json.loads(line);opts=request['settings'];device='cuda' if opts.get('asr_device')=='gpu' else 'cpu';compute='float16' if device=='cuda' else 'int8';wanted=(request['model'],opts['asr_threads'],device)
         if key!=wanted:
-            emit('stage',message='Trascrizione · caricamento Whisper CPU INT8')
+            emit('stage',message='Trascrizione · caricamento Whisper '+device.upper()+' '+compute.upper())
+            if device=='cuda' and os.name=='nt':
+                for folder in (ROOT/'runtime/cuda/llama',ROOT/'runtime/vision/packages/torch/lib'):
+                    if folder.is_dir():cuda_dlls.append(os.add_dll_directory(str(folder)))
             from faster_whisper import WhisperModel
-            model=WhisperModel(request['model'],device='cpu',compute_type='int8',cpu_threads=opts['asr_threads'],local_files_only=True);key=wanted
+            model=WhisperModel(request['model'],device=device,compute_type=compute,cpu_threads=opts['asr_threads'],local_files_only=True);key=wanted
         emit('stage',message='Trascrizione · lettura audio')
         signal=audio(request['path']);duration=len(signal)/16000
         segments,info=model.transcribe(signal,language=None if opts['asr_language']=='auto' else opts['asr_language'],beam_size=opts['asr_beam'],vad_filter=True,condition_on_previous_text=False)
@@ -47,6 +51,6 @@ for line in sys.stdin:
             chars+=len(s.text)
             if chars>500000:raise ValueError('Trascrizione troppo lunga.')
             result.append({'start':s.start,'end':s.end,'text':s.text.strip()});emit('stage',message=f'Trascrizione audio · {min(s.end,duration):.0f}/{duration:.0f} secondi')
-        data={'language':info.language,'language_probability':info.language_probability,'duration':duration,'segments':result,'text':'\n'.join(s['text'] for s in result),'model':request['model'],'device':'cpu','compute_type':'int8'}
+        data={'language':info.language,'language_probability':info.language_probability,'duration':duration,'segments':result,'text':'\n'.join(s['text'] for s in result),'model':request['model'],'device':device,'compute_type':compute}
         target=Path(request['output']);target.parent.mkdir(parents=True,exist_ok=True);part=target.with_suffix('.writing');part.write_text(json.dumps(data,ensure_ascii=False),encoding='utf-8');part.replace(target);emit('result',result={'path':str(target)})
     except Exception as e:emit('error',message=str(e))

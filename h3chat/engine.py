@@ -122,6 +122,8 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                     "cache":self.cache.snapshot()}
 
     def session_key(self, kind, model, settings):
+        from .devices import options
+        if kind in ('chat','image'):settings=options(settings,'llm' if kind=='chat' else 'image')
         files = self.model_files(model,settings)
         fingerprint = []
         for role, path in sorted(files.items()):
@@ -147,7 +149,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
             wanted = set()
             for field,kind in (('chat_model','chat'),('create_model','image'),('edit_model','image'),('diagram_model','image'),('_image_model','image'),('music_model','music'),('video_model','video')):
                 model = self.catalog.get(settings.get(field))
-                if model and not model.get('api'):
+                if model and not model.get('api') and not model.get('remote_media'):
                     wanted.add(self.session_key(kind,model,settings))
             # Keep an explicitly selected extra image model between messages,
             # including after the queue returns to the saved global settings.
@@ -193,7 +195,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         seen = set()
         for field,capability in (('chat_model','chat'),('create_model','create'),('edit_model','edit'),('diagram_model','create'),('_image_model','create'),('music_model','music'),('video_model','video')):
             model = self.catalog.get(settings.get(field))
-            if not model or model.get('api') or model['id'] in seen:
+            if not model or model.get('api') or model.get('remote_media') or model['id'] in seen:
                 continue
             seen.add(model['id'])
             model = model | inspect_model(self.root, model)
@@ -231,6 +233,8 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         return files
 
     def start_llama(self, model, settings, log_path, cancel, stage=None):
+        from .devices import options
+        settings=options(settings,'llm')
         if model.get('api'):
             if cancel.is_set():raise Cancelled()
             if not self.api_credentials:raise ValueError('Configurazione API non disponibile.')
@@ -423,6 +427,8 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         return result
 
     def start_image(self, model, settings, log_path, cancel, stage=None):
+        from .devices import options
+        settings=options(settings,'image')
         session = self._activate('image',model,settings,log_path,cancel,stage=stage)
         if session.ready and session.alive():
             return session
@@ -521,6 +527,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                 'loras':[{'path':l['path'],'weight':l['weight']} for l in settings.get('_loras',[])]}
 
     def generate(self, model, settings, prompt, refs, job_id, cancel, stage):
+        if model.get('remote_media'):return self.remote_generate(model,settings,prompt,refs,job_id,cancel,stage)
         folder = self.data / 'outputs' / job_id
         folder.mkdir(parents=True,exist_ok=True)
         output,log_path = folder/'image.png', folder/'engine.log'

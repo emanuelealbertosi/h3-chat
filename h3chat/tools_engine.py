@@ -35,11 +35,11 @@ class ToolsEngine:
     def transcribe(self,item,settings,cancel,stage,log_path):
         if not status(self.root)['asr']['ready']:raise ValueError('Installa il motore trascrizione dal Setup → Strumenti.')
         folder=model_path(self.root,settings['asr_model']);weight=folder/'model.bin';st=weight.stat()
-        key=hashlib.sha256(json.dumps([item['id'],str(folder),st.st_size,st.st_mtime_ns,settings['asr_language'],settings['asr_beam']]).encode()).hexdigest()
+        key=hashlib.sha256(json.dumps([item['id'],str(folder),st.st_size,st.st_mtime_ns,settings['asr_language'],settings['asr_beam'],settings.get('asr_device','cpu')]).encode()).hexdigest()
         target=safe_join(self.data,'transcriptions/'+key+'.json')
         if not target.exists():
             if settings.get('memory_policy')!='resident':
-                stage('Rilascio modelli · trascrizione sulla CPU');self.stop()
+                stage('Rilascio modelli · trascrizione sulla '+('GPU' if settings.get('asr_device')=='gpu' else 'CPU'));self.stop()
             self.tool_call('transcription-worker.py',{'model':str(folder),'path':str(safe_join(self.data,item['path'])),'settings':settings,'output':str(target)},cancel,stage,log_path,timeout=3600)
         result=json.loads(target.read_text(encoding='utf-8'))
         if not result['text'].strip():result['warning']='Nessun parlato riconosciuto; non è un’analisi di musica o rumori.'
@@ -67,7 +67,7 @@ class ToolsEngine:
         context=[];meta={};transcripts=[];remaining=budget(settings,history)
         sources=[]
         if requested(payload['prompt'],settings):
-            sources=search(payload['prompt'],settings,cancel,stage);meta['web_sources']=[{k:s[k] for k in ('title','url','read','snippet')} for s in sources]
+            sources=search(payload['prompt'],settings,cancel,stage);meta['web_sources']=[{k:s[k] for k in ('title','url','read','snippet','text')} for s in sources]
             for i,s in enumerate(sources,1):
                 allocation=max(150,min(remaining//max(1,len(sources)-i+1+len(documents)+len(audios)),3500));selected,_=excerpts([{'location':'web','text':s['text'][j:j+1200]} for j in range(0,len(s['text']),1200)],payload['prompt'],allocation)
                 text='\n'.join(x['text'] for x in selected);context.append(f"Fonte web [{i}] {s['title']}\nURL: {s['url']}\n{'Testo pagina' if s['read'] else 'Solo estratto ricerca'}:\n{text}");remaining-=len(text)+180

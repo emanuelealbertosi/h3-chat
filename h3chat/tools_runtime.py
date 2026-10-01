@@ -5,6 +5,7 @@ from pathlib import Path
 from .external_models import absolute_path
 
 REQUIRED={'documents':('pypdf/__init__.py','docx/__init__.py','lxml/etree.cp313-win_amd64.pyd','pypdfium2/__init__.py','msvcp140.dll'),
+          'lab':('manim/__init__.py','matplotlib/__init__.py','manimpango/__init__.py','cairo/__init__.py','msvcp140.dll'),
           'asr':('faster_whisper/__init__.py','ctranslate2/__init__.py','av/__init__.py','tokenizers/__init__.py','msvcp140.dll')}
 
 def status(root):

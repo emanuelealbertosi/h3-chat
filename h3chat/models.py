@@ -124,6 +124,7 @@ def discover_local(root):
 
 
 def inspect_model(root, model):
+    if model.get('remote_media'):return {'ready':True,'complete':True}
     if model.get('api'):
         from .providers import traits
         return traits(model)

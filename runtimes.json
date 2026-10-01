@@ -369,5 +369,304 @@
         "extract_to": "runtime/tools/asr"
       }
     ]
+  },
+  "tools_lab": {
+    "name": "Calcoli, grafici e Manim",
+    "files": [
+      {
+        "path": "runtime/downloads/lab/audioop_lts-0.2.2-cp313-abi3-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/34/a5/9d78fdb5b844a83da8a71226c7bdae7cc638861085fff7a1d707cb4823fa/audioop_lts-0.2.2-cp313-abi3-win_amd64.whl",
+        "size": 30503,
+        "sha256": "a2c2a947fae7d1062ef08c4e369e0ba2086049a5e598fda41122535557012e9e",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/av-19.0.0-cp312-abi3-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/38/21/81eefc2224ce5e44131552333a703346f55f0e23cae7db20961931b9d298/av-19.0.0-cp312-abi3-win_amd64.whl",
+        "size": 28158185,
+        "sha256": "96e4c0981ec21cadfef4c0b840d04a5e3c3be821894aa6a7d7a8ee870ba6b727",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/beautifulsoup4-4.15.0-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/88/c6/92fcd42f1ba33e1184263f25bfabf3d27c383410470f169e4b8163bf9c17/beautifulsoup4-4.15.0-py3-none-any.whl",
+        "size": 109924,
+        "sha256": "d6f88de62e1d4e38ecb1077eb9724cd0eff29d2a08ca16a401e9b9e93f117cf9",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/click-8.5.0-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/58/50/6c0d534c5f134586a8e1ba4e330569e32f057e33372ae556463212fb4cd3/click-8.5.0-py3-none-any.whl",
+        "size": 125251,
+        "sha256": "255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/cloup-4.0.0-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/2c/34/20224fd9d52e8ce7e3b319b5d6b7126da25e89d00cd1a5692b4b46ed2d26/cloup-4.0.0-py3-none-any.whl",
+        "size": 55776,
+        "sha256": "0678744a3a2753e1d78dd3ea5c6e4cbbc3b41561fd7a7a7d075dbc8dad74f74f",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/colorama-0.4.6-py2.py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl",
+        "size": 25335,
+        "sha256": "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/contourpy-1.4.0-cp313-cp313-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/68/c1/a59df0754bf83a6f3e153cc19d550a5b01f607e389b1c4d57f436f9139e0/contourpy-1.4.0-cp313-cp313-win_amd64.whl",
+        "size": 234084,
+        "sha256": "6507a016976a75a15aee47809a34605de6244ccc056e6164bf9fb14b27eecad4",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/cycler-0.12.1-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/e7/05/c19819d5e3d95294a6f5947fb9b9629efb316b96de511b418c53d245aae6/cycler-0.12.1-py3-none-any.whl",
+        "size": 8321,
+        "sha256": "85cef7cff222d8644161529808465972e51340599459b8ac3ccbac5a854e0d30",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/decorator-5.3.1-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/05/7f/798705f5296a58ca505d600456748d1be48078eac8a7050d8a98bc9edb89/decorator-5.3.1-py3-none-any.whl",
+        "size": 10365,
+        "sha256": "f47fe6fdbd2edd623ecfe36875d37aba411624e2670dd395dddae1358689bb3c",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/fonttools-4.66.1-cp313-cp313-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/d1/86/68bc2be04b83535607fbb70ebb2ba02380bf4286d79597c4515b7d247187/fonttools-4.66.1-cp313-cp313-win_amd64.whl",
+        "size": 2485146,
+        "sha256": "43d1284c1964666ee833f2badd3017dc138f53d4889043ffca66c5ce4188f188",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/glcontext-3.0.0-cp313-cp313-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/53/b4/f0e0860526b8661ec6ae2b25a15b61100e551f57f488613c564752173a56/glcontext-3.0.0-cp313-cp313-win_amd64.whl",
+        "size": 12971,
+        "sha256": "18aa4b1df50e8c8ea39bd0f775f39bcc987521f92c4ed019ec7d70078471354d",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/isosurfaces-0.1.2-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/b1/68/d5e9e6e0d6e43107d8393d2ee3d231dbb597bf93052c6f3117b313724980/isosurfaces-0.1.2-py3-none-any.whl",
+        "size": 11649,
+        "sha256": "525a49ba93f4dbc35303cd2faf30976af0f99d9274cfa2787aec016b8ef96c64",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/kiwisolver-1.5.1-cp313-cp313-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/f5/22/deabbb3ad6d918d74b7831b2d8ae7151b09d21c87974e5ee8a456f58c94c/kiwisolver-1.5.1-cp313-cp313-win_amd64.whl",
+        "size": 70758,
+        "sha256": "dc23390afe9f4ef9ac3bcc72a03a56eebbde03f4c571a32cb38f859cff9a6524",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/manim-0.21.0-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/02/b9/52a764c6fd593055cd401ca1f5bae9701e0fca750ae7627d38a48869fc32/manim-0.21.0-py3-none-any.whl",
+        "size": 679365,
+        "sha256": "021001097bb568372fa8f5d1dcf46ba085c8502c10efb2312ff45f19f7facb60",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/manimpango-0.6.1-cp313-cp313-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/3b/ed/a7a57491b26e8fb85ac0be9c39b53a6690f3c39beaf06d3715cb6916932b/manimpango-0.6.1-cp313-cp313-win_amd64.whl",
+        "size": 4203874,
+        "sha256": "e90d6b926d0e673ce624963d44cc28c55a368b6074108ab885a43305baeae26c",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/mapbox_earcut-2.1.0-cp313-cp313-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/60/e1/dc52f1b18347c29742ff1a82c0f88553c8fac71fdc541cabe553ddead1c4/mapbox_earcut-2.1.0-cp313-cp313-win_amd64.whl",
+        "size": 279382,
+        "sha256": "0224b889f67b2868b4cf4dc3ba7dd7006122ece2199159147edce80e05df079c",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/markdown_it_py-4.2.0-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/b3/81/4da04ced5a082363ecfa159c010d200ecbd959ae410c10c0264a38cac0f5/markdown_it_py-4.2.0-py3-none-any.whl",
+        "size": 91687,
+        "sha256": "9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/matplotlib-3.11.2-cp313-cp313-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/94/2e/6d1d33f242c705b5c6c6fb3f0fc141add51cb1abb62912e59de0835d28c4/matplotlib-3.11.2-cp313-cp313-win_amd64.whl",
+        "size": 9349539,
+        "sha256": "bc067c462a86f0e57bf52fc6e058d90171a5420007dac00c46e90153050c69a7",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/mdurl-0.1.2-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl",
+        "size": 9979,
+        "sha256": "84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/moderngl-5.12.0-cp313-cp313-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/2c/8b/0a264732e0ee49fca109e98ec28f4d0c326ffc31466aa6e9668e8961aabb/moderngl-5.12.0-cp313-cp313-win_amd64.whl",
+        "size": 108514,
+        "sha256": "e34d1cd38f7998258f76a08bb5e87f351ec653b7ea1928b2711f8719c10cefd1",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/moderngl_window-3.1.1-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/23/41/d3503f07de8ad3597165f88b07e1064629f82e65385c4307875b2f6b137f/moderngl_window-3.1.1-py3-none-any.whl",
+        "size": 382381,
+        "sha256": "e3b3ac2b4e23afcbfdac1971318a4db893bed3ba6a8fbde3367b1226af39b2e5",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/networkx-3.7-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/7e/cd/fe58041e9011f307c490e3e17dd48cc516448f7c698a3f2d9d9d65d7e6a8/networkx-3.7-py3-none-any.whl",
+        "size": 2142205,
+        "sha256": "e3fd2c13a7814cee3746340d8d7f8598a67f16a58bf47fb7f8793fab6efca1b0",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/numpy-2.5.3-cp313-cp313-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/f3/ec/100f2b1794ede74a9b3d7ec6b9736927f56713414c1dfe19ab6c383494bf/numpy-2.5.3-cp313-cp313-win_amd64.whl",
+        "size": 12560965,
+        "sha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/packaging-26.3-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl",
+        "size": 129956,
+        "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/pillow-12.3.0-cp313-cp313-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/a6/9b/7a58e61d62be561da3a356fe2384d4059a6345fc130e23ef1c36a5b81d24/pillow-12.3.0-cp313-cp313-win_amd64.whl",
+        "size": 7239691,
+        "sha256": "1cca606cd25738df4ed873d5ad46bbdb3d83b5cbca291f6b4ff13a4df6b0bbe8",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/pycairo-1.29.1-cp313-cp313-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/81/ba/3499ae0f6f8be6d55ef5db620a60693b4ef925b710890bf66c17aeff036e/pycairo-1.29.1-cp313-cp313-win_amd64.whl",
+        "size": 844528,
+        "sha256": "859f5f29d7c30fc28dbc5ce91eb30a45e0b7e447a7bd738c231dd7f9be368d1a",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/pydub-0.25.1-py2.py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/a6/53/d78dc063216e62fc55f6b2eebb447f6a4b0a59f55c8406376f76bf959b08/pydub-0.25.1-py2.py3-none-any.whl",
+        "size": 32327,
+        "sha256": "65617e33033874b59d87db603aa1ed450633288aefead953b30bded59cb599a6",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/pyglet-2.1.16-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/23/93/b81e304f8954876fed84c5afffe83d2c1c0ceed064d5003b87fbfe9f9076/pyglet-2.1.16-py3-none-any.whl",
+        "size": 1037857,
+        "sha256": "27f9cabf97a64b15d335cf70d9e8979bbab5f84a9900a058206bcd3a2de341ae",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/pyglm-2.8.3-cp313-cp313-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/17/fd/71b44ee5ac341e9979731a7b868e237f3775e140a9481cea79bae7abb83c/pyglm-2.8.3-cp313-cp313-win_amd64.whl",
+        "size": 1663010,
+        "sha256": "33118ef1d678ab573546757dee7f0a1ca2fba8e8d7760c9fe6320fe0cfa3deb7",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/pygments-2.21.0-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/71/46/17f022dd3e953bf20a04a028a21ec746d942f8d2af30fa0f124fa0e6a684/pygments-2.21.0-py3-none-any.whl",
+        "size": 1250147,
+        "sha256": "2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/pyparsing-3.3.3-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/38/bb/d215ee7c73b61497b28a5503f9f53523f294fcc936762b7caf90e0c1c2b5/pyparsing-3.3.3-py3-none-any.whl",
+        "size": 126420,
+        "sha256": "ece8c00a69cf01b45d0b1dedabb469c90d8caf996d4fda40f147627a122849a4",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+        "size": 229892,
+        "sha256": "a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/rich-15.0.0-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/82/3b/64d4899d73f91ba49a8c18a8ff3f0ea8f1c1d75481760df8c68ef5235bf5/rich-15.0.0-py3-none-any.whl",
+        "size": 310654,
+        "sha256": "33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/scipy-1.18.1-cp313-cp313-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/93/0e/e0348fbc0dbab65c114cf78957e7dfeb49f8e8b556b4d930cc12ff195e18/scipy-1.18.1-cp313-cp313-win_amd64.whl",
+        "size": 36622841,
+        "sha256": "559ed65f60c1af5a03f3912605a1b5114f522c7c32fb23c3376ae8f03219fe28",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/screeninfo-0.8.1-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/6e/bf/c5205d480307bef660e56544b9e3d7ff687da776abb30c9cb3f330887570/screeninfo-0.8.1-py3-none-any.whl",
+        "size": 12907,
+        "sha256": "e97d6b173856edcfa3bd282f81deb528188aff14b11ec3e195584e7641be733c",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/six-1.17.0-py2.py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl",
+        "size": 11050,
+        "sha256": "4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/skia_pathops-0.9.2-cp310-abi3-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/ff/96/bd1bfaf5335242a86d8af940ff2124861e9bc6a5520cf96fda374fd10945/skia_pathops-0.9.2-cp310-abi3-win_amd64.whl",
+        "size": 1782901,
+        "sha256": "9ae72d801b5f4c5dbb937fb25476a12fa2da70860f28dd637da2b529dbd8271c",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/soupsieve-2.10-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/66/87/5ed59e1d0290564e2027ed066c52b059892c4637741337fc0967183c8d4d/soupsieve-2.10-py3-none-any.whl",
+        "size": 38019,
+        "sha256": "8596eb8967d744174820280fa62b4542a2e955bfaccca73ed8a13c6eb8e9b502",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/svgelements-1.9.6-py2.py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/48/2c/6c9bb53db56c8a12a736d2158a8b842a5993b96daabc29d90a098e840280/svgelements-1.9.6-py2.py3-none-any.whl",
+        "size": 137856,
+        "sha256": "8a5cf2cc066d98e713d5b875b1d6e5eeb9b92e855e835ebd7caab2713ae1dcad",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/tqdm-4.70.1-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/a7/03/921a3d3c75785aca9ebfbfcabfbc3a1be12e2ab5265deb026d55a5a3f83e/tqdm-4.70.1-py3-none-any.whl",
+        "size": 80199,
+        "sha256": "c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/typing_extensions-4.16.0-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl",
+        "size": 45571,
+        "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
+        "extract_to": "runtime/tools/lab"
+      },
+      {
+        "path": "runtime/downloads/lab/watchdog-6.0.0-py3-none-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/db/d9/c495884c6e548fce18a8f40568ff120bc3a4b7b99813081c8ac0c936fa64/watchdog-6.0.0-py3-none-win_amd64.whl",
+        "size": 79070,
+        "sha256": "cbafb470cf848d93b5d013e2ecb245d4aa1c8fd0504e863ccefa32445359d680",
+        "extract_to": "runtime/tools/lab"
+      }
+    ]
   }
 }

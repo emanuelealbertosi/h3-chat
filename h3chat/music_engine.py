@@ -44,6 +44,7 @@ class MusicEngine:
   return result,{'model':model['name'],'max_tokens':tuning['max_tokens']}
 
  def generate_music(self,model,settings,composition,job_id,cancel,stage):
+  if model.get('remote_media'):return self.remote_generate(model,settings,'',[],job_id,cancel,stage,composition=composition)
   folder=self.data/'outputs'/job_id;folder.mkdir(parents=True,exist_ok=True)
   output=folder/'audio.wav';opts=options(model,settings)
   if composition['abc'] and opts['cot']=='off':raise ValueError('Per usare ABC scegli Melodia o Melodia e accordi nelle preferenze Musica.')

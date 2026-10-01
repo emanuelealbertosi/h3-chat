@@ -50,7 +50,7 @@ class Client:
             if response:
                 try:response.fp.raw._sock.shutdown(socket.SHUT_RDWR)
                 except (AttributeError,OSError):pass
-    def exchange(self,config,key,cancel,*,body=None,path='/models',on_event=None,timeout=300):
+    def exchange(self,config,key,cancel,*,body=None,path='/models',on_event=None,timeout=300,max_bytes=4*1024**2,content_type='application/json'):
         if cancel.is_set():raise Cancelled()
         events=queue.Queue(maxsize=64);stop=threading.Event();deadline=time.monotonic()+timeout
         def emit(kind,value):
@@ -61,13 +61,13 @@ class Client:
             response=None
             with self.lock:self.requests[stop]=None
             try:
-                headers={'Accept':'text/event-stream, application/json','Content-Type':'application/json','User-Agent':'H3-Chat'}
+                headers={'Accept':'text/event-stream, application/json','Content-Type':content_type,'User-Agent':'H3-Chat'}
                 if key:headers['Authorization']='Bearer '+key
-                request=urllib.request.Request(config['base_url']+path,data=None if body is None else json.dumps(body,ensure_ascii=False).encode('utf-8'),headers=headers)
+                request=urllib.request.Request(config['base_url']+path,data=None if body is None else body if isinstance(body,bytes) else json.dumps(body,ensure_ascii=False).encode('utf-8'),headers=headers)
                 response=urllib.request.build_opener(NoRedirect()).open(request,timeout=30)
                 with self.lock:self.requests[stop]=response
                 if stop.is_set():return
-                if body and body.get('stream'):
+                if isinstance(body,dict) and body.get('stream'):
                     while not stop.is_set():
                         line=response.readline(2*1024**2+1)
                         if len(line)>2*1024**2:raise ValueError('Evento API troppo grande.')
@@ -78,8 +78,8 @@ class Client:
                             if raw:emit('event',json.loads(raw))
                     emit('done',None)
                 else:
-                    raw=response.read(4*1024**2+1)
-                    if len(raw)>4*1024**2:raise ValueError('Risposta API troppo grande.')
+                    raw=response.read(max_bytes+1)
+                    if len(raw)>max_bytes:raise ValueError('Risposta API troppo grande.')
                     emit('result',json.loads(raw))
             except urllib.error.HTTPError as exc:
                 # Providers may echo headers or request text. Never persist their raw errors.

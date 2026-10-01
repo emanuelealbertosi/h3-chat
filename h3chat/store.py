@@ -14,6 +14,9 @@ PROFILES = {
     "balanced": {"context": 8192, "gpu_layers": 99, "width": 768, "height": 768},
 }
 DEFAULTS = {
+    "lab_auto": True, "manim_device": "cpu", "manim_duration": 8, "manim_fps": 15, "manim_width": 854, "manim_height": 480,
+    "llm_device": "inherit", "image_device": "inherit", "rag_device": "cpu", "asr_device": "cpu",
+    "rag_enabled": True, "rag_embedding_model": "", "rag_embedding_profile": "embeddinggemma", "rag_top_k": 6,
     "web_auto": True, "web_provider": "duckduckgo", "web_searxng_url": "", "web_max_results": 3,
     "transcribe_auto": True, "asr_model": "whisper-small", "asr_language": "auto", "asr_threads": 4, "asr_beam": 3,
     "video_model": "", "video_auto": True, "video_advanced": False, "video_overrides": {}, "video_prompt_max_tokens": 3000,
@@ -44,6 +47,7 @@ class Store:
                 PRAGMA journal_mode=WAL;
                 CREATE TABLE IF NOT EXISTS external_models (id TEXT PRIMARY KEY, config TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS api_providers (id TEXT PRIMARY KEY, config TEXT NOT NULL, secret TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS media_providers (id TEXT PRIMARY KEY, config TEXT NOT NULL, secret TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS collections (id TEXT PRIMARY KEY, name TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS chats (
@@ -66,6 +70,23 @@ class Store:
                     title TEXT NOT NULL DEFAULT 'Canvas', content TEXT NOT NULL DEFAULT '',
                     media TEXT NOT NULL DEFAULT '[]', updated REAL NOT NULL);
             """)
+            db.executescript("""
+                CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, instructions TEXT NOT NULL DEFAULT '', sources_only INTEGER NOT NULL DEFAULT 0, created REAL NOT NULL);
+                CREATE TABLE IF NOT EXISTS project_roots (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, path TEXT NOT NULL, UNIQUE(project_id,path));
+                CREATE TABLE IF NOT EXISTS project_exclusions (project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, path TEXT NOT NULL, PRIMARY KEY(project_id,path));
+                CREATE TABLE IF NOT EXISTS project_sources (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, path TEXT NOT NULL, name TEXT NOT NULL, fingerprint TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending', error TEXT NOT NULL DEFAULT '', updated REAL NOT NULL DEFAULT 0, UNIQUE(project_id,path));
+                CREATE TABLE IF NOT EXISTS rag_chunks (id INTEGER PRIMARY KEY AUTOINCREMENT, source_id TEXT NOT NULL REFERENCES project_sources(id) ON DELETE CASCADE, location TEXT NOT NULL, page INTEGER, text TEXT NOT NULL, embedding TEXT, embedding_key TEXT NOT NULL DEFAULT '');
+                CREATE INDEX IF NOT EXISTS rag_source ON rag_chunks(source_id);
+                CREATE VIRTUAL TABLE IF NOT EXISTS rag_fts USING fts5(text, content='rag_chunks', content_rowid='id', tokenize='unicode61 remove_diacritics 2');
+                CREATE TRIGGER IF NOT EXISTS rag_insert AFTER INSERT ON rag_chunks BEGIN INSERT INTO rag_fts(rowid,text) VALUES(new.id,new.text); END;
+                CREATE TRIGGER IF NOT EXISTS rag_delete AFTER DELETE ON rag_chunks BEGIN INSERT INTO rag_fts(rag_fts,rowid,text) VALUES('delete',old.id,old.text); END;
+                CREATE TRIGGER IF NOT EXISTS rag_update AFTER UPDATE OF text ON rag_chunks BEGIN INSERT INTO rag_fts(rag_fts,rowid,text) VALUES('delete',old.id,old.text); INSERT INTO rag_fts(rowid,text) VALUES(new.id,new.text); END;
+            """)
+            if 'project_id' not in {row['name'] for row in db.execute('PRAGMA table_info(chats)')}:
+                db.execute('ALTER TABLE chats ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL')
+            if 'source_url' not in {row['name'] for row in db.execute('PRAGMA table_info(project_sources)')}:
+                db.execute("ALTER TABLE project_sources ADD COLUMN source_url TEXT NOT NULL DEFAULT ''")
+            db.execute("UPDATE project_sources SET status='pending' WHERE status='indexing'")
             # One-time migration preserves the user's existing active model settings.
             if not db.execute("SELECT 1 FROM settings WHERE key='llm_overrides'").fetchone():
                 existing=DEFAULTS|{r['key']:json.loads(r['value']) for r in db.execute('SELECT * FROM settings')}
@@ -120,9 +141,9 @@ class Store:
             row["meta"] = json.loads(row["meta"])
         return rows
 
-    def create_chat(self, title="Nuova chat", collection_id=None):
+    def create_chat(self, title="Nuova chat", collection_id=None, project_id=None):
         chat_id, now = uid(), time.time()
-        self.execute("INSERT INTO chats VALUES (?,?,?,0,0,?,?)", (chat_id, title, collection_id, now, now))
+        self.execute("INSERT INTO chats(id,title,collection_id,pinned,archived,created,updated,project_id) VALUES (?,?,?,0,0,?,?,?)", (chat_id, title, collection_id, now, now, project_id))
         return self.chat(chat_id)
 
     def enqueue(self, chat_id, prompt, media, settings, canvas=False, loras=None):
@@ -142,6 +163,7 @@ class Store:
                              (user_id, chat_id, prompt, json.dumps(media), now, json.dumps(lora_meta)))
             snapshot = db.execute("SELECT * FROM canvases WHERE chat_id=?", (chat_id,)).fetchone()
             payload = {"prompt": prompt, "media": media, "settings": settings, "loras": loras, "until": cur.lastrowid, "canvas": canvas,
+                       "project_id": chat['project_id'],
                        "canvas_snapshot": dict(snapshot) if canvas and snapshot else None}
             db.execute("INSERT INTO messages(id,chat_id,role,status,created) VALUES (?,?,'assistant','queued',?)", (answer_id, chat_id, now))
             db.execute("INSERT INTO jobs VALUES (?,?,?,?, 'queued','In attesa','',?)", (job_id, chat_id, answer_id, json.dumps(payload), now))

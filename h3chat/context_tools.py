@@ -29,4 +29,4 @@ def excerpts(blocks,query,budget):
 def budget(settings,history):
     # Conservative characters/token estimate; leave space for prompt, history and output.
     past=sum(len(m.get('content','')) for m in history)
-    return max(600,min(24000,(settings['context']-settings['max_tokens']-700)*2-past))
+    return max(150,max(600,min(24000,(settings['context']-settings['max_tokens']-700)*2-past))-settings.get('_context_reserved',0))

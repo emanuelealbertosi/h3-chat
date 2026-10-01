@@ -98,6 +98,8 @@ class Handler(BaseHTTPRequestHandler):
             parts = [p for p in path.split("/") if p]
             method = self.command
             if method == "GET":
+                if len(parts)==3 and parts[:2]==['api','projects']:
+                    return self.json(self.app.knowledge.project(parts[2]))
                 if path == "/api/health":
                     return self.json({"app": "h3-chat", "version": __version__, "instance": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]})
                 if path == "/api/state":
@@ -123,11 +125,32 @@ class Handler(BaseHTTPRequestHandler):
                     return self.file(safe_join(self.app.data / "exports", relative))
                 if path.startswith("/media/"):
                     relative = path[len("/media/"):]
-                    if not relative.startswith(("uploads/", "outputs/")) or Path(relative).suffix not in (".png", ".jpg", ".wav", ".mp3", ".flac", ".ogg", ".mp4", ".pdf", ".docx", ".txt", ".srt"):
+                    if not relative.startswith(("uploads/", "outputs/")) or Path(relative).suffix not in (".png", ".jpg", ".wav", ".mp3", ".flac", ".ogg", ".mp4", ".pdf", ".docx", ".txt", ".srt", ".py", ".json", ".tex"):
                         raise PermissionError("File non disponibile.")
                     return self.file(safe_join(self.app.data, relative))
                 return self.json({"error": "Risorsa non trovata."}, 404)
             body = self.read_body()
+            if path=='/api/server/start' and method=='POST':return self.json(self.app.media_server.start(body))
+            if path=='/api/server/stop' and method=='POST':
+                self.app.media_server.close();return self.json({'ok':True})
+            if path=='/api/media-providers' and method=='POST':return self.json(self.app.media_provider_request(body),201)
+            if path=='/api/media-providers/test' and method=='POST':return self.json(self.app.media_provider_request(body,'test'))
+            if len(parts)==3 and parts[:2]==['api','media-providers'] and method=='DELETE':return self.json(self.app.media_provider_request({'id':parts[2]},'delete'))
+            if path=='/api/knowledge/embedding-default' and method=='POST':
+                target=ROOT/'models/embeddinggemma/embeddinggemma-300M-Q8_0.gguf'
+                if not target.is_file():raise ValueError('Scarica prima EmbeddingGemma dalle Preferenze.')
+                return self.json({'path':str(target)})
+            if path=='/api/projects' and method=='POST':return self.json(self.app.knowledge.save(body),201)
+            if len(parts)>=3 and parts[:2]==['api','projects']:
+                ident=parts[2]
+                if len(parts)==3 and method=='PATCH':return self.json(self.app.knowledge.save(body,ident))
+                if len(parts)==3 and method=='DELETE':return self.json(self.app.knowledge.delete(ident))
+                if len(parts)==4 and parts[3]=='sources' and method=='POST':return self.json(self.app.knowledge.add(ident,body),202)
+                if len(parts)==4 and parts[3]=='refresh' and method=='POST':return self.json(self.app.knowledge.refresh(ident),202)
+                if len(parts)==4 and parts[3]=='web-sources' and method=='POST':return self.json(self.app.save_web_sources(ident,body),202)
+                if len(parts)==5 and parts[3]=='sources' and method=='DELETE':return self.json(self.app.knowledge.remove(ident,parts[4]))
+                if len(parts)==5 and parts[3]=='roots' and method=='DELETE':
+                    self.app.knowledge.mutable(ident);self.app.store.execute('DELETE FROM project_roots WHERE id=? AND project_id=?',(parts[4],ident));return self.json({'ok':True})
             if path in ('/api/providers','/api/providers/models','/api/providers/test') and method=='POST':
                 return self.json(self.app.provider_request(body,'models' if path.endswith('/models') else 'test' if path.endswith('/test') else 'save'))
             if len(parts)==3 and parts[:2]==['api','providers'] and method=='DELETE':
@@ -153,7 +176,7 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/uploads" and method == "POST":
                 return self.json(self.app.upload(body), 201)
             if path == "/api/chats" and method == "POST":
-                return self.json(self.app.store.create_chat(collection_id=body.get("collection_id")), 201)
+                return self.json(self.app.store.create_chat(collection_id=body.get("collection_id"),project_id=body.get('project_id')), 201)
             if path == "/api/downloads" and method == "POST":
                 return self.json({"id": self.app.downloads.start(body["id"], body.get("kind", "model"))}, 202)
             if len(parts) == 4 and parts[:2] == ["api", "downloads"] and parts[3] == "cancel":
@@ -168,10 +191,13 @@ class Handler(BaseHTTPRequestHandler):
                 if method == "DELETE":
                     return self.json(self.app.delete_chat(chat_id))
                 if method == "PATCH":
-                    allowed = {"title", "pinned", "archived", "collection_id"}
+                    allowed = {"title", "pinned", "archived", "collection_id", "project_id"}
                     if not body or set(body) - allowed:
                         raise ValueError("Modifica chat non valida.")
                     for key, value in body.items():
+                        if key=='project_id':
+                            if self.app.store.one("SELECT id FROM jobs WHERE chat_id=? AND status IN ('queued','running')",(chat_id,)):raise ValueError('Attendi il lavoro prima di spostare la chat.')
+                            if value is not None:self.app.knowledge.project(value)
                         if key == "title" and (not isinstance(value, str) or not value.strip() or len(value) > 150):
                             raise ValueError("Titolo non valido.")
                         if key in ("pinned", "archived") and type(value) is not bool:

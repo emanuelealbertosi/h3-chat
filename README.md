@@ -1,10 +1,10 @@
 # H3-Chat
 
-Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle app H3. Una sola conversazione per testo, codice, immagini, canzoni, video, formule, grafici e diagrammi. I motori locali sono gestiti dall'app; non servono Ollama, LM Studio o ComfyUI. Gli LLM locali non richiedono chiavi API o abbonamenti; puoi scegliere anche un provider LLM tramite API.
+Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle app H3. Una sola conversazione per testo, codice, immagini, canzoni, video, formule, grafici e diagrammi. I motori locali sono gestiti dall'app; non servono Ollama, LM Studio o ComfyUI. Gli LLM locali non richiedono chiavi API o abbonamenti; puoi scegliere anche provider LLM tramite API e server esterni per immagini, musica e video. Progetti con RAG, ricerca web e animazioni Manim restano nella stessa chat.
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.12.1-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.12.1/H3-Chat-0.12.1-windows-x64.zip) dalla [release v0.12.1](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.12.1), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.13.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.13.0/H3-Chat-0.13.0-windows-x64.zip) dalla [release v0.13.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.13.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 
@@ -20,9 +20,17 @@ La finestra desktop usa Microsoft Edge in modalità app, normalmente già presen
 
 ## Provider LLM tramite API
 
-In **Setup → LLM tramite API** collega DeepSeek, OpenRouter o un servizio Chat Completions compatibile: indirizzo base, chiave e ID modello. Puoi caricare l’elenco modelli, provare la connessione, salvare più collegamenti e premere **Usa in chat**. Chat, router e Assistant usano il provider scelto; immagini, musica, video e trascrizione restano locali. Nessun peso LLM occupa RAM/VRAM sul PC.
+In **Setup → LLM tramite API** collega DeepSeek, OpenRouter o un servizio Chat Completions compatibile: indirizzo base, chiave e ID modello. Puoi caricare l’elenco modelli, provare la connessione, salvare più collegamenti e premere **Usa in chat**. Chat, router e Assistant usano il provider scelto; immagini, musica e video possono usare motori standalone o server esterni. La trascrizione resta sul PC. Nessun peso LLM occupa RAM/VRAM sul PC.
 
 Le chiavi sono protette con Windows DPAPI e non vengono mostrate o registrate nelle chat. La conversazione, gli estratti dei documenti, le trascrizioni e le immagini fornite a Vision vengono inviati al servizio selezionato. Vision/thinking/JSON si configurano per collegamento; le tariffe e il limite effettivo di contesto dipendono dal provider. In chat compare **API**, anche per Vision. [Configurazione e limiti](docs/api-providers.md).
+
+## Progetti, fonti e animazioni
+
+Crea un **Progetto**, collega PDF/Word/testi o cartelle e usa **RAG** per recuperare estratti nella chat. Le citazioni aprono il pannello **Fonti e file**, con documento, pagina/righe e testo evidenziato. La ricerca web funziona anche senza progetto; gli snapshot delle fonti web possono essere salvati e indicizzati nel progetto. Ricerca per parole inclusa, ricerca semantica opzionale con un GGUF embedding (EmbeddingGemma scaricabile dall’admin).
+
+**Strumenti → Interprete numerico** esegue calcoli e dati dei grafici con sintassi Python limitata. Installa **Manim** dal Setup e chiedi «Ricava dal PDF allegato un’animazione Manim»: lo stesso LLM prepara scene validate con testi, formule, forme, frecce e grafici di funzioni. MP4 riproducibile e sorgente JSON scaricabile in chat o nel canvas. La prima versione usa storyboard dichiarativi, non tutta l’API Python Manim. [Uso e limiti](docs/projects-and-animations.md).
+
+In admin puoi scegliere **CPU/GPU per funzione** e collegare **server esterni LLM, immagini, musica e video**. Per musica/video remoti è previsto il protocollo H3; immagini supportano anche Forge/A1111 e Images API compatibili con risposte base64. Il video MiniMax H3 resta GPU; Vision/mmproj chat resta CPU. Immagini e musica sulla CPU mostrano un avviso sui tempi. [Configurazione dei server e dispositivi](docs/external-servers.md).
 
 ## Un unico prompt
 
@@ -33,6 +41,8 @@ Le chiavi sono protette con Windows DPAPI e non vengono mostrate o registrate ne
 - «Spiegami questa formula…» → testo e LaTeX.
 - «Crea una canzone rock…» oppure il pulsante **Music** → motore musicale YuE2.
 - «Crea un video…», «Anima questa immagine» oppure **Video** → MiniMax H3, con default 15 secondi / 0,7 MP.
+- «Ricava dal PDF un’animazione Manim» → storyboard validato e MP4.
+- «Usa l’interprete per calcolare e disegnare…» → dati calcolati e grafico.
 
 La chat resta unica. Nel composer puoi lasciare Immagini su Automatico oppure selezionare esplicitamente il modello immagini. Le richieste esplicite più comuni sono riconosciute direttamente; quelle ambigue sono classificate dal modello chat con uno schema JSON vincolato. I modelli piccoli possono interpretare male richieste complesse: per codice, routing e analisi densa scegli un modello più capace dal setup.
 
@@ -295,7 +305,7 @@ Preset, controlli Avanzate e LoRA sono descritti nelle [verifiche della 0.6](doc
 
 I collegamenti esterni sono verificati anche con un modello vision reale caricato fuori dalla cartella dell’app, senza copie dei pesi: [Verifica 0.4](docs/validation-v0.4.md).
 
-Chat CPU, streaming, canvas separato, gestione conversazioni, rendering e API sono implementati e collaudati. Creazione, editing e riuso dei processi immagini sono stati eseguiti su CPU con SD 1.5; i dettagli sono in [Verifica 0.3](docs/validation-v0.3.md). Il collaudo di questa versione non equivale a una certificazione di tutte le combinazioni di GPU, driver e modelli: in particolare CUDA/Vulkan e FLUX multi-riferimento richiedono ancora una prova di inferenza sulle rispettive configurazioni hardware. Video e musica sono inclusi; la versione 0.11 aggiunge ricerca web, importazione PDF/Word e trascrizione del parlato. Esecuzione del codice generato, analisi generale di musica/rumori, identificazione dei parlanti e plugin non sono inclusi.
+Chat CPU, streaming, canvas separato, gestione conversazioni, rendering e API sono implementati e collaudati. Creazione, editing e riuso dei processi immagini sono stati eseguiti su CPU con SD 1.5; i dettagli sono in [Verifica 0.3](docs/validation-v0.3.md). Il collaudo di questa versione non equivale a una certificazione di tutte le combinazioni di GPU, driver e modelli: in particolare CUDA/Vulkan e FLUX multi-riferimento richiedono ancora una prova di inferenza sulle rispettive configurazioni hardware. Video e musica sono inclusi; la versione 0.11 aggiunge ricerca web, importazione PDF/Word e trascrizione del parlato. La versione 0.13 aggiunge progetti/RAG, interprete numerico limitato, storyboard Manim e server esterni multimediali. Python generale, analisi di musica/rumori, identificazione dei parlanti e plugin non sono inclusi.
 
 Font e layout derivano dai riferimenti locali H3-Music e H3-Comics. Motori: [llama.cpp](https://github.com/ggml-org/llama.cpp), [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp). Riferimenti: [multimodalità llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md), [FLUX.2 nel motore immagini](https://github.com/leejet/stable-diffusion.cpp/blob/master/docs/flux2.md), [FLUX.2 ufficiale](https://github.com/black-forest-labs/flux2), [Python integrato](https://www.python.org/downloads/release/python-31315/).
 

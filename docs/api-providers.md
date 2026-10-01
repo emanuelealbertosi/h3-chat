@@ -9,8 +9,9 @@ Puoi mantenere più collegamenti, anche a modelli diversi dello stesso provider.
 
 La chat mostra **API** accanto al nome del modello. Chat, router, preparazione prompt
 immagini, stile/testo musicale e piano video riutilizzano questo LLM. Nessun peso
-LLM viene caricato sul PC. Immagini, musica, video e Whisper restano sui motori
-locali scelti; Assistant Off conserva il percorso diretto ai generatori.
+LLM viene caricato sul PC. Immagini, musica e video possono usare motori locali
+o [server esterni](external-servers.md); Whisper resta sul PC. Assistant Off
+conserva il percorso diretto ai generatori.
 La modalità Residenti riguarda solo i processi locali: non genera richieste API
 di precaricamento. A richiesta libera il precedente LLM locale quando si passa
 alla chiamata API.
@@ -20,7 +21,8 @@ alla chiamata API.
 Supportato il protocollo **Chat Completions compatibile**: POST
 `<base_url>/chat/completions`, Bearer token, risposta JSON o streaming SSE, GET
 `<base_url>/models` per l’elenco. Per esempio, un server compatibile sul PC può
-usare `http://127.0.0.1:1234/v1`; i servizi esterni devono usare HTTPS.
+usare `http://127.0.0.1:1234/v1` oppure un IP privato LAN; i servizi Internet
+devono usare HTTPS.
 Puoi incollare anche l’indirizzo completo che termina in `/chat/completions`:
 l’app ricava la base. Non aggiunge automaticamente `/v1` ad altri percorsi.
 Le API native Anthropic Messages, Gemini GenerateContent e Responses non sono
@@ -37,8 +39,8 @@ Nessuna chiave, chat o configurazione personale entra nello ZIP o in GitHub.
 Il provider riceve conversazione, istruzioni, estratti web/documenti, trascrizioni
 e immagini effettivamente fornite a Vision/Assistant. I file PDF/Word completi
 non vengono caricati con una Files API: vengono estratti sul PC. Gli audio
-riferimento Video restano locali; la preparazione API ne vede i nomi e le
-istruzioni, non dichiara di ascoltarli. Attivare API richiede Internet e può
+riferimento Video restano locali o vengono inviati al server video configurato;
+la preparazione LLM API ne vede i nomi e le istruzioni, non dichiara di ascoltarli. Attivare API richiede Internet e può
 consumare credito secondo le condizioni del servizio.
 
 ## Compatibilità del modello
