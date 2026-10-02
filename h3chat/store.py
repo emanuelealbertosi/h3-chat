@@ -14,7 +14,7 @@ PROFILES = {
     "balanced": {"context": 8192, "gpu_layers": 99, "width": 768, "height": 768},
 }
 DEFAULTS = {
-    "lab_auto": True, "manim_device": "cpu", "manim_duration": 8, "manim_fps": 15, "manim_width": 854, "manim_height": 480,
+    "lab_auto": True, "manim_device": "cpu", "manim_duration": 8, "manim_fps": 15, "manim_width": 854, "manim_height": 480, "manim_timeout": 600, "manim_memory_gb": 4,
     "llm_device": "inherit", "image_device": "inherit", "rag_device": "cpu", "asr_device": "cpu",
     "rag_enabled": True, "rag_embedding_model": "", "rag_embedding_profile": "embeddinggemma", "rag_top_k": 6,
     "web_auto": True, "web_provider": "duckduckgo", "web_searxng_url": "", "web_max_results": 3,

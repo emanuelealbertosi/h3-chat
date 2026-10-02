@@ -32,7 +32,7 @@ from .store import DEFAULTS, PROFILES, Store, uid
 from .rag import Knowledge, validate as validate_rag, grounded, quote_warnings
 from .devices import validate as validate_devices, label as device_label, CPU_WARNING
 from .context_tools import budget as context_budget
-from .lab import route as lab_route, SCHEMA as LAB_SCHEMA, BRIEF as LAB_BRIEF, MANIM_SCHEMA, MANIM_BRIEF, validate_scene, validate_chart, files as lab_files
+from .lab import route as lab_route, SCHEMA as LAB_SCHEMA, BRIEF as LAB_BRIEF, validate_chart, files as lab_files
 from .calculator import Calculator
 from .models import MAX_CONTEXT, discover_local, inspect_model, THINK_LEVELS, thinking_parameters, mtp_tokens
 from .external_models import PROFILES as EXTERNAL_PROFILES, ROLE_LABELS, build_model, validate_config
@@ -185,7 +185,7 @@ class Service:
         validate_rag(s)
         validate_devices(s)
         if type(s['lab_auto']) is not bool:raise ValueError('Routing interprete/Manim non valido.')
-        for key,lo,hi in (('manim_duration',1,30),('manim_fps',5,30),('manim_width',320,1920),('manim_height',240,1080)):
+        for key,lo,hi in (('manim_duration',1,600),('manim_fps',5,30),('manim_width',320,3840),('manim_height',240,2160),('manim_timeout',30,3600),('manim_memory_gb',1,32)):
             if type(s[key]) is not int or not lo<=s[key]<=hi:raise ValueError('Parametro Manim non valido: '+key)
         validate_llm_presets(s['llm_overrides'],s['profile'])
         if s["profile"] not in PROFILES or s["backend"] not in ("cpu","cuda","vulkan"):
@@ -375,9 +375,12 @@ class Service:
             if not isinstance(source_ids,list) or any(not isinstance(x,str) or x not in valid for x in source_ids):raise ValueError('Selezione fonti RAG non valida.')
         settings.update(_rag=rag,_rag_sources=source_ids)
         lab=body.get('lab','auto');source=body.get('lab_source','')
-        if lab not in ('auto','calculate','manim') or not isinstance(source,str) or len(source)>20000:raise ValueError('Strumento o sorgente non valido.')
+        if lab not in ('auto','calculate','manim') or not isinstance(source,str) or len(source)>(100000 if lab=='manim' else 20000):raise ValueError('Strumento o sorgente non valido.')
         if source and lab=='auto':raise ValueError('Specifica lo strumento per eseguire il sorgente.')
         settings.update(_lab=lab,_lab_source=source)
+        if lab not in ('manim','calculate') and not (lab=='auto' and settings.get('lab_auto',True) and lab_route(prompt)=='manim') and video_route([{'content':prompt}],settings):
+            from .video_options import prompt_duration
+            prompt_duration(prompt)
         request_history=[{'content':prompt,'media':media}]
         direct_media=video_route(request_history,settings) or music_route(request_history,settings) or visual_route(request_history,settings) or explicit_route(request_history) in ('create','edit')
         pure=transcribe or (not direct_media and pure_transcription(prompt,[x for x in media if x['mime'].startswith('audio/')]))
@@ -553,38 +556,32 @@ class Service:
             if intent!='chat':
                 for key in ('think_level','think_budget','model_warning'):meta.pop(key,None)
             self.store.update_answer(job,text,meta=meta)
-            if intent in ('calculate','manim'):
-                stage('Interprete numerico' if intent=='calculate' else 'Manim · preparazione scena')
-                if settings.get('_lab_source'):
-                    prepared={'title':'Calcolo' if intent=='calculate' else 'Animazione Manim','code':settings['_lab_source'] if intent=='calculate' else '', 'scene':settings['_lab_source'] if intent=='manim' else ''}
+            if intent=='manim':
+                from .manim_artifact import build as build_manim
+                title,content,media=build_manim(self,job,payload,visual_history,settings,model,cancel,stage,log_path,meta)
+                meta['artifact']={'title':title,'content':content,'media':media}
+                if payload.get('canvas'):
+                    self.save_artifact(job['chat_id'],title,content,media);self.store.update_answer(job,'Ho creato l’animazione nel canvas.','done',[],meta)
+                else:self.store.update_answer(job,content,'done',media,meta)
+                stage('Animazione Manim pronta')
+            elif intent=='calculate':
+                stage('Interprete numerico')
+                if settings.get('_lab_source'):prepared={'title':'Calcolo','code':settings['_lab_source']}
                 else:
-                    self.engine.start_llama(model,settings,log_path,cancel,stage=stage);messages=self.engine.chat_messages(visual_history,model,settings);messages[0]['content']+= '\n'+(MANIM_BRIEF if intent=='manim' else LAB_BRIEF);messages[-1]['content']+='\nRequested artifact type: '+intent
-                    raw,finish=self.engine.completion(messages,settings|{'think_level':'off'},cancel,on_text=lambda _:None,schema=MANIM_SCHEMA if intent=='manim' else LAB_SCHEMA)
+                    self.engine.start_llama(model,settings,log_path,cancel,stage=stage)
+                    messages=self.engine.chat_messages(visual_history,model,settings);messages[0]['content']+='\n'+LAB_BRIEF;messages[-1]['content']+='\nRequested artifact type: calculate'
+                    raw,finish=self.engine.completion(messages,settings|{'think_level':'off'},cancel,on_text=lambda _:None,schema=LAB_SCHEMA)
                     if finish=='length':raise ValueError('Il codice è incompleto: aumenta Max token nelle Preferenze.')
                     prepared=json.loads(raw)
-                    if intent=='manim':prepared={'title':prepared['title'],'scene':json.dumps(prepared,ensure_ascii=False),'code':''}
-                if intent=='calculate':
-                    result=Calculator().run(prepared['code']);stage('Calcolo eseguito · risultati verificati')
-                    content='# '+prepared['title']+'\n\n```python-calc\n'+prepared['code']+'\n```\n\n**Risultati dell’interprete**\n\n```text\n'+(result['output'] or json.dumps(result['values'],ensure_ascii=False,indent=2))+'\n```'
-                    chart=result['values'].get('chart')
-                    if chart:content+='\n\n```chart\n'+json.dumps(validate_chart(chart),ensure_ascii=False)+'\n```'
-                    media=lab_files(self.data,job['id'],prepared['title'],[('calcolo.py',prepared['code'],'text/x-python'),('risultati.json',json.dumps(result,ensure_ascii=False,indent=2),'application/json')])
-                    meta['calculation']=result
-                else:
-                    if not tools_status(self.root)['lab']['ready']:raise ValueError('Installa il componente opzionale Manim dal Setup → Interprete e animazioni.')
-                    scene=validate_scene(json.loads(prepared['scene']));opts={k:settings['manim_'+k] for k in ('duration','fps','width','height','device')};folder=self.data/'outputs'/job['id']
-                    prepared['title']=scene.get('title') or prepared['title']
-                    if settings['manim_device']=='gpu' and settings['memory_policy']!='resident':
-                        stage('Rilascio LLM · rendering Manim sulla GPU');self.engine.stop()
-                    rendered=self.engine.tool_call('lab-worker.py',{'scene':scene,'output':str(folder),'options':opts},cancel,stage,log_path,timeout=600)
-                    path=Path(rendered['path']).resolve()
-                    if not path.is_relative_to(folder.resolve()) or not path.is_file():raise ValueError('Output Manim non disponibile.')
-                    media=[{'id':uid(),'name':'animazione.mp4','path':path.relative_to(self.data).as_posix(),'mime':'video/mp4'}]+lab_files(self.data,job['id'],prepared['title'],[('scena-manim.json',json.dumps(scene,ensure_ascii=False,indent=2),'application/json')])
-                    content='# '+prepared['title']+'\n\n```manim\n'+json.dumps(scene,ensure_ascii=False,indent=2)+'\n```';meta['manim_options']=opts
-                meta['execution_mode']='Standalone · '+('CPU · Interprete numerico' if intent=='calculate' else ('GPU · OpenGL' if settings['manim_device']=='gpu' else 'CPU · Cairo')+' · Manim');meta['artifact']={'title':prepared['title'],'content':content,'media':media}
+                result=Calculator().run(prepared['code']);stage('Calcolo eseguito · risultati verificati')
+                content='# '+prepared['title']+'\n\n```python-calc\n'+prepared['code']+'\n```\n\n**Risultati dell’interprete**\n\n```text\n'+(result['output'] or json.dumps(result['values'],ensure_ascii=False,indent=2))+'\n```'
+                chart=result['values'].get('chart')
+                if chart:content+='\n\n```chart\n'+json.dumps(validate_chart(chart),ensure_ascii=False)+'\n```'
+                media=lab_files(self.data,job['id'],prepared['title'],[('calcolo.py',prepared['code'],'text/x-python'),('risultati.json',json.dumps(result,ensure_ascii=False,indent=2),'application/json')])
+                meta['calculation']=result;meta['execution_mode']='Standalone · CPU · Interprete numerico';meta['artifact']={'title':prepared['title'],'content':content,'media':media}
                 if payload.get('canvas'):self.save_artifact(job['chat_id'],prepared['title'],content,media);self.store.update_answer(job,'Ho creato l’artefatto nel canvas.','done',[],meta)
                 else:self.store.update_answer(job,content,'done',media,meta)
-                stage('Calcolo completato' if intent=='calculate' else 'Animazione Manim pronta')
+                stage('Calcolo completato')
             elif intent=='transcribe':
                 text='\n\n'.join('## '+item['name']+'\n\n'+(r['text'] or r.get('warning','Nessun parlato riconosciuto.')) for item,r in transcripts)
                 meta['model']='Whisper · '+('GPU FP16' if settings['asr_device']=='gpu' else 'CPU INT8')
@@ -643,6 +640,8 @@ class Service:
                 self.store.update_answer(job, text, "done", [] if payload.get('canvas') else transcript_media,meta=meta)
                 stage("Risposta completata" if finish != "length" else "Limite di risposta raggiunto: puoi chiedere di continuare")
             elif intent == "video":
+                from .video_options import with_prompt_duration
+                settings=with_prompt_duration(settings,payload['prompt'])
                 video_model=self.engine.require_model(settings['video_model'],'video')
                 refs=payload['media']
                 if not refs and re.search(r'\b(questa|questo|allegat\w*|precedente|this|previous)\b',payload['prompt'],re.I):

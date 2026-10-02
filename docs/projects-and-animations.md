@@ -57,36 +57,46 @@ Non è un kernel Python generale: niente file, rete, pacchetti esterni, classi o
 codice arbitrario. Operazioni e dimensioni dei dati sono limitate. Il pulsante
 **Calcola** riesegue un blocco `python-calc` senza una nuova chiamata LLM.
 
-## PDF → animazione Manim
+## PDF → animazione Manim completa
 
-Installa **Manim** in **Setup/Preferenze → Interprete e animazioni**. È un componente
-privato opzionale di circa 113 MB: non servono Python, TeX o FFmpeg di sistema.
-Allega il PDF e scrivi, per esempio:
+Installa **Manim** e **LaTeX** da Setup → Interprete e animazioni. Restano nella
+cartella dell’app: non richiedono Python o TeX di sistema né modifiche permanenti
+al PATH. Manim Community 0.21 usa TinyTeX/TeX Live 2026 e dvisvgm 3.6, scaricati
+con versione e hash verificati.
 
-> Ricava dal PDF una breve animazione Manim. Spiega l'area del cerchio in due scene,
-> con testo, cerchio e formula. Usa i dati del documento.
+Seleziona **Strumenti → Animazione Manim**, oppure nomina Manim nel prompt:
 
-Puoi scegliere anche **Strumenti → Animazione Manim**. Si riutilizza lo stesso LLM
-della chat, locale o API. Il testo del PDF viene estratto sul PC; le pagine senza
-testo, o figure richieste indicando la pagina, possono essere fornite al modello
-Vision, se attivo. I dati illeggibili non vengono ricostruiti dall'app.
+> Ricava dal PDF allegato un’animazione Manim di 30 secondi. Usa una scena 3D
+> con camera in movimento e formule LaTeX. Mantieni esatti i dati del documento.
 
-L'LLM produce uno storyboard JSON validato: massimo 12 scene, testi, formule
-MathText, cerchi, rettangoli, frecce e grafici di funzioni. Manim anima gli oggetti
-in sequenza e pulisce il canvas tra le scene. Le coordinate dei grafici vengono
-calcolate; le formule non richiedono una distribuzione TeX. Non viene eseguito
-Python Manim generato liberamente. Non sono ancora supportati immagini nella
-scena, oggetti 3D, voce narrante, trasformazioni complesse o tutta l'API Manim.
+Lo stesso LLM della chat genera Python `Scene` o `ThreeDScene`: API Manim,
+trasformazioni, `ValueTracker`, updaters, `ThreeDAxes`, `Surface`, `ImageMobject`,
+`Tex` e `MathTex`, oltre alle librerie del runtime. Le pagine PDF possono essere
+lette da Vision, se abilitato. I dati illeggibili non vengono inventati dall’app.
+La durata richiesta prevale sul preset; l’MP4 è verificato e, se troppo corto,
+la scena generata viene corretta fino a due volte. RAM e tempo massimo sono
+modificabili nelle preferenze. Un errore lascia codice e log consultabili.
 
-Default: CPU/Cairo, 8 secondi, 854 × 480, 15 fps. Durata, risoluzione, fps e
-CPU/OpenGL GPU si cambiano nelle preferenze. OpenGL richiede un contesto grafico
-compatibile. Video, JSON e pulsante **Renderizza animazione** sono disponibili
-nel risultato. Gli LLM piccoli possono omettere parti della richiesta; uno schema
-valido non garantisce da solo una lezione corretta e completa.
+Con **Canvas** attivo, video e codice compaiono soltanto nel canvas. Apri **Sorgente**,
+modifica il blocco `manim-python`, torna all’anteprima e premi **Renderizza animazione**.
+Il codice modificato viene eseguito direttamente, senza un secondo LLM. Puoi
+scaricare MP4, `.py`, configurazione JSON, formule `.tex` e log di rendering.
+Il commento `# h3_scene: NomeClasse` seleziona la scena se il file ne contiene più
+di una. Gli storyboard JSON precedenti conservano il pulsante di rendering.
 
-Con **Canvas** attivo all'invio, risultato e MP4 vengono mostrati solo nel canvas;
-nella chat resta il messaggio standard. Con Canvas spento sono visibili nella chat.
-Le istruzioni sono richiudibili; il MP4 si può riprodurre e scaricare.
+Il codice libero usa AppContainer Windows: lettura delle librerie e scrittura
+nella sola cartella temporanea del lavoro. I dati privati dell’app sono esclusi;
+solo gli allegati selezionati vengono copiati come `assets/asset-N.ext`. Un Job
+Object limita RAM/tempo e termina i processi figli all’annullamento. Non permette
+modifiche ai file del PC, installazione di pacchetti o accesso alla rete. LaTeX
+lavora senza shell escape; pacchetti TeX non presenti devono essere installati
+nel runtime prima del rendering. Cairo è il default CPU e supporta anche scene
+3D; OpenGL GPU richiede driver e un contesto grafico compatibili.
+
+**Video MiniMax H3** accetta singoli clip da 1 a 15 secondi. Una durata esplicita
+aggiorna il preset per quella richiesta; oltre 15 secondi la chat mostra un errore
+chiaro, senza generare silenziosamente un clip più corto. Per 30 secondi di
+animazione matematica scegli Manim.
 
 ## Riquadri e visualizzazioni
 

@@ -92,15 +92,15 @@ class ArtifactFlowTests(unittest.TestCase):
     def test_pdf_to_manim_router_typed_instructions_and_canvas_destination(self):
         import base64
         from tests.test_tools import pdf_file
-        item=self.app.upload({'name':'bilancio.pdf','data':base64.b64encode(pdf_file()).decode()});scene={'title':'Bilancio','scenes':[{'title':'Profitto','objects':[{'type':'text','text':'Profitto 900 euro','x':0,'y':0,'color':'#24605b'}]}]}
+        item=self.app.upload({'name':'bilancio.pdf','data':base64.b64encode(pdf_file()).decode()});scene={'title':'Bilancio','scene_name':'Bilancio','code':'from manim import *\nclass Bilancio(Scene):\n def construct(self):\n  self.add(Text("Profitto 900 euro"));self.wait(8)'}
         original=self.app.engine.tool_call
         def render(worker,request,*args,**kw):
-            if worker!='lab-worker.py':return original(worker,request,*args,**kw)
-            self.assertEqual(request['scene'],scene);target=Path(request['output'])/'animation.mp4';target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(b'fixture video transport');return {'path':str(target)}
+            if worker!='manim-worker.py':return original(worker,request,*args,**kw)
+            self.assertEqual(request['source'],scene);target=Path(request['output'])/'animation.mp4';target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(b'fixture video transport');return {'path':str(target)}
         for canvas in (False,True):
             job=self.job({'prompt':'Ricava una animazione Manim dal PDF','media':[item],'canvas':canvas})
-            with patch.object(self.app.engine,'require_model',return_value=self.model),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',return_value=(json.dumps(scene),'stop')) as completion,patch.object(self.app.engine,'tool_call',side_effect=render),patch('h3chat.service.tools_status',return_value={'lab':{'ready':True}}):self.app.execute_job(job,self.cancel)
-            answer=self.app.store.messages(job['chat_id'])[-1];self.assertEqual(answer['status'],'done');self.assertEqual(answer['meta']['intent'],'manim');self.assertEqual(answer['meta']['documents'][0]['pages'],2);self.assertIn('profit 900 euros',completion.call_args.args[0][-1]['content']);self.assertIn('scenes',completion.call_args.kwargs['schema']['properties'])
+            with patch.object(self.app.engine,'require_model',return_value=self.model),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',return_value=(json.dumps(scene),'stop')) as completion,patch.object(self.app.engine,'tool_call',side_effect=render),patch('h3chat.service.tools_status',return_value={'lab':{'ready':True},'latex':{'ready':True}}):self.app.execute_job(job,self.cancel)
+            answer=self.app.store.messages(job['chat_id'])[-1];self.assertEqual(answer['status'],'done');self.assertEqual(answer['meta']['intent'],'manim');self.assertEqual(answer['meta']['documents'][0]['pages'],2);self.assertIn('profit 900 euros',completion.call_args.args[0][-1]['content']);self.assertIn('code',completion.call_args.kwargs['schema']['properties'])
             artifact=answer['meta']['artifact'];self.assertTrue(any(m['mime']=='video/mp4' for m in artifact['media']));self.assertEqual(bool(answer['media']),not canvas)
             if canvas:self.assertNotIn('Profitto 900',answer['content'])
     def test_web_pages_can_be_saved_to_project_and_retrieved_without_new_search(self):

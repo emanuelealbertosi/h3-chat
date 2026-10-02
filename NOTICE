@@ -64,3 +64,10 @@ The optional video accelerator uses upstream SageAttention Windows wheels
 Pinned URLs and checksums are in runtimes.json; licenses remain in the installed
 wheel distributions. See docs/video-engine.md. These are app-local components
 and do not use another application's Python or ComfyUI installation.
+
+Full Manim Python rendering optionally uses TinyTeX/TeX Live 2026.10
+(https://github.com/rstudio/tinytex-releases, upstream licenses retained) and
+dvisvgm 3.6 (GPL-3.0-or-later; licenses/dvisvgm-GPL-3.txt). Binary provenance and
+source links: scripts/latex-sources.json. These optional downloads are not
+bundled in the portable application ZIP. Legacy storyboard formulas continue
+to use Matplotlib MathText; full Python Tex/MathTex uses the real TeX compiler.

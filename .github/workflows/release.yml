@@ -30,6 +30,12 @@ jobs:
       - run: python scripts/ci-install-music.py
         env:
           GH_TOKEN: ${{ github.token }}
+      - name: Validate full Manim, LaTeX, isolation and cancellation
+        run: |
+          runtime/python/python.exe -X utf8 scripts/ci-install-manim.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          runtime/python/python.exe -X utf8 scripts/check_manim.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - run: python scripts/bootstrap_bundle.py
       - run: python scripts/package.py
       - uses: actions/upload-artifact@v4

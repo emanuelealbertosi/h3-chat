@@ -1,0 +1,8 @@
+{
+  "version": "3.6",
+  "revision": 77973,
+  "source": "https://github.com/mgieseki/dvisvgm/tree/3.6",
+  "binary_archive": "https://mirror.ctan.org/systems/texlive/tlnet/archive/dvisvgm.windows.tar.xz",
+  "sha512": "3b5545ca50004c711ccd3c14e173b4a1ff5b213117510658593d73311e668346e717348bf7c797ebb73fa6482e0d927b62d24f8640b706143142bb5260eaf740",
+  "license": "GPL-3.0-or-later"
+}

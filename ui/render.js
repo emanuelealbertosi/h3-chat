@@ -60,14 +60,14 @@ export async function renderRich(target,text,{final=true,sources=[],onCitation=n
         figure.querySelector('button').onclick=()=>canvas.toBlob(b=>saveBlob(b,'grafico.png'));
       }catch(err){code.parentElement.insertAdjacentHTML('afterend',`<p class="render-error">Dati da correggere: ${escape(err.message)}</p>`);}
     } else {
-      const highlightLanguage=lang==='manim'?'json':lang==='python-calc'?'python':lang;
+      const highlightLanguage=lang==='manim'?'json':['python-calc','manim-python'].includes(lang)?'python':lang;
       if(hljs.getLanguage(highlightLanguage)){try{code.innerHTML=hljs.highlight(code.textContent,{language:highlightLanguage}).value;}catch{}}
       const bar=document.createElement('div');bar.className='code-bar no-export';
       bar.innerHTML=`<span>${escape(lang||'testo')}</span><button class="text-button">Copia</button>`;
       bar.querySelector('button').onclick=async()=>{await navigator.clipboard.writeText(code.textContent);bar.querySelector('button').textContent='Copiato';};
-      if(final&&onExecute&&['python-calc','manim'].includes(lang)){const run=document.createElement('button');run.className='text-button';run.textContent=lang==='manim'?'Renderizza animazione':'Calcola';run.onclick=()=>onExecute(lang,code.textContent);bar.append(run);}
+      if(final&&onExecute&&['python-calc','manim','manim-python'].includes(lang)){const run=document.createElement('button');run.className='text-button';run.textContent=lang.startsWith('manim')?'Renderizza animazione':'Calcola';run.onclick=()=>onExecute(lang,code.textContent);bar.append(run);}
       code.parentElement.prepend(bar);
-      if(lang==='manim'&&final){const pre=code.parentElement,details=document.createElement('details'),summary=document.createElement('summary');details.className='animation-instructions';summary.textContent='Istruzioni dell’animazione';pre.replaceWith(details);details.append(summary,pre);}
+      if(lang.startsWith('manim')&&final){const pre=code.parentElement,details=document.createElement('details'),summary=document.createElement('summary');details.className='animation-instructions';summary.textContent=lang==='manim-python'?'Codice Python Manim':'Istruzioni dell’animazione';pre.replaceWith(details);details.append(summary,pre);}
     }
   }
 }

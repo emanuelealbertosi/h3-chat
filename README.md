@@ -4,7 +4,7 @@ Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle 
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.13.4-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.13.4/H3-Chat-0.13.4-windows-x64.zip) dalla [release v0.13.4](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.13.4), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.14.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.14.0/H3-Chat-0.14.0-windows-x64.zip) dalla [release v0.14.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.14.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 
@@ -28,7 +28,7 @@ Le chiavi sono protette con Windows DPAPI e non vengono mostrate o registrate ne
 
 Crea un **Progetto**, collega PDF/Word/testi o cartelle e usa **RAG** per recuperare estratti nella chat. Le citazioni aprono il pannello **Fonti e file**, con documento, pagina/righe e testo evidenziato. La ricerca web funziona anche senza progetto; gli snapshot delle fonti web possono essere salvati e indicizzati nel progetto. Ricerca per parole inclusa, ricerca semantica opzionale con un GGUF embedding (EmbeddingGemma scaricabile dall’admin).
 
-**Strumenti → Interprete numerico** esegue calcoli e dati dei grafici con sintassi Python limitata. Installa **Manim** dal Setup e chiedi «Ricava dal PDF allegato un’animazione Manim»: lo stesso LLM prepara scene validate con testi, formule, forme, frecce e grafici di funzioni. MP4 riproducibile e sorgente JSON scaricabile in chat o nel canvas. La prima versione usa storyboard dichiarativi, non tutta l’API Python Manim. [Uso e limiti](docs/projects-and-animations.md).
+**Strumenti → Interprete numerico** esegue calcoli e dati dei grafici con sintassi Python limitata. Installa **Manim** dal Setup e chiedi «Ricava dal PDF allegato un’animazione Manim»: lo stesso LLM scrive Python Manim completo: scene 2D/3D, camera, trasformazioni, updaters, immagini e formule Tex/MathTex. Installa anche **LaTeX** dal Setup per le formule. MP4 riproducibile, codice Python modificabile e file LaTeX scaricabili in chat o nel canvas. La durata esplicita (ad esempio 30s) prevale sul preset ed è verificata; il codice generato può essere corretto automaticamente fino a due volte. Il rendering Windows usa AppContainer senza capacità di rete e limiti di RAM/tempo. Gli storyboard già salvati restano utilizzabili. [Uso e limiti](docs/projects-and-animations.md).
 
 In admin puoi scegliere **CPU/GPU per funzione** e collegare **server esterni LLM, immagini, musica e video**. Per musica/video remoti è previsto il protocollo H3; immagini supportano anche Forge/A1111 e Images API compatibili con risposte base64. Il video MiniMax H3 resta GPU; Vision/mmproj chat resta CPU. Immagini e musica sulla CPU mostrano un avviso sui tempi. [Configurazione dei server e dispositivi](docs/external-servers.md).
 
@@ -41,7 +41,7 @@ In admin puoi scegliere **CPU/GPU per funzione** e collegare **server esterni LL
 - «Spiegami questa formula…» → testo e LaTeX.
 - «Crea una canzone rock…» oppure il pulsante **Music** → motore musicale YuE2.
 - «Crea un video…», «Anima questa immagine» oppure **Video** → MiniMax H3, con default 15 secondi / 0,7 MP.
-- «Ricava dal PDF un’animazione Manim» → storyboard validato e MP4.
+- «Ricava dal PDF un’animazione Manim di 30s, con una scena 3D» → Python, LaTeX e MP4.
 - «Usa l’interprete per calcolare e disegnare…» → dati calcolati e grafico.
 
 La chat resta unica. Nel composer puoi lasciare Immagini su Automatico oppure selezionare esplicitamente il modello immagini. Le richieste esplicite più comuni sono riconosciute direttamente; quelle ambigue sono classificate dal modello chat con uno schema JSON vincolato. I modelli piccoli possono interpretare male richieste complesse: per codice, routing e analisi densa scegli un modello più capace dal setup.

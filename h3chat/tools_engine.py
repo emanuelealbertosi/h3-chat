@@ -20,7 +20,11 @@ class ToolsEngine:
             session.wait('hello',cancel,30,stage);session.send(request)
             return session.wait('result',cancel,timeout,stage)['result']
         finally:
+            owner=session.process.pid if session.process else None
             session.stop()
+            if worker=='manim-worker.py' and owner:
+                from .windows_sandbox import cleanup
+                cleanup(self.root,owner)
             with self.process_lock:
                 if self.tool_session is session:self.tool_session=None
 

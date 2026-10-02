@@ -689,5 +689,25 @@
         "extract_to": "runtime/tools/lab"
       }
     ]
+  },
+  "tools_latex": {
+    "files": [
+      {
+        "path": "runtime/archives/TinyTeX-v2026.10.zip",
+        "url": "https://github.com/rstudio/tinytex-releases/releases/download/v2026.10/TinyTeX-v2026.10.zip",
+        "size": 247389422,
+        "sha256": "dc1d6e63b21af62130ede1dcc4113bffdc184544690a23e3f489d75340f4ff61",
+        "extract_to": "runtime/tools/latex",
+        "version": "2026.10"
+      },
+      {
+        "path": "runtime/archives/dvisvgm-3.6-windows-addon.zip",
+        "url": "https://github.com/emanuelealbertosi/h3-chat/releases/download/latex-runtime-2026.10/dvisvgm-3.6-windows-addon.zip",
+        "size": 2117118,
+        "sha256": "510efa1ce95a3bf49721df3714523e94e095861188585d61c3c08262012118ca",
+        "extract_to": "runtime/tools/latex",
+        "version": "3.6"
+      }
+    ]
   }
 }
