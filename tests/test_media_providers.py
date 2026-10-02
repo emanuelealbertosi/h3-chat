@@ -56,7 +56,7 @@ class H3ServerTests(unittest.TestCase):
         with wave.open(audio,'wb') as f:f.setnchannels(1);f.setsampwidth(2);f.setframerate(8000);f.writeframes(b'\0\0'*100)
         def image(model,settings,prompt,refs,job_id,cancel,stage):self.assertEqual(settings['image_device'],'cpu');return self.output(job_id,'image/png',PNG)
         def music(model,settings,composition,job_id,cancel,stage):return self.output(job_id,'audio/wav',audio.getvalue())
-        def video(model,settings,plan,refs,job_id,cancel,stage):self.assertEqual(plan['prompt'],'English instructions');return self.output(job_id,'video/mp4',b'\x00\x00\x00\x18ftypmp42'+b'\0'*24)
+        def video(model,settings,plan,refs,job_id,cancel,stage,*,prompt=None):self.assertEqual(prompt,'Create an image');self.assertEqual(plan['prompt'],'English instructions');return self.output(job_id,'video/mp4',b'\x00\x00\x00\x18ftypmp42'+b'\0'*24)
         with patch.object(self.app.engine,'generate',side_effect=image),patch.object(self.app.engine,'generate_music',side_effect=music),patch.object(self.app.engine,'generate_video',side_effect=video):
             for role in ('image','music','video'):
                 cfg=self.client.save({'name':'Remote '+role,'role':role,'adapter':'h3','base_url':self.url,'model':role,'api_key':self.key,'device':'cpu' if role=='image' else 'gpu'});model=self.client.model(cfg);self.assertTrue(self.client.probe(cfg['id'])['ok']);settings=DEFAULTS|{'_image_options':image_options(model,DEFAULTS)}

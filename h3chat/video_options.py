@@ -2,10 +2,11 @@
 import math
 import re
 import secrets
+from fractions import Fraction
 
 DEFAULTS = {'duration':15, 'megapixels':.7, 'aspect':'16:9', 'steps':12, 'cfg':1,
             'sampler':'res_multistep', 'scheduler':'simple', 'seed':-1,
-            'shift_video':12, 'shift_audio':3, 'offload':True}
+            'shift_video':12, 'shift_audio':3, 'offload':True, 'attention':'auto','attention_chunks':0}
 ASPECTS = ('16:9','9:16','1:1','4:3','3:4')
 
 def validate(value):
@@ -18,6 +19,8 @@ def validate(value):
     if result['aspect'] not in ASPECTS:raise ValueError('Formato video non valido.')
     if result['sampler'] not in ('res_multistep','euler','dpmpp_2m') or result['scheduler'] not in ('simple','normal','beta'):raise ValueError('Sampler/scheduler video non supportato.')
     if type(result['offload']) is not bool:raise ValueError('Offload video: scegli attivo o disattivo.')
+    if result['attention'] not in ('auto','sage','pytorch'):raise ValueError('Accelerazione video non supportata.')
+    if type(result['attention_chunks']) is not int or not 0<=result['attention_chunks']<=56:raise ValueError('Suddivisioni attenzione: da 0 (automatico) a 56.')
     if type(result['seed']) is not int or not -1<=result['seed']<=2147483647:raise ValueError('Seed video non valido.')
     return result
 
@@ -29,6 +32,48 @@ def options(model,settings,randomize=True):
     result['height']=max(32,round(math.sqrt(result['megapixels']*1024**2/ratio)/32)*32)
     result['frames']=round(result['duration']*24)
     return result
+
+def resolve_canvas(opts,plan,image_sizes,prompt=''):
+    """Choose the output ratio before padding to the H3 latent's 32px grid.
+
+    Keyframes own the format. Reference-only jobs can override it in the user's
+    original prompt. The padded model canvas is cropped back after decoding.
+    """
+    matches=list(re.finditer(r'(?<![\d.])(\d+(?:[.,]\d+)?)\s*[:/]\s*(\d+(?:[.,]\d+)?)(?![\d.])',prompt))
+    explicit=None
+    for match in matches:
+        prefix=prompt[max(0,match.start()-50):match.start()]
+        # Fractions in a scene description are not output formats.
+        if '/' in match.group(0) and not re.search(r'\b(?:format[oa]?|aspect|ratio|rapporto)\b',prefix,re.I):continue
+        if re.search(r'\b(?:non|not)\s*(?:in\s+)?(?:format[oa]?\s+)?$',prefix,re.I):continue
+        a,b=(Fraction(v.replace(',','.')) for v in match.groups())
+        if a>0 and b>0 and Fraction(1,10)<=a/b<=10:explicit=a/b
+    if explicit is None:
+        if re.search(r'\b(?:verticale|vertical|portrait)\b',prompt,re.I):explicit=Fraction(9,16)
+        elif re.search(r'\b(?:quadrato|quadrata|square)\b',prompt,re.I):explicit=Fraction(1)
+        elif re.search(r'\b(?:orizzontale|landscape|widescreen)\b',prompt,re.I):explicit=Fraction(16,9)
+    images=plan.get('images',[])
+    guides=sorted((x for x in images if x['role']=='keyframe'),key=lambda x:(x['seconds'],x['index']))
+    anchor=guides[0] if guides else (images[0] if images and explicit is None else None)
+    if anchor:
+        width,height=image_sizes[anchor['index']-1]
+        if min(width,height)<=0:raise ValueError('Dimensioni del riferimento video non valide.')
+        ratio=Fraction(width,height);source='image'
+    elif explicit is not None:ratio=explicit;source='prompt'
+    else:ratio=Fraction(opts['aspect'].replace(':','/'));source='preset'
+    area=opts['megapixels']*1024**2
+    a,b=ratio.numerator,ratio.denominator
+    if max(a,b)<=32:
+        step=2 if a%2 or b%2 else 1
+        k=max(step,round(math.sqrt(area/(a*b))/step)*step)
+        output_width,output_height=a*k,b*k
+    else:
+        output_width=max(2,round(math.sqrt(area*float(ratio))/2)*2)
+        output_height=max(2,round(output_width/float(ratio)/2)*2)
+    width=math.ceil(output_width/32)*32;height=math.ceil(output_height/32)*32
+    if max(width,height)>8192:raise ValueError('Formato troppo allungato per il video. Usa soli riferimenti e specifica un formato nel prompt.')
+    return opts|{'aspect':f'{a}:{b}','aspect_source':source,'format_image':anchor['index'] if anchor else None,
+        'width':width,'height':height,'output_width':output_width,'output_height':output_height}
 
 def validate_plan(plan,refs,duration):
     if not isinstance(plan,dict) or set(plan)-{'prompt','images','audios'}:raise ValueError('Piano video non valido.')

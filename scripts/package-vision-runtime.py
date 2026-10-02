@@ -32,7 +32,8 @@ def main():
     output.with_suffix('.zip.sha256').write_text(sha+'  '+output.name+'\n',encoding='utf-8')
     manifest_path=ROOT/'runtimes.json'
     runtimes=json.loads(manifest_path.read_text(encoding='utf-8'))
-    support = [f for f in runtimes.get('vision',{}).get('files',[]) if f.get('extract_to')=='runtime/vision/dlls']
+    support = [f for f in runtimes.get('vision',{}).get('files',[])
+               if f.get('extract_to') in ('runtime/vision/dlls','runtime/vision/packages','runtime/python')]
     runtimes['vision']={'files':support+[{'path':'runtime/downloads/'+output.name,'extract_to':'runtime/vision',
         'url':'https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.7.0/'+output.name,
         'size':output.stat().st_size,'sha256':sha}]}

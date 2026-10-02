@@ -116,6 +116,7 @@ function renderStatus(){
   $('#generation-settings').title=(mtp?.note||'Seleziona un modello per verificare MTP.')+' Apri le Preferenze per contesto LLM, MTP e max token di risposta. Le modifiche valgono dal prossimo messaggio.';
   $('#job-status').textContent=job?job.stage:chat?.archived?'Conversazione archiviata. Ripristinala per continuare.':canvasOpen?'Destinazione: canvas · nella chat solo il messaggio di accompagnamento.':'';
   $('#send').hidden=!!job;$('#stop').hidden=!job;$('#prompt').disabled=!!chat?.archived;
+  $('#regenerate').disabled=!!job||!!chat?.archived||!chat?.messages.some(m=>m.role==='user');
   $('#setup-nudge').hidden=state.settings.setup_done&&!!state.models.find(m=>m.id===state.settings.chat_model)?.ready;
   $('#chat-title').textContent=chat?.title||'Una nuova conversazione';
   $('#canvas-source').readOnly=!!job?.canvas;
@@ -200,6 +201,13 @@ async function send(event){event.preventDefault();if(activeJob())return;const pr
     await persistCanvas();await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,...visualControls.read(),...projects.read(),lab:$('#lab-tool').value,think_level:$('#think-level').value,loras:loraUI.getSelections()});
     $('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);await refresh();
   }finally{$('#send').disabled=false;}
+}
+
+async function regenerate(){
+  if(!current||activeJob())return;
+  $('#regenerate').disabled=true;
+  try{await api('/chats/'+current+'/regenerate',{});await refresh();}
+  finally{renderStatus();}
 }
 
 async function ask(title,{value='',description='',confirm=false,options=null}={}){
@@ -352,6 +360,7 @@ $('#composer').onsubmit=act(send);
 $('#prompt').onkeydown=act(async e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();await send(e);}});
 $('#prompt').oninput=()=>{$('#prompt').style.height='auto';$('#prompt').style.height=Math.min(180,$('#prompt').scrollHeight)+'px';};
 $('#stop').onclick=act(async()=>{const j=activeJob();if(j){await api('/jobs/'+j.id+'/cancel',{});await refresh();}});
+$('#regenerate').onclick=act(regenerate);
 $('#new-chat').onclick=act(newChat);$('#home').onclick=act(async e=>{e.preventDefault();await newChat();});
 $('#search').oninput=renderSidebar;
 document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{filter=b.dataset.filter;collection=null;project=null;renderSidebar();});

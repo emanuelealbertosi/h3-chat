@@ -90,6 +90,27 @@
         "url": "https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.7.0/H3-Chat-vision-engine-0.7.0-windows-x64.zip",
         "size": 2102575536,
         "sha256": "b02020528937bd8d47bfb95516aca101803858a8d882717ad3b4a91cbbcf8fe7"
+      },
+      {
+        "path": "runtime/downloads/sageattention-2.2.0+cu130torch2.10.0andhigher.post6-cp310-abi3-win_amd64.whl",
+        "url": "https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post6/sageattention-2.2.0%2Bcu130torch2.10.0andhigher.post6-cp310-abi3-win_amd64.whl",
+        "size": 16656067,
+        "sha256": "1635283f5c01ec3cda58a784d0d7eabbcaffaf9511d1b263db4750e1ed7958bb",
+        "extract_to": "runtime/vision/packages"
+      },
+      {
+        "path": "runtime/downloads/triton_windows-3.7.1.post27-cp313-cp313-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/ec/28/f0b2801c2cfd79be5878bf429e82b5da00fb78f046a9c21ba946681cc467/triton_windows-3.7.1.post27-cp313-cp313-win_amd64.whl",
+        "size": 49684257,
+        "sha256": "e8ed215c02afc85a81f0097196f8bebdf6f68085f1bc0fe8771b9a74783f15ab",
+        "extract_to": "runtime/vision/packages"
+      },
+      {
+        "path": "runtime/downloads/python_3.13.2_include_libs.zip",
+        "url": "https://github.com/woct0rdho/triton-windows/releases/download/v3.0.0-windows.post1/python_3.13.2_include_libs.zip",
+        "size": 555256,
+        "sha256": "e3e8c3abb17ea8de1cd2cd264ad15aae3de5eb7dc61ab37cb1a3d07f9c86238d",
+        "extract_to": "runtime/python"
       }
     ]
   },

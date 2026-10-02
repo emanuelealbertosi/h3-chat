@@ -391,6 +391,12 @@ class Service:
         self.wake.set()
         return {"job_id": job_id}
 
+    def regenerate(self, chat_id):
+        with self.lock:
+            job_id = self.store.regenerate(chat_id)
+            self.wake.set()
+        return {"job_id": job_id}
+
     def save_web_sources(self,project_id,body):
         message=self.store.one("SELECT m.meta FROM messages m JOIN chats c ON c.id=m.chat_id WHERE m.id=? AND m.role='assistant' AND m.status='done' AND c.project_id=?",(body.get('message_id'),project_id))
         if not message:raise ValueError('Scegli una risposta completata appartenente al progetto.')
@@ -645,7 +651,7 @@ class Service:
                 if settings.get('_video_plan'):
                     plan,assistant_info=settings['_video_plan'],None
                 else:plan,assistant_info=self.engine.refine_video(history,payload['prompt'],refs,video_model,settings,cancel,log_path,stage)
-                media=self.engine.generate_video(video_model,settings,plan,refs,job['id'],cancel,stage)
+                media=self.engine.generate_video(video_model,settings,plan,refs,job['id'],cancel,stage,prompt=payload['prompt'])
                 meta.update(assistant_on=settings.get('_assistant',True),assistant=assistant_info,video_plan=plan,video_parameters=media['generation'],references=refs,video_selection=route.get('selection','auto'))
                 meta['loras_skipped']=public_loras(payload.get('loras',[]))
                 if payload.get('canvas'):

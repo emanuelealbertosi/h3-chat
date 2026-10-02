@@ -172,6 +172,24 @@ class CoreTests(unittest.TestCase):
             self.assertNotIn(self.app.token,text)
         finally:server.shutdown();server.server_close()
 
+    def test_regenerate_endpoint_preserves_request_and_rejects_double_click(self):
+        chat=self.app.store.create_chat()['id']
+        first=self.app.store.enqueue(chat,'Hello',[],DEFAULTS)
+        self.app.cancel(first)
+        server=ThreadingHTTPServer(('127.0.0.1',0),Handler);server.app=self.app
+        thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+        try:
+            url=f'http://127.0.0.1:{server.server_port}/api/chats/{chat}/regenerate'
+            request=urllib.request.Request(url,data=b'{}',headers={'Content-Type':'application/json','X-H3-Token':self.app.token})
+            with urllib.request.urlopen(request) as response:
+                self.assertEqual(response.status,202)
+                self.assertNotEqual(json.load(response)['job_id'],first)
+            self.assertTrue(self.app.wake.is_set())
+            with self.assertRaises(urllib.error.HTTPError) as error:urllib.request.urlopen(request)
+            self.assertEqual(error.exception.code,400)
+            self.assertEqual(len(self.app.store.chat(chat)['messages']),2)
+        finally:server.shutdown();server.server_close();thread.join()
+
     def test_origin_and_session_guards(self):
         server=ThreadingHTTPServer(('127.0.0.1',0),Handler);server.app=self.app
         thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()

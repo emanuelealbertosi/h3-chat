@@ -171,6 +171,31 @@ class Store:
             db.execute("UPDATE chats SET title=CASE WHEN title='Nuova chat' THEN ? ELSE title END,updated=? WHERE id=?", (title, now, chat_id))
         return job_id
 
+    def regenerate(self, chat_id):
+        """Replay the last saved request, replacing its answer atomically."""
+        job_id, now = uid(), time.time()
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            chat = db.execute("SELECT * FROM chats WHERE id=?", (chat_id,)).fetchone()
+            if not chat:
+                raise ValueError("Conversazione non trovata.")
+            if chat['archived']:
+                raise ValueError("Ripristina la chat dall’archivio per continuare.")
+            if db.execute("SELECT 1 FROM jobs WHERE chat_id=? AND status IN ('queued','running')", (chat_id,)).fetchone():
+                raise ValueError("Attendi la risposta oppure interrompila.")
+            user = db.execute("SELECT seq FROM messages WHERE chat_id=? AND role='user' ORDER BY seq DESC LIMIT 1", (chat_id,)).fetchone()
+            original = db.execute("SELECT * FROM jobs WHERE chat_id=? AND json_extract(payload,'$.until')=? ORDER BY created DESC LIMIT 1", (chat_id, user['seq'] if user else -1)).fetchone()
+            if not original:
+                raise ValueError("Invia prima un messaggio da rigenerare.")
+            # Keep attachments, controls, per-model settings and the original
+            # history/canvas snapshot. A retry must not consume its own answer.
+            payload = original['payload']
+            answer_id = original['message_id']
+            db.execute("UPDATE messages SET content='',media='[]',meta='{}',status='queued',created=? WHERE id=?", (now, answer_id))
+            db.execute("INSERT INTO jobs VALUES (?,?,?,?, 'queued','In attesa','',?)", (job_id, chat_id, answer_id, payload, now))
+            db.execute("UPDATE chats SET updated=? WHERE id=?", (now, chat_id))
+        return job_id
+
     def update_answer(self, job, content, status="running", media=None, meta=None):
         self.execute("UPDATE messages SET content=?,status=?,media=?,meta=? WHERE id=?",
                      (content, status, json.dumps(media or []), json.dumps(meta or {}), job["message_id"]))

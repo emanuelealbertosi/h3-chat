@@ -42,15 +42,15 @@ class VideoEngine:
         except (ValueError,TypeError) as exc:raise ValueError('Assistant: piano video non valido. '+str(exc)) from exc
         return plan,{'model':llm['name'],'max_tokens':tuning['max_tokens']}
 
-    def generate_video(self,model,settings,plan,refs,job_id,cancel,stage):
-        if model.get('remote_media'):return self.remote_generate(model,settings,'',refs,job_id,cancel,stage,plan=plan)
+    def generate_video(self,model,settings,plan,refs,job_id,cancel,stage,*,prompt=None):
+        if model.get('remote_media'):return self.remote_generate(model,settings,prompt if prompt is not None else plan['prompt'],refs,job_id,cancel,stage,plan=plan)
         opts=options(model,settings)
         plan=validate_plan(plan,refs,opts['duration'])
         if any(a['role']=='lipsync' for a in plan['audios']) and opts['steps']<8:
             opts['steps']=8;stage('Lip-sync · uso almeno 8 passi standard')
         folder=self.data/'outputs'/job_id;folder.mkdir(parents=True,exist_ok=True)
         output=folder/'video.mp4'
-        request={'op':'generate','output':str(output),'plan':plan,'options':opts,
+        request={'op':'generate','output':str(output),'plan':plan,'options':opts,'format_prompt':prompt if prompt is not None else plan['prompt'],
                  'images':[str(safe_join(self.data,x['path'])) for x in refs if x['mime'].startswith('image/')],
                  'audios':[str(safe_join(self.data,x['path'])) for x in refs if x['mime'].startswith('audio/')]}
         (folder/'video-plan.json').write_text(json.dumps({'plan':plan,'parameters':opts},ensure_ascii=False,indent=2),encoding='utf-8')
@@ -62,4 +62,6 @@ class VideoEngine:
         with output.open('rb') as stream:
             if stream.read(12)[4:8]!=b'ftyp':raise RuntimeError('Il motore non ha prodotto un MP4 valido.')
         session.uses+=1
-        return {'id':job_id,'name':'Video MiniMax H3.mp4','mime':'video/mp4','path':output.relative_to(self.data).as_posix(),'generation':opts|done.get('parameters',{})}
+        actual=opts|done.get('parameters',{})
+        (folder/'video-plan.json').write_text(json.dumps({'plan':plan,'parameters':actual},ensure_ascii=False,indent=2),encoding='utf-8')
+        return {'id':job_id,'name':'Video MiniMax H3.mp4','mime':'video/mp4','path':output.relative_to(self.data).as_posix(),'generation':actual}

@@ -15,7 +15,11 @@ def status(root):
             'core/comfy/sd.py', 'core/comfy/text_encoders/ming_image.py', 'core/comfy_extras/nodes_minimax_h3.py', 'core/comfy/text_encoders/minimax.py', 'packages/torch/__init__.py', 'packages.json', 'dlls/msvcp140.dll'))
     except (OSError, ValueError):
         ready = False
-    return {'ready':ready, 'backends':['cuda','cpu'], 'revision':REVISION,
+    accelerated=ready and all((Path(root)/name).is_file() for name in (
+        'runtime/vision/packages/sageattention/__init__.py',
+        'runtime/vision/packages/triton/__init__.py',
+        'runtime/python/include/Python.h','runtime/python/libs/python313.lib'))
+    return {'ready':ready, 'accelerated':accelerated, 'backends':['cuda','cpu'], 'revision':REVISION,
             'note':'Motore integrato Ming / Qwen Image 2.1 · NVIDIA CUDA o CPU. Nessun server esterno.'}
 
 

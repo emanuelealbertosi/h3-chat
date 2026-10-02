@@ -15,12 +15,73 @@ RUNTIME=ROOT/'runtime/vision'
 dll_directory=os.add_dll_directory(str(RUNTIME/'dlls')) if os.name=='nt' and (RUNTIME/'dlls').is_dir() else None
 sys.path[:0]=[str(RUNTIME/'packages'),str(RUNTIME/'core')]
 os.environ.update(HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1',HF_HUB_DISABLE_TELEMETRY='1',HF_HOME=str(RUNTIME/'cache'))
+os.environ['TRITON_CACHE_DIR']=str(RUNTIME/'cache/triton')
+# Triton's default sysconfig paths point at Python/Lib/site-packages. Our
+# optional packages live in a separate app-local directory, so select its
+# bundled compiler and CUDA headers explicitly instead of a system toolkit.
+triton_home=RUNTIME/'packages/triton'
+if (triton_home/'runtime/tcc/tcc.exe').is_file():
+    os.environ['CC']=str(triton_home/'runtime/tcc/tcc.exe')
+if (triton_home/'backends/nvidia/include/cuda.h').is_file():
+    os.environ['CUDA_PATH']=str(triton_home/'backends/nvidia')
+    os.environ['CUDA_HOME']=os.environ['CUDA_PATH']
 wire=sys.stdout;sys.stdout=sys.stderr
 logging.basicConfig(level=logging.INFO,stream=sys.stderr)
 faulthandler.enable(file=sys.stderr)
 
 def emit(event,**values):
     wire.write(json.dumps({'event':event,**values},ensure_ascii=False)+'\n');wire.flush()
+
+def read_safetensors(path,torch,types):
+    """Own writable CPU buffers; avoid c10 storage slicing and duplicate maps."""
+    import struct
+    values={}
+    with open(path,'rb') as source:
+        size=os.fstat(source.fileno()).st_size
+        prefix=source.read(8)
+        if len(prefix)!=8:raise ValueError('Header safetensors incompleto.')
+        header_size=struct.unpack('<Q',prefix)[0]
+        if header_size>100_000_000 or header_size+8>size:raise ValueError('Header safetensors non valido.')
+        header=json.loads(source.read(header_size))
+        if not isinstance(header,dict):raise ValueError('Header safetensors non valido.')
+        base=8+header_size
+        for name,info in header.items():
+            if name=='__metadata__':continue
+            if not isinstance(info,dict):raise ValueError('Tensore safetensors non valido.')
+            shape=info.get('shape');offsets=info.get('data_offsets');dtype=types.get(info.get('dtype'))
+            if dtype is None or not isinstance(shape,list) or any(type(d) is not int or d<0 for d in shape):raise ValueError('Tipo/forma safetensors non validi.')
+            if not isinstance(offsets,list) or len(offsets)!=2 or any(type(d) is not int for d in offsets):raise ValueError('Offset safetensors non validi.')
+            start,end=offsets
+            if start<0 or end<start or base+end>size or math.prod(shape)*dtype.itemsize!=end-start:raise ValueError('Dimensione/offset safetensors non validi.')
+            if start==end:values[name]=torch.empty(shape,dtype=dtype)
+            else:
+                # torch keeps the buffer owner. It is writable for CUDA host
+                # registration and uses one allocation, without a second full
+                # file mapping competing with model weights in system RAM.
+                buffer=bytearray(end-start);source.seek(base+start)
+                if source.readinto(buffer)!=len(buffer):raise ValueError('Tensore safetensors incompleto.')
+                tensor=torch.frombuffer(buffer,dtype=dtype).view(shape)
+                values[name]=tensor
+    return values,header.get('__metadata__',{})
+
+def chunked_attention(torch,attention,chunks):
+    """Heads are independent: bound Sage's workspace without changing tokens."""
+    @attention.wrap_attn
+    def run(q,k,v,heads,mask=None,attn_precision=None,skip_reshape=False,skip_output_reshape=False,**kwargs):
+        base=attention.attention_sage
+        if chunks<=1 or not skip_reshape or mask is not None or q.shape[1]!=heads or k.shape[1]!=heads or v.shape[1]!=heads:
+            return base(q,k,v,heads,mask=mask,attn_precision=attn_precision,skip_reshape=skip_reshape,skip_output_reshape=skip_output_reshape,**kwargs)
+        b,_,seq,dim=q.shape
+        # Store directly in the final NHD layout to avoid a second full-sized
+        # allocation when the model reshapes the completed head output.
+        output=torch.empty((b,seq,heads,dim),device=q.device,dtype=q.dtype).transpose(1,2)
+        group=max(1,math.ceil(heads/chunks))
+        for start in range(0,heads,group):
+            end=min(heads,start+group)
+            output[:,start:end]=base(q[:,start:end],k[:,start:end],v[:,start:end],end-start,
+                mask=None,attn_precision=attn_precision,skip_reshape=True,skip_output_reshape=True,**kwargs)
+        return output if skip_output_reshape else output.transpose(1,2).reshape(b,seq,heads*dim)
+    return run
 
 def read_audio(path,start,seconds,exact=False):
     """Decode a bounded source interval. PyAV is bundled; no external ffmpeg."""
@@ -95,6 +156,17 @@ class Worker:
         import comfy.sample
         from comfy_extras import nodes_minimax_h3
         self.comfy=comfy;self.h3=nodes_minimax_h3
+        # safetensors' PyTorch reader slices UntypedStorage and can fault in
+        # c10 on Windows when large files are reopened after CUDA offload.
+        # Own writable CPU buffers without a duplicate file mapping, while
+        # preserving BF16 and quantization metadata.
+        original_reader=comfy.utils.load_torch_file
+        def read_weights(path,safe_load=False,device=None,return_metadata=False):
+            if str(path).lower().endswith(('.safetensors','.sft')) and (device is None or device.type=='cpu'):
+                values,metadata=read_safetensors(str(path),torch,comfy.utils._TYPES)
+                return (values,metadata) if return_metadata else values
+            return original_reader(path,safe_load=safe_load,device=device,return_metadata=return_metadata)
+        comfy.utils.load_torch_file=read_weights
         # Loading/PCIe transfers can take longer than sampling on a SATA drive.
         # Expose those transitions rather than leaving a generic sampling label.
         self.phase='Video · caricamento componenti';self.last_load=()
@@ -112,7 +184,11 @@ class Worker:
         comfy.model_management.load_models_gpu=load_gpu
         comfy.utils.PROGRESS_BAR_ENABLED=False
         self.files=request['files'];self.offload=request['offload']
-        self.load_diffuser()
+        # On a 16 GB GPU the encoder and diffuser cannot coexist. Do not even
+        # map the large diffuser into RAM until conditioning has finished.
+        # This keeps the two weight sets out of the working set together.
+        self.model=None;self.clip=None;self.vae=None;self.audio_vae=None
+        if not self.offload:self.load_diffuser()
         self.load_conditioners()
         emit('ready')
 
@@ -137,6 +213,22 @@ class Worker:
         self.audio_vae=comfy.sd.VAE(sd=comfy.utils.load_torch_file(files['audio_vae'],safe_load=True))
         if self.vae.latent_channels!=24 or self.audio_vae.latent_channels!=32:raise ValueError('VAE non compatibili con MiniMax H3: video 24 canali, audio 32 canali.')
 
+    def configure_attention(self, preference, chunks=0):
+        from comfy.ldm.modules import attention
+        available=attention.SAGE_ATTENTION_IS_AVAILABLE
+        if preference=='sage' and not available:
+            raise ValueError('SageAttention non installato. Installa l’acceleratore dal Setup video, oppure scegli Auto / PyTorch.')
+        backend='sage' if preference!='pytorch' and available else 'pytorch'
+        if not chunks:
+            gb=self.torch.cuda.get_device_properties(0).total_memory/1024**3
+            chunks=8 if gb<=20 else 4 if gb<=32 else 1
+        self.attention_chunks=chunks if backend=='sage' else 1
+        function=chunked_attention(self.torch,attention,chunks) if backend=='sage' else attention.attention_pytorch
+        self.model.set_model_optimized_attention(function)
+        logging.info('Video attention backend: %s (requested: %s, head chunks: %d)',backend,preference,self.attention_chunks)
+        emit('stage',message='Video · attenzione '+('SageAttention' if backend=='sage' else 'PyTorch'))
+        return backend
+
     def discard(self, *names):
         # Finished stages do not need their weights. Deleting them avoids the
         # quantized encoder's unsafe CUDA->CPU .to() path in torch/c10 on Windows.
@@ -158,22 +250,32 @@ class Worker:
                 images.append(self.torch.from_numpy(np.asarray(rgb).copy().astype(np.float32)/255)[None])
         return images
 
-    def condition(self,request):
+    def fit_frame(self,image,opts):
+        """Contain the complete guide, then pad to the latent grid, never stretch."""
+        width,height=opts['output_width'],opts['output_height']
+        ih,iw=image.shape[1:3];scale=min(width/iw,height/ih)
+        w,h=max(1,round(iw*scale)),max(1,round(ih*scale))
+        image=self.h3._resize(image,w,h,'disabled')
+        left=(opts['width']-w)//2;top=(opts['height']-h)//2
+        return self.torch.nn.functional.pad(image,(0,0,left,opts['width']-w-left,top,opts['height']-h-top))
+
+    def condition(self,request,images=None):
         torch,comfy,h3=self.torch,self.comfy,self.h3
         opts=request['options'];plan=request['plan'];width,height=opts['width'],opts['height']
         latent,grid_frames=h3._empty_av_latent(width,height,opts['frames'])
-        images=self.images(request['images']);items=[];blocks=[];guides=[]
+        if images is None:images=self.images(request['images'])
+        items=[];blocks=[];guides=[]
         for entry in plan['images']:
             image=images[entry['index']-1]
             if entry['role']=='keyframe':
                 frame=min(round(entry['seconds']*24),opts['frames']-1)
-                image=h3._resize(image,width,height,'disabled' if frame==0 else 'center')
+                image=self.fit_frame(image,opts)
                 z=self.vae.encode(image)
                 guides.append({'resolved_frame_index':frame,'latent':z})
             else:
                 ih,iw=image.shape[1:3];scale=min(1,math.sqrt(width*height/(iw*ih)))
                 w,h=max(32,round(iw*scale/32)*32),max(32,round(ih*scale/32)*32)
-                image=h3._resize(image,w,h,'disabled');z=self.vae.encode(image)
+                image=self.fit_frame(image,{'width':w,'height':h,'output_width':w,'output_height':h});z=self.vae.encode(image)
                 blocks.append({'kind':'image','latent_h':h//16,'latent_w':w//16,'latent':z})
             items.append({'type':'image','data':image})
         master=None;master_z=None
@@ -199,18 +301,26 @@ class Worker:
         return positive,latent,master,grid_frames
 
     def generate(self,request):
-        torch,comfy=self.torch,self.comfy;opts=request['options']
-        if self.model is None:self.load_diffuser()
+        from h3chat.video_options import resolve_canvas
+        torch,comfy=self.torch,self.comfy
+        images=self.images(request['images'])
+        opts=resolve_canvas(request['options'],request['plan'],[(im.shape[2],im.shape[1]) for im in images],request.get('format_prompt',request['plan'].get('prompt','')))
+        request=request|{'options':opts}
+        emit('stage',message=f"Video · formato {opts['aspect']} · {opts['output_width']}×{opts['output_height']} · "+('dall’immagine guida' if opts['aspect_source']=='image' else 'dal prompt' if opts['aspect_source']=='prompt' else 'dal preset'))
+        if self.model is None and not self.offload:self.load_diffuser()
         if self.clip is None:self.load_conditioners()
         # Quantized parameters are rewrapped while offloading. no_grad avoids
         # inference tensors without version counters in PyTorch's .to() path.
         with torch.no_grad():
             emit('stage',message='Video · preparazione istruzioni, fotogrammi e audio')
             self.phase='Video · preparazione istruzioni, fotogrammi e audio'
-            positive,latent,master,grid_frames=self.condition(request)
+            positive,latent,master,grid_frames=self.condition(request,images)
+            images=None
             if self.offload:
                 emit('stage',message='Video · rilascio encoder e VAE dopo il condizionamento')
                 self.discard('clip','vae','audio_vae')
+            if self.model is None:self.load_diffuser()
+            attention_backend=self.configure_attention(opts.get('attention','auto'),opts.get('attention_chunks',0))
             negative=[[torch.zeros_like(value),info.copy()] for value,info in positive]
             model=self.h3.MiniMaxH3SigmaShift.execute(self.model,opts['shift_video'],opts['shift_audio'])[0]
             noise=comfy.sample.prepare_noise(latent['samples'],opts['seed'])
@@ -228,6 +338,8 @@ class Worker:
             pixels=self.vae.decode(samples.unbind()[0])
             if pixels.ndim==5:pixels=pixels.reshape(-1,*pixels.shape[-3:])
             if len(pixels)<opts['frames']:raise RuntimeError('Il VAE non ha decodificato tutti i fotogrammi.')
+            left=(opts['width']-opts['output_width'])//2;top=(opts['height']-opts['output_height'])//2
+            pixels=pixels[:,top:top+opts['output_height'],left:left+opts['output_width'],:]
             emit('stage',message='Video · preparazione audio e salvataggio MP4')
             self.phase='Video · preparazione audio e salvataggio MP4'
             if master is None:
@@ -236,7 +348,7 @@ class Worker:
                     self.audio_vae=comfy.sd.VAE(sd=comfy.utils.load_torch_file(self.files['audio_vae'],safe_load=True))
                 master=vae_decode_audio(self.audio_vae,{'samples':samples})
             write_video(request['output'],pixels,master,opts['frames'])
-        emit('done',parameters={'fps':24,'duration':opts['frames']/24,'model_frames':grid_frames,'output_frames':opts['frames'],'engine':'minimax-h3','audio_sample_rate':master['sample_rate'],'audio_preserved':any(x['role'] in ('lipsync','reuse') for x in request['plan']['audios'])})
+        emit('done',parameters={'fps':24,'duration':opts['frames']/24,'model_frames':grid_frames,'output_frames':opts['frames'],'width':opts['output_width'],'height':opts['output_height'],'canvas_width':opts['width'],'canvas_height':opts['height'],'aspect':opts['aspect'],'aspect_source':opts['aspect_source'],'format_image':opts['format_image'],'engine':'minimax-h3','attention_backend':attention_backend,'attention_chunks':self.attention_chunks,'audio_sample_rate':master['sample_rate'],'audio_preserved':any(x['role'] in ('lipsync','reuse') for x in request['plan']['audios'])})
 
 def main():
     emit('hello');worker=Worker()

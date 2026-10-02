@@ -4,7 +4,7 @@ Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle 
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.13.2-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.13.2/H3-Chat-0.13.2-windows-x64.zip) dalla [release v0.13.2](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.13.2), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.13.3-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.13.3/H3-Chat-0.13.3-windows-x64.zip) dalla [release v0.13.3](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.13.3), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 
@@ -65,6 +65,10 @@ Il motore musicale CPU è incluso nel pacchetto Windows; il motore NVIDIA CUDA s
 Il canto italiano è sperimentale. I pesi YuE2 sono soggetti a **CC BY-NC 4.0**; non sono inclusi nell’archivio dell’app. Dettagli, build e provenienza: [motore musicale](docs/music-engine.md).
 
 ## Video · MiniMax H3
+
+Il video mantiene il formato del primo fotogramma guida, senza deformare le immagini. Con soli riferimenti puoi indicare un formato diverso nel prompt, per esempio «solo reference, formato 16:9». Senza immagini vale il formato richiesto o il preset. Il motore aggiunge il minimo margine per la propria griglia e lo rimuove dal file finale.
+
+In **Setup → Video**, il pulsante **Installa acceleratore video** aggiunge SageAttention e i suoi componenti al runtime privato. Il preset **Auto** lo usa quando disponibile; nelle impostazioni avanzate puoi scegliere Sage o PyTorch e la suddivisione dell’attenzione. L’offload completa e libera encoder e VAE prima di leggere il diffusore, poi libera il diffusore prima della decodifica. Tutto il calcolo video resta sulla GPU.
 
 Nella stessa chat premi **Video** oppure chiedi «Crea un video», «Genera un filmato» o «Anima questa immagine». Il risultato è un MP4 con audio, player e download; con canvas attivo appare nel canvas. In **Setup → Video → Sfoglia e collega** scegli diffusore H3 standard FL2VA/REF2VA, encoder Qwen3-VL per H3, VAE video e VAE audio, tutti safetensors e nelle loro cartelle originali. Il motore privato si installa dallo stesso pannello, è condiviso con Ming/Qwen e poi funziona offline. Richiede NVIDIA CUDA; PDD/Turbo e GGUF non sono supportati.
 
@@ -210,6 +214,8 @@ Ogni modello selezionato ha una valutazione separata. La valutazione complessiva
 La stima cambia con modello, contesto, layer, risoluzione e numero di riferimenti allegati (almeno uno per una previsione vision). “Applica suggerimento” modifica il setup da salvare. La memoria è aggiornata durante l'apertura delle impostazioni, con cache di circa 10 secondi. Sono stime euristiche: kernel, driver, template, dimensioni reali delle immagini e memoria occupata successivamente possono cambiare il risultato. Il motore continua a riportare gli errori OOM effettivi nel lavoro.
 
 ## Chat e canvas
+
+La freccia circolare accanto a **Invia** rigenera l’ultimo prompt con gli stessi allegati, modelli, parametri e scelte di quel messaggio. Sostituisce l’ultima risposta senza duplicare la richiesta e lascia intatta la bozza nel compositore. Durante un lavoro o nelle chat archiviate il pulsante è disabilitato. Con seed fisso la generazione può restituire lo stesso risultato; usa -1 per un seed casuale.
 
 Puoi creare, cercare per titolo, rinominare, fissare in evidenza, archiviare, ripristinare ed eliminare conversazioni; organizzarle in raccolte e spostarle tra raccolte. Eliminare una raccolta conserva le chat. Messaggi, impostazioni, stato dei lavori e canvas sono persistiti in SQLite. Gli allegati sono file locali; quelli condivisi vengono conservati anche dopo la cancellazione di una chat.
 

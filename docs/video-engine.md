@@ -113,6 +113,17 @@ and video. Chat and canvas use a seekable player, byte-range HTTP and MP4 downlo
 With canvas selected, the media artifact is placed in the canvas and the message
 body contains its standard accompanying text.
 
+## Image aspect ratio
+
+The first keyframe in time determines the output ratio, including when the
+prompt specifies a different format. In reference-only mode an explicit format
+in the original user prompt overrides the reference ratio; otherwise the first
+reference determines it. Text-to-video uses the explicit prompt or preset ratio.
+EXIF orientation is applied before measuring. Images are resized proportionally
+and contained, with neutral padding for mismatched guides. H3's 32-pixel grid is
+padded separately and cropped away from the decoded MP4, whose dimensions remain
+even. A 4:3 image at 0.7 MP produces 992×744, sampled on a 992×768 grid.
+
 ## GPU and memory
 
 Inference requires NVIDIA CUDA. Diffusion, the H3 encoder and both VAEs compute on
@@ -127,6 +138,47 @@ placement. Enabled offload reduces VRAM by transferring inactive weights to RAM;
 disabled offload requires all components to fit in GPU memory. Recent model file
 pages may be retained by the existing reclaimable file cache, without copying
 weights or locking RAM. This can help reloading but cannot remove PCIe transfers.
+
+With video offload enabled, conditioning is completed first and the encoder and
+VAEs are released before reading the diffuser weights. The diffuser is released
+before reloading the video VAE for decoding. This ordering applies to the first
+generation and to subsequent jobs on the same worker, and prevents the large
+encoder and diffuser weight sets from occupying RAM together. A temporary drop
+in VRAM between these stages is expected; storing weights in RAM does not switch
+inference to CPU. A large 15-second clip can leave little or no VRAM for resident
+diffuser weights, requiring repeated RAM-to-GPU transfers during sampling.
+
+Video presets default to `attention: auto`, selecting SageAttention when the
+optional accelerator is installed. Advanced preferences also expose `sage`
+(requires installation) and `pytorch` for comparison. The backend is logged at
+sampling time and recorded in the output's generation details. Masked attention
+and unsupported kernel calls retain the core's PyTorch fallback. SageAttention
+uses quantized attention and can change the generated output; it is not a
+bit-for-bit replacement for PyTorch. Independent attention heads are processed
+in groups to bound Sage workspace: automatic uses eight groups up to 20 GiB,
+four up to 32 GiB, and one above that. Advanced `attention_chunks` can override
+this (0 means automatic, 1 disables grouping). No tokens or frames are removed.
+
+On Windows the worker reads safetensors into owned writable CPU buffers using
+`readinto` and `torch.frombuffer`. This avoids the native storage-slicing crash
+seen when reopening the large diffuser after CUDA conditioning, as well as
+read-only host-registration failures. There is one allocation per tensor and no
+second whole-file mapping competing with offloaded weights in RAM. This reader
+preserves original quantization metadata and never modifies the model file.
+
+The video engine install button also installs the accelerator in existing
+installations. `runtimes.json` pins the upstream SageAttention
+`2.2.0+cu130torch2.10.0andhigher.post6` Windows ABI3 wheel, Triton Windows
+`3.7.1.post27` for Python 3.13 and the Python 3.13 include/import libraries,
+including download sizes and SHA-256 checksums. They live entirely under the
+application directory; no ComfyUI installation, system Python, CUDA Toolkit or
+Visual Studio is required. Triton's compiled kernel cache stays under
+`runtime/vision/cache/triton`. Wheel licenses accompany the installed packages:
+SageAttention Apache-2.0, Triton MIT, CPython PSF.
+
+Sources: [SageAttention Windows release](https://github.com/woct0rdho/SageAttention/releases/tag/v2.2.0-windows.post6),
+[Triton Windows](https://github.com/woct0rdho/triton-windows), and
+[embedded Python setup](https://github.com/woct0rdho/triton-windows#8-special-notes-for-comfyui-with-embeded-python).
 
 H3 weights are much larger than the small chat/image models: memory assessments
 include model files, duration, resolution, references and decoded video buffers.

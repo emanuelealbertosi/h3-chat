@@ -194,6 +194,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(self.app.cancel(parts[2]))
             if len(parts) == 4 and parts[:2] == ["api", "chats"] and parts[3] == "messages" and method == "POST":
                 return self.json(self.app.send(parts[2], body), 202)
+            if len(parts) == 4 and parts[:2] == ["api", "chats"] and parts[3] == "regenerate" and method == "POST":
+                return self.json(self.app.regenerate(parts[2]), 202)
             if len(parts) == 3 and parts[:2] == ["api", "chats"]:
                 chat_id = parts[2]
                 if method == "DELETE":

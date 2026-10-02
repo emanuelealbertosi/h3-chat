@@ -58,3 +58,9 @@ No system TeX, Python, or FFmpeg installation is required for supported scenes;
 formula rendering uses Matplotlib MathText and video encoding uses PyAV.
 EmbeddingGemma weights are optional and governed by the Gemma terms; no weights
 are included in the app or release package.
+
+The optional video accelerator uses upstream SageAttention Windows wheels
+(Apache-2.0), Triton Windows (MIT) and CPython include/import libraries (PSF).
+Pinned URLs and checksums are in runtimes.json; licenses remain in the installed
+wheel distributions. See docs/video-engine.md. These are app-local components
+and do not use another application's Python or ComfyUI installation.
