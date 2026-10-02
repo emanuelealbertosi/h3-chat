@@ -93,13 +93,13 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
     def key(self):
         return self.active.api_key if self.active else None
 
-    def _drop(self, key, remember=True):
+    def _drop(self, key, remember=True, keep_warm=True):
         session = self.sessions.pop(key, None)
         if session:
             if remember and session.ready:
                 self.cache.remember(session.files.values())
             started = time.monotonic()
-            warm = (remember and self.policy == 'on_demand' and self.cache.limit > 0
+            warm = (keep_warm and remember and self.policy == 'on_demand' and self.cache.limit > 0
                     and session.kind == 'image' and session.model.get('engine') == 'vision'
                     and hasattr(session, 'worker_backend')
                     and session.ready and session.alive())
@@ -205,7 +205,14 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                 for old in list(self.sessions):
                     if old != key:
                         if stage:stage('Rilascio memoria · '+self.sessions[old].model['name'])
-                        self._drop(old)
+                        self._drop(old, keep_warm=kind != 'video')
+                # H3's large CPU weights and pinned transfer buffers need the
+                # RAM held by idle Torch image workers. A warm image process
+                # helps chat/image switching but competes with video offload.
+                if kind == 'video' and self.warm_image:
+                    if stage:stage('Rilascio memoria · motore immagini inattivo prima del video')
+                    self.warm_image.stop()
+                    self.warm_image = None
             session = self.sessions.get(key)
             if not session:
                 warm = self.warm_image

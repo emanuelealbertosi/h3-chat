@@ -16,9 +16,9 @@ class WarmEngineTests(unittest.TestCase):
     tearDown = fixture.ResidencyTests.tearDown
     loaded = fixture.ResidencyTests.loaded
     # Reuse the tiny process/model fixture, not the parent test cases.
-    def vision(self):
+    def vision(self, settings=None):
         self.models['image']['engine'] = 'vision'
-        session = self.loaded('image', 'image')
+        session = self.loaded('image', 'image', settings)
         session.worker_backend = 'cpu'
         session.send = Mock()
         session.wait = Mock(return_value={'event': 'unloaded'})
@@ -64,6 +64,38 @@ class WarmEngineTests(unittest.TestCase):
         from h3chat.downloads import Cancelled
         with self.assertRaises(Cancelled):
             self.engine._activate('chat', self.models['llm'], self.settings, self.root/'next.log', self.cancel)
+        self.assertTrue(image.ready)
+        image.send.assert_not_called()
+
+    def video(self, settings=None, stage=None):
+        path=self.root/'video.bin';path.write_bytes(b'video weights')
+        model=self.models['image'] | {'id':'video','capabilities':['video'],
+            'files':[{'role':'model','path':path.name,'size':path.stat().st_size}]}
+        return self.engine._activate('video',model,settings or self.settings,
+            self.root/'video.log',self.cancel,stage=stage)
+
+    def test_direct_image_to_video_closes_image_without_warm_unload(self):
+        image=self.vision()
+        self.video()
+        self.assertFalse(image.alive())
+        image.send.assert_not_called()
+        self.assertIsNone(self.engine.warm_image)
+        self.assertGreater(self.engine.cache.snapshot()['mapped_bytes'],0)
+
+    def test_video_releases_image_runtime_already_warmed_during_chat(self):
+        image=self.vision()
+        self.loaded('chat','llm')
+        stage=Mock()
+        self.video(stage=stage)
+        self.assertFalse(image.alive())
+        self.assertIsNone(self.engine.warm_image)
+        self.assertFalse(self.engine.snapshot()['warm_image_engine'])
+        stage.assert_any_call('Rilascio memoria · motore immagini inattivo prima del video')
+
+    def test_resident_video_keeps_the_requested_image_model(self):
+        image=self.vision(self.settings | {'memory_policy':'resident'})
+        self.video(self.settings | {'memory_policy':'resident'})
+        self.assertTrue(image.alive())
         self.assertTrue(image.ready)
         image.send.assert_not_called()
 

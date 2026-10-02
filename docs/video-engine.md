@@ -139,6 +139,13 @@ disabled offload requires all components to fit in GPU memory. Recent model file
 pages may be retained by the existing reclaimable file cache, without copying
 weights or locking RAM. This can help reloading but cannot remove PCIe transfers.
 
+In on-demand mode the image process is fully closed before local video loading,
+including an image worker previously kept warm during chat. The file-cache
+preference remains intact. An idle Torch process can retain substantial RAM and
+commit allocations even after unloading model objects; these compete with H3
+offload and can force Windows paging. Resident mode keeps the selected models.
+Returning to images after video therefore requires a fresh image runtime.
+
 With video offload enabled, conditioning is completed first and the encoder and
 VAEs are released before reading the diffuser weights. The diffuser is released
 before reloading the video VAE for decoding. This ordering applies to the first
@@ -185,3 +192,8 @@ include model files, duration, resolution, references and decoded video buffers.
 They are estimates, not a guarantee against OOM. Loading, GPU transfers, sampling,
 decoding and MP4 saving have distinct status messages. Cancelling the job stops
 the owned worker and releases its model process.
+
+Sampling logs record each H3 step duration. Completed generation parameters
+include `sampling_seconds` and `step_seconds`, visible in advanced chat details.
+The first interval includes sampler preparation and GPU transfers; these are
+wall-clock measurements, not isolated CUDA-kernel profiling.

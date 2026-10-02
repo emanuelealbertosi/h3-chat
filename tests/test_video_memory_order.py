@@ -1,5 +1,6 @@
 """Check video component lifetimes without loading CUDA or user model weights."""
 import ast
+import time
 import contextlib
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -14,7 +15,7 @@ class VideoMemoryOrderTests(unittest.TestCase):
         tree = ast.parse((ROOT/'native/video-worker.py').read_text(encoding='utf-8'))
         definition = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'Worker')
         events = []
-        namespace = {'emit': lambda event, **values: events.append((event, values)), 'write_video': Mock(), 'read_safetensors':Mock(return_value=({},{}))}
+        namespace = {'emit': lambda event, **values: events.append((event, values)), 'write_video': Mock(), 'read_safetensors':Mock(return_value=({},{})), 'time':time, 'logging':Mock()}
         exec(compile(ast.Module(body=[definition], type_ignores=[]), '<video-worker>', 'exec'), namespace)
         worker = namespace['Worker']()
         torch = SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: True),
@@ -55,6 +56,7 @@ class VideoMemoryOrderTests(unittest.TestCase):
             self.assertIsNotNone(model)
             if offload:self.assertIsNone(worker.clip)
             lifetime.append('sample')
+            for step in range(2):kwargs['callback'](step,None,None,2)
             return SimpleNamespace(unbind=lambda: (object(), object()))
 
         # The decoder must be sized like the real tensor and still carry ndim.
@@ -85,6 +87,14 @@ class VideoMemoryOrderTests(unittest.TestCase):
                 # A reused worker must use the same ordering on the next job.
                 worker.generate(request)
         self.assertEqual([event for event, _ in events].count('done'), 2 if offload else 1)
+        for event,values in events:
+            if event=='done':
+                durations=values['parameters']['step_seconds']
+                self.assertEqual(len(durations),2)
+                self.assertTrue(all(seconds>=0 for seconds in durations))
+                self.assertGreaterEqual(values['parameters']['sampling_seconds'],sum(durations))
+        self.assertEqual([values['step'] for event,values in events if event=='progress'],
+            [1,2]*(2 if offload else 1))
         self.assertEqual(lifetime,
             ['conditioners','condition','diffuser','sample'] * 2 if offload
             else ['diffuser','conditioners','condition','sample'])

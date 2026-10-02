@@ -7,6 +7,7 @@ import math
 import os
 from pathlib import Path
 import sys
+import time
 import traceback
 import faulthandler
 
@@ -326,8 +327,16 @@ class Worker:
             noise=comfy.sample.prepare_noise(latent['samples'],opts['seed'])
             emit('stage',message='Video · generazione MiniMax H3')
             self.phase='Video · generazione MiniMax H3'
+            sampling_started=time.monotonic();last_step=sampling_started;step_seconds=[]
+            def progress(step,x0,x,total):
+                nonlocal last_step
+                now=time.monotonic();seconds=now-last_step;last_step=now
+                step_seconds.append(seconds)
+                logging.info('H3 sampling step %d/%d: %.2f s',step+1,total,seconds)
+                emit('progress',step=step+1,steps=total,step_seconds=seconds)
             samples=comfy.sample.sample(model,noise,opts['steps'],opts['cfg'],opts['sampler'],opts['scheduler'],positive,negative,latent['samples'],noise_mask=latent.get('noise_mask'),disable_pbar=True,seed=opts['seed'],
-                callback=lambda step,x0,x,total:emit('progress',step=step+1,steps=total))
+                callback=progress)
+            sampling_seconds=time.monotonic()-sampling_started
             if self.offload:
                 emit('stage',message='Video · rilascio diffusore prima della decodifica')
                 model=None
@@ -348,7 +357,7 @@ class Worker:
                     self.audio_vae=comfy.sd.VAE(sd=comfy.utils.load_torch_file(self.files['audio_vae'],safe_load=True))
                 master=vae_decode_audio(self.audio_vae,{'samples':samples})
             write_video(request['output'],pixels,master,opts['frames'])
-        emit('done',parameters={'fps':24,'duration':opts['frames']/24,'model_frames':grid_frames,'output_frames':opts['frames'],'width':opts['output_width'],'height':opts['output_height'],'canvas_width':opts['width'],'canvas_height':opts['height'],'aspect':opts['aspect'],'aspect_source':opts['aspect_source'],'format_image':opts['format_image'],'engine':'minimax-h3','attention_backend':attention_backend,'attention_chunks':self.attention_chunks,'audio_sample_rate':master['sample_rate'],'audio_preserved':any(x['role'] in ('lipsync','reuse') for x in request['plan']['audios'])})
+        emit('done',parameters={'fps':24,'duration':opts['frames']/24,'model_frames':grid_frames,'output_frames':opts['frames'],'width':opts['output_width'],'height':opts['output_height'],'canvas_width':opts['width'],'canvas_height':opts['height'],'aspect':opts['aspect'],'aspect_source':opts['aspect_source'],'format_image':opts['format_image'],'engine':'minimax-h3','attention_backend':attention_backend,'attention_chunks':self.attention_chunks,'sampling_seconds':sampling_seconds,'step_seconds':step_seconds,'audio_sample_rate':master['sample_rate'],'audio_preserved':any(x['role'] in ('lipsync','reuse') for x in request['plan']['audios'])})
 
 def main():
     emit('hello');worker=Worker()
