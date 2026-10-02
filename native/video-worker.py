@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import sys
 import traceback
+import faulthandler
 
 ROOT=Path(__file__).resolve().parents[1]
 RUNTIME=ROOT/'runtime/vision'
@@ -16,6 +17,7 @@ sys.path[:0]=[str(RUNTIME/'packages'),str(RUNTIME/'core')]
 os.environ.update(HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1',HF_HUB_DISABLE_TELEMETRY='1',HF_HOME=str(RUNTIME/'cache'))
 wire=sys.stdout;sys.stdout=sys.stderr
 logging.basicConfig(level=logging.INFO,stream=sys.stderr)
+faulthandler.enable(file=sys.stderr)
 
 def emit(event,**values):
     wire.write(json.dumps({'event':event,**values},ensure_ascii=False)+'\n');wire.flush()
@@ -109,23 +111,41 @@ class Worker:
             return result
         comfy.model_management.load_models_gpu=load_gpu
         comfy.utils.PROGRESS_BAR_ENABLED=False
-        files=request['files']
+        self.files=request['files'];self.offload=request['offload']
+        self.load_diffuser()
+        self.load_conditioners()
+        emit('ready')
+
+    def load_diffuser(self):
+        comfy=self.comfy;files=self.files
         emit('stage',message='Video · lettura diffusore MiniMax H3')
         self.model=comfy.sd.load_diffusion_model(files['diffusion'])
         if self.model is None or type(self.model.model.model_config).__name__!='MiniMaxH3':raise ValueError('Scegli un diffusore MiniMax H3 standard, compatibile FL2VA / REF2VA.')
         head=self.model.model.diffusion_model.final_layer
         if head.video_out.weight.shape[0]!=96 or head.audio_out.weight.shape[0]!=32:raise ValueError('PDD/Turbo non supportato: scegli un modello H3 standard FL2VA / REF2VA.')
+
+    def load_conditioners(self):
+        comfy,torch,files=self.comfy,self.torch,self.files
         emit('stage',message='Video · lettura encoder Qwen3-VL MiniMax H3')
         # LOW_VRAM defaults text encoding to CPU in the underlying library.
         # Override placement: offload stores weights in RAM, all inference is CUDA.
         device=comfy.model_management.get_torch_device()
         self.clip=comfy.sd.load_clip([files['llm']],clip_type=comfy.sd.CLIPType.MINIMAX,
-            model_options={'load_device':device,'offload_device':torch.device('cpu') if request['offload'] else device,'initial_device':torch.device('cpu')})
+            model_options={'load_device':device,'offload_device':torch.device('cpu') if self.offload else device,'initial_device':torch.device('cpu')})
         emit('stage',message='Video · lettura VAE video e audio')
         self.vae=comfy.sd.VAE(sd=comfy.utils.load_torch_file(files['vae'],safe_load=True))
         self.audio_vae=comfy.sd.VAE(sd=comfy.utils.load_torch_file(files['audio_vae'],safe_load=True))
         if self.vae.latent_channels!=24 or self.audio_vae.latent_channels!=32:raise ValueError('VAE non compatibili con MiniMax H3: video 24 canali, audio 32 canali.')
-        emit('ready')
+
+    def discard(self, *names):
+        # Finished stages do not need their weights. Deleting them avoids the
+        # quantized encoder's unsafe CUDA->CPU .to() path in torch/c10 on Windows.
+        # Comfy's loaded-model list has weak references, not ownership.
+        import gc
+        for name in names:setattr(self,name,None)
+        gc.collect()
+        self.comfy.model_management.cleanup_models()
+        self.comfy.model_management.soft_empty_cache(force=True)
 
     def images(self,paths):
         import numpy as np
@@ -180,12 +200,17 @@ class Worker:
 
     def generate(self,request):
         torch,comfy=self.torch,self.comfy;opts=request['options']
+        if self.model is None:self.load_diffuser()
+        if self.clip is None:self.load_conditioners()
         # Quantized parameters are rewrapped while offloading. no_grad avoids
         # inference tensors without version counters in PyTorch's .to() path.
         with torch.no_grad():
             emit('stage',message='Video · preparazione istruzioni, fotogrammi e audio')
             self.phase='Video · preparazione istruzioni, fotogrammi e audio'
             positive,latent,master,grid_frames=self.condition(request)
+            if self.offload:
+                emit('stage',message='Video · rilascio encoder e VAE dopo il condizionamento')
+                self.discard('clip','vae','audio_vae')
             negative=[[torch.zeros_like(value),info.copy()] for value,info in positive]
             model=self.h3.MiniMaxH3SigmaShift.execute(self.model,opts['shift_video'],opts['shift_audio'])[0]
             noise=comfy.sample.prepare_noise(latent['samples'],opts['seed'])
@@ -193,6 +218,11 @@ class Worker:
             self.phase='Video · generazione MiniMax H3'
             samples=comfy.sample.sample(model,noise,opts['steps'],opts['cfg'],opts['sampler'],opts['scheduler'],positive,negative,latent['samples'],noise_mask=latent.get('noise_mask'),disable_pbar=True,seed=opts['seed'],
                 callback=lambda step,x0,x,total:emit('progress',step=step+1,steps=total))
+            if self.offload:
+                emit('stage',message='Video · rilascio diffusore prima della decodifica')
+                model=None
+                self.discard('model')
+                self.vae=comfy.sd.VAE(sd=comfy.utils.load_torch_file(self.files['vae'],safe_load=True))
             emit('stage',message='Video · decodifica fotogrammi sulla GPU')
             self.phase='Video · decodifica fotogrammi sulla GPU'
             pixels=self.vae.decode(samples.unbind()[0])
@@ -202,6 +232,8 @@ class Worker:
             self.phase='Video · preparazione audio e salvataggio MP4'
             if master is None:
                 from comfy_extras.nodes_audio import vae_decode_audio
+                if self.audio_vae is None:
+                    self.audio_vae=comfy.sd.VAE(sd=comfy.utils.load_torch_file(self.files['audio_vae'],safe_load=True))
                 master=vae_decode_audio(self.audio_vae,{'samples':samples})
             write_video(request['output'],pixels,master,opts['frames'])
         emit('done',parameters={'fps':24,'duration':opts['frames']/24,'model_frames':grid_frames,'output_frames':opts['frames'],'engine':'minimax-h3','audio_sample_rate':master['sample_rate'],'audio_preserved':any(x['role'] in ('lipsync','reuse') for x in request['plan']['audios'])})

@@ -29,14 +29,17 @@ def emit(event, **values):
 
 
 class Worker:
-    def load(self, request):
-        self.architecture = request['architecture']
-        if self.architecture not in ('ming', 'qwen21'):
-            raise ValueError('Architettura non supportata dal motore vision.')
+    def initialize(self, request):
+        backend = request['backend']
+        if hasattr(self, 'backend'):
+            if self.backend != backend:
+                raise ValueError('Per cambiare CPU/GPU occorre riavviare il motore immagini.')
+            return
+        emit('stage', message='Inizializzazione librerie del motore immagini')
         import comfy.cli_args
         args = comfy.cli_args.args
-        args.cpu = request['backend'] == 'cpu'
-        if request['backend'] not in ('cpu', 'cuda'):
+        args.cpu = backend == 'cpu'
+        if backend not in ('cpu', 'cuda'):
             raise ValueError('Ming e Qwen Image 2.1 richiedono il motore CPU oppure NVIDIA CUDA.')
         # Model lifetime is managed by H3-Chat; CUDA components stay on GPU.
         args.highvram = not args.cpu
@@ -60,6 +63,36 @@ class Worker:
                 comfy.model_patcher.CoreModelPatcher = comfy.model_patcher.ModelPatcherDynamic
                 comfy.memory_management.aimdo_enabled = True
         self.torch, self.comfy = torch, comfy
+        self.backend = backend
+        self.phase = 'Motore immagini pronto'
+        original_load = comfy.model_management.load_models_gpu
+        def load_gpu(models, *args, **kwargs):
+            names = ', '.join(type(m.model).__name__ for m in models)
+            emit('stage', message='Trasferimento componenti GPU · ' + names if backend=='cuda' else 'Preparazione componenti CPU · ' + names)
+            result = original_load(models, *args, **kwargs)
+            emit('stage', message=self.phase)
+            return result
+        comfy.model_management.load_models_gpu = load_gpu
+
+    def unload(self):
+        # Keep imported libraries; release all model objects and GPU allocations.
+        # This is not CPU inference, and does not keep a second model loaded.
+        import gc
+        if hasattr(self, 'comfy'):
+            for name in ('base_model', 'base_clip', 'vae'):
+                setattr(self, name, None)
+            gc.collect()
+            self.comfy.model_management.cleanup_models()
+            self.comfy.model_management.unload_all_models()
+            self.comfy.model_management.soft_empty_cache(force=True)
+        emit('unloaded')
+
+    def load(self, request):
+        self.architecture = request['architecture']
+        if self.architecture not in ('ming', 'qwen21'):
+            raise ValueError('Architettura non supportata dal motore vision.')
+        self.initialize(request)
+        torch, comfy = self.torch, self.comfy
         torch.set_num_threads(request.get('threads', 4))
         comfy.utils.PROGRESS_BAR_ENABLED = False
         files = request['files']
@@ -176,14 +209,17 @@ class Worker:
         if len(images) > 4:
             raise ValueError('Sono supportati fino a quattro riferimenti.')
         with torch.inference_mode():
+            self.phase = 'Lettura delle istruzioni e dei riferimenti'
             emit('stage', message='Lettura delle istruzioni e dei riferimenti')
             positive, negative, latent = self.encode(clip, request, images)
             noise = comfy.sample.prepare_noise(latent, request['seed'])
+            self.phase = 'Generazione immagine'
             emit('stage', message='Generazione immagine')
             samples = comfy.sample.sample(model, noise, request['steps'], request['cfg'], sampler, scheduler,
                 positive, negative, latent, denoise=1.0, disable_pbar=True, seed=request['seed'],
                 callback=lambda step, x0, x, total: emit('progress', step=step+1, steps=total))
-            emit('stage', message='Decodifica immagine')
+            self.phase = 'Decodifica immagine'
+            emit('stage', message=self.phase)
             pixels = self.vae.decode(samples)
             if pixels.ndim == 5:
                 pixels = pixels.reshape(-1, *pixels.shape[-3:])
@@ -202,6 +238,11 @@ def main():
             request = json.loads(line)
             if request['op'] == 'load':
                 worker.load(request)
+            elif request['op'] == 'initialize':
+                worker.initialize(request)
+                emit('initialized')
+            elif request['op'] == 'unload':
+                worker.unload()
             elif request['op'] == 'generate':
                 worker.generate(request)
             else:

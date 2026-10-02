@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import re
 import secrets
@@ -78,6 +79,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         self.api_client = ApiClient()
         self.api_credentials = None
         self.remote_config = None
+        self.warm_image = None
 
     @property
     def process(self):
@@ -96,7 +98,26 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         if session:
             if remember and session.ready:
                 self.cache.remember(session.files.values())
-            session.stop()
+            started = time.monotonic()
+            warm = (remember and self.policy == 'on_demand' and self.cache.limit > 0
+                    and session.kind == 'image' and session.model.get('engine') == 'vision'
+                    and hasattr(session, 'worker_backend')
+                    and session.ready and session.alive())
+            if warm:
+                try:
+                    session.send({'op': 'unload'})
+                    session.wait('unloaded', threading.Event(), 30)
+                    session.ready = False
+                    if self.warm_image:
+                        self.warm_image.stop()
+                    self.warm_image = session
+                except (OSError, RuntimeError, ValueError):
+                    session.stop()
+                    warm = False
+            else:
+                session.stop()
+            logging.getLogger('h3chat.engine').info('Rilascio %s: %.2f s · %s', session.model['name'],
+                time.monotonic() - started, 'motore immagini mantenuto pronto' if warm else 'processo chiuso')
             if self.active is session:
                 self.active = None
 
@@ -107,6 +128,9 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
             if self.tool_session:self.tool_session.stop()
             for key in list(self.sessions):
                 self._drop(key, remember=False)
+            if self.warm_image:
+                self.warm_image.stop()
+                self.warm_image = None
             self.cache.clear()
 
     def abort_active(self):
@@ -119,7 +143,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
     def snapshot(self):
         with self.process_lock:
             return {"policy":self.policy,"models":[s.snapshot() for s in self.sessions.values() if s.alive()],
-                    "cache":self.cache.snapshot()}
+                    "cache":self.cache.snapshot(), 'warm_image_engine': bool(self.warm_image and self.warm_image.alive())}
 
     def session_key(self, kind, model, settings):
         from .devices import options
@@ -146,6 +170,9 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         with self.process_lock:
             self.policy = settings.get('memory_policy', 'on_demand')
             self.cache.configure(settings.get('ram_cache_gb', 0))
+            if self.warm_image and (not self.cache.limit or self.policy != 'on_demand' or not self.warm_image.alive()):
+                self.warm_image.stop()
+                self.warm_image = None
             wanted = set()
             for field,kind in (('chat_model','chat'),('create_model','image'),('edit_model','image'),('diagram_model','image'),('_image_model','image'),('music_model','music'),('video_model','video')):
                 model = self.catalog.get(settings.get(field))
@@ -181,7 +208,19 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                         self._drop(old)
             session = self.sessions.get(key)
             if not session:
-                session = Session(key,kind,model,self.model_files(model,settings),settings,log_path)
+                warm = self.warm_image
+                if kind == 'image' and model.get('engine') == 'vision' and warm:
+                    self.warm_image = None
+                    if warm.alive() and warm.worker_backend == ('cpu' if settings['profile']=='cpu' else settings['backend']):
+                        session = warm
+                        session.key, session.kind, session.model = key, kind, model
+                        session.files, session.settings = self.model_files(model, settings), dict(settings)
+                        session.uses = 0
+                        session.active_loras, session.lora_stamps = [], {}
+                    else:
+                        warm.stop()
+                if session is None:
+                    session = Session(key,kind,model,self.model_files(model,settings),settings,log_path)
                 self.cache.forget(session.files.values())
                 self.sessions[key] = session
             self.active = session
@@ -468,18 +507,28 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
             raise ValueError('Ming e Qwen Image 2.1 usano CPU oppure CUDA NVIDIA. Scegli il motore adatto nel Setup.')
         python = self.root / 'runtime/python/python.exe'
         worker = self.root / 'native/vision-worker.py'
+        started = time.monotonic()
         with self.process_lock:
             if cancel.is_set():raise Cancelled()
-            session.start([python,'-I','-X','utf8',worker],ipc=True,cwd=self.root)
-        session.wait('hello',cancel,30)
+            warm = session.alive()
+            if not warm:
+                if stage:stage('Avvio del motore immagini · Python e librerie')
+                session.start([python,'-I','-X','utf8',worker],ipc=True,cwd=self.root)
+        if not warm:
+            session.wait('hello',cancel,30)
+        elif stage:
+            stage('Motore immagini già inizializzato · lettura dei pesi')
+        session.worker_backend = backend
         session.send({'op':'load','architecture':model['architecture'],'backend':backend,
                       'files':session.files,'threads':settings['threads'],
                       'resident':settings.get('memory_policy')=='resident'})
         try:
             session.wait('ready',cancel,900,stage)
         except RuntimeError as exc:
-            raise RuntimeError(self.failure(log_path,str(exc))) from exc
+            raise RuntimeError(self.failure(session.log_path,str(exc))) from exc
         session.ready = True
+        logging.getLogger('h3chat.engine').info('Caricamento %s: %.2f s · %s', model['name'],
+            time.monotonic()-started, 'motore riutilizzato' if warm else 'avvio completo')
         return session
 
     def refine_image_prompt(self, history, prompt, refs, settings, cancel, log_path, stage, *, image_model):

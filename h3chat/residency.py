@@ -99,10 +99,11 @@ class Session:
             if cancel.is_set():raise Cancelled()
             try:event=self.events.get(timeout=.15)
             except queue.Empty:
-                if not self.alive():raise RuntimeError('Il motore si è arrestato. Consulta il registro.')
+                if not self.alive():raise RuntimeError(self.exit_message())
                 continue
             if event.get('event')==target:return event
-            if event.get('event') in ('exit','error'):raise RuntimeError(event.get('message','Il motore si è arrestato.'))
+            if event.get('event')=='exit':raise RuntimeError(self.exit_message())
+            if event.get('event')=='error':raise RuntimeError(event.get('message','Errore del motore.'))
             if event.get('event')=='stage' and stage:
                 stage(event.get('message','Motore immagini'))
             if event.get('event')=='progress' and stage:
@@ -115,6 +116,25 @@ class Session:
                 else:
                     stage(f"{'Generazione video' if self.kind=='video' else 'Generazione musica' if self.kind=='music' else 'Generazione immagine'} · {step}/{steps} passi")
         raise RuntimeError('Tempo massimo del motore superato.')
+
+    def exit_message(self):
+        code = self.process.poll() if self.process else None
+        if code is None and self.process:
+            try:code = self.process.wait(timeout=.5)
+            except subprocess.TimeoutExpired:pass
+        if code is None:
+            try:
+                with self.log_path.open('rb') as log:
+                    log.seek(0, 2);log.seek(max(0, log.tell()-65536))
+                    if b'Windows fatal exception: access violation' in log.read():code = 0xc0000005
+            except OSError:pass
+        if code is None:return 'Il motore si è arrestato. Consulta il registro.'
+        number = code & 0xffffffff
+        if number == 0xc0000005:
+            return 'Arresto nativo del motore (0xC0000005 · accesso alla memoria non valido). Consulta il registro; non è un normale errore OOM di Python.'
+        if number in (0xc0000017, 0xc000009a):
+            return f'Memoria di sistema insufficiente nel motore (0x{number:08X}). Libera RAM o aumenta il file di paging.'
+        return f'Il motore si è arrestato (codice {code}, 0x{number:08X}). Consulta il registro.'
 
     def stop(self):
         self.ready=False
