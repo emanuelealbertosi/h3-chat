@@ -50,7 +50,7 @@ def main():
                 if self.path.startswith('/fixture/'):
                     self.guard(); self.read_body()
                     if self.path.startswith('/fixture/slides/'):
-                        from h3chat.slides import encode
+                        from h3chat.slides import encode,partial_page
                         phase=self.path.rsplit('/',1)[-1]
                         if phase=='start':
                             ident=app.store.enqueue(chat,'Crea 3 slide sintetiche',[],DEFAULTS|{'_lab':'slides'},True)
@@ -61,6 +61,11 @@ def main():
                                {'title':'Diagramma','status':'ready','nodes':[n('title','heading','Diagramma'),n('graph','mermaid','flowchart LR\n A[Documento] --> B[Slide]')],'notes':'Relazioni verificabili.','sources':[]},
                                {'title':'Figura','status':'writing','nodes':[n('title','heading','Figura'),n('text','text','Prima parte' if phase=='start' else 'Prima parte e testo completato'),n('image','image','Immagine originale',asset_id='a'*32)],'notes':'Figura autorizzata.','sources':[]}]
                         if phase=='done':pages[-1]['status']='ready'
+                        if phase=='early':
+                            pages[-1]['nodes']=partial_page('{"nodes":[{"text":"Contenuto già visibile prima di completare la pagina',set(),set())['nodes']
+                        elif phase=='orphan':
+                            raw='{"nodes":['+json.dumps(n('1. Titolo','heading','Gruppo ancora in composizione',parent='layout futuro'))+',{"text":"Testo che cresce mentre arriva il gruppo'
+                            pages[-1]['nodes']=partial_page(raw,set(),set())['nodes']
                         deck={'version':1,'format':'4:3','title':'Presentazione sintetica','references':[{'id':'R1','label':'Fonte sintetica · pagina 2'}],'pages':pages,'active':2}
                         value={'title':deck['title'],'content':encode(deck),'media':image['media']}
                         app.save_artifact(chat,value['title'],value['content'],value['media'])

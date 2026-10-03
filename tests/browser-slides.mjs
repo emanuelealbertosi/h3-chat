@@ -14,6 +14,10 @@ try{
   await page.goto(fixture.url);await page.click(`[data-chat="${fixture.chat}"]`);await page.selectOption('#lab-tool','slides');assert.equal(await page.locator('#slides-options').isVisible(),true);
   await post('/fixture/slides/start');await page.click('#canvas-toggle');await page.waitForSelector('.h3-slide-page');
   assert.match(await page.locator('.h3-slide-page').innerText(),/Prima parte/);assert.equal(await page.locator('.h3-slide-page img').count(),1);
+  await post('/fixture/slides/early');await page.waitForFunction(()=>document.querySelector('.h3-slide-page')?.textContent.includes('Contenuto già visibile'));
+  assert.equal(await page.locator('.slides-navigation select').inputValue(),'2');
+  await post('/fixture/slides/orphan');await page.waitForFunction(()=>document.querySelector('.h3-slide-page')?.textContent.includes('Testo che cresce'));
+  assert.match(await page.locator('.h3-slide-page').innerText(),/Gruppo ancora in composizione/);
   await post('/fixture/slides/stream');await page.waitForFunction(()=>document.querySelector('.h3-slide-page')?.textContent.includes('testo completato'));
   assert.equal(await page.locator('#canvas-history option').count(),4);
   await page.selectOption('.slides-navigation select','0');await page.waitForSelector('.h3-slide-page .katex');

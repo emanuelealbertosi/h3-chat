@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from h3chat.service import Service
-from h3chat.slides import PREFIX, requested, options, validate_page, partial_page, validate_content, encode,edit_request,edit_options
+from h3chat.slides import PREFIX, requested, options, validate_page, normalize_page, partial_page, validate_content, encode,edit_request,edit_options
 from h3chat.pdf_export import export_html
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -46,6 +46,44 @@ class SchemaTests(unittest.TestCase):
         self.assertTrue(edit_request('Riduci il testo della seconda pagina',content))
         self.assertEqual(edit_options('Riduci il testo',content),{'count':2,'format':'4:3'})
         self.assertEqual(edit_options('Aggiungi 2 slide in 16:9',content),{'count':4,'format':'16:9'})
+
+    def test_model_labels_forward_groups_and_root_container(self):
+        raw={'nodes':[node(id='2. Testo',parent='layout principale'),
+                      node('group',id='layout principale',parent='root'),
+                      node('group',id='root',parent=None,style={'flow':'columns','columns':[2,1]})]}
+        page=normalize_page(raw,set(),set())
+        self.assertEqual([n['id'] for n in page['nodes']],['n3','n2','n1'])
+        self.assertEqual([n['parent'] for n in page['nodes']],['root','n3','n2'])
+        self.assertEqual(page['nodes'][0]['style']['flow'],'columns')
+        validate_page(page,set(),set())
+        for nodes in ([node(id='duplicate'),node(id='duplicate')],
+                      [node(parent='not provided')],
+                      [node('group',parent='n2'),node('group',id='n2',parent='n1')],
+                      [node(id='root')]):
+            with self.assertRaises(ValueError):normalize_page({'nodes':nodes},set(),set())
+
+    def test_preview_reads_reordered_properties_and_unfinished_groups(self):
+        raw='{"nodes":[{"kind":"text","text":"Contenuto in tempo reale'
+        self.assertEqual(partial_page(raw,set(),set())['nodes'][0]['text'],'Contenuto in tempo reale')
+        raw='{"nodes":[{"text":"Testo prima del tipo'
+        self.assertEqual(partial_page(raw,set(),set())['nodes'][0]['text'],'Testo prima del tipo')
+        raw='{"nodes":['+json.dumps(node(id='1. Titolo',parent='gruppo futuro'))+',{"kind":"text","text":"Secondo '
+        draft=partial_page(raw,set(),set())
+        self.assertEqual([n['text'] for n in draft['nodes']],['Fonte [R1]','Secondo '])
+        self.assertTrue(all(n['parent']=='root' for n in draft['nodes']))
+        # Words resembling fields inside a string must not become node fields.
+        raw='{"nodes":[{"kind":"text","text":"Una chiave \\"parent\\": \\"evil\\"'
+        self.assertEqual(partial_page(raw,set(),set())['nodes'][0]['parent'],'root')
+
+    def test_every_token_of_noncanonical_page_can_be_previewed(self):
+        raw=json.dumps({'nodes':[node('group',id='0.layout'),node(id='1.text',parent='0.layout',text='Testo progressivo con $x^2$ e "virgolette".')],'notes':'','sources':[]})
+        longest=0
+        for size in range(1,len(raw)+1):
+            draft=partial_page(raw[:size],set(),set())
+            if draft:
+                validate_page(draft,set(),set(),draft=True)
+                longest=max(longest,sum(len(n['text']) for n in draft['nodes']))
+        self.assertGreaterEqual(longest,len('Testo progressivo con $x^2$ e "virgolette".'))
 
 class GenerationTests(unittest.TestCase):
     def setUp(self):
@@ -94,6 +132,39 @@ class GenerationTests(unittest.TestCase):
         job=self.enqueue();answer=self.execute(job,fail=True)
         self.assertEqual(answer['status'],'failed');self.assertIn('Progressivo',answer['meta']['artifact']['content'])
         self.assertEqual(len(self.app.store.canvas_history.listing(job['chat_id'])['items']),1)
+
+    def test_generation_recovers_invalid_tree_and_streams_before_node_id(self):
+        job=self.enqueue();page_calls=0;self.calls=[];self.job=job;self.progress=0;self.fail=False;self.documents=False
+        def complete(messages,settings,cancel,**kw):
+            nonlocal page_calls
+            if 'slides' in kw['schema']['properties']:return self.completion(messages,settings,cancel,**kw)
+            page_calls+=1
+            if page_calls==2:
+                kw['on_text']('{"nodes":[{"id":"layout","parent":"root","kind":"group","text":""')
+                self.assertIn('Già visibile',self.app.store.canvas_history.get(job['chat_id'])['content'])
+            kw['on_text']('{"nodes":[{"kind":"text","text":"Già visibile')
+            self.assertIn('Già visibile',self.app.store.canvas_history.get(job['chat_id'])['content'])
+            if page_calls==1:return json.dumps({'nodes':[node(parent='unprovided')]}),'stop'
+            if page_calls==2:self.assertIn('Correggi soltanto',messages[-1]['content'])
+            return json.dumps({'nodes':[node(id='1. Testo',parent='contenitore'),node('group',id='contenitore')]}),'stop'
+        with patch.object(self.app.engine,'require_model',return_value=self.model),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete):
+            self.app.execute_job(job,self.cancel)
+        answer=self.app.store.messages(job['chat_id'])[-1]
+        self.assertEqual(answer['status'],'done',answer['meta'].get('error'));self.assertEqual(page_calls,3)
+        validate_content(answer['meta']['artifact']['content'],[])
+
+    def test_broken_tree_retry_is_bounded_and_retains_preview(self):
+        job=self.enqueue();self.calls=[];self.job=job;self.progress=0;self.fail=False;self.documents=False;page_calls=0
+        def complete(messages,settings,cancel,**kw):
+            nonlocal page_calls
+            if 'slides' in kw['schema']['properties']:return self.completion(messages,settings,cancel,**kw)
+            page_calls+=1;kw['on_text']('{"nodes":[{"kind":"text","text":"Anteprima conservata')
+            return json.dumps({'nodes':[node(parent='unknown')]}),'stop'
+        with patch.object(self.app.engine,'require_model',return_value=self.model),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete):
+            self.app.execute_job(job,self.cancel)
+        answer=self.app.store.messages(job['chat_id'])[-1]
+        self.assertEqual(answer['status'],'failed');self.assertEqual(page_calls,2)
+        self.assertIn('Anteprima conservata',answer['meta']['artifact']['content'])
 
     def test_real_word_text_and_figures_reach_current_llm(self):
         from docx import Document
