@@ -1,10 +1,10 @@
 {
   "archive": "windows-bootstrap.zip",
-  "size": 3424504,
-  "sha256": "8656686365fd68482592535b240165fe765812123ed2610bda5478bc4ee5a577",
+  "size": 3425285,
+  "sha256": "2f8ea875b4eeb332818454370d845250057cd80003bdc7940474910fd7118d14",
   "sources": {
     "ui/api-providers.js": "e655a70bf19b32109cb8ba889601a28d7e2372c9a54eb5a255ac7a3c7924ad90",
-    "ui/app.js": "516b9e8764adc84e71138b263492bd9f48882e04f622fb63311ae5c534518c95",
+    "ui/app.js": "1671605eca165a4da081ffbaa48ef970d09bad82d3ece49a7f4a5ec71444980e",
     "ui/chart-schema.js": "9c2986e0fa5723f03cd25aaee518ae1d298e3101fcac4f4636b754341aa6cc08",
     "ui/exports.js": "700aa4998336e5098562765258048159923fb74dc6ba6d21b6569291e49e34d2",
     "ui/image-settings.js": "44e705fd38a8e66b00f9528bfc2c3c77138ef9deafe42e7c61dd7387565fbda6",
@@ -19,8 +19,8 @@
     "ui/video-settings.js": "ba64b7babab8e87dada14a91dd6f0e6ad62bcd350a69a4c00633b99cddb9a716",
     "ui/visual-controls.js": "bdaa144712a476c0c2e2895f8bf271a2fdd8e00ce35c5327d91532b6c51abd18",
     "ui/workspace-settings.js": "5214e4f3609670787f351d51ab1bb05c5a108acf9335d29262dae7b4872df053",
-    "package.json": "de47fa6e83ba90aadf6730ba2002bc3afba1e975a1e0e797425f70b6862cae9b",
-    "package-lock.json": "2c22ead2672db60f827c7a5bca827940f5331a666dfde1e8ed8e8396ed857b8a",
+    "package.json": "bae03877d9e13be582794879b81d2a3e6fd9d237fed9d908625d240991791396",
+    "package-lock.json": "34b0f2704ea11c2f889372a357e08e8c85ead8e8fb1f9da39257448627709b7e",
     "scripts/build-ui.mjs": "1aa3d19b42d71b0544001b6075b98289d1b13fbc572af033d0bd3b818e59d468",
     "scripts/Launcher.cs": "806ae2fed5c690ba6d2680883ab103ed22b99dff9a74ab46ef5970b8238bca87",
     "native/sd-worker.cpp": "6c3b306db0db2d0f7597b73adbe46864a0438bf5782f02d11dd4884d45dc94bb",
@@ -34,7 +34,7 @@
   "files": {
     "H3-Chat.exe": "776a15737dda9bc9fd90575430869e79def535989fa69c43f2a06df5e5eb0da9",
     "native/h3-sd-worker.exe": "8c29e2eacd15fa9a704b977cb69ed345d06495c2ec7e2702087d0278ba29fb00",
-    "static/app.js": "12e4b951c11b38707fb6beb80e466e885bf73f5951775896d5a70678a43cced1",
+    "static/app.js": "4d6639110351b2d59e9f64a588dd81453bf2fcc2ca21f10dfa4131ed49c1c7ef",
     "static/vendor/fonts/KaTeX_AMS-Regular.ttf": "68534840bcfdd2bffb6f0e8deb48684dd01e7f04ea2813267577afb906de1d13",
     "static/vendor/fonts/KaTeX_AMS-Regular.woff": "30da91e84c893f875e252689faebdc590b2871145e8adc7f9a9d4dbd8ce0b251",
     "static/vendor/fonts/KaTeX_AMS-Regular.woff2": "0cdd387c9590a1a9f9794560022dbb59654a7d86f187aa0c81495ad42d3a7308",

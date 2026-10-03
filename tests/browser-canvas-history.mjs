@@ -1,0 +1,69 @@
+import {spawn} from 'node:child_process';
+import {createRequire} from 'node:module';
+import {once} from 'node:events';
+import {mkdir} from 'node:fs/promises';
+import {createInterface} from 'node:readline';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url);
+const {chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
+const child=spawn('runtime/python/python.exe',['-X','utf8','tests/serve_canvas_fixture.py'],{stdio:['ignore','pipe','pipe']});
+let diagnostic='';child.stderr.on('data',x=>diagnostic+=x);
+const lines=createInterface({input:child.stdout});
+const timer=setTimeout(()=>child.kill(),30000);
+const first=await Promise.race([once(lines,'line'),once(child,'exit').then(()=>{throw Error(diagnostic);})]);
+clearTimeout(timer);const fixture=JSON.parse(first[0]);lines.close();
+const browser=await chromium.launch({channel:'msedge',headless:true});
+const page=await browser.newPage({viewport:{width:1440,height:1000}});
+const errors=[];page.on('pageerror',e=>errors.push(e.message));
+const post=path=>page.evaluate(async path=>{
+  const {token}=await (await fetch('/api/state')).json();
+  const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-H3-Token':token},body:'{}'});
+  if(!r.ok)throw Error(await r.text());
+},path);
+try{
+  await page.goto(fixture.url);await page.locator(`.chat-link[data-chat="${fixture.chat}"]`).click();
+  await page.click('#canvas-toggle');
+  await page.waitForFunction(()=>document.querySelector('#canvas-title').value==='Documento recente');
+  assert.equal(await page.locator('#canvas-history option').count(),3);
+  await page.click('#canvas-previous');await page.waitForSelector('#canvas-preview img');
+  assert.equal(await page.locator('#canvas-title').inputValue(),'Immagine precedente');
+  assert.equal(await page.locator('#canvas-follow').isChecked(),false);
+  assert.match(await page.locator('#canvas-preview a[download]').getAttribute('href'),/fixture.png$/);
+  await page.click('#canvas-previous');await page.waitForSelector('#canvas-preview .katex');
+  assert.match(await page.locator('#canvas-preview').innerText(),/Versione originale/);
+  await post('/fixture/start');
+  await page.waitForFunction(()=>document.querySelector('#canvas-history').options.length===4);
+  await page.waitForTimeout(1200);
+  assert.equal(await page.locator('#canvas-title').inputValue(),'Documento iniziale');
+  const downloadEvent=page.waitForEvent('download');await page.click('[data-export="md"]');
+  assert.equal((await downloadEvent).suggestedFilename(),'Documento iniziale.md');
+  await post('/fixture/finish');
+  await page.waitForFunction(()=>!document.querySelector('#stop').offsetParent);
+  assert.equal(await page.locator('#canvas-history option').count(),4);
+  await page.click('#canvas-restore');
+  await page.waitForFunction(()=>document.querySelector('#canvas-restore').hidden);
+  assert.equal(await page.locator('#canvas-follow').isChecked(),true);
+  await page.click('#canvas-source-tab');await page.fill('#canvas-source','# Documento modificato\n\nModifica manuale');
+  await page.click('#canvas-preview-tab');
+  await page.waitForFunction(()=>document.querySelector('#canvas-history').options.length===5);
+  await page.selectOption('#canvas-history',{label:'1. Documento iniziale'});
+  await page.waitForFunction(()=>document.querySelector('#canvas-preview').textContent.includes('Versione originale'));
+  await page.click('#canvas-close');await page.click('#canvas-toggle');
+  assert.match(await page.locator('#canvas-preview').innerText(),/Versione originale/);
+  await page.reload();await page.locator(`.chat-link[data-chat="${fixture.chat}"]`).click();await page.click('#canvas-toggle');
+  await page.waitForFunction(()=>document.querySelector('#canvas-preview').textContent.includes('Modifica manuale'));
+  await page.setViewportSize({width:390,height:844});
+  await mkdir('work/canvas-validation',{recursive:true});await page.screenshot({path:'work/canvas-validation/mobile.png'});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  await page.setViewportSize({width:1440,height:1000});await page.click('#canvas-close');
+  await page.locator(`.chat-link[data-chat="${fixture.other}"]`).click();await page.click('#canvas-toggle');
+  assert.equal(await page.locator('#canvas-history option').count(),1);
+  assert.equal(await page.locator('#canvas-history').isDisabled(),true);
+  assert.equal(await page.locator('#canvas-title').inputValue(),'Canvas');
+  assert.deepEqual(errors,[]);
+  console.log('Canvas: legacy recovery, previous/next, media, stable selection during streaming, export, restore, edits, reload, chat isolation and mobile passed.');
+}finally{
+  await browser.close();
+  try{await fetch(fixture.url+'/api/shutdown',{method:'POST',headers:{'Content-Type':'application/json','X-H3-Token':(await (await fetch(fixture.url+'/api/state')).json()).token},body:'{}'});}catch{}
+  if(child.exitCode===null){const wait=once(child,'exit');const stop=setTimeout(()=>child.kill(),5000);await wait;clearTimeout(stop);}
+}

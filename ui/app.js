@@ -16,6 +16,7 @@ import {renderMediaProviders,renderServer} from './media-providers.js';
 const $=s=>document.querySelector(s);
 let state=null,current=null,chat=null,filter='all',collection=null,project=null,attachments=[],settingsTab='setup',settingsDraft=null;
 let canvasOpen=false,canvas={title:'Canvas',content:'',media:[]},canvasEditing=false,canvasSaveTimer,canvasDirty=false;
+let canvasHistory={items:[],active_id:null},canvasFollow=true,canvasSaving=null,canvasSelection=0,canvasHistoryRequest=0;
 let loading=false,pollTimer,lastSidebar='',lastCanvas='',renderQueue=Promise.resolve();
 const drafts=new Map();
 let assessmentTimer,assessmentRequest=0,lastAssessment=0,thinkSaving=false;
@@ -66,7 +67,8 @@ async function refresh(){
   try{
     state=await api('/state');renderSidebar();renderStatus();
     if(current){const id=current;const fresh=await api('/chats/'+id);if(current===id){chat=fresh;await renderChat();}
-      if(canvasOpen&&!canvasDirty&&!canvasEditing){const c=await api('/canvas/'+id);if(current===id)await setCanvas(c,false);}}
+      if(canvasOpen){await loadCanvasHistory(id);
+        if(canvasFollow&&!canvasDirty&&!canvasEditing){const selection=canvasSelection,c=await api('/canvas/'+id);if(current===id&&canvasFollow&&selection===canvasSelection)await setCanvas(c,false);}}}
     updateDownloads();
     await projects.poll();
     if($('#settings').open&&Date.now()-lastAssessment>10000)scheduleAssessment();
@@ -121,13 +123,15 @@ function renderStatus(){
   $('#chat-title').textContent=chat?.title||'Una nuova conversazione';
   $('#canvas-source').readOnly=!!job?.canvas;
   $('#canvas-title').readOnly=!!job?.canvas;
+  $('#canvas-restore').disabled=!!job?.canvas||!canvas.id||canvas.id===canvasHistory.active_id;
 }
 async function newChat(){if(current)await persistCanvas();const fresh=await api('/chats',{collection_id:collection,project_id:project});await openChat(fresh.id);await refresh();$('#prompt').focus();}
 async function openChat(id){
   if(current){drafts.set(current,{prompt:$('#prompt').value,attachments:[...attachments]});await persistCanvas();}
   current=id;chat=await api('/chats/'+id);$('#messages').innerHTML='';
   const draft=drafts.get(id)||{prompt:'',attachments:[]};$('#prompt').value=draft.prompt;attachments=draft.attachments;renderAttachments();
-  canvasDirty=false;lastCanvas='';canvasEditing=false;await setCanvas(await api('/canvas/'+id));
+  canvasSelection++;canvasHistory={items:[],active_id:null};canvasFollow=true;canvasDirty=false;lastCanvas='';canvasEditing=false;
+  await loadCanvasHistory(id);await setCanvas(await api('/canvas/'+id));
   renderSidebar();renderStatus();await renderChat();$('#sidebar').classList.remove('visible');
   $('#scroll-area').scrollTop=$('#scroll-area').scrollHeight;
 }
@@ -169,7 +173,12 @@ async function renderChat(){
     const actions=article.querySelector('.message-actions');
     if(message.content){const copy=document.createElement('button');copy.className='text-button';copy.textContent='Copia';copy.onclick=act(async()=>{await navigator.clipboard.writeText(message.content);toast('Copiato.');});actions.append(copy);}
     if(message.role==='assistant'&&message.status==='done'){
-      const toCanvas=document.createElement('button');toCanvas.className='text-button';toCanvas.textContent=message.meta.canvas?'Apri canvas':'Apri nel canvas';toCanvas.onclick=act(async()=>{if(!message.meta.canvas||message.meta.artifact){if(canvas.content||canvas.media.length){if(!await ask('Sostituire il canvas?',{description:'Il contenuto attuale verrà sostituito da questa risposta.',confirm:true}))return;}await setCanvas(message.meta.artifact||(message.meta.music_composition?{title:message.meta.music_composition.title,content:'## '+message.meta.music_composition.title+'\n\n'+message.meta.music_composition.lyrics.replaceAll('\n','  \n'),media:message.media}:{title:chat.title,content:message.content,media:message.media}));canvasDirty=true;await persistCanvas();}await toggleCanvas(true);});actions.append(toCanvas);
+      const toCanvas=document.createElement('button');toCanvas.className='text-button';toCanvas.textContent=message.meta.canvas?'Apri canvas':'Apri nel canvas';toCanvas.onclick=act(async()=>{
+        await persistCanvas();await loadCanvasHistory();const item=canvasHistory.items.findLast(x=>x.message_id===message.id&&!x.source_key.startsWith('manual:'));
+        if(item)await selectCanvasArtifact(item.id);
+        else{await setCanvas({title:chat.title,content:message.content,media:message.media});canvasDirty=true;await persistCanvas();}
+        await toggleCanvas(true);
+      });actions.append(toCanvas);
       if(message.meta.finish_reason==='length'){const note=document.createElement('span');note.textContent='Limite di risposta raggiunto';actions.append(note);}
     }
     if(message.role==='user'){const repeat=document.createElement('button');repeat.className='text-button';repeat.textContent='Riutilizza';repeat.onclick=()=>{$('#prompt').value=message.content;attachments=[...message.media];loraUI.setSelections(message.meta.loras||[]);visualControls.set({image_model:message.meta.image_model||'',assistant:message.meta.assistant??true,video:message.meta.video||false,web:message.meta.web||false,transcribe:message.meta.transcribe||false,music:message.meta.music||false,music_fields:message.meta.music_fields||{}});renderAttachments();$('#prompt').focus();};actions.append(repeat);}
@@ -230,16 +239,49 @@ function chatMenu(id,button){const c=state.chats.find(c=>c.id===id);if(!c)return
 }
 function collectionMenu(id,button){const c=state.collections.find(c=>c.id===id);menuAt(button,[{label:'Rinomina raccolta',action:async()=>{const name=await ask('Rinomina raccolta',{value:c.name});if(name){await api('/collections/'+id,{name},'PATCH');await refresh();}}},{label:'Elimina raccolta',danger:true,action:async()=>{if(await ask('Eliminare la raccolta?',{description:'Le conversazioni restano disponibili in Tutte le chat.',confirm:true})){await api('/collections/'+id,{},'DELETE');if(collection===id)collection=null;await refresh();}}}]);}
 
-async function toggleCanvas(value=!canvasOpen){projects.hide();canvasOpen=value;$('#canvas-panel').hidden=!value;$('#workspace').classList.toggle('has-canvas',value);$('#canvas-toggle').setAttribute('aria-pressed',value);$('#canvas-follow').checked=value;
-  if(value&&current&&!canvasDirty)await setCanvas(await api('/canvas/'+current),true);if(value)await renderCanvas();renderStatus();}
-async function setCanvas(value,force=true){const signature=JSON.stringify([value.title,value.content,value.media]);if(!force&&signature===lastCanvas)return;canvas={title:value.title||'Canvas',content:value.content||'',media:value.media||[]};lastCanvas=signature;$('#canvas-title').value=canvas.title;$('#canvas-source').value=canvas.content;await renderCanvas();}
+async function loadCanvasHistory(id=current){
+  if(!id){canvasHistory={items:[],active_id:null};renderCanvasHistory();return;}
+  const request=++canvasHistoryRequest,value=await api('/canvas/'+id+'/history');if(current!==id||request!==canvasHistoryRequest)return;
+  canvasHistory=value;renderCanvasHistory();
+}
+function renderCanvasHistory(){
+  const items=canvasHistory.items,index=items.findIndex(x=>x.id===canvas.id),select=$('#canvas-history');
+  const signature=JSON.stringify([items,canvas.id,canvasHistory.active_id]);
+  if(select.dataset.signature!==signature){select.dataset.signature=signature;
+    select.innerHTML=(!items.length||index<0?'<option value="">Canvas in uso</option>':'')+items.map((x,i)=>`<option value="${esc(x.id)}">${i+1}. ${esc(x.title)}${x.id===canvasHistory.active_id?' · in uso':''}</option>`).join('');select.value=canvas.id||'';
+  }
+  select.disabled=!items.length;$('#canvas-previous').disabled=index<=0;
+  $('#canvas-next').disabled=index<0||index>=items.length-1;
+  const item=items[index];$('#canvas-history-status').textContent=item?`${index+1} di ${items.length} · ${new Date(item.created*1000).toLocaleString('it-IT',{dateStyle:'short',timeStyle:'short'})}`:items.length+' artefatti salvati';
+  $('#canvas-follow').checked=canvasFollow;
+  $('#canvas-restore').hidden=!canvas.id||canvas.id===canvasHistory.active_id;
+  $('#canvas-restore').disabled=!!activeJob()?.canvas;
+}
+async function selectCanvasArtifact(ident){
+  await persistCanvas();const id=current,selection=++canvasSelection;canvasFollow=false;canvasEditing=false;renderCanvasHistory();
+  const value=await api('/canvas/'+id+'/history/'+ident);if(current!==id||selection!==canvasSelection)return;
+  await setCanvas(value);renderStatus();
+}
+async function followCanvas(){
+  await persistCanvas();const id=current,selection=++canvasSelection;canvasFollow=true;canvasEditing=false;
+  if(id){await loadCanvasHistory(id);const value=await api('/canvas/'+id);if(current===id&&selection===canvasSelection)await setCanvas(value);}
+  renderCanvasHistory();renderStatus();
+}
+async function toggleCanvas(value=!canvasOpen){projects.hide();canvasOpen=value;$('#canvas-panel').hidden=!value;$('#workspace').classList.toggle('has-canvas',value);$('#canvas-toggle').setAttribute('aria-pressed',value);
+  if(value&&current){await loadCanvasHistory();if(canvasFollow&&!canvasDirty&&!canvasEditing)await setCanvas(await api('/canvas/'+current),true);}if(value)await renderCanvas();renderStatus();}
+async function setCanvas(value,force=true){if(!current){canvasHistory={items:[],active_id:null};canvasFollow=true;canvasSelection++;}const signature=JSON.stringify([value.id,value.title,value.content,value.media]);if(!force&&signature===lastCanvas)return;canvas={id:value.id||null,title:value.title||'Canvas',content:value.content||'',media:value.media||[]};lastCanvas=signature;$('#canvas-title').value=canvas.title;$('#canvas-source').value=canvas.content;renderCanvasHistory();await renderCanvas();}
 async function renderCanvas(){
   const empty=!canvas.content&&!canvas.media.length;$('#canvas-empty').hidden=!empty||canvasEditing;$('#canvas-preview').hidden=canvasEditing||empty;$('#canvas-source').hidden=!canvasEditing;
   $('#canvas-preview-tab').classList.toggle('active',!canvasEditing);$('#canvas-source-tab').classList.toggle('active',canvasEditing);
-  if(!canvasEditing){const value={...canvas,media:[...canvas.media]},message=[...(chat?.messages||[])].reverse().find(m=>m.meta?.artifact?.content===value.content||m.content===value.content);renderQueue=renderQueue.then(async()=>{await renderRich($('#canvas-preview'),value.content,{final:!activeJob()?.canvas,sources:message?.meta?.rag_sources||[],onCitation:(s,all)=>projects.citation(s,all,message),onExecute:act(executeArtifact)});appendMedia($('#canvas-preview'),value.media);});await renderQueue;}
+  if(!canvasEditing){const value={...canvas,media:[...canvas.media]},entry=canvasHistory.items.find(x=>x.id===value.id),message=(chat?.messages||[]).find(m=>m.id===entry?.message_id)||[...(chat?.messages||[])].reverse().find(m=>m.meta?.artifact?.content===value.content||m.content===value.content);renderQueue=renderQueue.then(async()=>{await renderRich($('#canvas-preview'),value.content,{final:!activeJob()?.canvas||value.id!==canvasHistory.active_id,sources:message?.meta?.rag_sources||[],onCitation:(s,all)=>projects.citation(s,all,message),onExecute:act(executeArtifact)});appendMedia($('#canvas-preview'),value.media);});await renderQueue;}
 }
-async function persistCanvas(){clearTimeout(canvasSaveTimer);if(!canvasDirty)return;if(!current){const fresh=await api('/chats',{project_id:project});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
-  const id=current,value={...canvas};await api('/canvas/'+id,value,'PUT');canvasDirty=false;$('#canvas-save-status').textContent='Salvato sul computer';}
+async function persistCanvas(){clearTimeout(canvasSaveTimer);if(canvasSaving){await canvasSaving;if(canvasDirty)return persistCanvas();return;}if(!canvasDirty)return;
+  canvasSaving=(async()=>{
+    if(!current){const fresh=await api('/chats',{project_id:project});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
+    const id=current,value=structuredClone(canvas),saved=await api('/canvas/'+id,value,'PUT');
+    if(current===id){const unchanged=JSON.stringify(canvas)===JSON.stringify(value);canvas.id=saved.id;if(unchanged)canvasDirty=false;await loadCanvasHistory(id);$('#canvas-save-status').textContent=canvasDirty?'Modifiche da salvare':'Salvato sul computer';}
+  })();try{await canvasSaving;}finally{canvasSaving=null;}
+}
 function canvasChanged(){canvas.title=$('#canvas-title').value;canvas.content=$('#canvas-source').value;canvasDirty=true;$('#canvas-save-status').textContent='Modifiche da salvare';clearTimeout(canvasSaveTimer);canvasSaveTimer=setTimeout(act(persistCanvas),800);}
 
 function collectSettings(){
@@ -390,11 +432,19 @@ $('#settings-save').onclick=async()=>{
   finally{button.disabled=false;button.textContent='Salva impostazioni';}
 };
 $('#canvas-toggle').onclick=act(()=>toggleCanvas());$('#canvas-close').onclick=act(()=>toggleCanvas(false));
-$('#canvas-follow').onchange=act(()=>toggleCanvas($('#canvas-follow').checked));
+$('#canvas-follow').onchange=act(async()=>{if($('#canvas-follow').checked)await followCanvas();else{canvasFollow=false;canvasSelection++;renderCanvasHistory();}});
+$('#canvas-history').onchange=act(()=>selectCanvasArtifact($('#canvas-history').value));
+$('#canvas-previous').onclick=act(()=>{const i=canvasHistory.items.findIndex(x=>x.id===canvas.id);if(i>0)return selectCanvasArtifact(canvasHistory.items[i-1].id);});
+$('#canvas-next').onclick=act(()=>{const i=canvasHistory.items.findIndex(x=>x.id===canvas.id);if(i>=0&&i<canvasHistory.items.length-1)return selectCanvasArtifact(canvasHistory.items[i+1].id);});
+$('#canvas-current').onclick=act(followCanvas);
+$('#canvas-restore').onclick=act(async()=>{
+  await persistCanvas();const id=current,value=await api('/canvas/'+id+'/history/'+canvas.id+'/restore',{});
+  if(current!==id)return;canvasFollow=true;canvasSelection++;await loadCanvasHistory(id);await setCanvas(value);renderStatus();toast('Artefatto in uso: le prossime richieste nel canvas partiranno da questo contenuto.');
+});
 $('#canvas-preview-tab').onclick=act(async()=>{canvasEditing=false;await persistCanvas();await renderCanvas();});
 $('#canvas-source-tab').onclick=act(async()=>{if(activeJob()?.canvas)throw Error('Attendi la scrittura del motore prima di modificare.');canvasEditing=true;await renderCanvas();$('#canvas-source').focus();});
 $('#canvas-write').onclick=$('#canvas-source-tab').onclick;
 $('#canvas-title').oninput=canvasChanged;$('#canvas-source').oninput=canvasChanged;$('#canvas-save').onclick=act(async()=>{await persistCanvas();toast('Canvas salvato.');});
-document.querySelectorAll('[data-export]').forEach(b=>b.onclick=act(async()=>{if(activeJob()?.canvas)throw Error('Attendi che il documento sia completo prima di esportare.');await persistCanvas();if(!canvas.content&&!canvas.media.length)throw Error('Il canvas è vuoto.');canvasEditing=false;await renderCanvas();const root=$('#canvas-preview');$('#canvas-panel').classList.add('exporting');try{if(b.dataset.export==='md')saveBlob(new Blob([canvas.content],{type:'text/markdown;charset=utf-8'}),canvas.title+'.md');if(b.dataset.export==='pdf')await exportPdf(root,canvas.title,state.token);if(b.dataset.export==='docx')await exportDocx(root,canvas.title);if(b.dataset.export==='png')await exportPng(root,canvas.title);toast('Esportazione pronta.');}finally{$('#canvas-panel').classList.remove('exporting');}}));
+document.querySelectorAll('[data-export]').forEach(b=>b.onclick=act(async()=>{if(activeJob()?.canvas&&canvas.id===canvasHistory.active_id)throw Error('Attendi che il documento sia completo prima di esportare.');await persistCanvas();if(!canvas.content&&!canvas.media.length)throw Error('Il canvas è vuoto.');canvasEditing=false;await renderCanvas();const root=$('#canvas-preview');$('#canvas-panel').classList.add('exporting');try{if(b.dataset.export==='md')saveBlob(new Blob([canvas.content],{type:'text/markdown;charset=utf-8'}),canvas.title+'.md');if(b.dataset.export==='pdf')await exportPdf(root,canvas.title,state.token);if(b.dataset.export==='docx')await exportDocx(root,canvas.title);if(b.dataset.export==='png')await exportPng(root,canvas.title);toast('Esportazione pronta.');}finally{$('#canvas-panel').classList.remove('exporting');}}));
 await refresh();
 window.addEventListener('beforeunload',e=>{if(canvasDirty){e.preventDefault();e.returnValue='';}});

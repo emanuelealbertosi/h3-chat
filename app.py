@@ -115,11 +115,11 @@ class Handler(BaseHTTPRequestHandler):
                 if len(parts) == 3 and parts[:2] == ["api", "chats"]:
                     return self.json(self.app.store.chat(parts[2]))
                 if len(parts) == 3 and parts[:2] == ["api", "canvas"]:
-                    self.app.store.chat(parts[2])
-                    canvas = self.app.store.one("SELECT * FROM canvases WHERE chat_id=?", (parts[2],))
-                    if canvas:
-                        canvas["media"] = json.loads(canvas["media"])
-                    return self.json(canvas or {"title": "Canvas", "content": "", "media": []})
+                    return self.json(self.app.store.canvas_history.get(parts[2]))
+                if len(parts) == 4 and parts[:2] == ['api', 'canvas'] and parts[3] == 'history':
+                    return self.json(self.app.store.canvas_history.listing(parts[2]))
+                if len(parts) == 5 and parts[:2] == ['api', 'canvas'] and parts[3] == 'history':
+                    return self.json(self.app.store.canvas_history.get(parts[2], parts[4]))
                 if path == "/":
                     return self.file(ROOT / "static/index.html")
                 if path.startswith("/static/"):
@@ -240,8 +240,13 @@ class Handler(BaseHTTPRequestHandler):
                 if self.app.store.one("SELECT id FROM jobs WHERE chat_id=? AND status IN ('queued','running') AND json_extract(payload,'$.canvas')=1", (parts[2],)):
                     raise ValueError("Il motore sta scrivendo nel canvas. Attendi o interrompilo prima di modificare.")
                 media = self.app.validate_media(body.get("media", []),canvas=True)
-                self.app.store.execute("INSERT OR REPLACE INTO canvases VALUES (?,?,?,?,?)", (parts[2], title, content, json.dumps(media), time.time()))
-                return self.json({"ok": True})
+                if body.get('id') is not None and not isinstance(body['id'], str):
+                    raise ValueError('Riferimento artefatto non valido.')
+                return self.json(self.app.store.canvas_history.save(parts[2], {'title':title, 'content':content, 'media':media}, edit_id=body.get('id'), editable=True))
+            if len(parts) == 6 and parts[:2] == ['api', 'canvas'] and parts[3] == 'history' and parts[5] == 'restore' and method == 'POST':
+                if self.app.store.one("SELECT id FROM jobs WHERE chat_id=? AND status IN ('queued','running') AND json_extract(payload,'$.canvas')=1", (parts[2],)):
+                    raise ValueError('Il motore sta scrivendo nel canvas. Attendi o interrompilo prima di ripristinare.')
+                return self.json(self.app.store.canvas_history.restore(parts[2], parts[4]))
             if path == "/api/shutdown" and method == "POST":
                 self.json({"ok": True})
                 threading.Thread(target=self.server.shutdown, daemon=True).start()

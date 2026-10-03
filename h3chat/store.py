@@ -94,6 +94,8 @@ class Store:
                 db.execute("INSERT INTO settings VALUES ('llm_overrides',?)",(json.dumps(presets),))
             db.execute("UPDATE messages SET status='interrupted' WHERE status IN ('queued','running')")
             db.execute("UPDATE jobs SET status='interrupted',error='Applicazione riavviata. Puoi riprovare.' WHERE status IN ('queued','running')")
+        from .canvas_history import CanvasHistory
+        self.canvas_history = CanvasHistory(self)
 
     @contextmanager
     def connect(self):
@@ -191,11 +193,19 @@ class Store:
             # history/canvas snapshot. A retry must not consume its own answer.
             payload = original['payload']
             answer_id = original['message_id']
+            self.canvas_history.backfill(db, chat_id)
             db.execute("UPDATE messages SET content='',media='[]',meta='{}',status='queued',created=? WHERE id=?", (now, answer_id))
             db.execute("INSERT INTO jobs VALUES (?,?,?,?, 'queued','In attesa','',?)", (job_id, chat_id, answer_id, payload, now))
             db.execute("UPDATE chats SET updated=? WHERE id=?", (now, chat_id))
         return job_id
 
     def update_answer(self, job, content, status="running", media=None, meta=None):
+        if status not in ('queued', 'running'):
+            value = (meta or {}).get('artifact') or self.canvas_history.message_value(content, media or [], meta or {})
+            if value:
+                self.canvas_history.save(job['chat_id'], value, key='job:' + job['id'],
+                                         message_id=job['message_id'], activate=bool((meta or {}).get('canvas')))
+        # Register before publishing the terminal answer, so concurrent history
+        # polling cannot import the same output as an additional legacy entry.
         self.execute("UPDATE messages SET content=?,status=?,media=?,meta=? WHERE id=?",
                      (content, status, json.dumps(media or []), json.dumps(meta or {}), job["message_id"]))

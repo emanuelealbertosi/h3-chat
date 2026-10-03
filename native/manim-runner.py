@@ -40,6 +40,10 @@ if os.name=='nt':
 
 def main():
     folder=Path.cwd();request=json.loads((folder/'request.json').read_text(encoding='utf-8'))
+    # Some Windows hosts deny the NUL device inside AppContainer. Redirect child
+    # process output to a disposable job file, without widening device access.
+    os.devnull = str(folder / 'process-null.log')
+    Path(os.devnull).touch()
     from manim import Scene,tempconfig
     opts=request['options']
     # TeX runs without shell escape and sees only copied assets / job caches.

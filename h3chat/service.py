@@ -332,7 +332,7 @@ class Service:
             if meta_path.exists():
                 resolved.append(json.loads(meta_path.read_text(encoding="utf-8")))
             else:
-                matches = self.store.all("SELECT media FROM messages WHERE role='assistant' AND status='done' UNION ALL SELECT media FROM canvases")
+                matches = self.store.all("SELECT media FROM messages WHERE role='assistant' AND status='done' UNION ALL SELECT media FROM canvases UNION ALL SELECT media FROM canvas_artifacts")
                 found = next((m for row in matches for m in json.loads(row["media"]) if m["id"] == image_id), None)
                 if not found:
                     raise ValueError("Immagine non trovata.")
@@ -726,7 +726,9 @@ class Service:
             self.store.execute("UPDATE chats SET updated=? WHERE id=?", (time.time(), job["chat_id"]))
 
     def save_artifact(self, chat_id, title, content, media):
-        self.store.execute("INSERT OR REPLACE INTO canvases VALUES (?,?,?,?,?)", (chat_id, title[:150], content, json.dumps(media), time.time()))
+        job = self.store.one("SELECT id,message_id FROM jobs WHERE chat_id=? AND status IN ('queued','running') ORDER BY created DESC LIMIT 1", (chat_id,))
+        return self.store.canvas_history.save(chat_id, {'title':title[:150], 'content':content, 'media':media},
+            key='job:' + job['id'] if job else None, message_id=job['message_id'] if job else None)
 
     def close(self):
         self.media_server.close()
