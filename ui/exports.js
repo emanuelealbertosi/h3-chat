@@ -8,7 +8,7 @@ async function waitImages(root){await document.fonts.ready;await Promise.all([..
 
 export async function exportPng(root,title){await waitImages(root);const width=root.clientWidth,height=root.scrollHeight;const c=await toCanvas(root,{...captureOptions,width,height,style:{...captureOptions.style,width:width+'px',height:height+'px',maxHeight:'none',overflow:'visible',flex:'none'}});c.toBlob(b=>saveBlob(b,nameOf(title)+'.png'));}
 
-export async function exportPdf(root,title,token) {
+export async function printableHtml(root) {
   await waitImages(root);
   const clone=root.cloneNode(true);
   clone.querySelectorAll('.no-export').forEach(n=>n.remove());
@@ -21,7 +21,11 @@ export async function exportPdf(root,title,token) {
   const sourceCanvases=[...root.querySelectorAll('canvas')];
   clone.querySelectorAll('canvas').forEach((node,i)=>{const img=document.createElement('img');img.src=sourceCanvases[i].toDataURL('image/png');node.replaceWith(img);});
   for(const img of clone.querySelectorAll('img')){if(img.src.startsWith(location.origin+'/media/')){const blob=await fetch(img.src).then(r=>r.blob());img.src=await new Promise(resolve=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.readAsDataURL(blob);});}}
-  const response=await fetch('/api/export/pdf',{method:'POST',headers:{'Content-Type':'application/json','X-H3-Token':token},body:JSON.stringify({title,html:clone.innerHTML})});
+  return clone.innerHTML;
+}
+export async function exportPdf(root,title,token,options={}) {
+  const html=await printableHtml(root);
+  const response=await fetch('/api/export/pdf',{method:'POST',headers:{'Content-Type':'application/json','X-H3-Token':token},body:JSON.stringify({title,html,...options})});
   const result=await response.json();if(!response.ok)throw Error(result.error);
   const a=document.createElement('a');a.href=result.url;a.download=nameOf(title)+'.pdf';a.click();return result.url;
 }
@@ -40,6 +44,7 @@ export async function exportDocx(root,title){
   async function raster(node){const canvas=await toCanvas(node,captureOptions);const data=await new Promise(r=>canvas.toBlob(r));const width=Math.min(620,canvas.width/2);const height=canvas.height/canvas.width*width;const scale=Math.min(1,850/height);children.push(new Paragraph({children:[new ImageRun({type:'png',data:await data.arrayBuffer(),transformation:{width:width*scale,height:height*scale},altText:{name:title,description:node.textContent.slice(0,300),title}})],spacing:{after:160}}));}
   for(const node of root.children){
     if(node.classList.contains('no-export'))continue;
+    if(node.matches('.h3-slide-page')){if(children.length)children.push(new Paragraph({children:[new TextRun({break:1})],pageBreakBefore:true}));await raster(node);continue;}
     if(node.matches('figure,.math-block')||node.querySelector('.katex')){await raster(node);continue;}
     if(node.tagName==='TABLE'){
       const rows=[...node.rows],cols=Math.max(...rows.map(r=>r.cells.length));const widths=Array(cols).fill(Math.floor(9360/cols));widths[cols-1]+=9360-widths.reduce((a,b)=>a+b,0);

@@ -1,10 +1,16 @@
 # H3-Chat
 
+**Slide dal vivo:** chiedi «Crea 10 slide dal PDF» oppure scegli
+**Strumenti → Slide · HTML in tempo reale**. Il canvas compone le pagine mentre
+il modello scrive, usando documenti, figure, immagini della chat, RAG e fonti
+web. Navigazione tra pagine, note/citazioni ed export HTML offline/PDF sono
+integrati nella cronologia degli artefatti. [Guida alle slide](docs/slides.md).
+
 Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle app H3. Una sola conversazione per testo, codice, immagini, canzoni, video, formule, grafici e diagrammi. I motori locali sono gestiti dall'app; non servono Ollama, LM Studio o ComfyUI. Gli LLM locali non richiedono chiavi API o abbonamenti; puoi scegliere anche provider LLM tramite API e server esterni per immagini, musica e video. Progetti con RAG, ricerca web e animazioni Manim restano nella stessa chat.
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.14.2-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.14.2/H3-Chat-0.14.2-windows-x64.zip) dalla [release v0.14.2](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.14.2), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.15.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.15.0/H3-Chat-0.15.0-windows-x64.zip) dalla [release v0.15.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.15.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 

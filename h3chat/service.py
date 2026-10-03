@@ -34,6 +34,7 @@ from .devices import validate as validate_devices, label as device_label, CPU_WA
 from .context_tools import budget as context_budget
 from .lab import route as lab_route, SCHEMA as LAB_SCHEMA, BRIEF as LAB_BRIEF, validate_chart, files as lab_files
 from .calculator import Calculator
+from .slides import requested as slides_requested, options as slides_options, edit_request as slides_edit, edit_options as slides_edit_options
 from .models import MAX_CONTEXT, discover_local, inspect_model, THINK_LEVELS, thinking_parameters, mtp_tokens
 from .external_models import PROFILES as EXTERNAL_PROFILES, ROLE_LABELS, build_model, validate_config
 from .hardware import detect_hardware, assess_model, assess_selection
@@ -321,7 +322,7 @@ class Service:
         return result
 
     def validate_media(self, media, *, canvas=False):
-        if not isinstance(media, list) or len(media) > 12:
+        if not isinstance(media, list) or len(media) > (64 if canvas else 12):
             raise ValueError("Per i video allega fino a nove immagini e tre tracce audio.")
         resolved = []
         for item in media:
@@ -375,10 +376,19 @@ class Service:
             if not isinstance(source_ids,list) or any(not isinstance(x,str) or x not in valid for x in source_ids):raise ValueError('Selezione fonti RAG non valida.')
         settings.update(_rag=rag,_rag_sources=source_ids)
         lab=body.get('lab','auto');source=body.get('lab_source','')
-        if lab not in ('auto','calculate','manim') or not isinstance(source,str) or len(source)>(100000 if lab=='manim' else 20000):raise ValueError('Strumento o sorgente non valido.')
+        if lab not in ('auto','calculate','manim','slides') or not isinstance(source,str) or len(source)>(100000 if lab=='manim' else 20000):raise ValueError('Strumento o sorgente non valido.')
+        if lab=='slides' and source:raise ValueError('Modifica il sorgente delle slide direttamente nel canvas.')
+        current_canvas=self.store.canvas_history.get(chat_id) if body.get('canvas') or slides_requested(prompt) else {}
+        editing_slides=slides_edit(prompt,current_canvas.get('content',''))
+        slide_request=lab=='slides' or (lab=='auto' and not any((selection,music,video,transcribe)) and (slides_requested(prompt) or editing_slides))
+        if slide_request:
+            slide_defaults=slides_edit_options(prompt,current_canvas['content']) if editing_slides and lab=='auto' else body.get('slides')
+            lab='slides'
+            settings['_slides']=slide_defaults if editing_slides and slide_defaults and body.get('lab','auto')=='auto' else slides_options(prompt,slide_defaults)
+            self.engine.require_model(settings['chat_model'],'chat')
         if source and lab=='auto':raise ValueError('Specifica lo strumento per eseguire il sorgente.')
         settings.update(_lab=lab,_lab_source=source)
-        if lab not in ('manim','calculate') and not (lab=='auto' and settings.get('lab_auto',True) and lab_route(prompt)=='manim') and video_route([{'content':prompt}],settings):
+        if lab not in ('manim','calculate','slides') and not (lab=='auto' and settings.get('lab_auto',True) and lab_route(prompt)=='manim') and video_route([{'content':prompt}],settings):
             from .video_options import prompt_duration
             prompt_duration(prompt)
         request_history=[{'content':prompt,'media':media}]
@@ -389,10 +399,11 @@ class Service:
         canvas = body.get("canvas", False)
         if type(canvas) is not bool:
             raise ValueError("Destinazione canvas non valida.")
+        if slide_request:canvas=True
         loras=self.loras.capture(body.get('loras',[]),settings['lora_dirs'],self.catalog)
         job_id = self.store.enqueue(chat_id, prompt.strip(), media, settings, canvas, loras)
         self.wake.set()
-        return {"job_id": job_id}
+        return {"job_id": job_id, "canvas": canvas, "intent": 'slides' if slide_request else None}
 
     def regenerate(self, chat_id):
         with self.lock:
@@ -488,6 +499,7 @@ class Service:
                 project=self.knowledge.project(project_id)
                 settings['system_prompt']+='\nIstruzioni del progetto:\n'+project['instructions']
                 if settings.get('_rag',settings['rag_enabled']):
+                    settings['_rag_overview']=settings.get('_lab')=='slides'
                     retrieved,rag_mode=self.knowledge.retrieve(project_id,payload['prompt'],settings,cancel,stage,settings.get('_rag_sources'))
                     remaining=context_budget(settings,history)//2
                     for row in retrieved:
@@ -510,7 +522,13 @@ class Service:
             pure=settings.get('_transcribe') or (not selected_route and direct not in ('create','edit') and pure_transcription(payload['prompt'],[x for x in payload['media'] if x['mime'].startswith('audio/')]))
             tool_meta={};transcripts=[];sources=[];transcript_media=[]
             if not selected_route or selected_route['intent']!='video':
+                slide_documents=[]
+                if selected_route and selected_route['intent']=='slides':
+                    slide_documents=next(([x for x in m['media'] if x['mime'] in ('application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document')] for m in reversed(history) if any(x['mime'] in ('application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document') for x in m['media'])),[])
                 history,tool_meta,transcripts,sources=self.engine.prepare_tools(history,payload,settings,cancel,stage,log_path)
+                if selected_route and selected_route['intent']=='slides':
+                    from .slide_sources import extract_assets
+                    tool_meta['_slide_assets']=extract_assets(self,job,slide_documents,rag_sources,project_id,cancel,stage,log_path)
                 visual_history=history
                 transcript_media=self.engine.transcript_files(transcripts,job['id'])
             if project_id and settings.get('_rag',settings['rag_enabled']):
@@ -521,7 +539,7 @@ class Service:
             if pure:selected_route={'intent':'transcribe'}
             elif not selected_route and (sources or tool_meta.get('documents') or transcripts or project_id):selected_route={'intent':'chat'}
             if not pure and not settings.get('_lab_source'):self.engine.prepare(settings, cancel, stage)
-            direct_media=((selected_route and selected_route['intent'] in ('create','edit','music','video','transcribe')) or direct in ('create','edit')) and not settings.get('_assistant',True)
+            direct_media=((selected_route and selected_route['intent'] in ('create','edit','music','video','transcribe')) or (not selected_route and direct in ('create','edit'))) and not settings.get('_assistant',True)
             model={} if direct_media or pure or settings.get('_lab_source') else self.engine.require_model(settings["chat_model"], "chat")
             if selected_route:
                 route = selected_route
@@ -538,8 +556,8 @@ class Service:
                 meta['model_identity'] = model['identity']
             if model.get('api'):meta['api']=True
             meta.update(tool_meta)
-            role='llm' if intent=='chat' else 'image' if intent in ('create','edit') else 'asr' if intent=='transcribe' else intent
-            meta['execution_mode']='Server esterno · LLM' if model.get('api') and intent=='chat' else 'Standalone · '+device_label(settings,role)
+            role='llm' if intent in ('chat','slides') else 'image' if intent in ('create','edit') else 'asr' if intent=='transcribe' else intent
+            meta['execution_mode']='Server esterno · LLM' if model.get('api') and intent in ('chat','slides') else 'Standalone · '+device_label(settings,role)
             if intent in ('calculate','manim'):meta['execution_mode']='Standalone · '+('CPU · Interprete numerico' if intent=='calculate' else ('GPU · OpenGL' if settings['manim_device']=='gpu' else 'CPU · Cairo')+' · Manim')
             if role in ('image','music') and device_label(settings,role)=='CPU':meta['device_warning']=CPU_WARNING
             selected_id=route.get('image_model') or settings.get('create_model' if intent=='create' else 'edit_model' if intent=='edit' else intent+'_model')
@@ -558,7 +576,11 @@ class Service:
             if intent!='chat':
                 for key in ('think_level','think_budget','model_warning'):meta.pop(key,None)
             self.store.update_answer(job,text,meta=meta)
-            if intent=='manim':
+            if intent=='slides':
+                from .slides import build as build_slides
+                meta['artifact']=build_slides(self,job,payload,history,settings,model,cancel,stage,log_path,meta)
+                self.store.update_answer(job,f"Ho creato {meta['slides_count']} slide nel canvas. Puoi sfogliarle ed esportarle."+(' '+meta['slide_warning'] if meta.get('slide_warning') else ''),'done',[],meta)
+            elif intent=='manim':
                 from .manim_artifact import build as build_manim
                 title,content,media=build_manim(self,job,payload,visual_history,settings,model,cancel,stage,log_path,meta)
                 meta['artifact']={'title':title,'content':content,'media':media}

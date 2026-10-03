@@ -262,7 +262,8 @@ class Knowledge:
             finally:self.embeddings.close()
         selected=[r for _,r in sorted(rank.values(),key=lambda x:-x[0])[:settings['rag_top_k']]]
         # Explicit summaries can sample the document; unrelated questions never receive fake relevant hits.
-        if not selected and re.search(r'riassum|sintesi|summary|summariz|panoramica|\bmanim\b',query,re.I):selected=self.store.all(base+' ORDER BY s.name,c.id LIMIT ?',args+[settings['rag_top_k']])
+        if not selected and (settings.get('_rag_overview') or re.search(r'riassum|sintesi|summary|summariz|panoramica|\bmanim\b',query,re.I)):
+            selected=self.store.all(base+' ORDER BY row_number() OVER (PARTITION BY s.id ORDER BY c.id),s.name,c.id LIMIT ?',args+[settings['rag_top_k']])
         return selected,mode
     def close(self):
         self.closed.set()

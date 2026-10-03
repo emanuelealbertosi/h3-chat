@@ -92,7 +92,7 @@ class ToolsEngine:
                     output=safe_join(self.data,'document-cache/'+item['id'])
                     rendered=self.tool_call('document-worker.py',{'op':'render','path':str(safe_join(self.data,item['path'])),'pages':picked,'output':str(output)},cancel,stage,log_path)
                     first=len(history[-1]['media'])+1
-                    history[-1]['media'] += [{'id':item['id'],'name':item['name']+f" · pagina {x['page']}",'path':Path(x['path']).relative_to(self.data).as_posix(),'mime':'image/png'} for x in rendered]
+                    history[-1]['media'] += [{'id':hashlib.sha256(f"{item['id']}:{x['page']}".encode()).hexdigest()[:32],'name':item['name']+f" · pagina {x['page']}",'path':Path(x['path']).relative_to(self.data).as_posix(),'mime':'image/png'} for x in rendered]
                     context.append('Pagine PDF fornite a Vision: '+', '.join(f"Immagine {first+i} = {item['name']} pagina {x['page']}" for i,x in enumerate(rendered))+'. Altre pagine senza testo non sono state lette.')
                     meta['documents'][-1]['visual_pages']=picked
                 elif pages:

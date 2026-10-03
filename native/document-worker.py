@@ -76,11 +76,54 @@ def render(path,pages,output):
     finally:doc.close()
     return result
 
+def assets(path, pages, output, limit=16):
+    """Bounded embedded figures; scan pages remain eligible as whole-page images."""
+    from PIL import Image
+    import io
+    Image.MAX_IMAGE_PIXELS=20000000
+    folder=Path(output);folder.mkdir(parents=True,exist_ok=True)
+    result=[];seen=set()
+    def save(raw,location):
+        import hashlib
+        if len(result)>=limit or len(raw)>20*1024**2:return
+        key=hashlib.sha256(raw).hexdigest()
+        if key in seen:return
+        seen.add(key)
+        try:
+            with Image.open(io.BytesIO(raw)) as image:
+                if image.width<100 or image.height<100:return
+                image.thumbnail((1600,1600))
+                target=folder/f'figure-{len(result)+1}.png';image.convert('RGB').save(target)
+            result.append({'path':str(target),'location':location})
+        except (OSError,ValueError):return
+    if Path(path).suffix.lower()=='.docx':
+        validate_docx(path)
+        with zipfile.ZipFile(path) as z:
+            for item in z.infolist():
+                if item.filename.startswith('word/media/') and item.file_size<=20*1024**2:
+                    save(z.read(item),Path(item.filename).name)
+                if len(result)>=limit:break
+    else:
+        from pypdf import PdfReader
+        doc=PdfReader(path)
+        if doc.is_encrypted or len(doc.pages)>300:raise ValueError('PDF protetto o troppo lungo.')
+        numbers=list(dict.fromkeys(pages)) if pages else list(range(1,len(doc.pages)+1))
+        for number in numbers:
+            if not 1<=number<=len(doc.pages):continue
+            page=doc.pages[number-1]
+            contents=page.get_contents()
+            if contents and len(contents.get_data())>16*1024**2:continue
+            for image in page.images:
+                save(image.data,f'pagina {number} · {image.name}')
+                if len(result)>=limit:break
+            if len(result)>=limit:break
+    return result
+
 emit('hello',engine='documents')
 for line in sys.stdin:
     try:
         request=json.loads(line)
-        result=read(request['path']) if request['op']=='read' else render(request['path'],request['pages'],request['output'])
+        result=(read(request['path']) if request['op']=='read' else assets(request['path'],request.get('pages',[]),request['output'],request.get('limit',16)) if request['op']=='assets' else render(request['path'],request['pages'],request['output']))
         if request['op']=='read':
             target=Path(request['output']);target.parent.mkdir(parents=True,exist_ok=True);part=target.with_suffix('.writing');part.write_text(json.dumps(result,ensure_ascii=False),encoding='utf-8');part.replace(target);result={'path':str(target)}
         emit('result',result=result)

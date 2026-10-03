@@ -46,7 +46,7 @@ class Sanitizer(HTMLParser):
 
 def embedded_css(root):
     sheets=[]
-    for relative in ('style.css','vendor/katex.min.css','vendor/highlight.css'):
+    for relative in ('style.css','slides.css','vendor/katex.min.css','vendor/highlight.css'):
         file=root/'static'/relative
         def replace(match):
             name=match.group(1).strip('"\'')
@@ -58,16 +58,17 @@ def embedded_css(root):
     return '\n'.join(sheets)
 
 
-def export_pdf(root,data,body):
+def export_document(root,data,body):
     source=body.get('html','');title=body.get('title','Documento H3')
     if not isinstance(source,str) or len(source)>16*1024*1024 or not isinstance(title,str) or len(title)>150:raise ValueError('Documento non valido o troppo grande.')
     parser=Sanitizer();parser.feed(source)
-    candidates=[Path(os.environ.get('PROGRAMFILES(X86)','C:/Program Files (x86)'))/'Microsoft/Edge/Application/msedge.exe',
-                Path(os.environ.get('PROGRAMFILES','C:/Program Files'))/'Microsoft/Edge/Application/msedge.exe']
-    edge=next((p for p in candidates if p.exists()),None)
-    if not edge:raise ValueError('Per il PDF serve Microsoft Edge, normalmente incluso in Windows.')
+    slide_format=body.get('slide_format')
+    if slide_format is not None:
+        from .slides import FORMATS
+        if slide_format not in FORMATS:raise ValueError('Formato slide non valido.')
     key=uid();folder=data/'exports'/key;folder.mkdir(parents=True)
-    css=embedded_css(root)+'''
+    base_css=embedded_css(root)
+    css=base_css+'''
       @page {size:A4;margin:18mm 17mm;} body{background:white;margin:0;color:#202f30;}
       .rich{font-size:11pt;line-height:1.65;max-width:none;overflow:visible;}
       .rich h1{font-size:29pt}.rich h2{font-size:18pt}.rich h3{font-size:14pt}
@@ -77,8 +78,29 @@ def export_pdf(root,data,body):
       figure,.math-block{break-inside:avoid;max-width:100%} .chart-box{height:auto} img{max-width:100%;height:auto;max-height:220mm}
       .no-export{display:none!important} .rich .math-block{overflow:visible}.visual-label{font-size:9pt}
     '''
-    document='<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:; font-src data:; script-src \'none\'"><title>'+html.escape(title)+'</title><style>'+css+'</style><article class="rich">'+''.join(parser.output)+'</article>'
+    if slide_format:
+        css=base_css
+        width,height=FORMATS[slide_format]
+        css+='\n'+f'@page{{size:{width}px {height}px;margin:0}}'
+        css+='body{margin:0;background:#e8ece7}.slides-document{width:1280px;margin:auto}.h3-slide-page{break-after:page;margin:0 0 24px;box-shadow:0 4px 24px #0002}.h3-slide-page:last-child{break-after:auto}@media print{body{background:white}.h3-slide-page{margin:0;box-shadow:none}}'
+    wrapper='slides-document' if slide_format else 'rich'
+    document='<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:; font-src data:; script-src \'none\'"><title>'+html.escape(title)+'</title><style>'+css+'</style></head><body><article class="'+wrapper+'">'+''.join(parser.output)+'</article></body></html>'
     source_file=folder/'document.html';source_file.write_text(document,encoding='utf-8')
+    return folder,source_file,title
+
+
+def export_html(root,data,body):
+    folder,source,title=export_document(root,data,body)
+    return {'url':'/exports/'+folder.name+'/document.html','name':title+'.html'}
+
+
+def export_pdf(root,data,body):
+    candidates=[Path(os.environ.get('PROGRAMFILES(X86)','C:/Program Files (x86)'))/'Microsoft/Edge/Application/msedge.exe',
+                Path(os.environ.get('PROGRAMFILES','C:/Program Files'))/'Microsoft/Edge/Application/msedge.exe']
+    edge=next((p for p in candidates if p.exists()),None)
+    if not edge:raise ValueError('Per il PDF serve Microsoft Edge, normalmente incluso in Windows.')
+    folder,source_file,title=export_document(root,data,body)
+    key=folder.name
     target=folder/'document.pdf'
     args=[str(edge),'--headless','--disable-gpu','--no-first-run','--no-pdf-header-footer','--print-to-pdf='+str(target),
           '--user-data-dir='+str(folder/'browser-profile'),'--virtual-time-budget=2500',source_file.as_uri()]

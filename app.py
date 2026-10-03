@@ -126,7 +126,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.file(safe_join(ROOT / "static", path[len("/static/"):]))
                 if path.startswith("/exports/"):
                     relative = path[len("/exports/"):]
-                    if len(parts) != 3 or parts[-1] != "document.pdf":
+                    if len(parts) != 3 or parts[-1] not in ("document.pdf","document.html"):
                         raise PermissionError("File non disponibile.")
                     return self.file(safe_join(self.app.data / "exports", relative))
                 if path.startswith("/media/"):
@@ -175,6 +175,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(self.app.remove_external_model(parts[2]))
             if path == "/api/export/pdf" and method == "POST":
                 return self.json(export_pdf(ROOT, self.app.data, body))
+            if path == "/api/export/html" and method == "POST":
+                from h3chat.pdf_export import export_html
+                return self.json(export_html(ROOT, self.app.data, body))
             if path == "/api/memory/release" and method == "POST":
                 return self.json(self.app.release_memory())
             if path == "/api/assess" and method == "POST":
@@ -240,6 +243,8 @@ class Handler(BaseHTTPRequestHandler):
                 if self.app.store.one("SELECT id FROM jobs WHERE chat_id=? AND status IN ('queued','running') AND json_extract(payload,'$.canvas')=1", (parts[2],)):
                     raise ValueError("Il motore sta scrivendo nel canvas. Attendi o interrompilo prima di modificare.")
                 media = self.app.validate_media(body.get("media", []),canvas=True)
+                from h3chat.slides import validate_content
+                validate_content(content,media)
                 if body.get('id') is not None and not isinstance(body['id'], str):
                     raise ValueError('Riferimento artefatto non valido.')
                 return self.json(self.app.store.canvas_history.save(parts[2], {'title':title, 'content':content, 'media':media}, edit_id=body.get('id'), editable=True))

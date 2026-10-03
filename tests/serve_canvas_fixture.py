@@ -49,7 +49,24 @@ def main():
                 nonlocal active
                 if self.path.startswith('/fixture/'):
                     self.guard(); self.read_body()
-                    if self.path == '/fixture/start':
+                    if self.path.startswith('/fixture/slides/'):
+                        from h3chat.slides import encode
+                        phase=self.path.rsplit('/',1)[-1]
+                        if phase=='start':
+                            ident=app.store.enqueue(chat,'Crea 3 slide sintetiche',[],DEFAULTS|{'_lab':'slides'},True)
+                            active=app.store.one('SELECT * FROM jobs WHERE id=?',(ident,))
+                            app.store.execute("UPDATE jobs SET status='running',stage='Slide · composizione progressiva' WHERE id=?",(ident,))
+                        def n(ident,kind,text='',**kw):return {'id':ident,'parent':'root','kind':kind,'text':text,'asset_id':'','language':'text','style':{}}|kw
+                        pages=[{'title':'Fonti e formule','status':'ready','nodes':[n('title','heading','Fonti e formule'),n('text','text','Una formula precisa: $A=\\pi r^2$. Dati dalla fonte [R1].')],'notes':'Nota dalla fonte sintetica.','sources':['R1']},
+                               {'title':'Diagramma','status':'ready','nodes':[n('title','heading','Diagramma'),n('graph','mermaid','flowchart LR\n A[Documento] --> B[Slide]')],'notes':'Relazioni verificabili.','sources':[]},
+                               {'title':'Figura','status':'writing','nodes':[n('title','heading','Figura'),n('text','text','Prima parte' if phase=='start' else 'Prima parte e testo completato'),n('image','image','Immagine originale',asset_id='a'*32)],'notes':'Figura autorizzata.','sources':[]}]
+                        if phase=='done':pages[-1]['status']='ready'
+                        deck={'version':1,'format':'4:3','title':'Presentazione sintetica','references':[{'id':'R1','label':'Fonte sintetica · pagina 2'}],'pages':pages,'active':2}
+                        value={'title':deck['title'],'content':encode(deck),'media':image['media']}
+                        app.save_artifact(chat,value['title'],value['content'],value['media'])
+                        app.store.update_answer(active,'Slide nel canvas.','done' if phase=='done' else 'running',[],{'canvas':True,'intent':'slides','artifact':value,'rag_sources':[{'citation':'R1','name':'Fonte sintetica','location':'pagina 2','text':'Una formula precisa','source_id':'synthetic','chunk_id':1,'page':2,'url':''}]})
+                        if phase=='done':app.store.execute("UPDATE jobs SET status='done' WHERE id=?",(active['id'],))
+                    elif self.path == '/fixture/start':
                         ident = app.store.enqueue(chat, 'Synthetic generation', [], DEFAULTS, True)
                         active = app.store.one('SELECT * FROM jobs WHERE id=?', (ident,))
                         app.store.execute("UPDATE jobs SET status='running' WHERE id=?", (ident,))

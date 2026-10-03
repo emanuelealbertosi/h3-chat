@@ -1,0 +1,33 @@
+import {spawn} from 'node:child_process';
+import {createRequire} from 'node:module';
+import {once} from 'node:events';
+import {createInterface} from 'node:readline';
+import {readFile,mkdir} from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url);const {chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
+const child=spawn('runtime/python/python.exe',['-X','utf8','tests/serve_canvas_fixture.py'],{stdio:['ignore','pipe','pipe']});let diagnostic='';child.stderr.on('data',x=>diagnostic+=x);
+const lines=createInterface({input:child.stdout}),timer=setTimeout(()=>child.kill(),30000);
+const first=await Promise.race([once(lines,'line'),once(child,'exit').then(()=>{throw Error(diagnostic);})]);clearTimeout(timer);const fixture=JSON.parse(first[0]);lines.close();
+const browser=await chromium.launch({channel:'msedge',headless:true});const page=await browser.newPage({viewport:{width:1640,height:1100}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+const post=path=>page.evaluate(async path=>{const {token}=await (await fetch('/api/state')).json();const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-H3-Token':token},body:'{}'});if(!r.ok)throw Error(await r.text());},path);
+try{
+  await page.goto(fixture.url);await page.click(`[data-chat="${fixture.chat}"]`);await page.selectOption('#lab-tool','slides');assert.equal(await page.locator('#slides-options').isVisible(),true);
+  await post('/fixture/slides/start');await page.click('#canvas-toggle');await page.waitForSelector('.h3-slide-page');
+  assert.match(await page.locator('.h3-slide-page').innerText(),/Prima parte/);assert.equal(await page.locator('.h3-slide-page img').count(),1);
+  await post('/fixture/slides/stream');await page.waitForFunction(()=>document.querySelector('.h3-slide-page')?.textContent.includes('testo completato'));
+  assert.equal(await page.locator('#canvas-history option').count(),4);
+  await page.selectOption('.slides-navigation select','0');await page.waitForSelector('.h3-slide-page .katex');
+  await post('/fixture/slides/done');await page.waitForFunction(()=>!document.querySelector('#stop').offsetParent);assert.equal(await page.locator('.slides-navigation select').inputValue(),'0');
+  await page.click('.slide-notes summary');assert.match(await page.locator('.slide-notes').innerText(),/pagina 2/);
+  await page.click('.slide-notes .rag-citation');assert.equal(await page.locator('#knowledge-panel').isVisible(),true);await page.click('#knowledge-canvas');
+  await page.selectOption('.slides-navigation select','1');await page.waitForSelector('.h3-slide-page svg');
+  await page.selectOption('.slides-navigation select','2');await page.waitForSelector('.h3-slide-page img');
+  await mkdir('work/slides-qa',{recursive:true});await page.screenshot({path:'work/slides-qa/canvas.png',fullPage:true});
+  let download=page.waitForEvent('download');await page.click('[data-export="html"]');const htmlDownload=await download;await htmlDownload.saveAs('work/slides-qa/slides.html');const html=await readFile('work/slides-qa/slides.html','utf8');
+  assert.equal((html.match(/class="h3-slide-page/g)||[]).length,3);assert.match(html,/data:image\/png;base64/);assert.match(html,/1280px 960px/);assert.ok(!html.includes('<script'));assert.ok(html.includes('katex'));
+  download=page.waitForEvent('download');await page.click('[data-export="pdf"]');const pdfDownload=await download;await pdfDownload.saveAs('work/slides-qa/slides.pdf');
+  assert.ok((await readFile('work/slides-qa/slides.pdf')).subarray(0,5).toString()==='%PDF-');
+  await page.reload();await page.click(`[data-chat="${fixture.chat}"]`);await page.click('#canvas-toggle');await page.waitForSelector('.h3-slide-page');assert.equal(await page.locator('.slides-navigation select option').count(),3);
+  await page.setViewportSize({width:390,height:844});await page.waitForTimeout(200);assert.ok(await page.locator('.slides-viewport').evaluate(el=>el.getBoundingClientRect().width>100));
+  assert.deepEqual(errors,[]);console.log('Slides: progressive HTML, page browsing, formulas, Mermaid, figures, RAG links, offline HTML, PDF, history and mobile passed.');
+}finally{await browser.close();child.kill();}
