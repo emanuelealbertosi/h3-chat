@@ -2,10 +2,20 @@
 
 ## Progetti e RAG
 
-Premi **＋ accanto a Progetti**, assegna un nome e salva. Puoi scrivere istruzioni
-condivise e collegare file o cartelle con **Collega e indicizza**. PDF, Word `.docx`,
-testo e codice sono supportati. Gli originali restano nei loro percorsi; l'indice
-SQLite viene salvato nella cartella dati dell'app. Le cartelle vengono ricontrollate
+Premi **＋ accanto a Progetti**, assegna un nome e salva. Nella sezione Documenti
+premi **Scegli file…** per aprire il selettore del sistema e scegliere più file,
+**Importa cartella…** per scegliere una cartella, oppure trascina file e cartelle
+nel riquadro. PDF, Word `.docx`, testo e codice sono supportati. I documenti
+vengono copiati nel progetto e indicizzati automaticamente; gli originali non
+vengono modificati. Funziona anche dal browser di un altro dispositivo tramite
+Tailscale. L'importazione mostra il progresso e riconosce i file già presenti.
+I file non supportati nelle cartelle vengono ignorati.
+
+Per usare invece i file nei loro percorsi originali, apri **Collega percorsi
+originali · senza copia** e usa **Collega cartella originale…** oppure inserisci
+i percorsi, quindi premi **Collega e indicizza**. Questi percorsi appartengono al
+computer dove gira H3-Chat. L'indice SQLite viene salvato nella cartella dati
+dell'app. Le cartelle collegate vengono ricontrollate
 durante l'aggiornamento e prima delle risposte. Scollegare un documento impedisce
 che la cartella lo aggiunga di nuovo; scollegare la cartella ferma il rilevamento,
 ma conserva i documenti già indicizzati.

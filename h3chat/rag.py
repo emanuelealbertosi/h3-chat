@@ -1,6 +1,8 @@
 """Project knowledge on local SQLite; optional GGUF semantic retrieval."""
 from __future__ import annotations
 import hashlib
+import base64
+import binascii
 import json
 import math
 import os
@@ -105,6 +107,7 @@ class Knowledge:
         p=self.store.one('SELECT * FROM projects WHERE id=?',(ident,))
         if not p:raise ValueError('Progetto non trovato.')
         p['sources']=self.store.all('SELECT s.*, (SELECT COUNT(*) FROM rag_chunks c WHERE c.source_id=s.id) AS chunks FROM project_sources s WHERE project_id=? ORDER BY name',(ident,))
+        for source in p['sources']:source['imported']=Path(source['path']).is_relative_to(self.data/'project-imports')
         p['roots']=self.store.all('SELECT * FROM project_roots WHERE project_id=?',(ident,))
         with self.lock:p['indexing']=self.tasks.get(ident,{}).get('status')=='running';p['progress']=dict(self.tasks.get(ident,{}))
         return p
@@ -125,6 +128,45 @@ class Knowledge:
     def delete(self,ident):
         with self.index_lock:self.mutable(ident);self.store.execute('DELETE FROM projects WHERE id=?',(ident,))
         return {'ok':True}
+    def import_file(self,ident,body):
+        """Browser-selected files have no trustworthy original filesystem path."""
+        name=body.get('name','');encoded=body.get('data','');defer=body.get('defer',False)
+        if not isinstance(name,str) or not 1<=len(name)<=200 or any(x in name for x in ('/','\\','\0')):
+            raise ValueError('Nome documento non valido.')
+        extension=Path(name).suffix.lower()
+        label=body.get('relative_path') or name
+        if not isinstance(label,str) or len(label)>1200 or label.startswith('/') or any(x in label for x in ('\\',':','\0')) or any(part in ('','..','.') for part in label.split('/')) or label.split('/')[-1]!=name:
+            raise ValueError('Nome della cartella importata non valido.')
+        if extension not in EXTENSIONS:raise ValueError('Usa PDF, Word .docx oppure file di testo/codice.')
+        if not isinstance(encoded,str) or len(encoded)>35*1024**2 or type(defer) is not bool:raise ValueError('Documento non valido o oltre 25 MB.')
+        try:raw=base64.b64decode(encoded,validate=True)
+        except (ValueError,binascii.Error):raise ValueError('Contenuto documento non valido.')
+        if not raw or len(raw)>25*1024**2:raise ValueError('Documento vuoto o oltre 25 MB.')
+        if extension=='.pdf' and not raw.startswith(b'%PDF-'):raise ValueError('Il file non è un PDF valido.')
+        if extension=='.docx':
+            import io,zipfile
+            try:
+                with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                    items=z.infolist();names={x.filename for x in items}
+                    if not {'[Content_Types].xml','word/document.xml'}<=names or len(items)>10000 or sum(x.file_size for x in items)>100*1024**2 or any('vbaproject' in n.lower() for n in names):
+                        raise ValueError('Documento Word non valido, troppo grande o con macro.')
+            except zipfile.BadZipFile:raise ValueError('Documento Word non valido.')
+        digest=hashlib.sha256(label.encode('utf-8')+b'\0'+raw).hexdigest()
+        with self.index_lock:
+            self.mutable(ident)
+            target=safe_join(self.data,'project-imports/'+ident+'/'+digest+'/document'+extension)
+            existing=self.store.one('SELECT id FROM project_sources WHERE project_id=? AND path=?',(ident,str(target)))
+            duplicate=bool(existing)
+            if not duplicate and self.store.one('SELECT COUNT(*) AS n FROM project_sources WHERE project_id=?',(ident,))['n']>=500:raise ValueError('Massimo 500 documenti per progetto.')
+            target.parent.mkdir(parents=True,exist_ok=True)
+            if not duplicate or not target.is_file():
+                temporary=target.with_name(uid()+'.writing')
+                try:temporary.write_bytes(raw);temporary.replace(target)
+                finally:temporary.unlink(missing_ok=True)
+            source_id=existing['id'] if existing else uid()
+            self.store.execute('INSERT OR IGNORE INTO project_sources(id,project_id,path,name) VALUES (?,?,?,?)',(source_id,ident,str(target),label))
+        if not defer:self.refresh(ident)
+        return {'id':source_id,'name':name,'duplicate':duplicate}
     def add(self,ident,body):
         paths=body.get('paths',[])
         if not isinstance(paths,list) or not 1<=len(paths)<=30 or any(not isinstance(p,str) or len(p)>2000 for p in paths):raise ValueError('Scegli fino a trenta file o cartelle.')

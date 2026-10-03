@@ -1,0 +1,30 @@
+import {spawn} from 'node:child_process';
+import {createRequire} from 'node:module';
+import {once} from 'node:events';
+import {createInterface} from 'node:readline';
+import assert from 'node:assert/strict';
+import {mkdir,writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
+const child=spawn('runtime/python/python.exe',['-X','utf8','tests/serve_canvas_fixture.py'],{stdio:['ignore','pipe','pipe']});let diagnostic='';child.stderr.on('data',x=>diagnostic+=x);
+const lines=createInterface({input:child.stdout}),timer=setTimeout(()=>child.kill(),30000);const first=await Promise.race([once(lines,'line'),once(child,'exit').then(()=>{throw Error(diagnostic);})]);clearTimeout(timer);const fixture=JSON.parse(first[0]);lines.close();
+const browser=await chromium.launch({channel:'msedge',headless:true}),page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+try{
+  await page.goto(fixture.url);await page.click('#new-project');await page.fill('#project-name','Documenti facili');await page.click('#project-save');await page.waitForSelector('#project-files');
+  const chooserEvent=page.waitForEvent('filechooser');await page.click('#project-files');const chooser=await chooserEvent;assert.ok(chooser.isMultiple());
+  await chooser.setFiles([{name:'Introduzione.md',mimeType:'text/markdown',buffer:Buffer.from('Introduzione verificata 1234.')},{name:'Risultati.txt',mimeType:'text/plain',buffer:Buffer.from('Risultati verificati 5678.')}]);
+  await page.waitForFunction(()=>document.querySelectorAll('#project-source-list .project-source').length===2&&document.querySelector('#project-source-list').textContent.includes('Indicizzato'));await page.waitForFunction(()=>!document.querySelector('#project-files').disabled);
+  assert.match(await page.locator('#project-source-list').innerText(),/Importato nel progetto/);
+  const file={name:'Introduzione.md',mimeType:'text/markdown',buffer:Buffer.from('Introduzione verificata 1234.')};await page.locator('#project-file-input').setInputFiles(file);await page.waitForFunction(()=>document.querySelector('#project-import-status').textContent.includes('già presenti'));assert.equal(await page.locator('#project-source-list .project-source').count(),2);
+  await page.waitForFunction(()=>!document.querySelector('#project-files').disabled);
+  await page.evaluate(()=>{const d=new DataTransfer();d.items.add(new File(['Testo trascinato 91011.'],'Trascinato.md',{type:'text/markdown'}));document.querySelector('#project-dropzone').dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:d}));});
+  await page.waitForFunction(()=>document.querySelectorAll('#project-source-list .project-source').length===3&&document.querySelector('#project-source-list').textContent.includes('Trascinato.md'));await page.waitForFunction(()=>!document.querySelector('#project-files').disabled);
+  await mkdir('work/project-import-qa/Cartella/Sottocartella',{recursive:true});await writeFile('work/project-import-qa/Cartella/Sottocartella/Capitolo.md','Capitolo dalla cartella 2222.');await writeFile('work/project-import-qa/Cartella/ignored.bin','Not a document');
+  const folderChooserEvent=page.waitForEvent('filechooser');await page.click('#project-import-folder');await (await folderChooserEvent).setFiles(resolve('work/project-import-qa/Cartella'));
+  await page.waitForFunction(()=>document.querySelectorAll('#project-source-list .project-source').length===4&&document.querySelector('#project-source-list').textContent.includes('Cartella/Sottocartella/Capitolo.md'));await page.waitForFunction(()=>!document.querySelector('#project-files').disabled);
+  await page.evaluate(()=>{const file=new File(['Cartella trascinata 3333.'],'Drag.md',{type:'text/markdown'});const entry={isFile:true,name:'Drag.md',file:callback=>callback(file)};const folder={isFile:false,name:'Cartella trascinata',createReader:()=>{let read=false;return {readEntries:callback=>{callback(read?[]:[entry]);read=true;}}}};const event=new Event('drop',{bubbles:true,cancelable:true});Object.defineProperty(event,'dataTransfer',{value:{items:[{kind:'file',webkitGetAsEntry:()=>folder}],files:[]}});document.querySelector('#project-dropzone').dispatchEvent(event);});
+  await page.waitForFunction(()=>document.querySelectorAll('#project-source-list .project-source').length===5&&document.querySelector('#project-source-list').textContent.includes('Cartella trascinata/Drag.md'));await page.waitForFunction(()=>!document.querySelector('#project-files').disabled);
+  await page.locator('#project-file-input').setInputFiles({name:'Errore.pdf',mimeType:'application/pdf',buffer:Buffer.from('Not a PDF')});await page.waitForSelector('#project-error:visible');assert.match(await page.locator('#project-error').innerText(),/PDF valido/);assert.equal(await page.locator('#project-source-list .project-source').count(),5);
+  await page.setViewportSize({width:390,height:844});assert.ok(await page.locator('#project-dropzone').isVisible());await mkdir('work/project-import-qa',{recursive:true});await page.screenshot({path:'work/project-import-qa/mobile.png',fullPage:true});
+  assert.deepEqual(errors,[]);console.log('Projects: native multiple file chooser, import, index, duplicate detection, drag and drop, validation, private copy labels and mobile passed.');
+}finally{await browser.close();child.kill();}

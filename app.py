@@ -154,6 +154,7 @@ class Handler(BaseHTTPRequestHandler):
                 if len(parts)==3 and method=='PATCH':return self.json(self.app.knowledge.save(body,ident))
                 if len(parts)==3 and method=='DELETE':return self.json(self.app.knowledge.delete(ident))
                 if len(parts)==4 and parts[3]=='sources' and method=='POST':return self.json(self.app.knowledge.add(ident,body),202)
+                if len(parts)==4 and parts[3]=='import' and method=='POST':return self.json(self.app.knowledge.import_file(ident,body),201)
                 if len(parts)==4 and parts[3]=='refresh' and method=='POST':return self.json(self.app.knowledge.refresh(ident),202)
                 if len(parts)==4 and parts[3]=='web-sources' and method=='POST':return self.json(self.app.save_web_sources(ident,body),202)
                 if len(parts)==5 and parts[3]=='sources' and method=='DELETE':return self.json(self.app.knowledge.remove(ident,parts[4]))
