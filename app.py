@@ -107,7 +107,7 @@ class Handler(BaseHTTPRequestHandler):
                 if len(parts)==3 and parts[:2]==['api','projects']:
                     return self.json(self.app.knowledge.project(parts[2]))
                 if path == "/api/health":
-                    return self.json({"app": "h3-chat", "version": __version__, "instance": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16], 'network': getattr(self.server, 'network', None).status if getattr(self.server, 'network', None) else {}})
+                    return self.json({"app": "h3-chat", "version": __version__, "worker_alive": self.app.worker.is_alive(), "instance": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16], 'network': getattr(self.server, 'network', None).status if getattr(self.server, 'network', None) else {}})
                 if path == "/api/state":
                     return self.json(self.app.state() | {'network': getattr(self.server, 'network', None).status if getattr(self.server, 'network', None) else {}})
                 if path == "/api/hardware":

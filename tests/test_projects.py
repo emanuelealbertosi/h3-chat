@@ -7,6 +7,7 @@ from h3chat.service import Service
 from h3chat.calculator import Calculator
 from h3chat.lab import validate_scene,validate_chart,route
 from h3chat.devices import options,label
+from h3chat.context_tools import retrieval_query,retrieval_budget
 
 ROOT=Path(__file__).resolve().parents[1]
 class ProjectTests(unittest.TestCase):
@@ -25,6 +26,36 @@ class ProjectTests(unittest.TestCase):
         self.assertEqual(self.k.retrieve(a['id'],'ricavi',DEFAULTS,self.cancel,lambda _:None,[])[0],[])
         with self.assertRaises(ValueError):self.k.retrieve(a['id'],'ricavi',DEFAULTS,self.cancel,lambda _:None,['b.md'])
         self.assertEqual(self.retrieve(a,'elefante')[0],[])
+    def test_followup_retrieval_keeps_topic_after_model_change_and_long_artifact(self):
+        app=Service(ROOT,self.path/'followup',start_worker=False);self.addCleanup(app.close)
+        p=app.knowledge.save({'name':'Programmazione','sources_only':True})
+        file=self.path/'polimorfismo.md';file.write_text('Il polimorfismo permette a oggetti diversi di rispondere allo stesso metodo.')
+        app.store.execute('INSERT INTO project_sources(id,project_id,path,name) VALUES (?,?,?,?)',('src',p['id'],str(file),'Polimorfismo'))
+        chat=app.store.create_chat(project_id=p['id']);model={'id':'first','name':'Primo','vision':{'enabled':False},'capabilities':['chat'],'files':[]}
+        with patch.object(app.engine,'require_model',return_value=model):ticket=app.send(chat['id'],{'prompt':'Spiega il polimorfismo'})
+        job=app.store.one('SELECT * FROM jobs WHERE id=?',(ticket['job_id'],))
+        app.store.update_answer(job,'Risposta precedente','done',[],{'artifact':{'title':'Vecchia scena','content':'x'*40000,'media':[]}})
+        app.store.execute("UPDATE jobs SET status='done' WHERE id=?",(job['id'],))
+        app.store.save_settings({'chat_model':'qwen3-06','context':4096,'max_tokens':1024})
+        model=model|{'id':'qwen3-06','name':'Secondo'}
+        with patch.object(app.engine,'require_model',return_value=model):ticket=app.send(chat['id'],{'prompt':'Ricrea l’animazione','lab':'manim'})
+        job=app.store.one('SELECT * FROM jobs WHERE id=?',(ticket['job_id'],))
+        with patch.object(app.engine,'prepare'),patch.object(app.engine,'require_model',return_value=model),patch('h3chat.manim_artifact.build',return_value=('Scena','Codice',[])) as build:
+            app.execute_job(job,self.cancel)
+        self.assertEqual(app.store.one('SELECT status FROM jobs WHERE id=?',(job['id'],))['status'],'done')
+        history=build.call_args.args[3];meta=build.call_args.args[-1]
+        self.assertIn('polimorfismo',meta['rag_sources'][0]['text'])
+        self.assertIn('[R1]',history[-1]['content'])
+        self.assertNotIn('Nessun estratto',history[-1]['content'])
+        self.assertEqual(meta['model'],'Secondo')
+    def test_followup_query_never_uses_assistant_content_or_changes_explicit_topics(self):
+        history=[{'role':'user','content':'Spiega il polimorfismo pagina 4'}, {'role':'assistant','content':'Argomento inventato elefante'}, {'role':'user','content':'Ricrea pagina 2'}]
+        query=retrieval_query('Ricrea pagina 2',history)
+        self.assertIn('polimorfismo',query);self.assertNotIn('elefante',query);self.assertNotIn('pagina 4',query)
+        self.assertEqual(retrieval_query('Ricrea una scena sulla fotosintesi',history),'Ricrea una scena sulla fotosintesi')
+        self.assertEqual(retrieval_query('Cosa mangia un elefante?',history),'Cosa mangia un elefante?')
+        self.assertEqual(retrieval_query('Riprova',[{'role':'user','content':'Riprova'}]),'Riprova')
+        self.assertGreaterEqual(retrieval_budget(DEFAULTS|{'context':4096,'max_tokens':1024},history+[{'role':'assistant','content':'x'*40000},{'role':'user','content':'Ricrea'}]),330)
     def test_project_delete_preserves_chat_and_original_documents(self):
         p=self.project();file=self.source(p,'a.md','Ricavi 1200');chat=self.store.create_chat(project_id=p['id']);self.retrieve(p,'ricavi');self.k.delete(p['id']);self.assertIsNone(self.store.chat(chat['id'])['project_id']);self.assertTrue(file.exists());self.assertEqual(self.store.all('SELECT * FROM rag_chunks'),[])
     def test_folders_detect_new_files_and_do_not_restore_excluded_documents(self):

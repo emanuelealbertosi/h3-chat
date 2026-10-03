@@ -1,5 +1,14 @@
 # H3-Chat
 
+I provider LLM esterni si configurano da **Impostazioni → Provider LLM**:
+DeepSeek, OpenRouter oppure un endpoint personalizzato compatibile con Chat
+Completions. Inserisci indirizzo, chiave API e ID modello, salva il collegamento
+e premi **Usa in chat** per usarlo anche nel router e nell’Assistant.
+
+Il RAG mantiene l’argomento nelle richieste successive come «ricrea l’animazione»,
+anche cambiando LLM. Domande nuove con un argomento esplicito avviano una nuova
+ricerca; progetto e selezione delle fonti rimangono vincolanti.
+
 **Slide dal vivo:** chiedi «Crea 10 slide dal PDF» oppure scegli
 **Strumenti → Slide · HTML in tempo reale**. Il canvas compone le pagine mentre
 il modello scrive, usando documenti, figure, immagini della chat, RAG e fonti
@@ -22,7 +31,7 @@ Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle 
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.16.2-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.16.2/H3-Chat-0.16.2-windows-x64.zip) dalla [release v0.16.2](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.16.2), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.16.3-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.16.3/H3-Chat-0.16.3-windows-x64.zip) dalla [release v0.16.3](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.16.3), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 

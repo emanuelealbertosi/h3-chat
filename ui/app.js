@@ -372,10 +372,12 @@ function renderSettings(){
     body.querySelectorAll('[data-remove-external]').forEach(b=>b.onclick=()=>localModels.remove(state.models.find(m=>m.id===b.dataset.removeExternal)));
     $('#rescan-models').onclick=act(async()=>{collectSettings();state=await api('/state');renderSettings();renderStatus();toast('Cartelle locali aggiornate.');});
     body.querySelectorAll('[data-download]').forEach(b=>{const model=state.models.find(m=>m.id===b.dataset.download);b.disabled=model.complete||model.local;b.onclick=act(async()=>{await api('/downloads',{id:model.id,kind:'model'});await refresh();});});
+  }else if(settingsTab==='providers'){
+    body.replaceChildren();
   }else{
     body.innerHTML=`<div class="settings-grid"><section class="card" id="llm-settings-card"></section><section class="card" id="image-settings-card"></section><section class="card full"><h3>Preferenze generali</h3>${numberField('threads','Thread CPU · motori chat e immagini',1,64)}<h3>Come vuoi che risponda</h3><label class="field"><span>Istruzioni personali</span><textarea data-setting="system_prompt">${esc(settingsDraft.system_prompt)}</textarea></label><p>Codice evidenziato, Markdown, LaTeX, diagrammi Mermaid e grafici numerici sono già abilitati. Il canvas esporta Word modificabile e PDF/PNG fedeli all'anteprima; formule e figure nel Word sono immagini.</p></section></div>`;
   }
-  if(['setup','advanced','models'].includes(settingsTab)){
+  if(['setup','advanced','models','providers'].includes(settingsTab)){
     const providers=document.createElement('section');providers.className='card api-providers';body.append(providers);
     renderProviders(providers,{state,request:api,changed:async()=>{collectSettings();state=await api('/state');if(settingsDraft.chat_model&&!state.models.some(m=>m.id===settingsDraft.chat_model))syncLlmDraft(settingsDraft,state,'');renderSettings();renderStatus();toast('Collegamento API salvato. Sceglilo per la chat oppure premi Usa in chat.');},use:async id=>{collectSettings();syncLlmDraft(settingsDraft,state,id);state.settings=await api('/settings',settingsDraft);state=await api('/state');renderSettings();renderStatus();toast('Modello API selezionato per chat, router e Assistant.');}});
   }
@@ -394,7 +396,7 @@ function renderSettings(){
   if(settingsTab==='advanced')renderLlmPreferences($('#llm-settings-card'),settingsDraft,state,scheduleAssessment);
   if(settingsTab==='advanced')renderImagePreferences($('#image-settings-card'),settingsDraft,state,scheduleAssessment);
   if(settingsTab==='advanced'){const folders=document.createElement('section');folders.className='card lora-folder-settings';body.append(folders);loraUI.renderFolders(folders,settingsDraft);}
-  body.insertAdjacentHTML('beforeend','<section id="memory-assessment" class="memory-assessment" aria-live="polite">Rilevamento del computer e stima della memoria…</section>');
+  if(settingsTab!=='providers')body.insertAdjacentHTML('beforeend','<section id="memory-assessment" class="memory-assessment" aria-live="polite">Rilevamento del computer e stima della memoria…</section>');
   const updateVision=()=>{const m=state.models.find(m=>m.id===settingsDraft.chat_model),el=$('#setup-vision-note');if(el){el.textContent=m?.api?(m.vision?.enabled?'Vision tramite API: le immagini vengono inviate al provider.':'LLM via API · solo testo. Conversazione ed estratti vengono inviati al provider.'):m?.vision?.enabled?'Vision attiva: mmproj caricato automaticamente.':m?.vision?.warning||'Scegli un modello vision per leggere immagini e grafici.';el.classList.toggle('vision-ok',!!m?.vision?.enabled);}};
   body.onchange=e=>{if(e.target.matches('[data-setting]:not([data-llm-setting])')){collectSettings();updateVision();updateDownloads();scheduleAssessment();}};
   updateVision();scheduleAssessment();updateDownloads();

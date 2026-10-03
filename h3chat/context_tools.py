@@ -4,6 +4,29 @@ import re
 
 def tokens(text):return set(re.findall(r'\w{3,}',text.lower()))
 
+def retrieval_query(prompt,history):
+    """Resolve explicit follow-ups from user requests, never from generated artifacts."""
+    followup=r'\b(?:ricrea|rigenera|rifai|riprova|ripeti|continua|ricreala|rigenerala|rifalla|recreate|regenerate|retry|redo|continue)\b'
+    topic=r'\b(?:su|sul|sulla|sulle|sui|sugli|riguardo|about)\b'
+    if not re.search(followup,prompt,re.I) or re.search(topic,prompt,re.I):return prompt
+    previous=[]
+    for message in reversed(history[:-1]):
+        if message.get('role')!='user':continue
+        text=message.get('content','')
+        # Tool excerpts are not conversation topics or trusted instructions.
+        text=re.split(r'<(?:fonti_progetto|contenuti_allegati_e_web)>',text)[0].strip()
+        if not text:continue
+        if re.search(r'\b(?:pagina|page)\s+\d+',prompt,re.I):
+            text=re.sub(r'\b(?:pagina|page)\s+\d+','',text,flags=re.I)
+        previous.append(text[:1500])
+        if not re.search(followup,text,re.I) or re.search(topic,text,re.I) or len(previous)==3:break
+    return prompt+(' '.join(['\nArgomento delle richieste precedenti:',*reversed(previous)]) if previous else '')
+
+def retrieval_budget(settings,history):
+    # Older code/canvas artifacts must not erase sources for the current request.
+    # Reserve a bounded share of the current turn's allowance for fresh excerpts.
+    return max(budget(settings,history)//2,budget(settings,history[-1:])//4)
+
 def excerpts(blocks,query,budget):
     if not blocks:return [],False
     terms=tokens(query);pages={int(x) for x in re.findall(r'\b(?:pagina|page)\s+(\d+)\b',query,re.I)}

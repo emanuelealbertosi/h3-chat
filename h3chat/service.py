@@ -31,7 +31,7 @@ from .llm_options import KEYS as LLM_KEYS, defaults as llm_defaults, merge as me
 from .store import DEFAULTS, PROFILES, Store, uid
 from .rag import Knowledge, validate as validate_rag, grounded, quote_warnings
 from .devices import validate as validate_devices, label as device_label, CPU_WARNING
-from .context_tools import budget as context_budget
+from .context_tools import retrieval_query, retrieval_budget
 from .lab import route as lab_route, SCHEMA as LAB_SCHEMA, BRIEF as LAB_BRIEF, validate_chart, files as lab_files
 from .calculator import Calculator
 from .slides import requested as slides_requested, options as slides_options, edit_request as slides_edit, edit_options as slides_edit_options
@@ -470,6 +470,7 @@ class Service:
             payload = json.loads(job["payload"])
             settings = DEFAULTS | payload["settings"]
             history = self.store.messages(job["chat_id"], payload["until"])
+            rag_query = retrieval_query(payload['prompt'],history)
             for previous in history:
                 composition=previous.get("meta",{}).get("music_composition")
                 if composition:previous["content"] += "\nComposizione del brano (non ascolto audio):\n"+json.dumps(composition,ensure_ascii=False)
@@ -500,8 +501,8 @@ class Service:
                 settings['system_prompt']+='\nIstruzioni del progetto:\n'+project['instructions']
                 if settings.get('_rag',settings['rag_enabled']):
                     settings['_rag_overview']=settings.get('_lab')=='slides'
-                    retrieved,rag_mode=self.knowledge.retrieve(project_id,payload['prompt'],settings,cancel,stage,settings.get('_rag_sources'))
-                    remaining=context_budget(settings,history)//2
+                    retrieved,rag_mode=self.knowledge.retrieve(project_id,rag_query,settings,cancel,stage,settings.get('_rag_sources'))
+                    remaining=retrieval_budget(settings,history)
                     for row in retrieved:
                         excerpt_text=row['text']
                         if len(excerpt_text)+180>remaining:

@@ -66,10 +66,12 @@ def build(app,job,payload,history,settings,model,cancel,stage,log_path,meta):
     generated=not settings.get('_lab_source')
     messages=None
     if generated:
+        stage('Manim · avvio LLM per scrivere la scena')
         app.engine.start_llama(model,settings,log_path,cancel,stage=stage)
         messages=app.engine.chat_messages(history,model,settings)
         messages[0]['content']+='\n'+BRIEF
         messages[-1]['content']+='\nManim rendering options: '+json.dumps(opts)+'\nRequired total timeline: '+str(opts['duration'])+' seconds. The sum of play()/wait() timings must equal this duration.\nAvailable assets (relative paths): '+json.dumps([{'path':'assets/'+a['name'],'original':a['original']} for a in assets],ensure_ascii=False)
+        stage('Manim · scrittura del codice della scena')
         raw,finish=app.engine.completion(messages,settings|{'think_level':'off'},cancel,on_text=lambda _:None,schema=SCHEMA)
         if finish=='length':raise ValueError('Codice Manim incompleto: aumenta Max token nelle Preferenze.')
         source=json.loads(raw)
@@ -91,6 +93,7 @@ def build(app,job,payload,history,settings,model,cancel,stage,log_path,meta):
             if remaining<1:raise TimeoutError('Rendering Manim oltre il tempo massimo configurato.')
             if opts['device']=='gpu' and settings['memory_policy']!='resident':
                 stage('Rilascio LLM · rendering Manim sulla GPU');app.engine.stop()
+            stage('Manim · avvio del rendering della scena')
             rendered=app.engine.tool_call('lab-worker.py' if legacy else 'manim-worker.py',
                 ({'scene':source} if legacy else {'source':source,'assets':assets})|{'output':str(folder),'options':opts|{'timeout':remaining}},cancel,stage,log_path,timeout=remaining+180)
             path=Path(rendered['path']).resolve()
