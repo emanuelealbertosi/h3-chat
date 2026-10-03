@@ -33,7 +33,9 @@ def main():
         second=fixture_model('RVN-IQ3_M-mtp.gguf','Qwen fixture','Internal Ara')
         app.store.save_settings({'chat_model':model['id']})
         outputs = Path(folder) / 'outputs'; outputs.mkdir(exist_ok=True)
-        (outputs / 'fixture.png').write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6P4AAAAAASUVORK5CYII='))
+        sys.path.insert(0,str(ROOT/'runtime/tools/documents'))
+        from PIL import Image,ImageDraw
+        picture=Image.new('RGB',(320,180),'#087f8c');drawing=ImageDraw.Draw(picture);drawing.rectangle((20,20,140,140),fill='#d7ef92');drawing.ellipse((175,40,290,155),fill='#f5b5a9');picture.save(outputs/'fixture.png')
         original = {'title':'Documento iniziale', 'content':'# Documento iniziale\n\nVersione originale.\n\n$x^2$\n\n```python\nprint(42)\n```', 'media':[]}
         image = {'title':'Immagine precedente', 'content':'', 'media':[{'id':'a'*32, 'name':'fixture.png', 'path':'outputs/fixture.png', 'mime':'image/png'}]}
         latest = {'title':'Documento recente', 'content':'# Documento recente\n\nContenuto più recente.', 'media':[]}

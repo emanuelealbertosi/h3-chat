@@ -4,7 +4,7 @@ import {once} from 'node:events';
 import {createInterface} from 'node:readline';
 import {readFile,mkdir} from 'node:fs/promises';
 import assert from 'node:assert/strict';
-const require=createRequire(import.meta.url);const {chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
+const require=createRequire(import.meta.url);const {chromium}=require(process.env.H3_PLAYWRIGHT||'playwright'),JSZip=require('jszip');
 const child=spawn('runtime/python/python.exe',['-X','utf8','tests/serve_canvas_fixture.py'],{stdio:['ignore','pipe','pipe']});let diagnostic='';child.stderr.on('data',x=>diagnostic+=x);
 const lines=createInterface({input:child.stdout}),timer=setTimeout(()=>child.kill(),30000);
 const first=await Promise.race([once(lines,'line'),once(child,'exit').then(()=>{throw Error(diagnostic);})]);clearTimeout(timer);const fixture=JSON.parse(first[0]);lines.close();
@@ -29,6 +29,9 @@ try{
   await mkdir('work/slides-qa',{recursive:true});await page.screenshot({path:'work/slides-qa/canvas.png',fullPage:true});
   let download=page.waitForEvent('download');await page.click('[data-export="html"]');const htmlDownload=await download;await htmlDownload.saveAs('work/slides-qa/slides.html');const html=await readFile('work/slides-qa/slides.html','utf8');
   assert.equal((html.match(/class="h3-slide-page/g)||[]).length,3);assert.match(html,/data:image\/png;base64/);assert.match(html,/1280px 960px/);assert.ok(!html.includes('<script'));assert.ok(html.includes('katex'));
+  download=page.waitForEvent('download',{timeout:120000});await page.click('[data-export="pptx"]');await(await download).saveAs('work/slides-qa/media.pptx');
+  const pptx=await JSZip.loadAsync(await readFile('work/slides-qa/media.pptx')),graphics=Object.keys(pptx.files).filter(n=>/^ppt\/media\/.*\.png$/.test(n));assert.equal(graphics.length,3);
+  for(const name of graphics){const pixels=await page.evaluate(async data=>{const img=new Image();img.src='data:image/png;base64,'+data;await img.decode();const c=document.createElement('canvas');c.width=img.width;c.height=img.height;const ctx=c.getContext('2d');ctx.drawImage(img,0,0);const a=ctx.getImageData(0,0,c.width,c.height).data;let visible=0;for(let i=3;i<a.length;i+=4)if(a[i]>0)visible++;return visible;},await pptx.file(name).async('base64'));assert.ok(pixels>100,name+' is blank');}
   download=page.waitForEvent('download');await page.click('[data-export="pdf"]');const pdfDownload=await download;await pdfDownload.saveAs('work/slides-qa/slides.pdf');
   assert.ok((await readFile('work/slides-qa/slides.pdf')).subarray(0,5).toString()==='%PDF-');
   await page.reload();await page.click(`[data-chat="${fixture.chat}"]`);await page.click('#canvas-toggle');await page.waitForSelector('.h3-slide-page');assert.equal(await page.locator('.slides-navigation select option').count(),3);

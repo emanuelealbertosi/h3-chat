@@ -22,7 +22,7 @@ function addTextLines(slide,frame){
       range.setStart(node,part.index);range.setEnd(node,part.index+part[0].length);const rect=range.getBoundingClientRect();if(!rect.width||!rect.height)continue;
       const f=frame.getBoundingClientRect(),x=(rect.left-f.left)/96,y=(rect.top-f.top)/96,w=rect.width/96,h=rect.height/96;
       const block=parent.closest('p,li,pre,h1,h2,h3,th,td,.slide-heading,.slide-continuation-title,.h3-slide-footer,.h3-slide-kicker')||parent;
-      let row=[...lines.values()].find(l=>l.block===block&&Math.abs(l.y-y)<.025);
+      let row=[...lines.values()].find(l=>l.block===block&&Math.abs(l.y-y)<.025&&Math.abs(l.x+l.w-x)<.08);
       if(!row){row={block,x,y,w:0,h,runs:[],fontSize:parseFloat(style.fontSize)*.75};lines.set(lines.size,row);}
       row.x=Math.min(row.x,x);row.w=Math.max(row.w,x+w-row.x);row.h=Math.max(row.h,h);
       row.runs.push({text:part[0].replace(/\n/g,' '),options:{fontFace:font(style),fontSize:parseFloat(style.fontSize)*.75,color:color(style.color).color,bold:Number(style.fontWeight)>=600,italic:style.fontStyle==='italic'}});
@@ -35,7 +35,8 @@ function addTextLines(slide,frame){
       listed.add(row.block);const list=row.block.parentElement,ordered=list.tagName==='OL',number=Number(list.getAttribute('start')||1)+[...list.children].indexOf(row.block);
       bullet=ordered?{type:'number',numberType:'arabicPeriod',numberStartAt:number,indent:16.56}:{indent:16.56};row.x-=.23;row.w+=.23;
     }
-    slide.addText(row.runs,{x:row.x,y:row.y,w:Math.max(.05,row.w+.07),h:Math.max(row.h+.03,.12),margin:0,bullet,breakLine:false,vertAnchor:'top',fit:'shrink',paraSpaceAfterPt:0});
+    const right=(row.block.getBoundingClientRect().right-frame.getBoundingClientRect().left)/96;
+    slide.addText(row.runs,{x:row.x,y:row.y,w:Math.max(.05,row.w,Math.min(row.w*1.08+.12,right-row.x)),h:Math.max(row.h+.03,.12),margin:0,bullet,wrap:false,breakLine:false,vertAnchor:'top',fit:'shrink',paraSpaceAfterPt:0});
   }
 }
 function chart(slide,pres,canvas,frame){
@@ -59,6 +60,15 @@ async function repairChartAxes(blob){
   }
   return changed?zip.generateAsync({type:'blob',compression:'DEFLATE',mimeType:'application/vnd.openxmlformats-officedocument.presentationml.presentation'}):blob;
 }
+async function rasterGraphic(element){
+  const rect=element.getBoundingClientRect();if(!rect.width||!rect.height)throw Error('Elemento grafico senza dimensioni.');
+  // Inline math has zero clientWidth; a root SVG cannot be captured reliably
+  // through foreignObject. An HTML wrapper gives both a real raster viewport.
+  const wrapper=document.createElement('div');wrapper.style.cssText=`display:inline-block;width:${rect.width}px;height:${rect.height}px;vertical-align:top;`;
+  element.before(wrapper);wrapper.append(element);
+  try{return await toPng(wrapper,{width:rect.width,height:rect.height,pixelRatio:3,backgroundColor:'transparent',style:{margin:'0',transform:'none'},filter:n=>!n.classList?.contains('no-export')});}
+  finally{wrapper.replaceWith(element);}
+}
 export async function exportPowerPoint(root,deck,title){
   try{
   const pres=new pptxgen(),height=parseFloat(root.firstElementChild.style.getPropertyValue('--slide-height'));
@@ -71,10 +81,10 @@ export async function exportPowerPoint(root,deck,title){
     }
     addTextLines(slide,frame);
     for(const element of frame.querySelectorAll('img,svg,.katex-display,.katex:not(.katex-display .katex),canvas')){
-      if(element.closest('.no-export')||element.matches('.katex')&&element.parentElement.closest('.katex'))continue;
+      if(element.closest('.no-export')||element.parentElement.closest('.katex,.katex-display'))continue;
       if(element.tagName==='CANVAS'&&chart(slide,pres,element,frame))continue;
-      const data=await toPng(element,{pixelRatio:3,backgroundColor:'transparent',filter:n=>!n.classList?.contains('no-export')});
-      slide.addImage({data,...box(element,frame)});
+      const bounds=box(element,frame),data=await rasterGraphic(element);
+      slide.addImage({data,...bounds});
     }
     const page=deck.pages[Number(frame.dataset.page)-1];slide.addNotes([page.notes||'',...(page.sources||[]).map(id=>{const r=deck.references.find(r=>r.id===id);return r?'['+id+'] '+r.label:'';}),'Formule e diagrammi sono elementi grafici; testi, riquadri e grafici dati sono modificabili in PowerPoint.'].filter(Boolean).join('\n'));
   }
