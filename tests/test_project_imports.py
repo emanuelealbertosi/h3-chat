@@ -25,7 +25,7 @@ class ImportTests(unittest.TestCase):
 
     def test_import_deduplication_persistence_and_retrieval(self):
         first=self.upload();source=self.app.knowledge.project(self.project['id'])['sources'][0]
-        target=Path(source['path']);self.assertTrue(source['imported']);self.assertTrue(target.is_relative_to(Path(self.temp.name)/'project-imports'))
+        target=Path(source['path']);self.assertTrue(source['imported']);self.assertTrue(target.is_relative_to(Path(self.temp.name).resolve()/'project-imports'))
         modified=target.stat().st_mtime_ns;second=self.upload();self.assertEqual(first['id'],second['id']);self.assertTrue(second['duplicate']);self.assertEqual(target.stat().st_mtime_ns,modified)
         rows,_=self.app.knowledge.retrieve(self.project['id'],'ricavi',DEFAULTS,threading.Event(),lambda _:None);self.assertIn('1200',rows[0]['text'])
         other=self.app.knowledge.save({'name':'Other fixture'});self.assertEqual(self.app.knowledge.retrieve(other['id'],'ricavi',DEFAULTS,threading.Event(),lambda _:None)[0],[])
@@ -65,7 +65,7 @@ class ImportTests(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as denied:urllib.request.urlopen(request('wrong'))
         self.assertEqual(denied.exception.code,403)
         result=json.load(urllib.request.urlopen(request(self.app.token)));self.assertTrue(result['id'])
-        path=Path(self.app.knowledge.project(self.project['id'])['sources'][0]['path']).relative_to(Path(self.temp.name)).as_posix()
+        path=Path(self.app.knowledge.project(self.project['id'])['sources'][0]['path']).relative_to(Path(self.temp.name).resolve()).as_posix()
         with self.assertRaises(urllib.error.HTTPError):urllib.request.urlopen(url+'/media/'+path)
 
 if __name__=='__main__':unittest.main()
