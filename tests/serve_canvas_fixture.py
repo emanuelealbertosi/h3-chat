@@ -50,11 +50,35 @@ def main():
             def handle_request(self):
                 nonlocal active
                 if self.path.startswith('/fixture/'):
-                    self.guard(); self.read_body()
+                    self.guard(); fixture_body=self.read_body()
+                    if self.path=='/fixture/manim-duration':
+                        import av
+                        ident=app.store.enqueue(chat,'Manim 20 secondi',[],DEFAULTS|{'_lab':'manim'},True)
+                        job=app.store.one('SELECT * FROM jobs WHERE id=?',(ident,));folder=outputs/ident;folder.mkdir()
+                        with av.open(str(folder/'animation.mp4'),'w') as movie:
+                            video=movie.add_stream('libx264',rate=5);video.width=320;video.height=240;video.pix_fmt='yuv420p'
+                            for i in range(140):
+                                frame=av.VideoFrame.from_image(Image.new('RGB',(320,240),(20+i,90,130)))
+                                for packet in video.encode(frame):movie.mux(packet)
+                            for packet in video.encode(None):movie.mux(packet)
+                        value={'title':'Manim da recuperare','content':'Scena sintetica.','media':[]}
+                        app.store.update_answer(job,'Solo codice.', 'failed',[],{'intent':'manim','canvas':True,'artifact':value,'error':'Durata errata: il video dura 28.00 s; richiesti 20 s. Correggi i tempi.'})
+                        app.store.execute("UPDATE jobs SET status='failed' WHERE id=?",(ident,))
+                        return self.json({'message_id':job['message_id']})
+                    if self.path=='/fixture/audio':
+                        import io,math,wave
+                        stream=io.BytesIO()
+                        with wave.open(stream,'wb') as audio:
+                            audio.setnchannels(1);audio.setsampwidth(2);audio.setframerate(44100)
+                            audio.writeframes(b''.join(struct.pack('<h',round(7000*math.sin(2*math.pi*440*i/44100))) for i in range(44100)))
+                        track=app.upload({'name':'Brano sintetico.wav','data':base64.b64encode(stream.getvalue()).decode()})
+                        app.store.execute("INSERT INTO messages(id,chat_id,role,content,created,media) VALUES (? ,?,'assistant','Audio sintetico.',999,?)",('audio-fixture',chat,json.dumps([track])))
+                        app.save_artifact(chat,'Brano sintetico','Audio nel canvas.',[track])
+                        return self.json({'ok':True})
                     if self.path.startswith('/fixture/slides/'):
                         from h3chat.slides import encode,partial_page
                         phase=self.path.rsplit('/',1)[-1]
-                        if phase in ('start','design'):
+                        if phase in ('start','design','contrast'):
                             ident=app.store.enqueue(chat,'Crea 3 slide sintetiche',[],DEFAULTS|{'_lab':'slides'},True)
                             active=app.store.one('SELECT * FROM jobs WHERE id=?',(ident,))
                             app.store.execute("UPDATE jobs SET status='running',stage='Slide · composizione progressiva' WHERE id=?",(ident,))
@@ -76,7 +100,23 @@ def main():
                                    {'title':'Contenuti senza tagli','status':'ready','nodes':[n('title','heading','Contenuti senza tagli'),n('long','text',long),n('code','code','\n'.join(f'print("Riga {i}")' for i in range(40)),language='python'),n('list','text','\n'.join(f'- Punto verificabile {i}' for i in range(20)))],'notes':'Tutti i marcatori devono essere conservati.','sources':[]},
                                    {'title':'Dati e coordinate precise','status':'ready','nodes':[n('title','heading','Dati e coordinate precise'),n('bars','chart',json.dumps({'type':'bar','title':'Valori verificati','labels':['A','B','C'],'datasets':[{'label':'Serie','data':[10,30,20]}]})),n('scatter','chart',json.dumps({'type':'scatter','title':'Coordinate originali','labels':[],'datasets':[{'label':'Prima','data':[{'x':-2,'y':4},{'x':0,'y':0},{'x':2,'y':4}]},{'label':'Seconda','data':[{'x':-1,'y':1},{'x':1,'y':1}]}]}))],'notes':'Valori e coordinate restano modificabili in PowerPoint.','sources':[]}]
                             deck={'version':1,'format':'16:9','theme':'indigo','typography':'modern','title':'Presentazione di collaudo','references':[],'pages':pages,'active':0}
-                        finished=phase in ('done','design')
+                        if phase=='contrast':
+                            surface=lambda name:{'flow':'stack','columns':[1,1],'surface':name,'gap':12}
+                            cover=[n('title','heading','Testi sempre leggibili'),n('cover-panel','group',style=surface('accent')),
+                                   n('cover-text','text','Paragrafi, **evidenziazioni**, codice `inline` e formule $A=\\pi r^2$.',parent='cover-panel'),
+                                   n('cover-table','text','| Voce | Valore |\n|---|---|\n| Fonte verificata | 42 |',parent='cover-panel')]
+                            cases=[n('title','heading','Riquadri e codice')]
+                            for name in ('plain','soft','accent','dark'):
+                                cases.extend([n('panel-'+name,'group',style=surface(name)),
+                                              n('text-'+name,'text','Testo '+name+' · **grassetto** e `codice inline`.\n\n- Voce leggibile',parent='panel-'+name),
+                                              n('code-'+name,'code','# Commento leggibile\nprint("Un esempio")',parent='panel-'+name,language='python')])
+                            charts=[n('title','heading','Grafici su sfondo scuro'),n('dark-panel','group',style=surface('dark')),
+                                    n('chart','chart',json.dumps({'type':'bar','title':'Dati leggibili','labels':['A','B'],'datasets':[{'label':'Verificato','data':[10,20]}]}),parent='dark-panel'),
+                                    n('diagram','mermaid','flowchart LR\n A[Documento] --> B[Slide]',parent='dark-panel')]
+                            pages=[{'title':title,'status':'ready','nodes':nodes,'notes':'Collaudo sintetico del contrasto.','sources':[]} for title,nodes in (('Copertina',cover),('Superfici',cases),('Grafici',charts))]
+                            pages[1]['overrides']={'text-plain':{'color':'#ffffff','background':'#ffffff'},'text-soft':{'color':'#000000','background':'#000000'}}
+                            deck={'version':1,'format':'16:9','theme':fixture_body.get('theme','lagoon'),'design':fixture_body.get('design','professional'),'title':'Collaudo contrasto','references':[],'pages':pages,'active':0}
+                        finished=phase in ('done','design','contrast')
                         value={'title':deck['title'],'content':encode(deck),'media':image['media']}
                         app.save_artifact(chat,value['title'],value['content'],value['media'])
                         app.store.update_answer(active,'Slide nel canvas.','done' if finished else 'running',[],{'canvas':True,'intent':'slides','artifact':value,'rag_sources':[{'citation':'R1','name':'Fonte sintetica','location':'pagina 2','text':'Una formula precisa','source_id':'synthetic','chunk_id':1,'page':2,'url':''}]})

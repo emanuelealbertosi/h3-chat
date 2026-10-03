@@ -1,5 +1,6 @@
 """MiniMax H3 uses the private inference runtime and the shared process pool."""
 import json
+import time
 from .downloads import Cancelled, safe_join
 from .video_options import options, validate_plan
 from .video_routing import BRIEF, PLAN_SCHEMA, direct_plan
@@ -54,7 +55,9 @@ class VideoEngine:
                  'images':[str(safe_join(self.data,x['path'])) for x in refs if x['mime'].startswith('image/')],
                  'audios':[str(safe_join(self.data,x['path'])) for x in refs if x['mime'].startswith('audio/')]}
         (folder/'video-plan.json').write_text(json.dumps({'plan':plan,'parameters':opts},ensure_ascii=False,indent=2),encoding='utf-8')
+        startup_started=time.monotonic()
         session=self.start_video(model,settings,folder/'engine.log',cancel,stage)
+        startup_seconds=time.monotonic()-startup_started
         stage('Generazione video · '+model['name']);session.send(request)
         try:done=session.wait('done',cancel,14400,stage)
         except RuntimeError as exc:raise RuntimeError(self.failure(session.log_path,str(exc))) from exc
@@ -62,6 +65,6 @@ class VideoEngine:
         with output.open('rb') as stream:
             if stream.read(12)[4:8]!=b'ftyp':raise RuntimeError('Il motore non ha prodotto un MP4 valido.')
         session.uses+=1
-        actual=opts|done.get('parameters',{})
+        actual=opts|done.get('parameters',{})|{'startup_seconds':startup_seconds}
         (folder/'video-plan.json').write_text(json.dumps({'plan':plan,'parameters':actual},ensure_ascii=False,indent=2),encoding='utf-8')
         return {'id':job_id,'name':'Video MiniMax H3.mp4','mime':'video/mp4','path':output.relative_to(self.data).as_posix(),'generation':actual}

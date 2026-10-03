@@ -100,3 +100,10 @@ incluse in tutti gli export e non nascondono il testo.
 Funziona con LLM locali oppure provider API, secondo la normale configurazione.
 Per gli allegati serve il componente Documenti incluso nell'installazione;
 per l'esportazione PDF serve Microsoft Edge.
+
+Il colore dei testi viene verificato sullo sfondo effettivo, anche nei riquadri
+annidati, nelle tabelle, nel codice e nelle formule. I colori già leggibili
+restano invariati; quelli poco contrastati vengono corretti automaticamente.
+La verifica si applica anche alle slide salvate in precedenza e alle modifiche
+grafiche. PDF, HTML e PowerPoint conservano testi leggibili e superfici del
+canvas; l'export PowerPoint mantiene anche gli sfondi di codice e figure.

@@ -7,11 +7,22 @@ web. Testi completi o sintesi, stili professionale/giocoso/fumettoso, temi e
 caratteri, continuazioni automatiche, modifica grafica ed export PDF/PowerPoint
 modificabile sono integrati nella cronologia. [Guida alle slide](docs/slides.md).
 
+Gli audio si scaricano in **WAV oppure MP3**, dalla chat e dal canvas. Il WAV
+originale resta intatto; le conversioni MP3 a 320 kbps sono locali, su CPU,
+senza caricare modelli. I componenti necessari sono inclusi nel pacchetto
+Windows e installati da `install.bat`. Sono supportati anche gli audio
+WAV/MP3/FLAC/OGG restituiti dai server esterni; conversioni fino a un'ora.
+
+Manim conserva un rendering valido anche se la durata differisce da quella
+richiesta: mostra la durata effettiva senza tagliare o allungare la scena.
+Per i vecchi errori «Durata errata» usa **Recupera animazione** sotto la risposta;
+il video già prodotto viene aggiunto al canvas senza nuovo rendering.
+
 Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle app H3. Una sola conversazione per testo, codice, immagini, canzoni, video, formule, grafici e diagrammi. I motori locali sono gestiti dall'app; non servono Ollama, LM Studio o ComfyUI. Gli LLM locali non richiedono chiavi API o abbonamenti; puoi scegliere anche provider LLM tramite API e server esterni per immagini, musica e video. Progetti con RAG, ricerca web e animazioni Manim restano nella stessa chat.
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.16.1-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.16.1/H3-Chat-0.16.1-windows-x64.zip) dalla [release v0.16.1](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.16.1), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.16.2-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.16.2/H3-Chat-0.16.2-windows-x64.zip) dalla [release v0.16.2](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.16.2), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 

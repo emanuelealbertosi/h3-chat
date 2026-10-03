@@ -202,6 +202,13 @@
         "size": 45571,
         "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
         "extract_to": "runtime/tools/documents"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/38/21/81eefc2224ce5e44131552333a703346f55f0e23cae7db20961931b9d298/av-19.0.0-cp312-abi3-win_amd64.whl",
+        "path": "runtime/downloads/tools/documents/av-19.0.0-cp312-abi3-win_amd64.whl",
+        "size": 28158185,
+        "sha256": "96e4c0981ec21cadfef4c0b840d04a5e3c3be821894aa6a7d7a8ee870ba6b727",
+        "extract_to": "runtime/tools/documents"
       }
     ]
   },

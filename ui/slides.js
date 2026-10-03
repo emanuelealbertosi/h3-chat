@@ -3,6 +3,7 @@ import hljs from 'highlight.js';
 import {exportPdf,exportDocx,exportPng} from './exports.js';
 import {layoutSlide} from './slide-layout.js';
 import {validateDesign,applyOverride} from './slide-design.js';
+import {repairSlideContrast} from './slide-contrast.js';
 
 export const slideFormats={'16:9':720,'4:3':960,'16:10':800,'1:1':1280};
 export function readDeck(content){
@@ -62,7 +63,7 @@ async function pageElement(deck,page,index,media,options,mount){
   const footer=document.createElement('div');footer.className='h3-slide-footer';
   const sources=(page.sources||[]).map(id=>{const source=(deck.references||[]).find(r=>r.id===id);return source?'['+id+'] '+source.label:'';}).filter(Boolean);
   footer.title=sources.join(' · ');footer.textContent=deck.title.slice(0,80)+((page.sources||[]).length?' · '+page.sources.map(id=>'['+id+']').join(' '):'')+' · '+(index+1)+' / '+deck.pages.length;frame.append(footer);
-  return frame;
+  repairSlideContrast(frame);return frame;
 }
 export async function renderSlides(target,value,options={}){
   const deck=readDeck(value.content);if(!deck)return false;

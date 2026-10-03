@@ -303,25 +303,32 @@ class Worker:
 
     def generate(self,request):
         from h3chat.video_options import resolve_canvas
+        generation_started=time.monotonic();timings={}
         torch,comfy=self.torch,self.comfy
         images=self.images(request['images'])
         opts=resolve_canvas(request['options'],request['plan'],[(im.shape[2],im.shape[1]) for im in images],request.get('format_prompt',request['plan'].get('prompt','')))
         request=request|{'options':opts}
         emit('stage',message=f"Video · formato {opts['aspect']} · {opts['output_width']}×{opts['output_height']} · "+('dall’immagine guida' if opts['aspect_source']=='image' else 'dal prompt' if opts['aspect_source']=='prompt' else 'dal preset'))
+        preparation_started=time.monotonic()
         if self.model is None and not self.offload:self.load_diffuser()
         if self.clip is None:self.load_conditioners()
+        timings['conditioner_reload']=time.monotonic()-preparation_started
         # Quantized parameters are rewrapped while offloading. no_grad avoids
         # inference tensors without version counters in PyTorch's .to() path.
         with torch.no_grad():
             emit('stage',message='Video · preparazione istruzioni, fotogrammi e audio')
             self.phase='Video · preparazione istruzioni, fotogrammi e audio'
+            conditioning_started=time.monotonic()
             positive,latent,master,grid_frames=self.condition(request,images)
+            timings['conditioning']=time.monotonic()-conditioning_started
             images=None
+            diffuser_started=time.monotonic()
             if self.offload:
                 emit('stage',message='Video · rilascio encoder e VAE dopo il condizionamento')
                 self.discard('clip','vae','audio_vae')
             if self.model is None:self.load_diffuser()
             attention_backend=self.configure_attention(opts.get('attention','auto'),opts.get('attention_chunks',0))
+            timings['diffuser_load']=time.monotonic()-diffuser_started
             negative=[[torch.zeros_like(value),info.copy()] for value,info in positive]
             model=self.h3.MiniMaxH3SigmaShift.execute(self.model,opts['shift_video'],opts['shift_audio'])[0]
             noise=comfy.sample.prepare_noise(latent['samples'],opts['seed'])
@@ -337,27 +344,36 @@ class Worker:
             samples=comfy.sample.sample(model,noise,opts['steps'],opts['cfg'],opts['sampler'],opts['scheduler'],positive,negative,latent['samples'],noise_mask=latent.get('noise_mask'),disable_pbar=True,seed=opts['seed'],
                 callback=progress)
             sampling_seconds=time.monotonic()-sampling_started
+            decoder_started=time.monotonic()
             if self.offload:
                 emit('stage',message='Video · rilascio diffusore prima della decodifica')
                 model=None
                 self.discard('model')
                 self.vae=comfy.sd.VAE(sd=comfy.utils.load_torch_file(self.files['vae'],safe_load=True))
+            timings['decoder_load']=time.monotonic()-decoder_started
             emit('stage',message='Video · decodifica fotogrammi sulla GPU')
             self.phase='Video · decodifica fotogrammi sulla GPU'
+            decode_started=time.monotonic()
             pixels=self.vae.decode(samples.unbind()[0])
             if pixels.ndim==5:pixels=pixels.reshape(-1,*pixels.shape[-3:])
             if len(pixels)<opts['frames']:raise RuntimeError('Il VAE non ha decodificato tutti i fotogrammi.')
             left=(opts['width']-opts['output_width'])//2;top=(opts['height']-opts['output_height'])//2
             pixels=pixels[:,top:top+opts['output_height'],left:left+opts['output_width'],:]
+            timings['video_decode']=time.monotonic()-decode_started
             emit('stage',message='Video · preparazione audio e salvataggio MP4')
             self.phase='Video · preparazione audio e salvataggio MP4'
+            audio_started=time.monotonic()
             if master is None:
                 from comfy_extras.nodes_audio import vae_decode_audio
                 if self.audio_vae is None:
                     self.audio_vae=comfy.sd.VAE(sd=comfy.utils.load_torch_file(self.files['audio_vae'],safe_load=True))
                 master=vae_decode_audio(self.audio_vae,{'samples':samples})
+            timings['audio_decode']=time.monotonic()-audio_started
+            saving_started=time.monotonic()
             write_video(request['output'],pixels,master,opts['frames'])
-        emit('done',parameters={'fps':24,'duration':opts['frames']/24,'model_frames':grid_frames,'output_frames':opts['frames'],'width':opts['output_width'],'height':opts['output_height'],'canvas_width':opts['width'],'canvas_height':opts['height'],'aspect':opts['aspect'],'aspect_source':opts['aspect_source'],'format_image':opts['format_image'],'engine':'minimax-h3','attention_backend':attention_backend,'attention_chunks':self.attention_chunks,'sampling_seconds':sampling_seconds,'step_seconds':step_seconds,'audio_sample_rate':master['sample_rate'],'audio_preserved':any(x['role'] in ('lipsync','reuse') for x in request['plan']['audios'])})
+            timings['saving']=time.monotonic()-saving_started
+        timings['sampling']=sampling_seconds;timings['generation']=time.monotonic()-generation_started
+        emit('done',parameters={'fps':24,'duration':opts['frames']/24,'model_frames':grid_frames,'output_frames':opts['frames'],'width':opts['output_width'],'height':opts['output_height'],'canvas_width':opts['width'],'canvas_height':opts['height'],'aspect':opts['aspect'],'aspect_source':opts['aspect_source'],'format_image':opts['format_image'],'engine':'minimax-h3','attention_backend':attention_backend,'attention_chunks':self.attention_chunks,'sampling_seconds':sampling_seconds,'step_seconds':step_seconds,'timings':timings,'audio_sample_rate':master['sample_rate'],'audio_preserved':any(x['role'] in ('lipsync','reuse') for x in request['plan']['audios'])})
 
 def main():
     emit('hello');worker=Worker()

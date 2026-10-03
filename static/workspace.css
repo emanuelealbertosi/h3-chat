@@ -19,5 +19,6 @@
 .model-identity-dialog{width:650px;max-width:94vw}
 .settings-grid>.card,.settings-grid .field{min-width:0}.field select{max-width:100%}
 .model-top h3{overflow-wrap:anywhere;min-width:0}
+.audio-downloads{display:flex;flex-wrap:wrap;align-items:center;gap:14px}.audio-downloads button{font:inherit}.audio-export-error{flex-basis:100%}
 
 .project-import-actions{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}.project-dropzone{border:2px dashed #b2c7b7;border-radius:12px;padding:24px 18px;text-align:center;cursor:pointer;background:#f5f8f1;color:#244f43;margin-bottom:14px;transition:background .15s,border-color .15s}.project-dropzone strong,.project-dropzone span,.project-dropzone small{display:block}.project-dropzone span{font-size:13px;margin:8px 0}.project-dropzone small{font-size:11px;color:#65786c}.project-dropzone.dragging,.project-dropzone:focus-visible{background:#e1edde;border-color:#346e55;outline:2px solid #346e55;outline-offset:2px}.project-dropzone[aria-disabled=true]{opacity:.6;cursor:wait}.project-path-options{margin:18px 0}.project-path-options summary{cursor:pointer;font-size:13px;color:#526e60}.project-path-options>p,#project-import-status{font-size:12px;line-height:1.6;overflow-wrap:anywhere}.project-path-options .field{margin-top:14px}

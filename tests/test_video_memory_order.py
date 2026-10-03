@@ -93,6 +93,10 @@ class VideoMemoryOrderTests(unittest.TestCase):
                 self.assertEqual(len(durations),2)
                 self.assertTrue(all(seconds>=0 for seconds in durations))
                 self.assertGreaterEqual(values['parameters']['sampling_seconds'],sum(durations))
+                timings=values['parameters']['timings']
+                self.assertEqual(timings['sampling'],values['parameters']['sampling_seconds'])
+                self.assertTrue(all(value>=0 for value in timings.values()))
+                self.assertGreaterEqual(timings['generation'],timings['conditioning']+timings['sampling'])
         self.assertEqual([values['step'] for event,values in events if event=='progress'],
             [1,2]*(2 if offload else 1))
         self.assertEqual(lifetime,

@@ -164,7 +164,7 @@ async function renderChat(){
       activity.innerHTML=`<div class="thinking" aria-hidden="true"><i></i><i></i><i></i></div><div><strong>${esc(title)}</strong><span class="activity-stage">${esc(job?.stage||'Preparazione del motore…')}</span><small class="activity-elapsed">Tempo trascorso: ${duration}</small></div>`;
       content.append(activity);
     }
-    appendMedia(content,message.media);appendMusicDetails(content,message,state.settings.chat_advanced);appendVideoDetails(content,message,state.settings.chat_advanced);appendToolsDetails(content,message,state.settings.chat_advanced);
+    appendMedia(content,message.media,{api});appendMusicDetails(content,message,state.settings.chat_advanced);appendVideoDetails(content,message,state.settings.chat_advanced);appendToolsDetails(content,message,state.settings.chat_advanced);
     if(message.role==='assistant')projects.append(content,message);
     if(message.meta.quote_warnings?.length){const warning=document.createElement('p');warning.className='render-error';warning.textContent='Citazione letterale da verificare: '+message.meta.quote_warnings.join(' ');content.append(warning);}
     if(message.role==='assistant'&&message.meta.execution_mode){const hint=document.createElement('p');hint.className='mode-hint';hint.textContent=message.meta.execution_mode+(message.meta.device_warning?' · '+message.meta.device_warning:'');content.append(hint);}
@@ -177,6 +177,9 @@ async function renderChat(){
     if(message.role==='assistant'&&message.meta.think_level){const badge=document.createElement('span');badge.className='badge';badge.textContent='Think '+message.meta.think_level;badge.title=message.meta.api?message.meta.think_note:message.meta.think_budget+' token massimi di ragionamento';article.querySelector('.message-head').append(badge);}
     if(['failed','interrupted','cancelled'].includes(message.status)){const err=document.createElement('div');err.className='message-error';err.textContent=message.meta.error||'Risposta interrotta. Puoi riprovare.';content.append(err);}
     const actions=article.querySelector('.message-actions');
+    if(message.status==='failed'&&message.meta.intent==='manim'&&message.meta.error?.startsWith('Durata errata:')){
+      const recover=document.createElement('button');recover.className='text-button';recover.textContent='Recupera animazione';recover.onclick=act(async()=>{await api('/chats/'+current+'/recover-manim',{message_id:message.id});await refresh();toast('Animazione recuperata.');});actions.append(recover);
+    }
     if(message.content){const copy=document.createElement('button');copy.className='text-button';copy.textContent='Copia';copy.onclick=act(async()=>{await navigator.clipboard.writeText(message.content);toast('Copiato.');});actions.append(copy);}
     if(message.role==='assistant'&&message.status==='done'){
       const toCanvas=document.createElement('button');toCanvas.className='text-button';toCanvas.textContent=message.meta.canvas?'Apri canvas':'Apri nel canvas';toCanvas.onclick=act(async()=>{
@@ -288,7 +291,7 @@ async function renderCanvas(){
       canvasFollow=false;canvasSelection++;canvas.content=content;canvasDirty=true;$('#canvas-source').value=content;
       await persistCanvas();await renderCanvas();
     }});}catch(e){$('#canvas-preview').textContent=e.message;}}
-    else{$('#canvas-preview').classList.remove('slides-preview');await renderRich($('#canvas-preview'),value.content,options);appendMedia($('#canvas-preview'),value.media);}
+    else{$('#canvas-preview').classList.remove('slides-preview');await renderRich($('#canvas-preview'),value.content,options);appendMedia($('#canvas-preview'),value.media,{api});}
   });await renderQueue;}
 }
 async function persistCanvas(){clearTimeout(canvasSaveTimer);if(canvasSaving){await canvasSaving;if(canvasDirty)return persistCanvas();return;}if(!canvasDirty)return;

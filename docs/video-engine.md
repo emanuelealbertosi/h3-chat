@@ -194,6 +194,10 @@ decoding and MP4 saving have distinct status messages. Cancelling the job stops
 the owned worker and releases its model process.
 
 Sampling logs record each H3 step duration. Completed generation parameters
-include `sampling_seconds` and `step_seconds`, visible in advanced chat details.
+include `sampling_seconds` and `step_seconds`. The last step time is shown
+during generation; a summary and expandable per-phase timings appear in chat
+even when advanced details are disabled. `startup_seconds` measures worker
+activation/loading, while `timings` records conditioning, diffuser loading,
+sampling, decoder loading, video/audio decoding and MP4 saving.
 The first interval includes sampler preparation and GPU transfers; these are
 wall-clock measurements, not isolated CUDA-kernel profiling.

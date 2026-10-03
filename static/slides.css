@@ -18,7 +18,7 @@
 .h3-slide-page .rich :is(p,ul,ol,pre,figure,blockquote,table){margin:0 0 calc(10px * var(--slide-fit));font-size:inherit;color:inherit}
 .h3-slide-page .rich>:last-child{margin-bottom:0}
 .h3-slide-page .rich :is(ul,ol){padding-left:1.25em}.h3-slide-page .rich li{margin:.2em 0;padding-left:.1em}
-.h3-slide-page .rich li::marker{color:var(--slide-accent);font-weight:750}
+.h3-slide-page .rich li::marker{color:currentColor;font-weight:750}
 .h3-slide-page .slide-heading,.h3-slide-page .slide-continuation-title{font:800 calc(var(--node-font-size,48px) * var(--slide-fit))/1.12 var(--node-font,Manrope),sans-serif;letter-spacing:-1.6px;color:inherit}
 .h3-slide-page .slide-heading :is(p,h1,h2,h3){font:inherit;letter-spacing:inherit;margin:0;color:inherit}
 .slide-cover .slide-heading{--node-font-size:62px;letter-spacing:-2px}

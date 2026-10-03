@@ -22,6 +22,17 @@ export function renderVideoSettings(container,{state,draft,link,edit,install,cha
  container.querySelector('[data-video-action="reset"]').onclick=()=>{if(draft.video_overrides)delete draft.video_overrides[selected];render();changed();};
 }
 export function appendVideoDetails(content,message,advanced){
+ const parameters=message.meta.video_parameters;
+ if(parameters&&typeof parameters.sampling_seconds==='number'){
+  const time=value=>value<60?Math.round(value)+' s':Math.floor(value/60)+' min '+Math.round(value%60)+' s';
+  const steps=(parameters.step_seconds||[]).filter(x=>Number.isFinite(x)&&x>=0),steady=steps.length>1?steps.slice(1):steps;
+  const note=document.createElement('p');note.className='small-note video-performance';
+  note.textContent='Tempi video · generazione '+time(parameters.sampling_seconds)+(steady.length?' · '+(steady.reduce((a,b)=>a+b,0)/steady.length).toFixed(1)+' s/passo':'')+(parameters.attention_backend?' · '+(parameters.attention_backend==='sage'?'SageAttention':'PyTorch'):'');content.append(note);
+  if(parameters.timings){const details=document.createElement('details'),summary=document.createElement('summary'),list=document.createElement('p');details.className='video-timings';summary.textContent='Tempi delle singole fasi';
+   const labels={startup:'Avvio e caricamento componenti',conditioner_reload:'Ricaricamento encoder',conditioning:'Preparazione prompt e riferimenti',diffuser_load:'Lettura diffusore',sampling:'Generazione e trasferimenti GPU',decoder_load:'Rilascio diffusore e caricamento VAE',video_decode:'Decodifica video',audio_decode:'Decodifica audio',saving:'Salvataggio MP4'};
+   list.textContent=Object.entries({startup:parameters.startup_seconds,...parameters.timings}).filter(([key,value])=>labels[key]&&Number.isFinite(value)).map(([key,value])=>labels[key]+': '+time(value)).join(' · ');details.append(summary,list);content.append(details);
+  }
+ }
  if(!advanced||!message.meta.video_plan)return;
  const details=document.createElement('details'),summary=document.createElement('summary'),pre=document.createElement('pre');
  summary.textContent='Istruzioni e parametri video · Assistant '+(message.meta.assistant_on?'On':'Off');

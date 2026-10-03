@@ -62,15 +62,33 @@ class FlowTests(unittest.TestCase):
         self.assertEqual(self.options['duration'],30);self.assertEqual(self.worker,'manim-worker.py')
         self.assertEqual(answer['media'],[]);artifact=answer['meta']['artifact']
         self.assertIn('manim-python',artifact['content']);self.assertTrue(any(m['name']=='scena.py' for m in artifact['media']))
-    def test_generated_short_video_is_repaired_to_requested_thirty_seconds(self):
-        self.durations=iter([10,30]);source={'title':'Demo','scene_name':'Demo','code':CODE}
-        job=self.job({'prompt':'crea animazione Manim di 30s','canvas':False})
-        answer,llm=self.execute(job,[(json.dumps(source),'stop'),(json.dumps(source),'stop')])
-        self.assertEqual(answer['status'],'done');self.assertEqual(llm.call_count,2)
-        self.assertEqual(answer['meta']['manim_duration'],30);self.assertEqual(answer['meta']['manim_repairs'],1)
-        self.assertIn('Required total timeline: 30',llm.call_args_list[0].args[0][-1]['content'])
-    def test_manual_wrong_duration_fails_and_preserves_source(self):
+    def test_generated_duration_difference_preserves_video_without_extra_llm(self):
+        self.durations=iter([28]);source={'title':'Demo','scene_name':'Demo','code':CODE}
+        job=self.job({'prompt':'crea animazione Manim di 20s','canvas':False})
+        answer,llm=self.execute(job,[(json.dumps(source),'stop')])
+        self.assertEqual(answer['status'],'done');self.assertEqual(llm.call_count,1)
+        self.assertEqual(answer['meta']['manim_duration'],28);self.assertEqual(answer['meta']['manim_repairs'],0)
+        self.assertIn('28.0 s',answer['meta']['manim_timing_note']);self.assertTrue(any(m['mime']=='video/mp4' for m in answer['media']))
+        self.assertIn('Required total timeline: 20',llm.call_args_list[0].args[0][-1]['content'])
+    def test_manual_duration_difference_preserves_source_and_publishes_video(self):
         self.durations=iter([10]);job=self.job({'prompt':'renderizza Manim 30 secondi','lab':'manim','lab_source':CODE,'canvas':True})
         answer,llm=self.execute(job)
-        self.assertEqual(answer['status'],'failed');self.assertIn('Durata errata',answer['meta']['error'])
+        self.assertEqual(answer['status'],'done');self.assertIn('10.0 s',answer['meta']['manim_timing_note'])
+        self.assertTrue(any(m['mime']=='video/mp4' for m in answer['meta']['artifact']['media']))
         self.assertIn(CODE,answer['meta']['artifact']['content']);llm.assert_not_called()
+    def test_recover_legacy_duration_error_without_rerender_or_overwriting_new_canvas(self):
+        from h3chat.manim_artifact import recover
+        job=self.job({'prompt':'Manim 20s','lab':'manim','lab_source':CODE,'canvas':True})
+        folder=self.app.data/'outputs'/job['id'];folder.mkdir(parents=True)
+        (folder/'animation.mp4').write_bytes(b'\0\0\0\x18ftypisom'+b'synthetic'*20)
+        artifact={'title':'Scena precedente','content':'```manim-python\n'+CODE+'\n```','media':[]}
+        self.app.store.update_answer(job,'','failed',[],{'intent':'manim','canvas':True,'artifact':artifact,'error':'Durata errata: il video dura 28.00 s; richiesti 20 s. Correggi i tempi.'})
+        self.app.store.execute("UPDATE jobs SET status='failed' WHERE id=?",(job['id'],))
+        self.app.store.canvas_history.save(job['chat_id'],artifact,key='job:'+job['id'],message_id=job['message_id'])
+        self.app.store.canvas_history.save(job['chat_id'],{'title':'Documento successivo','content':'Da conservare','media':[]},key='later')
+        with patch.object(self.app.engine,'tool_call',side_effect=AssertionError('Must not render')):recover(self.app,job['chat_id'],job['message_id'])
+        answer=self.app.store.messages(job['chat_id'])[-1];self.assertEqual(answer['status'],'done')
+        self.assertNotIn('error',answer['meta']);self.assertEqual(answer['meta']['manim_duration'],28)
+        self.assertTrue(any(x['mime']=='video/mp4' for x in answer['meta']['artifact']['media']))
+        self.assertEqual(self.app.store.canvas_history.get(job['chat_id'])['content'],'Da conservare')
+        with self.assertRaises(ValueError):recover(self.app,'other-chat',job['message_id'])

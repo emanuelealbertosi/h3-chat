@@ -84,7 +84,7 @@ def main():
     print('[1/5] Interfaccia e launcher precompilati',flush=True);install_bundle()
     print('[2/5] Motori chat e immagini CPU',flush=True);install_runtime('cpu')
     print('[3/5] Motore musicale CPU',flush=True);install_runtime('music_cpu')
-    print('[4/5] Lettura PDF e Word',flush=True);install_runtime('tools_documents')
+    print('[4/5] PDF, Word e conversione audio WAV/MP3',flush=True);install_runtime('tools_documents')
     print('[5/5] Verifica motori',flush=True)
     subprocess.run([sys.executable,'-X','utf8',str(ROOT/'scripts/check_native.py')],check=True)
     worker=ROOT/'runtime/music/cpu/h3-music-worker.exe'

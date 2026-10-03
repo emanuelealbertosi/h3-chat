@@ -126,7 +126,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.file(safe_join(ROOT / "static", path[len("/static/"):]))
                 if path.startswith("/exports/"):
                     relative = path[len("/exports/"):]
-                    if len(parts) != 3 or parts[-1] not in ("document.pdf","document.html"):
+                    if len(parts) != 3 or parts[-1] not in ("document.pdf","document.html","audio.wav","audio.mp3"):
                         raise PermissionError("File non disponibile.")
                     return self.file(safe_join(self.app.data / "exports", relative))
                 if path.startswith("/media/"):
@@ -176,6 +176,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(self.app.remove_external_model(parts[2]))
             if path == "/api/export/pdf" and method == "POST":
                 return self.json(export_pdf(ROOT, self.app.data, body))
+            if path == "/api/export/audio" and method == "POST":
+                from h3chat.audio_export import export_audio
+                media=self.app.validate_media([{'id':body.get('id')}],canvas=True)[0]
+                return self.json(export_audio(ROOT,self.app.data,media,body.get('format')))
             if path == "/api/export/html" and method == "POST":
                 from h3chat.pdf_export import export_html
                 return self.json(export_html(ROOT, self.app.data, body))
@@ -200,6 +204,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(self.app.send(parts[2], body), 202)
             if len(parts) == 4 and parts[:2] == ["api", "chats"] and parts[3] == "regenerate" and method == "POST":
                 return self.json(self.app.regenerate(parts[2]), 202)
+            if len(parts) == 4 and parts[:2] == ['api','chats'] and parts[3] == 'recover-manim' and method == 'POST':
+                from h3chat.manim_artifact import recover
+                return self.json(recover(self.app,parts[2],body.get('message_id')))
             if len(parts) == 3 and parts[:2] == ["api", "chats"]:
                 chat_id = parts[2]
                 if method == "DELETE":

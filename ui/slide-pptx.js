@@ -4,11 +4,12 @@ import Chart from 'chart.js/auto';
 import {toPng} from 'html-to-image';
 import {saveBlob} from './render.js';
 import {chartData} from './pptx-chart-data.js';
+import {parseColor,colorHex,composite} from './color-contrast.js';
 
 const NS='http://schemas.openxmlformats.org/drawingml/2006/chart';
 function color(raw){
-  const values=raw.match(/[\d.]+/g);if(!values||values.length<3)return {color:'FFFFFF',transparency:100};
-  return {color:values.slice(0,3).map(n=>Math.round(Number(n)).toString(16).padStart(2,'0')).join('').toUpperCase(),transparency:Math.round((1-Number(values[3]??1))*100)};
+  const values=parseColor(raw);if(!values)return {color:'FFFFFF',transparency:100};
+  return {color:colorHex(values).slice(1).toUpperCase(),transparency:Math.round((1-values[3])*100)};
 }
 function box(element,frame){const r=element.getBoundingClientRect(),f=frame.getBoundingClientRect();return {x:(r.left-f.left)/96,y:(r.top-f.top)/96,w:r.width/96,h:r.height/96};}
 function font(style){return /Comic Sans/i.test(style.fontFamily)?'Comic Sans MS':/Consolas|monospace|Courier/i.test(style.fontFamily)?'Courier New':/Cormorant|Cambria|serif/i.test(style.fontFamily)&&!/sans-serif/i.test(style.fontFamily)?'Cambria':'Arial';}
@@ -43,9 +44,12 @@ function chart(slide,pres,canvas,frame){
   const instance=Chart.getChart(canvas);if(!instance)return false;const cfg=instance.config,series=cfg.data.datasets;
   const type=cfg.type;if(!['line','bar','scatter','pie','doughnut'].includes(type))return false;
   const data=chartData(type,series,cfg.data.labels||[]);
+  const contrast=instance.$h3Contrast||{foreground:'#53636a',background:'#ffffff'},foreground=color(contrast.foreground).color,background=color(contrast.background).color;
+  const grid=colorHex(composite([...parseColor(contrast.foreground).slice(0,3),.18],parseColor(contrast.background))).slice(1).toUpperCase();
   const options={...box(canvas,frame),showLegend:series.length>1,legendPos:'b',showTitle:!!cfg.options.plugins?.title?.text,title:String(cfg.options.plugins?.title?.text||''),titleFontSize:16,
     chartColors:['087F8C','6850A1','B84944','B5964D','4375A0'],showValue:['pie','doughnut'].includes(type),showPercent:['pie','doughnut'].includes(type),catAxisLabelFontSize:11,valAxisLabelFontSize:11,
-    catAxisLabelColor:'53636A',valAxisLabelColor:'53636A',valGridLine:{color:'DAE1E5',size:.5},catGridLine:{style:'none'},showBorder:false,showCatName:false};
+    catAxisLabelColor:foreground,valAxisLabelColor:foreground,legendColor:foreground,titleColor:foreground,valGridLine:{color:grid,size:.5},catGridLine:{style:'none'},showBorder:false,showCatName:false,
+    chartArea:{fill:{color:background}},plotArea:{fill:{color:background}}};
   if(type==='bar')options.barDir='col';
   if(type==='scatter')Object.assign(options,{lineSize:0,lineDataSymbol:'circle',lineDataSymbolSize:6});
   slide.addChart(pres.ChartType[type],data,options);return true;
@@ -75,7 +79,10 @@ export async function exportPowerPoint(root,deck,title){
   pres.defineLayout({name:'H3',width:1280/96,height:height/96});pres.layout='H3';pres.author='H3-Chat';pres.title=title;pres.subject=deck.title;pres.theme={headFontFace:'Cambria',bodyFontFace:'Arial',lang:'it-IT'};
   for(const frame of root.querySelectorAll('.h3-slide-page')){
     const slide=pres.addSlide();slide.background={color:color(getComputedStyle(frame).backgroundColor).color};
-    for(const element of frame.querySelectorAll('.h3-slide-node,pre,th,td')){
+    // Preserve every painted HTML surface, including inline code and figure
+    // labels: their readable text color depends on that background in the DOM.
+    for(const element of frame.querySelectorAll('*')){
+      if(element.closest('.no-export,svg,math,.katex')||getComputedStyle(element).display==='none')continue;
       const style=getComputedStyle(element),fill=color(style.backgroundColor),border=parseFloat(style.borderTopWidth)||0;if(fill.transparency===100&&!border)continue;
       const bounds=box(element,frame),line=border?{...color(style.borderTopColor),width:border*.75}:{...fill,transparency:100};if(bounds.w>0&&bounds.h>0)slide.addShape(parseFloat(style.borderRadius)?pres.ShapeType.roundRect:pres.ShapeType.rect,{...bounds,rectRadius:.12,fill:{...fill},line,radius:.12});
     }

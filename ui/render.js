@@ -72,12 +72,27 @@ export async function renderRich(target,text,{final=true,sources=[],onCitation=n
   }
 }
 
-export function appendMedia(target,media) {
+export function appendMedia(target,media,{api}={}) {
   for(const m of media||[]){
     const figure=document.createElement('figure'),url='/media/'+escape(m.path);
     if(!m.mime?.startsWith('image/')&&!m.mime?.startsWith('audio/')&&!m.mime?.startsWith('video/')){figure.className='document-output';figure.innerHTML=`<a href="${url}" download="${escape(m.name)}">▤ ${escape(m.name)} · Scarica</a>`;}
     else if(m.mime?.startsWith('video/')){figure.className='video-output';figure.innerHTML=`<video controls playsinline preload="metadata" src="${url}" aria-label="${escape(m.name)}"></video><figcaption><a href="${url}" download="${escape(m.name)}">Scarica MP4</a></figcaption>`;}
-    else if(m.mime?.startsWith('audio/')){figure.className='audio-output';figure.innerHTML=`<div class="audio-title">♫ ${escape(m.name)}</div><audio class="no-export" controls preload="metadata" src="${url}" aria-label="${escape(m.name)}"></audio><figcaption class="no-export"><a href="${url}" download="${escape(m.name)}">Scarica audio originale</a></figcaption>`;}
+    else if(m.mime?.startsWith('audio/')){
+      figure.className='audio-output';figure.innerHTML=`<div class="audio-title">♫ ${escape(m.name)}</div><audio class="no-export" controls preload="metadata" src="${url}" aria-label="${escape(m.name)}"></audio><figcaption class="no-export audio-downloads"></figcaption>`;
+      const caption=figure.querySelector('figcaption');
+      for(const format of ['wav','mp3']){
+        if(m.path.toLowerCase().endsWith('.'+format)){const a=document.createElement('a');a.href='/media/'+m.path;a.download=m.name;a.textContent='Scarica '+format.toUpperCase();caption.append(a);}
+        else if(api){const button=document.createElement('button');button.type='button';button.className='text-button';button.textContent='Scarica '+format.toUpperCase();button.dataset.audioFormat=format;
+          button.onclick=async()=>{
+            caption.querySelector('.audio-export-error')?.remove();button.disabled=true;button.textContent='Conversione '+format.toUpperCase()+'…';
+            try{const result=await api('/export/audio',{id:m.id,format});const a=document.createElement('a');a.href=result.url;a.download=result.name;document.body.append(a);a.click();a.remove();}
+            catch(error){const notice=document.createElement('span');notice.className='audio-export-error render-error';notice.setAttribute('role','alert');notice.textContent=error.message;caption.append(notice);}
+            finally{button.disabled=false;button.textContent='Scarica '+format.toUpperCase();}
+          };caption.append(button);
+        }
+      }
+      if(!m.path.toLowerCase().endsWith('.wav')&&!m.path.toLowerCase().endsWith('.mp3')){const a=document.createElement('a');a.href='/media/'+m.path;a.download=m.name;a.textContent='Scarica originale';caption.append(a);}
+    }
     else{figure.className='image-output';figure.innerHTML=`<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="${escape(m.name)}" loading="lazy"></a><figcaption class="no-export">${escape(m.name)} <a href="${url}" download>Scarica originale</a></figcaption>`;}
     target.append(figure);
   }

@@ -1,4 +1,6 @@
 import {themes,typography,designs,encodeDeck,applyOverride,validateDesign} from './slide-design.js';
+import {parseColor,colorHex} from './color-contrast.js';
+import {effectiveBackground} from './slide-contrast.js';
 export function mountEditor(target,deck,index,frames,onChange,session={}){
   const page=deck.pages[index];session.undo||=[];session.redo||=[];
   const panel=document.createElement('section');panel.className='slide-editor no-export';panel.ariaLabel='Modifica grafica delle slide';
@@ -6,6 +8,7 @@ export function mountEditor(target,deck,index,frames,onChange,session={}){
   target.querySelector('.slides-navigation').after(panel);
   const q=id=>panel.querySelector('#'+id),error=e=>{q('slide-editor-error').hidden=!e;q('slide-editor-error').textContent=e?.message||'';};
   const designLabel=document.createElement('label');designLabel.textContent='Stile ';const designSelect=document.createElement('select');designSelect.id='slide-design';designLabel.append(designSelect);panel.querySelector('.slide-editor-top').prepend(designLabel);
+  panel.querySelector('.slide-editor-help').append(' Il contrasto viene corretto automaticamente quando il colore scelto è poco leggibile.');
   const maxHeight=Math.min(1164,parseFloat(frames[0].style.getPropertyValue('--slide-height'))-220);q('slide-height').max=String(maxHeight);
   const comicFont=document.createElement('option');comicFont.textContent='Comic Sans MS';q('slide-font').append(comicFont);
   for(const [id,items,selected] of [['slide-theme',themes,deck.theme||'lagoon'],['slide-typography',typography,deck.typography||'modern'],['slide-design',designs,deck.design||'professional']]){
@@ -34,7 +37,7 @@ export function mountEditor(target,deck,index,frames,onChange,session={}){
     const el=target.querySelector(`[data-node-id="${id}"]`),style=el?getComputedStyle(selected.kind==='code'?el.querySelector('pre')||el:el):null,value=page.overrides?.[id]||{};
     q('slide-font-size').value=value.font_size||Math.round(parseFloat(style?.fontSize||27)/(Number(frames[0].style.getPropertyValue('--slide-fit'))||1));
     const inheritedFont=['Comic Sans MS','Cormorant','Consolas'].find(font=>style?.fontFamily.includes(font))||'Manrope';
-    q('slide-font').value=value.font||(selected.kind==='code'?'Consolas':inheritedFont);q('slide-color').value=value.color||'#163e48';q('slide-background').value=value.background||'#ffffff';q('slide-align').value=value.align||'left';
+    q('slide-font').value=value.font||(selected.kind==='code'?'Consolas':inheritedFont);q('slide-color').value=colorHex(parseColor(style?.color)||[22,62,72,1]);q('slide-background').value=el?colorHex(effectiveBackground(el,el.closest('.h3-slide-page'))):'#ffffff';q('slide-align').value=value.align||'left';
     delete q('slide-color').dataset.changed;delete q('slide-background').dataset.changed;
     q('slide-width').value=value.width||'';q('slide-height').value=value.height||'';
     q('slide-text').disabled=selected.kind==='group';

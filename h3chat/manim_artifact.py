@@ -1,5 +1,7 @@
 """Full Manim generation, editing, bounded repair and artifact preservation."""
 import json
+import math
+import re
 import time
 from pathlib import Path
 from .downloads import Cancelled, safe_join
@@ -7,6 +9,38 @@ from .manim_code import BRIEF, SCHEMA, duration, source_from_text, validate_sour
 from .lab import files, validate_scene
 from .store import uid
 from .tools_runtime import status
+
+
+def recover(app,chat_id,message_id):
+    """Publish a completed legacy rendering rejected only for its running time."""
+    if not isinstance(message_id,str) or not re.fullmatch('[0-9a-f]{32}',message_id):raise ValueError('Messaggio non valido.')
+    job=app.store.one('SELECT * FROM jobs WHERE chat_id=? AND message_id=?',(chat_id,message_id))
+    message=app.store.one('SELECT * FROM messages WHERE chat_id=? AND id=?',(chat_id,message_id))
+    if not job or not message or job['status']!='failed' or message['status']!='failed':raise ValueError('Animazione non recuperabile.')
+    meta=json.loads(message['meta'])
+    match=re.match(r'^Durata errata: il video dura ([0-9.]+) s; richiesti ([0-9.]+) s\.',meta.get('error',''))
+    if meta.get('intent')!='manim' or not match or not re.fullmatch('[0-9a-f]{32}',job['id']):raise ValueError('Questo errore richiede un nuovo rendering.')
+    actual,requested=map(float,match.groups())
+    if not all(math.isfinite(x) and x>0 for x in (actual,requested)):raise ValueError('Durata non valida.')
+    path=safe_join(app.data,'outputs/'+job['id']+'/animation.mp4')
+    if not path.is_file() or not 12<path.stat().st_size<=512*1024**2:raise ValueError('Il video precedente non è più disponibile. Rigenera la richiesta.')
+    with path.open('rb') as stream:
+        if stream.read(12)[4:8]!=b'ftyp':raise ValueError('Il file precedente non è un video valido.')
+    artifact=meta.get('artifact')
+    if not isinstance(artifact,dict):raise ValueError('Sorgente dell’animazione non disponibile.')
+    media=[{'id':uid(),'name':'animazione.mp4','path':path.relative_to(app.data).as_posix(),'mime':'video/mp4'},
+           *[item for item in artifact.get('media',[]) if item.get('mime')!='video/mp4']]
+    artifact=artifact|{'media':media};meta.update(artifact=artifact,manim_duration=actual,
+        manim_timing_note=f'Durata effettiva: {actual:.1f} s · richiesta: {requested:g} s.')
+    meta.pop('error',None)
+    if meta.get('canvas'):
+        head=app.store.one('SELECT a.message_id FROM canvas_heads h JOIN canvas_artifacts a ON a.id=h.artifact_id WHERE h.chat_id=?',(chat_id,))
+        app.store.canvas_history.save(chat_id,artifact,key='job:'+job['id'],message_id=message_id,activate=bool(head and head['message_id']==message_id))
+    app.store.execute("UPDATE messages SET content=?,status='done',media=?,meta=? WHERE chat_id=? AND id=?",
+        ('Ho recuperato l’animazione nel canvas.' if meta.get('canvas') else artifact['content'],json.dumps([] if meta.get('canvas') else media),json.dumps(meta),chat_id,message_id))
+    app.store.execute("UPDATE jobs SET status='done',error='',stage='Animazione recuperata' WHERE id=?",(job['id'],))
+    app.store.execute('UPDATE chats SET updated=? WHERE id=?',(time.time(),chat_id))
+    return {'ok':True}
 
 
 def build(app,job,payload,history,settings,model,cancel,stage,log_path,meta):
@@ -62,8 +96,10 @@ def build(app,job,payload,history,settings,model,cancel,stage,log_path,meta):
             path=Path(rendered['path']).resolve()
             if not path.is_relative_to(folder.resolve()) or not path.is_file():raise ValueError('Output Manim non disponibile.')
             actual=rendered.get('duration')
+            # Duration is a target, not a reason to discard a valid rendering.
+            # Preserve the complete scene and report its actual running time.
             if (generated or explicit) and actual is not None and abs(actual-opts['duration'])>max(.15,2/opts['fps']):
-                raise ValueError(f'Durata errata: il video dura {actual:.2f} s; richiesti {opts["duration"]} s. Correggi i tempi di play e wait, senza limitarti a un fermo immagine finale.')
+                meta['manim_timing_note']=f'Durata effettiva: {actual:.1f} s · richiesta: {opts["duration"]:g} s.'
             media.insert(0,{'id':uid(),'name':'animazione.mp4','path':path.relative_to(app.data).as_posix(),'mime':'video/mp4'})
             for extra in [folder/'manim-render.log',*[Path(p) for p in rendered.get('latex',[])]]:
                 if extra.is_file() and extra.resolve().is_relative_to(folder.resolve()):media.append({'id':uid(),'name':extra.name,'path':extra.relative_to(app.data).as_posix(),'mime':'text/plain' if extra.suffix=='.log' else 'application/x-tex'})
