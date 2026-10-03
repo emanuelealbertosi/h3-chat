@@ -157,6 +157,13 @@ class HistoryApiTests(unittest.TestCase):
                 self.assertEqual(cm.exception.code, 403)
                 request(path, {}, 'POST')
                 self.assertEqual(request(f'/api/canvas/{chat}')['id'], old['id'])
+                outputs = Path(folder) / 'outputs'; outputs.mkdir(exist_ok=True)
+                (outputs / 'manim-render.log').write_text('Synthetic renderer diagnostics')
+                with urllib.request.urlopen(base + '/media/outputs/manim-render.log') as response:
+                    self.assertEqual(response.read(), b'Synthetic renderer diagnostics')
+                with self.assertRaises(urllib.error.HTTPError) as cm:
+                    urllib.request.urlopen(base + '/media/logs/private.log')
+                self.assertEqual(cm.exception.code, 403)
             finally:
                 server.shutdown(); server.server_close(); thread.join(); app.close()
 

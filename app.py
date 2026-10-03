@@ -131,7 +131,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.file(safe_join(self.app.data / "exports", relative))
                 if path.startswith("/media/"):
                     relative = path[len("/media/"):]
-                    if not relative.startswith(("uploads/", "outputs/")) or Path(relative).suffix not in (".png", ".jpg", ".wav", ".mp3", ".flac", ".ogg", ".mp4", ".pdf", ".docx", ".txt", ".srt", ".py", ".json", ".tex"):
+                    if not relative.startswith(("uploads/", "outputs/")) or Path(relative).suffix not in (".png", ".jpg", ".wav", ".mp3", ".flac", ".ogg", ".mp4", ".pdf", ".docx", ".txt", ".srt", ".py", ".json", ".tex", ".log"):
                         raise PermissionError("File non disponibile.")
                     return self.file(safe_join(self.app.data, relative))
                 return self.json({"error": "Risorsa non trovata."}, 404)
