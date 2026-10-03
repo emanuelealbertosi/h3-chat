@@ -9,6 +9,15 @@ Return JSON with title, code and scene_name. Use `from manim import *` and impor
 numpy as np when needed. Define the named Scene or ThreeDScene subclass with a
 construct method. Full Manim API is available: transformations, ValueTracker,
 updaters, camera movement, ThreeDAxes, Surface, meshes and ImageMobject.
+Compose a purposeful visual explanation: illustrate the underlying mechanisms
+with moving diagrams, geometric or computed objects, transformations and
+synchronized annotations. Avoid defaulting to a static title and text panels
+when the concept supports a visual demonstration. Choose 2D or 3D to serve the
+request; complexity and styling should follow the user's instructions.
+When asked to recreate or regenerate, develop a fresh visual treatment and
+complete source from the original subject and sources. Previous scene code is
+context, not a mandatory template. When asked to edit specific elements,
+preserve the unaffected parts instead. Never invent facts to add complexity.
 Use Text for prose and MathTex/Tex for LaTeX mathematics. Do not replace formulas
 with approximate text. Prefer Cairo-compatible objects unless GPU is selected.
 The default background is dark teal; use contrasting colors. Keep labels readable and fixed to the screen in 3D when appropriate. Set camera
@@ -18,7 +27,7 @@ Use only the attached asset filenames explicitly listed in the request.
 Do not use internet, install packages, read other files, spawn tools yourself or
 start an interactive window. The application handles rendering and export.
 Do not call scene.render() or a CLI from the scene code. Respect requested
-duration, resolution and fps. Keep all scene code, no ellipses or placeholders.
+duration as a target, resolution and fps. Keep all scene code, no ellipses or placeholders.
 '''
 
 def validate_source(value):

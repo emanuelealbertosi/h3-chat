@@ -358,7 +358,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                 "stream": on_text is not None}
         body.update(thinking_parameters(getattr(self, "active_model", {}), settings, router=on_text is None))
         if schema:
-            body.update(temperature=0, max_tokens=settings["max_tokens"] if on_text else 768, response_format={"type": "json_schema", "json_schema": {"name": "route", "strict": True, "schema": schema}})
+            body.update(temperature=0 if on_text is None else settings['temperature'], max_tokens=settings["max_tokens"] if on_text else 768, response_format={"type": "json_schema", "json_schema": {"name": "route", "strict": True, "schema": schema}})
         req = urllib.request.Request(f"http://127.0.0.1:{self.port}/v1/chat/completions", data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.key}"})
         try:

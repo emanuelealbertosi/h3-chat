@@ -173,7 +173,7 @@ class Store:
             db.execute("UPDATE chats SET title=CASE WHEN title='Nuova chat' THEN ? ELSE title END,updated=? WHERE id=?", (title, now, chat_id))
         return job_id
 
-    def regenerate(self, chat_id):
+    def regenerate(self, chat_id, llm_settings=None):
         """Replay the last saved request, replacing its answer atomically."""
         job_id, now = uid(), time.time()
         with self.connect() as db:
@@ -192,6 +192,11 @@ class Store:
             # Keep attachments, controls, per-model settings and the original
             # history/canvas snapshot. A retry must not consume its own answer.
             payload = original['payload']
+            if llm_settings is not None:
+                from .llm_options import KEYS
+                value=json.loads(payload)
+                value['settings'].update({key:llm_settings[key] for key in ('chat_model','llm_device','vision_enabled',*KEYS)})
+                payload=json.dumps(value)
             answer_id = original['message_id']
             self.canvas_history.backfill(db, chat_id)
             db.execute("UPDATE messages SET content='',media='[]',meta='{}',status='queued',created=? WHERE id=?", (now, answer_id))

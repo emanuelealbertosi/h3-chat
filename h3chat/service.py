@@ -27,7 +27,7 @@ from .web_search import requested as web_requested,sources_markdown
 from .music_options import validate as validate_music_options, validate_fields as validate_music_fields, NUMBERS as MUSIC_NUMBERS, DEFAULTS as MUSIC_DEFAULTS, INTEGER as MUSIC_INTEGER
 from .music_runtime import status as music_status
 from .vision_runtime import status as vision_status, SAMPLERS as VISION_SAMPLERS, SCHEDULERS as VISION_SCHEDULERS
-from .llm_options import KEYS as LLM_KEYS, defaults as llm_defaults, merge as merge_llm_settings, validate_presets as validate_llm_presets
+from .llm_options import KEYS as LLM_KEYS, MAX_OUTPUT_TOKENS, defaults as llm_defaults, merge as merge_llm_settings, validate_presets as validate_llm_presets
 from .store import DEFAULTS, PROFILES, Store, uid
 from .rag import Knowledge, validate as validate_rag, grounded, quote_warnings
 from .devices import validate as validate_devices, label as device_label, CPU_WARNING
@@ -94,7 +94,7 @@ class Service:
                 "api_providers":self.providers.list(),"api_presets":API_PRESETS,
                 "media_providers":self.media_providers.list(),
                 "media_server":self.media_server.status(),
-                "llm_options":{"keys":LLM_KEYS,"defaults":{profile:llm_defaults(profile) for profile in PROFILES},"max_context":MAX_CONTEXT},
+                "llm_options":{"keys":LLM_KEYS,"defaults":{profile:llm_defaults(profile) for profile in PROFILES},"max_context":MAX_CONTEXT,"max_output_tokens":MAX_OUTPUT_TOKENS},
                 "music_runtime":music_status(self.root), "music_options":{"defaults":MUSIC_DEFAULTS,"numbers":MUSIC_NUMBERS,"integers":sorted(MUSIC_INTEGER)},
                 "video_options":{"defaults":VIDEO_DEFAULTS,"aspects":VIDEO_ASPECTS},
                 "tools_runtime":tools_status(self.root),"transcription_models":[m|{'ready':all(safe_join(self.root,f['path']).is_file() for f in m['files'])} for m in self.downloads.tool_models.values() if m['id'].startswith('whisper-')],
@@ -191,7 +191,7 @@ class Service:
         validate_llm_presets(s['llm_overrides'],s['profile'])
         if s["profile"] not in PROFILES or s["backend"] not in ("cpu","cuda","vulkan"):
             raise ValueError("Profilo hardware non valido.")
-        for key, lo, hi in (("context", 1024, MAX_CONTEXT), ("gpu_layers", 0, 999), ("max_tokens", 64, 8192),
+        for key, lo, hi in (("context", 1024, MAX_CONTEXT), ("gpu_layers", 0, 999), ("max_tokens", 64, MAX_OUTPUT_TOKENS),
                             ("width", 256, 1536), ("height", 256, 1536), ("steps", 1, 100), ("threads", 1, 64), ("ram_cache_gb", 0, 32), ("mtp_draft_tokens", 1, 8)):
             if type(s[key]) is not int or not lo <= s[key] <= hi:
                 raise ValueError(f"{key}: inserisci un intero tra {lo} e {hi}.")
@@ -407,7 +407,7 @@ class Service:
 
     def regenerate(self, chat_id):
         with self.lock:
-            job_id = self.store.regenerate(chat_id)
+            job_id = self.store.regenerate(chat_id,self.store.settings())
             self.wake.set()
         return {"job_id": job_id}
 

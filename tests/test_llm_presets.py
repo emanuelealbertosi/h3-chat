@@ -47,3 +47,15 @@ class LlmPresetsTests(unittest.TestCase):
  def test_inactive_presets_are_validated_too(self):
   for value in ([],{'x':{'temperature':float('nan')}},{'x':{'context':1024,'max_tokens':8192}},{'x':{'oops':1}},{'x':{'mtp_enabled':'yes'}}):
    with self.assertRaises(ValueError):self.app.validate_settings({'llm_overrides':value})
+ def test_output_ceiling_preserves_values_and_large_api_budget_roundtrips(self):
+  from h3chat.remote_llm import request_body
+  before=self.app.store.settings()
+  self.assertEqual(self.app.validate_settings({})['max_tokens'],before['max_tokens'])
+  saved=self.app.save_settings({'chat_model':'qwen3-06','context':262144,'max_tokens':100000})
+  self.app.save_settings({'chat_model':'qwen3-4'})
+  restored=self.app.save_settings({'chat_model':'qwen3-06'})
+  self.assertEqual(restored['max_tokens'],100000)
+  cfg={'model':'fixture','thinking':'none','format':'json_object'}
+  self.assertEqual(request_body(cfg,[{'role':'user','content':'Synthetic request'}],saved,True,None)['max_tokens'],100000)
+  for patch in ({'context':262144,'max_tokens':100001},{'context':262144,'max_tokens':True}):
+   with self.assertRaises(ValueError):self.app.validate_settings(patch)

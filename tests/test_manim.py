@@ -64,9 +64,10 @@ class FlowTests(unittest.TestCase):
         self.assertIn('manim-python',artifact['content']);self.assertTrue(any(m['name']=='scena.py' for m in artifact['media']))
     def test_generated_duration_difference_preserves_video_without_extra_llm(self):
         self.durations=iter([28]);source={'title':'Demo','scene_name':'Demo','code':CODE}
-        job=self.job({'prompt':'crea animazione Manim di 20s','canvas':False})
+        job=self.job({'prompt':'crea animazione Manim di 20s','canvas':False,'think_level':'high'})
         answer,llm=self.execute(job,[(json.dumps(source),'stop')])
         self.assertEqual(answer['status'],'done');self.assertEqual(llm.call_count,1)
+        self.assertEqual(llm.call_args.args[1]['think_level'],'high')
         self.assertEqual(answer['meta']['manim_duration'],28);self.assertEqual(answer['meta']['manim_repairs'],0)
         self.assertIn('28.0 s',answer['meta']['manim_timing_note']);self.assertTrue(any(m['mime']=='video/mp4' for m in answer['media']))
         self.assertIn('Required total timeline: 20',llm.call_args_list[0].args[0][-1]['content'])

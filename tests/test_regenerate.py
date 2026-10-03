@@ -51,6 +51,20 @@ class RegenerateTests(unittest.TestCase):
         s.execute('UPDATE chats SET archived=1 WHERE id=?',(self.chat,))
         with self.assertRaisesRegex(ValueError,'archivio'):s.regenerate(self.chat)
 
+    def test_current_llm_changes_without_replacing_original_media_or_canvas(self):
+        s=self.store
+        original=DEFAULTS|{'chat_model':'old','_lab':'manim','_assistant':False,'_rag_sources':['source'],'_image_model':'original-image'}
+        first=s.enqueue(self.chat,'Ricrea la scena',[],original,True)
+        s.execute("UPDATE jobs SET status='done' WHERE id=?",(first,))
+        current=DEFAULTS|{'chat_model':'new','context':262144,'max_tokens':100000,'temperature':.9,'think_level':'high','llm_device':'cpu'}
+        again=s.regenerate(self.chat,current)
+        payload=json.loads(s.one('SELECT payload FROM jobs WHERE id=?',(again,))['payload'])
+        settings=payload['settings']
+        self.assertEqual((settings['chat_model'],settings['max_tokens'],settings['temperature'],settings['think_level']),('new',100000,.9,'high'))
+        self.assertEqual((settings['_lab'],settings['_rag_sources'],settings['_image_model']),('manim',['source'],'original-image'))
+        self.assertTrue(payload['canvas']);self.assertEqual(payload['prompt'],'Ricrea la scena')
+        self.assertEqual(len(s.chat(self.chat)['messages']),2)
+
     def test_latest_prompt_is_chosen_with_prior_context_and_chat_isolation(self):
         s = self.store
         first = s.enqueue(self.chat,'First',[],DEFAULTS)

@@ -147,6 +147,7 @@ class MtpTests(unittest.TestCase):
             with patch('h3chat.engine.urllib.request.urlopen',side_effect=response):
                 engine.completion([],self.settings|{'max_tokens':192,'think_level':'high'},threading.Event(),on_text=lambda _:None,schema=schema)
             self.assertEqual(bodies[0]['max_tokens'],192)
+            self.assertEqual(bodies[0]['temperature'],self.settings['temperature'])
 
     def test_refresh_keeps_external_model_visible_and_publishes_mtp_traits(self):
         app=Service(ROOT,self.root/'data',start_worker=False)

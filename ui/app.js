@@ -225,7 +225,7 @@ async function send(event){event.preventDefault();if(activeJob())return;const pr
 async function regenerate(){
   if(!current||activeJob())return;
   $('#regenerate').disabled=true;
-  try{await api('/chats/'+current+'/regenerate',{});if(chat?.messages.findLast(m=>m.role==='assistant')?.meta?.intent==='slides'){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}await refresh();}
+  try{await api('/chats/'+current+'/regenerate',{});const previous=chat?.messages.findLast(m=>m.role==='assistant');if(previous?.meta?.canvas||previous?.meta?.intent==='slides'){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}await refresh();}
   finally{renderStatus();}
 }
 
@@ -379,7 +379,7 @@ function renderSettings(){
   }
   if(['setup','advanced','models','providers'].includes(settingsTab)){
     const providers=document.createElement('section');providers.className='card api-providers';body.append(providers);
-    renderProviders(providers,{state,request:api,changed:async()=>{collectSettings();state=await api('/state');if(settingsDraft.chat_model&&!state.models.some(m=>m.id===settingsDraft.chat_model))syncLlmDraft(settingsDraft,state,'');renderSettings();renderStatus();toast('Collegamento API salvato. Sceglilo per la chat oppure premi Usa in chat.');},use:async id=>{collectSettings();syncLlmDraft(settingsDraft,state,id);state.settings=await api('/settings',settingsDraft);state=await api('/state');renderSettings();renderStatus();toast('Modello API selezionato per chat, router e Assistant.');}});
+    renderProviders(providers,{state,request:api,changed:async()=>{collectSettings();state=await api('/state');if(settingsDraft.chat_model&&!state.models.some(m=>m.id===settingsDraft.chat_model))syncLlmDraft(settingsDraft,state,'');renderSettings();renderStatus();toast('Collegamento API salvato. Sceglilo per la chat oppure premi Usa in chat.');},use:async id=>{collectSettings();syncLlmDraft(settingsDraft,state,id);selectLlmPreferencesModel(id);state.settings=await api('/settings',settingsDraft);state=await api('/state');renderSettings();renderStatus();toast('Modello API selezionato per chat, router e Assistant.');}});
   }
   if(settingsTab==='setup'||settingsTab==='advanced'){
     const media=document.createElement('section');media.className='card workspace-settings';body.append(media);renderMediaProviders(media,{state,api,changed:async()=>{collectSettings();const next=await api('/state');for(const key of ['chat_model','create_model','edit_model','music_model','video_model'])if(settingsDraft[key]===state.settings[key])settingsDraft[key]=next.settings[key];state=next;renderSettings();renderStatus();},notify:toast,act});
