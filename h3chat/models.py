@@ -96,6 +96,22 @@ def model_path(root, model, value):
     return safe_join(root,value)
 
 
+def llm_identity(path, model, info):
+    """Filesystem identity stays separate from aliases and untrusted GGUF names."""
+    name = str(model.get('name') or '')
+    generic = bool(re.fullmatch(r'(?:staged(?:[_ -].*)?|.*tmpl.*|model|unknown)', name, re.I))
+    filename = path.name
+    label = filename if generic or name in ('', path.stem, filename) else name + ' · ' + filename
+    return {'label':label, 'filename':filename, 'path':str(path.resolve()),
+            'directory':str(path.parent.resolve()), 'alias':name,
+            'gguf_name':str(info.get('general.name') or ''),
+            'architecture':str(info.get('general.architecture') or '')}
+
+
+def model_label(model):
+    return (model.get('identity') or {}).get('label') or model.get('name', 'Modello')
+
+
 def discover_local(root):
     """One model per dedicated folder. Never pair a projector from a shared cache."""
     root=Path(root).resolve(); base=root/'models/local'; result=[]
@@ -179,7 +195,8 @@ def inspect_model(root, model):
             'projector':(str(projector.resolve()) if model.get('external') else projector.relative_to(Path(root).resolve()).as_posix()) if projector else None,
             'projector_size':projector.stat().st_size if projector else 0,
             'warning':warning, 'max_refs':max(1,model.get('max_refs',4)) if projector else 0},
-            'thinking':thinking,'parameters':params,'mtp':inspect_mtp(root,model,info,ready)}
+            'thinking':thinking,'parameters':params,'mtp':inspect_mtp(root,model,info,ready),
+            'identity':llm_identity(base,model,info) if base else None}
 
 
 def thinking_parameters(model, settings, router=False):

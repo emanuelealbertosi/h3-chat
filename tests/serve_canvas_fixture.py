@@ -3,6 +3,7 @@ import base64
 import json
 from pathlib import Path
 import sys
+import struct
 import tempfile
 import threading
 
@@ -19,6 +20,18 @@ def main():
         chat = app.store.create_chat('Collaudo cronologia')['id']
         other = app.store.create_chat('Altra conversazione')['id']
         app.store.save_settings({'setup_done':True})
+        def fixture_model(filename, alias, internal):
+            path=Path(folder)/'models'/filename;path.parent.mkdir(exist_ok=True)
+            def string(value):
+                raw=value.encode();return struct.pack('<Q',len(raw))+raw
+            values={'general.architecture':'qwen35','general.name':internal}
+            data=b'GGUF'+struct.pack('<IQQ',3,0,len(values))
+            for k,v in values.items():data+=string(k)+struct.pack('<I',8)+string(v)
+            path.write_bytes(data)
+            return app.external_model({'profile':'chat','name':alias,'files':{'model':str(path)},'projector_mode':'off'})
+        model=fixture_model('Qwen-OrcaRouter-IQ3_XXS.gguf','Staged_Tmpl','Staged_Tmpl')
+        second=fixture_model('RVN-IQ3_M-mtp.gguf','Qwen fixture','Internal Ara')
+        app.store.save_settings({'chat_model':model['id']})
         outputs = Path(folder) / 'outputs'; outputs.mkdir(exist_ok=True)
         (outputs / 'fixture.png').write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6P4AAAAAASUVORK5CYII='))
         original = {'title':'Documento iniziale', 'content':'# Documento iniziale\n\nVersione originale.\n\n$x^2$\n\n```python\nprint(42)\n```', 'media':[]}
@@ -51,7 +64,7 @@ def main():
             do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = handle_request
 
         server = ThreadingHTTPServer(('127.0.0.1', 0), FixtureHandler); server.app = app
-        print(json.dumps({'url':f'http://127.0.0.1:{server.server_port}', 'chat':chat, 'other':other}), flush=True)
+        print(json.dumps({'url':f'http://127.0.0.1:{server.server_port}', 'chat':chat, 'other':other, 'model':model['id'], 'second_model':second['id']}), flush=True)
         try:
             server.serve_forever()
         finally:

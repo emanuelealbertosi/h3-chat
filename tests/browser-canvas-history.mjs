@@ -22,6 +22,20 @@ const post=path=>page.evaluate(async path=>{
 },path);
 try{
   await page.goto(fixture.url);await page.locator(`.chat-link[data-chat="${fixture.chat}"]`).click();
+  await page.click('#model-name');
+  assert.equal(await page.locator('#llm-identity-body .model-filename').innerText(),'Qwen-OrcaRouter-IQ3_XXS.gguf');
+  await page.locator('#llm-identity-body summary').click();
+  assert.match(await page.locator('#llm-identity-body').innerText(),/Staged_Tmpl/);
+  assert.match(await page.locator('#llm-identity-body .model-path').innerText(),/models.*Qwen-OrcaRouter-IQ3_XXS.gguf/);
+  await page.click('#llm-identity-close');await page.click('#settings-open');
+  assert.match(await page.locator('[data-setting="chat_model"] option:checked').innerText(),/Qwen-OrcaRouter-IQ3_XXS.gguf/);
+  assert.doesNotMatch(await page.locator('[data-setting="chat_model"] option:checked').innerText(),/Staged_Tmpl/);
+  await page.selectOption('[data-setting="chat_model"]',fixture.second_model);
+  assert.equal(await page.locator('#settings-body .model-filename').first().innerText(),'RVN-IQ3_M-mtp.gguf');
+  await page.click('[data-tab="advanced"]');
+  await page.selectOption('#llm-settings-model',fixture.model);
+  assert.equal(await page.locator('#settings-body .model-filename').first().innerText(),'Qwen-OrcaRouter-IQ3_XXS.gguf');
+  await page.click('#settings-close');
   await page.click('#canvas-toggle');
   await page.waitForFunction(()=>document.querySelector('#canvas-title').value==='Documento recente');
   assert.equal(await page.locator('#canvas-history option').count(),3);
@@ -61,7 +75,7 @@ try{
   assert.equal(await page.locator('#canvas-history').isDisabled(),true);
   assert.equal(await page.locator('#canvas-title').inputValue(),'Canvas');
   assert.deepEqual(errors,[]);
-  console.log('Canvas: legacy recovery, previous/next, media, stable selection during streaming, export, restore, edits, reload, chat isolation and mobile passed.');
+  console.log('LLM: real filename/path in chat, setup and presets; internal GGUF name separated. Canvas: legacy recovery, previous/next, media, stable selection during streaming, export, restore, edits, reload, chat isolation and mobile passed.');
 }finally{
   await browser.close();
   try{await fetch(fixture.url+'/api/shutdown',{method:'POST',headers:{'Content-Type':'application/json','X-H3-Token':(await (await fetch(fixture.url+'/api/state')).json()).token},body:'{}'});}catch{}

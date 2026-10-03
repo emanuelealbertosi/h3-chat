@@ -14,7 +14,7 @@ import urllib.request
 from pathlib import Path
 
 from .downloads import Cancelled, safe_join
-from .models import inspect_model, thinking_parameters, model_path, mtp_tokens
+from .models import inspect_model, thinking_parameters, model_path, mtp_tokens, model_label
 from .residency import Session, FileCache
 from .image_options import options as image_options
 from .vision_runtime import status as vision_status
@@ -116,7 +116,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                     warm = False
             else:
                 session.stop()
-            logging.getLogger('h3chat.engine').info('Rilascio %s: %.2f s · %s', session.model['name'],
+            logging.getLogger('h3chat.engine').info('Rilascio %s: %.2f s · %s', model_label(session.model),
                 time.monotonic() - started, 'motore immagini mantenuto pronto' if warm else 'processo chiuso')
             if self.active is session:
                 self.active = None
@@ -204,7 +204,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
             if self.policy == 'on_demand':
                 for old in list(self.sessions):
                     if old != key:
-                        if stage:stage('Rilascio memoria · '+self.sessions[old].model['name'])
+                        if stage:stage('Rilascio memoria · '+model_label(self.sessions[old].model))
                         self._drop(old, keep_warm=kind != 'video')
                 # H3's large CPU weights and pinned transfer buffers need the
                 # RAM held by idle Torch image workers. A warm image process
@@ -231,7 +231,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                 self.cache.forget(session.files.values())
                 self.sessions[key] = session
             self.active = session
-            if stage:stage(('Riutilizzo modello · ' if session.ready and session.alive() else 'Caricamento modello · ')+model['name'])
+            if stage:stage(('Riutilizzo modello · ' if session.ready and session.alive() else 'Caricamento modello · ')+model_label(model))
             return session
 
     def prepare(self, settings, cancel, stage):
@@ -247,7 +247,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
             model = model | inspect_model(self.root, model)
             if not model['ready']:
                 continue
-            stage('Modelli residenti · ' + model['name'])
+            stage('Modelli residenti · ' + model_label(model))
             log_path = self.data / 'logs' / (secrets.token_hex(12) + '.log')
             if capability == 'chat':
                 self.start_llama(model,settings,log_path,cancel,stage=stage)
@@ -266,7 +266,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         if not model["ready"] and model.get("external"):
             raise ValueError("Collegamento non disponibile: " + " ".join(model.get("external_problems",[])) + " Controlla i percorsi in Catalogo modelli → Modifica collegamento.")
         if not model["ready"]:
-            raise ValueError(f"Scarica tutti i componenti di {model['name']} nelle impostazioni.")
+            raise ValueError(f"Scarica tutti i componenti di {model_label(model)} nelle impostazioni.")
         return model
 
     def model_files(self, model, settings=None):
@@ -291,7 +291,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                     for previous in list(self.sessions):self._drop(previous)
             self.active_model=model
             self.remote_config=(config,key)
-            if stage:stage('Connessione API · '+model['name'])
+            if stage:stage('Connessione API · '+model_label(model))
             return
         self.remote_config = None
         session = self._activate("chat", model, settings, log_path, cancel, stage=stage)
@@ -456,7 +456,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
             media = message["media"] if message["seq"] == latest_media_seq and has_vision else []
             if media:
                 if len(media) > model.get("max_refs", 4):
-                    raise ValueError(f"{model['name']} accetta fino a {model['max_refs']} riferimenti.")
+                    raise ValueError(f"{model_label(model)} accetta fino a {model['max_refs']} riferimenti.")
                 parts = []
                 for index, item in enumerate(media, 1):
                     raw = safe_join(self.data, item["path"]).read_bytes()
@@ -534,7 +534,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         except RuntimeError as exc:
             raise RuntimeError(self.failure(session.log_path,str(exc))) from exc
         session.ready = True
-        logging.getLogger('h3chat.engine').info('Caricamento %s: %.2f s · %s', model['name'],
+        logging.getLogger('h3chat.engine').info('Caricamento %s: %.2f s · %s', model_label(model),
             time.monotonic()-started, 'motore riutilizzato' if warm else 'avvio completo')
         return session
 
@@ -569,12 +569,12 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
             if not isinstance(result,str) or not result.strip():raise ValueError()
         except (KeyError,TypeError,ValueError) as exc:
             raise ValueError('Assistant non ha prodotto istruzioni valide. Riprova o disattiva Assistant in chat.') from exc
-        return result.strip(), {'model':model['name'],'vision':bool(visual and refs),'max_tokens':tuning['max_tokens'],
+        return result.strip(), {'model':model_label(model),'vision':bool(visual and refs),'max_tokens':tuning['max_tokens'],
                                 'prompt_format':prompt_format,'image_model':image_model['name']}
 
     def image_request(self, model, settings, prompt, refs, output):
         if len(refs)>model.get('max_refs',1):
-            raise ValueError(f"{model['name']} accetta al massimo {model.get('max_refs',1)} riferimenti; ne hai forniti {len(refs)}.")
+            raise ValueError(f"{model_label(model)} accetta al massimo {model.get('max_refs',1)} riferimenti; ne hai forniti {len(refs)}.")
         architecture = model.get('architecture')
         params=settings.get('_image_options') or image_options(model,settings)
         return params|{'op':'generate','prompt':prompt,'output':str(output),
@@ -592,7 +592,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         with self.process_lock:
             existing=self.sessions.get(self.session_key('image',model,settings))
             if existing and any(p in getattr(existing,'lora_stamps',{}) and existing.lora_stamps[p]!=stamp for p,stamp in stamps.items()):self._drop(existing.key)
-        stage('Caricamento / riuso · ' + model['name'])
+        stage('Caricamento / riuso · ' + model_label(model))
         session = self.start_image(model,settings,log_path,cancel,stage=stage)
         stage('Generazione immagine')
         session.send(request)

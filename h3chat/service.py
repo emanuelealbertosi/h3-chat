@@ -534,6 +534,8 @@ class Service:
                 route = self.engine.route(history, settings, cancel)
             intent = route["intent"]
             meta = {"intent": intent, "model": model.get("name", ""), "settings": settings, "prompt": payload["prompt"], "canvas": payload.get("canvas", False)}
+            if intent == 'chat' and model.get('identity'):
+                meta['model_identity'] = model['identity']
             if model.get('api'):meta['api']=True
             meta.update(tool_meta)
             role='llm' if intent=='chat' else 'image' if intent in ('create','edit') else 'asr' if intent=='transcribe' else intent

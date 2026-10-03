@@ -106,6 +106,7 @@ class ExternalModelTests(unittest.TestCase):
         listed=browse({'path':str(self.weights)})
         self.assertEqual(listed['path'],str(self.weights));self.assertEqual(len(listed['entries']),2)
         result=suggest({'profile':'chat','path':str(self.llm)})
+        self.assertEqual(result['name'],self.llm.stem)
         self.assertEqual(result['candidates']['mmproj'],[str(self.projector)])
         for body in ({'profile':'chat','files':{'model':'relative.gguf'}},
                      {'profile':'chat','files':{'model':str(self.projector)}},

@@ -31,6 +31,27 @@ class ModelTests(unittest.TestCase):
             'qwen3.block_count':28,'tokenizer.chat_template':'{% if enable_thinking %}<think>{% endif %}'})
     def tearDown(self): self.tmp.cleanup()
 
+    def test_generic_gguf_names_are_replaced_by_filesystem_identity_in_labels(self):
+        gguf(self.base, **{'general.architecture':'qwen35', 'general.name':'Staged_Tmpl'})
+        model=discover_local(self.root)[0]
+        identity=inspect_model(self.root,model)['identity']
+        self.assertEqual(identity['label'],self.base.name)
+        self.assertEqual(identity['path'],str(self.base.resolve()))
+        self.assertEqual(identity['gguf_name'],'Staged_Tmpl')
+        self.assertEqual(model['name'],'Staged_Tmpl')
+        second=gguf(self.base.parent/'Other-IQ3_M.gguf', **{'general.architecture':'qwen35','general.name':'Staged_Tmpl'})
+        labels=[inspect_model(self.root,m)['identity']['label'] for m in discover_local(self.root)]
+        self.assertEqual(set(labels),{self.base.name,second.name})
+
+    def test_personal_alias_and_missing_file_still_show_the_configured_path(self):
+        model=discover_local(self.root)[0] | {'name':'Il mio Qwen'}
+        identity=inspect_model(self.root,model)['identity']
+        self.assertEqual(identity['label'],'Il mio Qwen · model.gguf')
+        self.base.unlink()
+        traits=inspect_model(self.root,model)
+        self.assertFalse(traits['ready'])
+        self.assertEqual(traits['identity']['path'],str(self.base.resolve()))
+
     def test_declared_context_comes_from_the_model_architecture(self):
         gguf(self.base,**{'general.architecture':'qwen35','qwen35.context_length':262144,'qwen3.context_length':32768})
         model=discover_local(self.root)[0]

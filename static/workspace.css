@@ -8,3 +8,14 @@
 .canvas-history-actions>span{font-size:9px;color:var(--muted);margin-right:auto}
 .canvas-history-actions .text-button{font-size:9px}
 .canvas-toolbar{flex-shrink:0;flex-wrap:wrap}
+.model-identity-info{border:1px solid var(--line);background:var(--paper);padding:10px 12px;border-radius:7px;margin:10px 0 16px;font-size:11px;min-width:0}
+.model-identity-info>strong,.model-identity-info .model-filename,.model-identity-info .model-path{display:block;overflow-wrap:anywhere}
+.model-identity-info .model-filename{font-weight:700;color:var(--green);margin:5px 0}
+.model-identity-info .model-path{font-size:10px;color:var(--muted);user-select:text}
+.model-identity-info details{margin-top:8px}.model-identity-info summary{cursor:pointer;color:var(--muted)}
+.model-identity-info dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px}.model-identity-info dt{color:var(--muted)}.model-identity-info dd{margin:0;overflow-wrap:anywhere}
+.model-identity-trigger{border:0;background:transparent;cursor:pointer;padding:2px 4px;text-align:left;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px}
+.workspace.has-canvas .model-identity-trigger{display:inline-block;max-width:170px}
+.model-identity-dialog{width:650px;max-width:94vw}
+.settings-grid>.card,.settings-grid .field{min-width:0}.field select{max-width:100%}
+.model-top h3{overflow-wrap:anywhere;min-width:0}

@@ -206,5 +206,5 @@ def suggest(body):
         role='audio_vae' if kind=='minimax-h3' and 'audio' in name and 'vae' in name else 'mmproj' if 'mmproj' in name else 'llm_vision' if 'vision' in name and kind!='chat' else 'vae' if 'vae' in name else 'llm' if any(s in name for s in ('qwen','encoder','llm')) else None
         if role in candidates and valid_weight(p):candidates[role].append(str(p.resolve()))
     info=metadata(main) if kind=='chat' else {}
-    return {'name':str(info.get('general.name') or main.stem),'candidates':candidates,
+    return {'name':main.stem if kind=='chat' else str(info.get('general.name') or main.stem),'candidates':candidates,
             'files':{k:v[0] for k,v in candidates.items() if len(v)==1 and k not in ('model','diffusion','mmproj')}}

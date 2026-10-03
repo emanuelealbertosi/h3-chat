@@ -4,7 +4,7 @@ Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle 
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.14.1-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.14.1/H3-Chat-0.14.1-windows-x64.zip) dalla [release v0.14.1](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.14.1), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.14.2-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.14.2/H3-Chat-0.14.2-windows-x64.zip) dalla [release v0.14.2](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.14.2), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 
@@ -85,6 +85,8 @@ Allega **PDF o Word .docx** alla chat (fino a tre documenti, 25 MB ciascuno; PDF
 **Web** forza una ricerca per il messaggio; “cerca sul web…” viene riconosciuto automaticamente se abilitato nelle preferenze. Default DuckDuckGo con fallback Bing; Bing e una propria istanza SearXNG sono selezionabili. L’app legge le fonti pubbliche e aggiunge link reali alla risposta o al canvas. Se una pagina blocca l’accesso, la fonte è indicata come solo estratto. Se non recupera risultati pertinenti, mostra un errore: non simula una ricerca. Solo il messaggio di ricerca viene inviato al provider, non i file allegati.
 
 Gli **audio allegati a una richiesta chat** vengono trascritti localmente; puoi chiedere un riassunto o fare domande sul parlato usando il tuo LLM. **Trascrivi** oppure “trascrivi questo audio” restituisce la trascrizione anche senza LLM, con download **TXT/SRT**. Il pulsante Canvas porta testo e download nel pannello laterale. Gli audio usati come riferimenti Video restano originali e non attivano automaticamente la trascrizione.
+
+**Quale file LLM sto usando?** Setup, Preferenze e Catalogo mostrano il nome effettivo del GGUF; sotto la selezione compaiono il percorso completo e «Copia percorso». In chat premi il nome del modello accanto all’invio per aprire gli stessi dettagli. Le etichette personali restano salvate, mentre nomi interni generici come `Staged_Tmpl` vengono sostituiti dal file nei menu. Nome interno GGUF e architettura dichiarata restano consultabili nei dettagli. Se il modello non è scaricato o il percorso è mancante, il file è indicato come previsto. Gli aggiornamenti dei nomi non cambiano modelli selezionati, percorsi o preset.
 
 In **Setup → Documenti, ricerca e trascrizione**, installa il motore opzionale e scarica **Whisper Small multilingue** (default) oppure **Tiny**. Puoi scegliere una cartella Faster Whisper/CTranslate2 già presente altrove con `model.bin`, `config.json` e `tokenizer.json`; nessun peso viene copiato. Imposta lingua, thread e beam. Inferenza **CPU INT8**, processo liberato dopo la richiesta, nessuna VRAM aggiuntiva; massimo tre audio, 64 MB e 30 minuti ciascuno. Non è un motore di analisi musicale, rumori, emozioni o identità vocale. I risultati possono contenere errori.
 

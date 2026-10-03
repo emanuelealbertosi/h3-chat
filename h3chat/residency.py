@@ -1,5 +1,6 @@
 """Process ownership and bounded, reclaimable mappings of recently used model files."""
 from __future__ import annotations
+from .models import model_label
 import json
 import mmap
 import os
@@ -155,7 +156,7 @@ class Session:
         if self.kind=='music':
             from .music_runtime import backend
             gpu=backend(self.settings)!='cpu'
-        return {'id':self.model['id'],'name':self.model['name'],'kind':self.kind,
+        return {'id':self.model['id'],'name':model_label(self.model),'kind':self.kind,
                 'ready':self.ready and self.alive(),'pid':self.process.pid if self.alive() else None,
                 'location':('RAM / VRAM · componenti a richiesta' if gpu else 'RAM') if self.kind=='music' else 'VRAM · Vision CPU' if gpu and self.kind=='chat' and 'mmproj' in self.files and self.settings.get('memory_policy')=='resident' else 'VRAM' if gpu and self.settings.get('memory_policy')=='resident' else 'RAM / VRAM' if gpu else 'RAM',
                 'mtp_tokens':next((v for k,v in self.key[2] if k=='mtp_tokens'),0) if self.ready else 0,

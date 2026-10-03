@@ -6,7 +6,7 @@ export function initLocalModels({api,getState,onChange,notify}){
     <dialog id="local-model-dialog" class="local-model-dialog"><form id="local-model-form">
       <header><div class="eyebrow">USA I FILE CHE HAI GIÀ</div><h2 id="local-model-title">Collega un modello</h2><p>I pesi restano nelle cartelle originali. Puoi usare anche file su un’altra unità.</p></header>
       <div class="local-model-body"><label class="field"><span>Tipo di modello</span><select id="local-model-kind"></select></label>
-      <label class="field"><span>Nome nella lista</span><input id="local-model-name" maxlength="150" placeholder="Nome facoltativo"></label>
+      <label class="field"><span>Nome nella lista</span><input id="local-model-name" maxlength="150" placeholder="Nome facoltativo"><small>Il nome è un’etichetta personale. Per gli LLM verranno mostrati anche il file GGUF e il percorso originale.</small></label>
       <div id="local-model-files"></div><p id="local-model-hint" class="small-note" aria-live="polite"></p>
       <p id="local-model-error" class="local-error" role="alert"></p></div>
       <footer><button type="button" id="local-model-close" class="btn">Annulla</button><button type="submit" id="local-model-save" class="btn primary">Salva collegamento</button></footer>
