@@ -41,6 +41,26 @@ class SchemaTests(unittest.TestCase):
         escaped='{"nodes":[{"id":"n1","parent":"root","kind":"text","text":"He said \\"hello\\"'
         self.assertIn('He said',partial_page(escaped,set(),set())['nodes'][0]['text'])
 
+    def test_full_text_and_styles_are_independent_and_prompt_wins(self):
+        for word,design in (('professionale','professional'),('giocoso','playful'),('colorato','playful'),('fumettoso','comic')):
+            chosen=options('Crea 5 slide con testi completi in stile '+word,{'detail':'concise','design':'professional'})
+            self.assertEqual(chosen,{'count':5,'format':'16:9','detail':'full','design':design})
+        self.assertEqual(options('non solo headlines')['detail'],'full')
+        content=encode({'version':1,'format':'4:3','design':'comic','detail':'full','pages':[{'title':'A','nodes':[]}]})
+        self.assertEqual(edit_options('Cambia il titolo',content)['detail'],'full')
+        self.assertEqual(edit_options('Rifai in sintesi, stile serio',content)['detail'],'concise')
+        for body in ({'design':'unknown'},{'detail':None},{'theme':[]}):
+            with self.assertRaises(ValueError):options('',body)
+
+    def test_manual_edits_have_bounded_styles_and_existing_nodes(self):
+        deck={'version':1,'format':'16:9','theme':'indigo','design':'comic','detail':'full','pages':[{'title':'Fixture','nodes':[node()], 'overrides':{'n1':{'x':20,'width':500,'font_size':32,'font':'Comic Sans MS','color':'#123456'}}}]}
+        validate_content(encode(deck),[])
+        for value in ({'x':float('inf')},{'font_size':True},{'font':'evil'},{'color':'url(evil)'},{'position':'absolute'}):
+            deck['pages'][0]['overrides']={'n1':value}
+            with self.assertRaises(ValueError):validate_content(encode(deck),[])
+        deck['pages'][0]['overrides']={'absent':{'x':20}}
+        with self.assertRaises(ValueError):validate_content(encode(deck),[])
+
     def test_editing_preserves_format_and_resolves_addition(self):
         content=encode({'version':1,'format':'4:3','pages':[{'title':'A','nodes':[]},{'title':'B','nodes':[]}]})
         self.assertTrue(edit_request('Riduci il testo della seconda pagina',content))
@@ -132,6 +152,14 @@ class GenerationTests(unittest.TestCase):
         job=self.enqueue();answer=self.execute(job,fail=True)
         self.assertEqual(answer['status'],'failed');self.assertIn('Progressivo',answer['meta']['artifact']['content'])
         self.assertEqual(len(self.app.store.canvas_history.listing(job['chat_id'])['items']),1)
+
+    def test_full_text_and_comic_options_reach_generation_and_history(self):
+        job=self.enqueue('Crea 2 slide con testi completi in stile fumettoso',slides={'detail':'concise','design':'professional'})
+        answer=self.execute(job);self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
+        deck=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4])
+        self.assertEqual(deck['detail'],'full');self.assertEqual(deck['design'],'comic')
+        instructions=self.calls[0][0]['content'];self.assertIn('"detail": "full"',instructions);self.assertIn('"design": "comic"',instructions)
+        self.assertIn('NON ridurli a headline',instructions)
 
     def test_generation_recovers_invalid_tree_and_streams_before_node_id(self):
         job=self.enqueue();page_calls=0;self.calls=[];self.job=job;self.progress=0;self.fail=False;self.documents=False

@@ -5,8 +5,8 @@ Allega PDF, documenti Word `.docx` o immagini e chiedi, ad esempio:
 > Crea 10 slide in 4:3 da questi documenti, con formule, immagini e un diagramma.
 
 Oppure scegli **Strumenti → Slide · HTML in tempo reale**, imposta il numero
-(1–30; default 8) e il formato (16:9 predefinito, 4:3, 16:10, 1:1).
-Il numero e il formato espliciti nel prompt prevalgono sui controlli. Il canvas
+(1–30; default 8), il formato (16:9 predefinito, 4:3, 16:10, 1:1), lo stile e
+il dettaglio del testo. Le scelte esplicite nel prompt prevalgono sui controlli. Il canvas
 si apre automaticamente; nella chat resta il messaggio di accompagnamento.
 
 Come la creazione V2 di H3-Slides, l'LLM progetta prima la sequenza, poi ogni
@@ -15,6 +15,26 @@ diagrammi. Il browser interpreta questi elementi come HTML, mostrando anche
 il testo ancora in scrittura. Il sorgente è dichiarativo e modificabile: non
 viene eseguito HTML, CSS o JavaScript arbitrario prodotto dal modello.
 H3-Slides non deve essere installato.
+
+## Contenuto e stile
+
+**Sintesi** è il valore predefinito. **Testi completi** chiede paragrafi,
+spiegazioni ed esempi nel corpo delle slide: non li riduce a headline e non li
+nasconde nelle note. Puoi chiedere «Crea 5 slide con testi completi, stile
+fumettoso» oppure «Presentazione discorsiva, seria e professionale». Lo stile
+non impone la brevità: ogni stile supporta entrambi i livelli di dettaglio.
+
+Sono disponibili gli stili **Serio / professionale**, **Giocoso / colorato** e
+**Fumettoso**, tre palette (petrolio, indaco, corallo) e caratteri moderni o
+editoriali. Il prompt può specificare altri toni e indicazioni di contenuto;
+il canvas applica i preset visivi disponibili. Colori e font dei singoli
+elementi sono modificabili nell'editor.
+
+Il renderer misura lo spazio dopo aver caricato font, figure e diagrammi.
+Riduce moderatamente la composizione e, se necessario, crea pagine di
+continuazione, conservando testo, codice, elenchi e tabelle. Il numero richiesto
+indica i capitoli logici: una pagina densa può produrre più pagine fisiche
+nell'anteprima e nei download. Il canvas indica quante continuazioni ci sono.
 
 ## Fonti
 
@@ -58,13 +78,24 @@ ricompone la presentazione usando il contenuto esistente; le versioni precedenti
 restano nella cronologia. **Sorgente slide** consente modifiche dirette al JSON
 dentro il blocco `h3-slides`, con controllo degli elementi e delle immagini.
 
+**Modifica grafica** seleziona gli elementi della pagina: modifica testo o
+codice, font, dimensioni, colori e allineamento; usa le maniglie ↕ e ↘ per
+spostare e ridimensionare. Puoi aggiungere testo, duplicare o eliminare
+elementi, cambiare tema/stile/caratteri e annullare o ripetere le modifiche.
+Il salvataggio è automatico in una copia di lavoro nella cronologia; la versione
+generata resta recuperabile. Durante la generazione l'editor è disabilitato.
+
 **HTML** scarica un documento autonomo con figure e font incorporati, apribile
 offline nel browser. **PDF** produce una pagina per slide nel formato scelto,
 con testo e diagrammi vettoriali quando disponibili. **PNG** esporta l'intera
 sequenza come immagine; **Word** contiene immagini delle pagine per conservarne
-la composizione. **.md** conserva il sorgente dichiarativo. PPTX non è incluso.
-Le pagine troppo dense restano interamente visibili con un avviso: prima
-dell'export chiedi di ridurle o dividerle, per evitare contenuti tagliati.
+la composizione. **PowerPoint** esporta `.pptx` con testi, riquadri e grafici
+dati nativi modificabili, oltre a note e fonti. Formule, diagrammi Mermaid e
+immagini restano oggetti grafici spostabili e ridimensionabili. I caratteri
+moderni/editoriali usano Arial/Cambria nell'export PowerPoint per portabilità;
+codice Courier New e stile fumettoso Comic Sans MS, se disponibile sul PC.
+**.md** conserva il sorgente dichiarativo. Le pagine di continuazione sono
+incluse in tutti gli export e non nascondono il testo.
 
 Funziona con LLM locali oppure provider API, secondo la normale configurazione.
 Per gli allegati serve il componente Documenti incluso nell'installazione;

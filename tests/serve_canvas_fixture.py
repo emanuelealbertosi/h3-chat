@@ -52,7 +52,7 @@ def main():
                     if self.path.startswith('/fixture/slides/'):
                         from h3chat.slides import encode,partial_page
                         phase=self.path.rsplit('/',1)[-1]
-                        if phase=='start':
+                        if phase in ('start','design'):
                             ident=app.store.enqueue(chat,'Crea 3 slide sintetiche',[],DEFAULTS|{'_lab':'slides'},True)
                             active=app.store.one('SELECT * FROM jobs WHERE id=?',(ident,))
                             app.store.execute("UPDATE jobs SET status='running',stage='Slide · composizione progressiva' WHERE id=?",(ident,))
@@ -67,10 +67,18 @@ def main():
                             raw='{"nodes":['+json.dumps(n('1. Titolo','heading','Gruppo ancora in composizione',parent='layout futuro'))+',{"text":"Testo che cresce mentre arriva il gruppo'
                             pages[-1]['nodes']=partial_page(raw,set(),set())['nodes']
                         deck={'version':1,'format':'4:3','title':'Presentazione sintetica','references':[{'id':'R1','label':'Fonte sintetica · pagina 2'}],'pages':pages,'active':2}
+                        if phase=='design':
+                            long=' '.join(f'Concetto{i}: il documento spiega un risultato verificabile con esempi e dettagli precisi.' for i in range(60))
+                            pages=[{'title':'Progetti che prendono forma','status':'ready','nodes':[n('title','heading','Progetti che prendono forma'),n('intro','text','Documenti, esempi e dati diventano una presentazione leggibile. **Il contenuto resta modificabile.**')],'notes':'Collaudo di design e modifica.','sources':[]},
+                                   {'title':'Confrontare le alternative','status':'ready','nodes':[n('title','heading','Confrontare le alternative'),n('one','text','### Metodo A\nDati verificabili e passaggi espliciti.'),n('two','text','### Metodo B\nUna vista compatta per decidere.'),n('three','text','### Risultato\nUna scelta motivata dalle fonti.')],'notes':'Layout a più colonne.','sources':[]},
+                                   {'title':'Contenuti senza tagli','status':'ready','nodes':[n('title','heading','Contenuti senza tagli'),n('long','text',long),n('code','code','\n'.join(f'print("Riga {i}")' for i in range(40)),language='python'),n('list','text','\n'.join(f'- Punto verificabile {i}' for i in range(20)))],'notes':'Tutti i marcatori devono essere conservati.','sources':[]},
+                                   {'title':'Dati e coordinate precise','status':'ready','nodes':[n('title','heading','Dati e coordinate precise'),n('bars','chart',json.dumps({'type':'bar','title':'Valori verificati','labels':['A','B','C'],'datasets':[{'label':'Serie','data':[10,30,20]}]})),n('scatter','chart',json.dumps({'type':'scatter','title':'Coordinate originali','labels':[],'datasets':[{'label':'Prima','data':[{'x':-2,'y':4},{'x':0,'y':0},{'x':2,'y':4}]},{'label':'Seconda','data':[{'x':-1,'y':1},{'x':1,'y':1}]}]}))],'notes':'Valori e coordinate restano modificabili in PowerPoint.','sources':[]}]
+                            deck={'version':1,'format':'16:9','theme':'indigo','typography':'modern','title':'Presentazione di collaudo','references':[],'pages':pages,'active':0}
+                        finished=phase in ('done','design')
                         value={'title':deck['title'],'content':encode(deck),'media':image['media']}
                         app.save_artifact(chat,value['title'],value['content'],value['media'])
-                        app.store.update_answer(active,'Slide nel canvas.','done' if phase=='done' else 'running',[],{'canvas':True,'intent':'slides','artifact':value,'rag_sources':[{'citation':'R1','name':'Fonte sintetica','location':'pagina 2','text':'Una formula precisa','source_id':'synthetic','chunk_id':1,'page':2,'url':''}]})
-                        if phase=='done':app.store.execute("UPDATE jobs SET status='done' WHERE id=?",(active['id'],))
+                        app.store.update_answer(active,'Slide nel canvas.','done' if finished else 'running',[],{'canvas':True,'intent':'slides','artifact':value,'rag_sources':[{'citation':'R1','name':'Fonte sintetica','location':'pagina 2','text':'Una formula precisa','source_id':'synthetic','chunk_id':1,'page':2,'url':''}]})
+                        if finished:app.store.execute("UPDATE jobs SET status='done' WHERE id=?",(active['id'],))
                     elif self.path == '/fixture/start':
                         ident = app.store.enqueue(chat, 'Synthetic generation', [], DEFAULTS, True)
                         active = app.store.one('SELECT * FROM jobs WHERE id=?', (ident,))

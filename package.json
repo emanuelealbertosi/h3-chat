@@ -1,6 +1,6 @@
 {
   "name": "h3-chat",
-  "version": "0.15.3",
+  "version": "0.16.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,14 +11,19 @@
     "buffer": "6.0.3",
     "chart.js": "4.5.1",
     "docx": "9.5.1",
-    "dompurify": "3.4.15",
+    "dompurify": "3.4.16",
     "highlight.js": "11.11.1",
     "html-to-image": "1.11.13",
+    "jszip": "3.10.1",
     "katex": "0.16.22",
     "marked": "15.0.12",
-    "mermaid": "11.17.2"
+    "mermaid": "11.17.2",
+    "pptxgenjs": "4.0.1"
   },
   "devDependencies": {
     "esbuild": "0.25.12"
+  },
+  "overrides": {
+    "image-size": "2.0.4"
   }
 }

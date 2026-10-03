@@ -13,7 +13,7 @@ import {initProjects} from './projects.js';
 import {renderWorkspaceSettings} from './workspace-settings.js';
 import {renderMediaProviders,renderServer} from './media-providers.js';
 import {modelLabel,modelIdentityHtml,initModelIdentity} from './model-identity.js';
-import {readDeck,renderSlides,exportSlides} from './slides.js';
+import {readDeck,renderSlides,exportSlides,transferSlideView} from './slides.js';
 
 const $=s=>document.querySelector(s);
 let state=null,current=null,chat=null,filter='all',collection=null,project=null,attachments=[],settingsTab='setup',settingsDraft=null;
@@ -58,6 +58,7 @@ const loraUI=initLoras({api,getState:()=>state,getChatId:()=>current,pickDirecto
 const projects=initProjects({api,getState:()=>state,getChat:()=>chat,refresh,notify:toast,act,select:act(async id=>{project=id;collection=null;filter='all';lastSidebar='';renderSidebar();if(id&&chat?.project_id!==id){const existing=state.chats.find(c=>c.project_id===id&&!c.archived);if(existing)await openChat(existing.id);else await newChat();}}),showCanvas:value=>value===null?($('#canvas-panel').hidden=!canvasOpen,$('#workspace').classList.toggle('has-canvas',canvasOpen)):toggleCanvas(value),pickDirectory:(path,callback)=>localModels.pickDirectory(path,callback)});
 $('#rag-enabled').closest('label').insertAdjacentHTML('afterend','<label class="think-control">Strumenti <select id="lab-tool" aria-label="Strumenti della chat"><option value="auto">Automatico · dal prompt</option><option value="calculate">Interprete numerico</option><option value="manim">Animazione Manim</option><option value="slides">Slide · HTML in tempo reale</option></select></label><span id="slides-options" hidden><label>Slide <input id="slides-count" aria-label="Numero di slide" type="number" min="1" max="30" value="8" style="width:65px"></label> <label>Formato <select id="slides-format" aria-label="Formato slide"><option>16:9</option><option>4:3</option><option>16:10</option><option>1:1</option></select></label></span>');
 $('#lab-tool').onchange=()=>{$('#slides-options').hidden=$('#lab-tool').value!=='slides';};
+$('#slides-options').insertAdjacentHTML('beforeend',' <label>Stile <select id="slides-design"><option value="professional">Serio / professionale</option><option value="playful">Giocoso / colorato</option><option value="comic">Fumettoso</option></select></label> <label>Contenuto <select id="slides-detail"><option value="concise">Sintesi</option><option value="full">Testi completi</option></select></label>');
 async function executeArtifact(lang,source){if(activeJob())throw Error('Attendi o interrompi il lavoro corrente.');if(!current)await newChat();await api('/chats/'+current+'/messages',{prompt:lang.startsWith('manim')?'Renderizza questa scena Manim':'Esegui questo calcolo con l’interprete',lab:lang.startsWith('manim')?'manim':'calculate',lab_source:source,canvas:canvasOpen,...projects.read()});await refresh();}
 function localCard(model){
   const m=model;
@@ -212,7 +213,7 @@ async function uploadFiles(files){
 async function send(event){event.preventDefault();if(activeJob())return;const prompt=$('#prompt').value.trim();if(!prompt)return;
   $('#send').disabled=true;
   try{if(!current){const fresh=await api('/chats',{collection_id:collection,project_id:project});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
-    await persistCanvas();const sent=await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,...visualControls.read(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='slides'?{slides:{count:Number($('#slides-count').value),format:$('#slides-format').value}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()});
+    await persistCanvas();const sent=await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,...visualControls.read(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='slides'?{slides:{count:Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()});
     if(sent.intent==='slides'){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}
     $('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);await refresh();
   }finally{$('#send').disabled=false;}
@@ -280,9 +281,13 @@ async function renderCanvas(){
   const empty=!canvas.content&&!canvas.media.length;$('#canvas-empty').hidden=!empty||canvasEditing;$('#canvas-preview').hidden=canvasEditing||empty;$('#canvas-source').hidden=!canvasEditing;
   $('#canvas-preview-tab').classList.toggle('active',!canvasEditing);$('#canvas-source-tab').classList.toggle('active',canvasEditing);
   const isDeck=canvas.content.startsWith('```h3-slides\n');$('#canvas-source-tab').textContent=isDeck?'Sorgente slide':'Modifica';$('#canvas-source').ariaLabel=isDeck?'Sorgente dichiarativo della presentazione':'Sorgente canvas';
-  const htmlButton=document.querySelector('[data-export="html"]');if(htmlButton)htmlButton.hidden=!isDeck;
+  for(const kind of ['html','pptx']){const button=document.querySelector('[data-export="'+kind+'"]');if(button)button.hidden=!isDeck;}
   if(!canvasEditing){const value={...canvas,media:[...canvas.media]},entry=canvasHistory.items.find(x=>x.id===value.id),message=(chat?.messages||[]).find(m=>m.id===entry?.message_id)||[...(chat?.messages||[])].reverse().find(m=>m.meta?.artifact?.content===value.content||m.content===value.content);renderQueue=renderQueue.catch(()=>{}).then(async()=>{const options={final:!activeJob()?.canvas||value.id!==canvasHistory.active_id,sources:message?.meta?.rag_sources||[],onCitation:(s,all)=>projects.citation(s,all,message),onExecute:act(executeArtifact)};
-    if(isDeck){try{await renderSlides($('#canvas-preview'),value,options);}catch(e){$('#canvas-preview').textContent=e.message;}}
+    if(isDeck){try{await renderSlides($('#canvas-preview'),value,{...options,editable:!activeJob()?.canvas,onChange:async content=>{
+      if(activeJob()?.canvas)throw Error('Attendi la fine della generazione prima di modificare.');
+      canvasFollow=false;canvasSelection++;canvas.content=content;canvasDirty=true;$('#canvas-source').value=content;
+      await persistCanvas();await renderCanvas();
+    }});}catch(e){$('#canvas-preview').textContent=e.message;}}
     else{$('#canvas-preview').classList.remove('slides-preview');await renderRich($('#canvas-preview'),value.content,options);appendMedia($('#canvas-preview'),value.media);}
   });await renderQueue;}
 }
@@ -290,7 +295,7 @@ async function persistCanvas(){clearTimeout(canvasSaveTimer);if(canvasSaving){aw
   canvasSaving=(async()=>{
     if(!current){const fresh=await api('/chats',{project_id:project});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
     const id=current,value=structuredClone(canvas),saved=await api('/canvas/'+id,value,'PUT');
-    if(current===id){const unchanged=JSON.stringify(canvas)===JSON.stringify(value);canvas.id=saved.id;if(unchanged)canvasDirty=false;await loadCanvasHistory(id);$('#canvas-save-status').textContent=canvasDirty?'Modifiche da salvare':'Salvato sul computer';}
+    if(current===id){const unchanged=JSON.stringify(canvas)===JSON.stringify(value);transferSlideView(canvas.id,saved.id);canvas.id=saved.id;if(unchanged)canvasDirty=false;await loadCanvasHistory(id);$('#canvas-save-status').textContent=canvasDirty?'Modifiche da salvare':'Salvato sul computer';}
   })();try{await canvasSaving;}finally{canvasSaving=null;}
 }
 function canvasChanged(){canvas.title=$('#canvas-title').value;canvas.content=$('#canvas-source').value;canvasDirty=true;$('#canvas-save-status').textContent='Modifiche da salvare';clearTimeout(canvasSaveTimer);canvasSaveTimer=setTimeout(act(persistCanvas),800);}
@@ -456,7 +461,7 @@ $('#canvas-preview-tab').onclick=act(async()=>{canvasEditing=false;await persist
 $('#canvas-source-tab').onclick=act(async()=>{if(activeJob()?.canvas)throw Error('Attendi la scrittura del motore prima di modificare.');canvasEditing=true;await renderCanvas();$('#canvas-source').focus();});
 $('#canvas-write').onclick=$('#canvas-source-tab').onclick;
 $('#canvas-title').oninput=canvasChanged;$('#canvas-source').oninput=canvasChanged;$('#canvas-save').onclick=act(async()=>{await persistCanvas();toast('Canvas salvato.');});
-document.querySelector('[data-export="md"]').insertAdjacentHTML('afterend','<button class="btn small" data-export="html" hidden>HTML</button>');
+document.querySelector('[data-export="md"]').insertAdjacentHTML('afterend','<button class="btn small" data-export="html" hidden>HTML</button><button class="btn small" data-export="pptx" hidden>PowerPoint</button>');
 document.querySelectorAll('[data-export]').forEach(b=>b.onclick=act(async()=>{if(activeJob()?.canvas&&canvas.id===canvasHistory.active_id)throw Error('Attendi che il documento sia completo prima di esportare.');await persistCanvas();if(!canvas.content&&!canvas.media.length)throw Error('Il canvas è vuoto.');canvasEditing=false;await renderCanvas();const root=$('#canvas-preview');$('#canvas-panel').classList.add('exporting');try{if(b.dataset.export==='md')saveBlob(new Blob([canvas.content],{type:'text/markdown;charset=utf-8'}),canvas.title+'.md');else if(readDeck(canvas.content))await exportSlides(canvas,b.dataset.export,state.token);else{if(b.dataset.export==='pdf')await exportPdf(root,canvas.title,state.token);if(b.dataset.export==='docx')await exportDocx(root,canvas.title);if(b.dataset.export==='png')await exportPng(root,canvas.title);}toast('Esportazione pronta.');}finally{$('#canvas-panel').classList.remove('exporting');}}));
 await refresh();
 window.addEventListener('beforeunload',e=>{if(canvasDirty){e.preventDefault();e.returnValue='';}});

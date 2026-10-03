@@ -1,6 +1,8 @@
 import {renderRich,saveBlob} from './render.js';
 import hljs from 'highlight.js';
 import {exportPdf,exportDocx,exportPng} from './exports.js';
+import {layoutSlide} from './slide-layout.js';
+import {validateDesign,applyOverride} from './slide-design.js';
 
 export const slideFormats={'16:9':720,'4:3':960,'16:10':800,'1:1':1280};
 export function readDeck(content){
@@ -8,6 +10,8 @@ export function readDeck(content){
   if(content.length>200000||!content.endsWith('\n```'))throw Error('Sorgente slide incompleto o troppo grande.');
   const deck=JSON.parse(content.slice(13,-4));
   if(deck.version!==1||!Object.hasOwn(slideFormats,deck.format)||!Array.isArray(deck.pages)||!deck.pages.length||deck.pages.length>30)throw Error('Presentazione non valida.');
+  if(deck.title!==undefined&&(typeof deck.title!=='string'||deck.title.length>150))throw Error('Titolo presentazione non valido.');
+  deck.title||='Presentazione';deck.references||=[];
   for(const page of deck.pages){
     if(typeof page.title!=='string'||page.title.length>150||!Array.isArray(page.nodes)||page.nodes.length>40)throw Error('Pagina slide non valida.');
     const groups=new Map([['root',0]]),ids=new Set(['root']);
@@ -16,9 +20,10 @@ export function readDeck(content){
       ids.add(node.id);if(node.kind==='group')groups.set(node.id,groups.get(node.parent)+1);
     }
   }
-  return deck;
+  validateDesign(deck);return deck;
 }
 const selections=new Map();
+export function transferSlideView(oldId,newId){if(selections.has(oldId))selections.set(newId,selections.get(oldId));}
 const observerByTarget=new WeakMap();
 function applyStyle(element,style={}){
   element.classList.add('slide-surface-'+(['plain','soft','accent','dark'].includes(style.surface)?style.surface:'plain'));
@@ -30,12 +35,17 @@ function applyStyle(element,style={}){
 }
 
 async function pageElement(deck,page,index,media,options,mount){
-  const frame=document.createElement('article');frame.className='h3-slide-page';frame.style.setProperty('--slide-height',slideFormats[deck.format]+'px');frame.dataset.page=String(index+1);
+  const frame=document.createElement('article');frame.className='h3-slide-page slide-theme-'+(deck.theme||'lagoon')+' slide-typography-'+(deck.typography||'modern')+' slide-design-'+(deck.design||'professional');frame.style.setProperty('--slide-height',slideFormats[deck.format]+'px');frame.dataset.page=String(index+1);
+  const roots=page.nodes.filter(n=>n.parent==='root');
+  if(index===0&&roots.length<=4&&!page.nodes.some(n=>['code','chart','mermaid'].includes(n.kind)))frame.classList.add('slide-cover');
+  if(roots.length>=4&&roots[0].kind==='heading'&&roots.slice(1).every(n=>n.kind==='text'&&n.text.length<1800))frame.classList.add('slide-auto-grid');
+  const kicker=document.createElement('div');kicker.className='h3-slide-kicker';kicker.textContent=index===0?'Presentazione':`Capitolo ${String(index+1).padStart(2,'0')}`;frame.append(kicker);
   const body=document.createElement('div');body.className='h3-slide-body';frame.append(body);const parents=new Map([['root',body]]);
   mount?.append(frame);
   if(!page.nodes.length){const h=document.createElement('h1');h.textContent=page.title;body.append(h);const p=document.createElement('p');p.className='slide-placeholder';p.textContent=page.status==='writing'?'Il modello sta componendo questa pagina…':'In attesa di composizione…';body.append(p);}
   for(const node of page.nodes){
-    const element=document.createElement('div');element.className='h3-slide-node slide-'+node.kind;applyStyle(element,node.style);parents.get(node.parent).append(element);
+    const element=document.createElement('div');element.className='h3-slide-node slide-'+node.kind;element.dataset.nodeId=node.id;applyStyle(element,node.style);applyOverride(element,page.overrides?.[node.id]);parents.get(node.parent).append(element);
+    if(node.kind==='text'&&node.parent==='root'&&roots.length>=3&&(node.style?.surface||'plain')==='plain')element.classList.add(roots.indexOf(node)%2?'slide-surface-soft':'slide-surface-accent');
     if(node.kind==='group'){parents.set(node.id,element);continue;}
     if(node.kind==='image'){
       const image=media.find(m=>m.id===node.asset_id&&m.mime.startsWith('image/')&&/^(uploads|outputs)\/[\w./-]+\.(png|jpg)$/.test(m.path));
@@ -51,21 +61,9 @@ async function pageElement(deck,page,index,media,options,mount){
   }
   const footer=document.createElement('div');footer.className='h3-slide-footer';
   const sources=(page.sources||[]).map(id=>{const source=(deck.references||[]).find(r=>r.id===id);return source?'['+id+'] '+source.label:'';}).filter(Boolean);
-  footer.textContent=(sources.join(' · ')||deck.title)+' · '+(index+1)+' / '+deck.pages.length;frame.append(footer);
+  footer.title=sources.join(' · ');footer.textContent=deck.title.slice(0,80)+((page.sources||[]).length?' · '+page.sources.map(id=>'['+id+']').join(' '):'')+' · '+(index+1)+' / '+deck.pages.length;frame.append(footer);
   return frame;
 }
-function fit(frame){
-  const body=frame.querySelector('.h3-slide-body');
-  const available=parseInt(frame.style.getPropertyValue('--slide-height'))-116;
-  for(const factor of [1,.9,.8,.72]){
-    frame.style.setProperty('--slide-fit',factor);
-    if(body.scrollHeight<=available+2)break;
-  }
-  const overflow=body.scrollHeight>available+2;frame.classList.toggle('slide-overflow',overflow);
-  frame.style.minHeight=overflow?body.scrollHeight+116+'px':'';
-  return overflow;
-}
-
 export async function renderSlides(target,value,options={}){
   const deck=readDeck(value.content);if(!deck)return false;
   observerByTarget.get(target)?.disconnect();
@@ -80,15 +78,36 @@ export async function renderSlides(target,value,options={}){
   picker.value=selected.index;prev.disabled=selected.index===0;next.disabled=selected.index===deck.pages.length-1;follow.textContent=selected.follow?'Segui scrittura ✓':'Segui scrittura';
   const change=index=>{selected.index=index;selected.follow=false;renderSlides(target,value,options);};prev.onclick=()=>change(selected.index-1);next.onclick=()=>change(selected.index+1);picker.onchange=()=>change(Number(picker.value));follow.onclick=()=>{selected.follow=true;renderSlides(target,value,options);};
   controls.append(prev,picker,next,follow);target.append(controls);
+  const edit=document.createElement('button');edit.id='slide-edit';edit.textContent=selected.editing?'Termina modifica':'Modifica grafica';edit.disabled=!options.editable||!options.onChange||pageNotReady(deck.pages[selected.index]);
+  edit.onclick=()=>{selected.editing=!selected.editing;renderSlides(target,value,options);};controls.append(edit);
   const viewport=document.createElement('div');viewport.className='slides-viewport';target.append(viewport);
   const page=deck.pages[selected.index];const frame=await pageElement(deck,page,selected.index,value.media,options,viewport);
   await document.fonts.ready;await Promise.all([...frame.querySelectorAll('img')].map(img=>img.decode().catch(()=>{})));
-  const warning=document.createElement('p');warning.className='slide-layout-warning no-export';warning.textContent='Questa pagina contiene troppo contenuto per il formato: chiedi di dividerla o ridurla. Il contenuto resta visibile.';target.append(warning);
-  const resize=()=>{warning.hidden=!fit(frame);const scale=Math.max(.1,(viewport.clientWidth||600)/1280);frame.style.transform='scale('+scale+')';viewport.style.height=frame.offsetHeight*scale+'px';};resize();const observer=new ResizeObserver(resize);observer.observe(viewport);observerByTarget.set(target,observer);
+  const frames=layoutSlide(frame,page.title);
+  for(const f of frames)for(const link of f.querySelectorAll('a.rag-citation')){
+    const source=options.sources?.find(s=>'#rag-'+s.citation===link.getAttribute('href'));
+    if(source&&options.onCitation)link.onclick=e=>{e.preventDefault();options.onCitation(source,options.sources);};
+  }
+  const warning=document.createElement('p');warning.className='slide-layout-warning no-export';warning.hidden=frames.length===1;warning.textContent=`Contenuto distribuito in ${frames.length} pagine di continuazione, mantenendo il testo leggibile.`;target.append(warning);
+  const resize=()=>{const scale=Math.max(.1,(viewport.clientWidth||600)/1280);let top=0;for(const f of frames){f.style.position='absolute';f.style.top=top+'px';f.style.transform='scale('+scale+')';top+=f.offsetHeight*scale+16;}viewport.style.height=top+'px';};resize();const observer=new ResizeObserver(resize);observer.observe(viewport);observerByTarget.set(target,observer);
+  if(selected.editing&&options.editable){const {mountEditor}=await import('./slide-editor.js');mountEditor(target,deck,selected.index,frames,async content=>{await assertLayouts(deck,value.media,options);await options.onChange(content);},selected);}
   const notes=document.createElement('details');notes.className='slide-notes no-export';const summary=document.createElement('summary');summary.textContent='Note e fonti della slide';notes.append(summary);
   const text=document.createElement('p');text.textContent=page.notes||'Nessuna nota.';notes.append(text);
   for(const id of page.sources||[]){const ref=(deck.references||[]).find(r=>r.id===id);if(!ref)continue;const p=document.createElement('p');p.textContent='['+id+'] '+ref.label;const rag=options.sources?.find(s=>s.citation===id);if(rag&&options.onCitation){p.className='rag-citation';p.tabIndex=0;p.onclick=()=>options.onCitation(rag,options.sources);p.onkeydown=e=>{if(e.key==='Enter')p.click();};}notes.append(p);}target.append(notes);
   return true;
+}
+const pageNotReady=page=>page.status!=='ready';
+
+async function assertLayouts(deck,media,options){
+  const root=document.createElement('div');root.style.cssText='position:fixed;left:-20000px;top:0;width:1280px;';document.body.append(root);
+  try{
+    for(const [index,page] of deck.pages.entries()){
+      if(pageNotReady(page))continue;
+      const frame=await pageElement(deck,page,index,media,options,root);
+      await document.fonts.ready;await Promise.all([...frame.querySelectorAll('img')].map(img=>img.decode().catch(()=>{})));
+      layoutSlide(frame,page.title);
+    }
+  }finally{await renderRich(root,'');root.remove();}
 }
 
 export async function exportSlides(value,kind,token){
@@ -99,7 +118,8 @@ export async function exportSlides(value,kind,token){
       await pageElement(deck,page,i,value.media,{},root);
     }
     await document.fonts.ready;await Promise.all([...root.querySelectorAll('img')].map(img=>img.decode().catch(()=>{})));
-    for(const frame of root.children)if(fit(frame))throw Error('Una slide supera il formato. Chiedi di ridurre il testo o dividere la pagina prima di esportare.');
+    for(const frame of [...root.children])layoutSlide(frame,deck.pages[Number(frame.dataset.page)-1].title);
+    if(kind==='pptx')return await (await import('./slide-pptx.js')).exportPowerPoint(root,deck,value.title);
     if(kind==='pdf')return await exportPdf(root,value.title,token,{slide_format:deck.format});
     if(kind==='docx')return await exportDocx(root,value.title);
     if(kind==='png')return await exportPng(root,value.title);

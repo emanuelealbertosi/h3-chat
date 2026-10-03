@@ -11,6 +11,9 @@ from .downloads import Cancelled
 PREFIX = '```h3-slides\n'
 FORMATS = {'16:9': (1280, 720), '4:3': (1280, 960), '16:10': (1280, 800), '1:1': (1280, 1280)}
 KINDS = ('group', 'heading', 'text', 'code', 'image', 'mermaid', 'chart')
+THEMES=('lagoon','indigo','sunset')
+TYPOGRAPHY=('modern','editorial')
+DESIGNS=('professional','playful','comic')
 TEXT = {'type': 'string'}
 STYLE = {'type': 'object', 'properties': {
     'flow': {'type': 'string', 'enum': ['stack', 'columns', 'row']},
@@ -36,9 +39,26 @@ PRECEDENTE. ID unici (es. n1, n2), mai root; parent="root" per gli elementi
 principali. Non usare null o il titolo della slide come parent. Una heading principale per pagina.
 flow=stack impila; columns usa pesi (es. [2,1]); row affianca. Non usare sempre
 riquadri identici: varia gerarchia, spazio negativo, colonne, confronti e callout.
-Testi concisi e ben leggibili su una slide, non una pagina web lunga. Circa 100
-parole per pagina; titolo breve, gruppi indipendenti. Non nascondere nelle note
+Con sintesi predefinita: una sola idea principale, titolo breve,
+60–90 parole visibili e massimo 3–4 blocchi. Quando la richiesta o le opzioni
+chiedono testi completi, discorsivi o integrali, scrivi i paragrafi completi,
+con spiegazioni ed esempi: NON ridurli a headline o slogan e NON spostare il
+testo richiesto nelle note. Non applicare il limite 60–90 parole in quel caso;
+l'app distribuisce il testo in continuazioni senza tagli. Conserva il numero
+di capitoli richiesto. Per codice sintetico usa circa 12 righe;
+per un diagramma o una figura mantieni al massimo due brevi blocchi di testo.
+Varia layout nella sequenza: copertina con messaggio chiave, confronti a colonne,
+processi con diagramma, esempio di codice e conclusione. Evita più heading
+principali nella stessa pagina, gruppi annidati decorativi e card dentro card.
+Usa surface=soft/accent per distinguere i blocchi e dark per un callout;
+non scegliere plain per tutti i nodi. Non generare colori o font arbitrari:
+l'app gestisce tema, tipografia e impaginazione. Non nascondere nelle note
 contenuti essenziali. Non oltre 40 nodi. Font size e spazi sono gestiti dal renderer.
+Stile professional: tono serio, preciso e sobrio. playful: tono vivace,
+esempi accessibili e titoli espressivi. comic: tono narrativo e riquadri
+fumettosi, senza inventare fatti o introdurre dialoghi non richiesti.
+Il testo completo è compatibile con OGNI stile: lo stile non è una richiesta
+di abbreviare il contenuto. Le istruzioni specifiche dell'utente prevalgono.
 heading/text: Markdown con formule LaTeX inline $...$ o display $$...$$,
 correttamente escapate nel JSON. code: codice letterale e language.
 mermaid: diagramma preciso, text è codice Mermaid puro. chart: text è JSON
@@ -72,7 +92,8 @@ def edit_options(prompt,content):
     extra=re.search(r'\baggiungi\w*\s+(una?|\d+)\s*(?:slides?|diapositive)\b',prompt,re.I)
     if extra:count+=1 if extra[1].lower() in ('un','una') else int(extra[1])
     # An addition specifies an increment, not the new total.
-    return options(prompt[:extra.start()]+prompt[extra.end():] if extra else prompt,{'count':count,'format':deck['format']})
+    return options(prompt[:extra.start()]+prompt[extra.end():] if extra else prompt,
+                   {'count':count,'format':deck['format']}|{k:deck[k] for k in ('theme','typography','design','detail') if k in deck})
 
 
 def options(prompt, body=None):
@@ -86,7 +107,38 @@ def options(prompt, body=None):
     if match: aspect = re.sub(r'\s', '', match[1])
     if type(count) is not int or not 1 <= count <= 30 or not isinstance(aspect,str) or aspect not in FORMATS:
         raise ValueError('Slide: scegli da 1 a 30 pagine e un formato 16:9, 4:3, 16:10 oppure 1:1.')
-    return {'count': count, 'format': aspect}
+    result={'count': count, 'format': aspect}
+    for key,allowed in (('theme',THEMES),('typography',TYPOGRAPHY),('design',DESIGNS),('detail',('concise','full'))):
+        if key in body:
+            if body[key] not in allowed:raise ValueError('Tema o tipografia delle slide non validi.')
+            result[key]=body[key]
+    for pattern,theme in ((r'\b(?:viola|indaco|violet|indigo)\b','indigo'),(r'\b(?:corallo|arancio|sunset)\b','sunset'),(r'\b(?:verde|petrolio|lagoon)\b','lagoon')):
+        if re.search(pattern,prompt,re.I):result['theme']=theme;break
+    if re.search(r'\b(?:editoriale|serif|editorial)\b',prompt,re.I):result['typography']='editorial'
+    for pattern,design in ((r'\b(?:fumettos[oa]|fumetti|comic)\b','comic'),(r'\b(?:giocos[oa]|colorat[oa]|playful)\b','playful'),(r'\b(?:seri[oa]|professionale|professional)\b','professional')):
+        if re.search(pattern,prompt,re.I):result['design']=design;break
+    if re.search(r'\b(?:test[oi]\s+(?:complet[oi]|estes[oi]|integral[ei]|dettagliat[oi])|discorsiv[oa]|senza\s+sintetizzare|non\s+solo\s+(?:titoli|headlines?)|full\s+text)\b',prompt,re.I):result['detail']='full'
+    elif re.search(r'\b(?:sintetic[oa]|solo\s+(?:titoli|headlines?)|in\s+sintesi)\b',prompt,re.I):result['detail']='concise'
+    return result
+
+
+def validate_overrides(page):
+    overrides=page.get('overrides',{})
+    ids={node['id'] for node in page['nodes']}
+    if not isinstance(overrides,dict) or len(overrides)>40:raise ValueError('Modifiche grafiche slide non valide.')
+    for ident,value in overrides.items():
+        if ident not in ids or not isinstance(value,dict) or set(value)-{'x','y','width','height','font_size','color','background','align','font'}:
+            raise ValueError('Elemento modificato nelle slide non valido.')
+        for key,number in value.items():
+            if key in ('color','background'):
+                if not isinstance(number,str) or not re.fullmatch(r'#[0-9a-fA-F]{6}',number):raise ValueError('Colore slide non valido.')
+            elif key=='align':
+                if number not in ('left','center','right'):raise ValueError('Allineamento slide non valido.')
+            elif key=='font':
+                if number not in ('Manrope','Cormorant','Consolas','Comic Sans MS'):raise ValueError('Carattere slide non valido.')
+            else:
+                limits={'x':(-1280,1280),'y':(-1280,1280),'width':(40,1164),'height':(20,1164),'font_size':(16,88)}[key]
+                if type(number) not in (int,float) or not limits[0]<=number<=limits[1]:raise ValueError('Dimensione o posizione slide non valida.')
 
 
 def style(value):
@@ -235,11 +287,16 @@ def validate_content(content, media):
     deck=json.loads(content[len(PREFIX):-4]); assets={m['id'] for m in media if m['mime'].startswith('image/')}
     if not isinstance(deck, dict) or deck.get('version')!=1 or deck.get('format') not in FORMATS or not isinstance(deck.get('pages'), list) or not 1<=len(deck['pages'])<=30:
         raise ValueError('Presentazione non valida.')
+    if deck.get('theme','lagoon') not in THEMES or deck.get('typography','modern') not in TYPOGRAPHY:raise ValueError('Tema slide non valido.')
+    if deck.get('design','professional') not in DESIGNS or deck.get('detail','concise') not in ('concise','full'):raise ValueError('Stile o dettaglio slide non valido.')
+    if 'title' in deck and (not isinstance(deck['title'],str) or len(deck['title'])>150):raise ValueError('Titolo presentazione non valido.')
     refs=deck.get('references', [])
     if not isinstance(refs,list) or len(refs)>100 or any(not isinstance(r,dict) or not isinstance(r.get('id'),str) or not isinstance(r.get('label'),str) or len(r['label'])>1000 for r in refs): raise ValueError('Fonti slide non valide.')
     for page in deck['pages']:
         if not isinstance(page,dict) or not isinstance(page.get('title'),str) or len(page['title'])>150: raise ValueError('Titolo slide non valido.')
+        if not isinstance(page.get('nodes'),list):raise ValueError('Elementi slide non validi.')
         if page.get('nodes'): validate_page({k:page[k] for k in ('nodes','notes','sources') if k in page},assets,{r['id'] for r in refs},draft=page.get('status')!='ready')
+        validate_overrides(page)
 
 
 def build(app, job, payload, history, settings, model, cancel, stage, log_path, meta):
@@ -289,6 +346,7 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     catalog=json.dumps([{'asset_id':m['id'],'description':descriptions.get(m['id'],m['name']+' (immagine non analizzata)')[:caption_budget], 'source':f'I{i}'} for i,m in enumerate(assets,1)],ensure_ascii=False)
     base=app.engine.chat_messages([m|{'media':[]} for m in history], model, settings)
     base[0]['content']+='\n'+BRIEF
+    base[0]['content']+='\nOPZIONI DELLA PRESENTAZIONE: '+json.dumps({k:opts.get(k,default) for k,default in (('design','professional'),('detail','concise'))},ensure_ascii=False)+'. detail=full richiede testi e spiegazioni completi, non una lista di headline.'
     base[-1]['content']+='\nCATALOGO IMMAGINI:\n'+catalog+'\nFONTI CITABILI:\n'+json.dumps(references,ensure_ascii=False)
     stage('Slide · progettazione della sequenza')
     outline_schema={'type':'object','properties':{'title':TEXT,'slides':{'type':'array','minItems':opts['count'],'maxItems':opts['count'],
@@ -302,7 +360,9 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     for row in outline['slides']:
         if not isinstance(row,dict) or any(not isinstance(row.get(k),str) or len(row[k])>1500 for k in ('title','purpose')): raise ValueError('Scaletta slide non valida.')
         pages.append({'title':row['title'][:150], 'purpose':row['purpose'], 'status':'pending','nodes':[], 'notes':'','sources':[]})
-    deck={'version':1,'format':opts['format'],'title':outline['title'][:150] or 'Presentazione','references':references,'pages':pages,'active':0}
+    deck={'version':1,'format':opts['format'],'theme':opts.get('theme','lagoon'),'typography':opts.get('typography','modern'),
+          'design':opts.get('design','professional'),'detail':opts.get('detail','concise'),
+          'title':outline['title'][:150] or 'Presentazione','references':references,'pages':pages,'active':0}
     def publish():
         content=encode(deck)
         meta['artifact']={'title':deck['title'],'content':content,'media':assets}

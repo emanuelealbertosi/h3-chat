@@ -6,7 +6,7 @@ await copyFile('node_modules/katex/dist/katex.min.css','static/vendor/katex.min.
 await cp('node_modules/katex/dist/fonts','static/vendor/fonts',{recursive:true});
 await copyFile('node_modules/highlight.js/styles/github.css','static/vendor/highlight.css');
 await mkdir('licenses',{recursive:true});
-for(const pkg of ['marked','dompurify','highlight.js','katex','mermaid','chart.js','docx','html-to-image','jspdf']) {
+for(const pkg of ['marked','dompurify','highlight.js','katex','mermaid','chart.js','docx','html-to-image','pptxgenjs','jszip','image-size']) {
   for(const file of ['LICENSE','LICENSE.md','LICENSE.txt']) {
     try {await copyFile(`node_modules/${pkg}/${file}`,`licenses/${pkg}.txt`);break;}catch{}
   }
