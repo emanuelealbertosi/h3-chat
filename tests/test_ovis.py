@@ -7,7 +7,7 @@ from h3chat.store import DEFAULTS
 
 class OvisTests(unittest.TestCase):
     def setUp(self):
-        self.tmp=tempfile.TemporaryDirectory();self.root=Path(self.tmp.name);self.folder=self.root/'ovis';self.folder.mkdir()
+        self.tmp=tempfile.TemporaryDirectory();self.root=Path(self.tmp.name).resolve();self.folder=self.root/'ovis';self.folder.mkdir()
         for name in ('tokenizer.json','tokenizer_config.json','chat_template.jinja','weights.safetensors'):(self.folder/name).write_text('{}')
         (self.folder/'config.json').write_text(json.dumps({'model_type':'qwen2_5_omni','thinker_config':{'text_config':{'hidden_size':2048}}}))
         (self.folder/'model.safetensors.index.json').write_text(json.dumps({'weight_map':{'thinker.model.embed_tokens.weight':'weights.safetensors'}}))
