@@ -1,4 +1,4 @@
-"""Ovis offline text retrieval; unused audio/vision/generation towers stay unloaded."""
+"""Ovis offline text/image retrieval; audio and generation towers stay unloaded."""
 import json,logging,os,sys,traceback
 from pathlib import Path
 
@@ -22,17 +22,17 @@ class Worker:
         if device=='cuda' and not torch.cuda.is_available():raise ValueError('Ovis GPU richiede NVIDIA CUDA. Seleziona CPU nelle Preferenze.')
         torch.set_num_threads(max(1,min(int(request.get('threads',4)),16)))
         config=Qwen2_5OmniConfig.from_pretrained(str(folder),local_files_only=True)
+        visual=bool(request.get('visual',False))
         # A meta-initialized identity removes the vocabulary projection from
         # loading and inference; output.logits is exactly the final hidden state.
         class RetrievalThinker(Qwen2_5OmniThinkerForConditionalGeneration):
             _tied_weights_keys={}
-            _keys_to_ignore_on_load_unexpected=[r'^(?:thinker\.)?(?:audio_tower|visual|lm_head)\.',r'^(?:talker|token2wav)\.']
+            _keys_to_ignore_on_load_unexpected=[r'^(?:thinker\.)?(?:audio_tower|lm_head)\.',r'^(?:talker|token2wav)\.']+([] if visual else [r'^(?:thinker\.)?visual\.'])
             def __init__(self,config):
                 super().__init__(config)
                 self.lm_head=torch.nn.Identity()
-                # Text-only RAG never passes image/audio tensors. Those towers
-                # cannot affect its embeddings and need not occupy RAM or VRAM.
-                self.audio_tower=torch.nn.Identity();self.visual=torch.nn.Identity()
+                self.audio_tower=torch.nn.Identity()
+                if not visual:self.visual=torch.nn.Identity()
         emit('stage',message='RAG · caricamento Ovis · '+('GPU' if device=='cuda' else 'CPU'))
         dtype=(torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16) if device=='cuda' else torch.float32
         self.model,info=RetrievalThinker.from_pretrained(str(folder),config=config.thinker_config,
@@ -43,14 +43,34 @@ class Worker:
         self.model.to(device).eval();self.device=device;self.torch=torch
         self.tokenizer=AutoTokenizer.from_pretrained(str(folder),local_files_only=True,trust_remote_code=False)
         self.tokenizer.chat_template=(folder/'chat_template.jinja').read_text(encoding='utf-8')
+        self.visual=visual;self.processor=None
+        if visual:
+            from transformers import AutoProcessor
+            self.processor=AutoProcessor.from_pretrained(str(folder),local_files_only=True,trust_remote_code=False,use_fast=False)
+            self.processor.chat_template=self.tokenizer.chat_template
         emit('loaded',dimensions=2048,device=device)
     def encode(self,request):
         from h3chat.ovis import messages
-        torch=self.torch;vectors=[];texts=request['texts']
-        if not isinstance(texts,list) or not 1<=len(texts)<=8 or any(not isinstance(t,str) or len(t)>100000 for t in texts):raise ValueError('Richiesta embedding non valida.')
-        for text in texts:
-            formatted=self.tokenizer.apply_chat_template(messages(text,bool(request.get('query'))),tokenize=False,add_generation_prompt=True)
-            inputs=self.tokenizer(formatted,return_tensors='pt',truncation=True,max_length=2048).to(self.device)
+        torch=self.torch;vectors=[]
+        items=request.get('items')
+        if items is None:items=[{'text':t} for t in request.get('texts',[])]
+        if not isinstance(items,list) or not 1<=len(items)<=8 or any(not isinstance(t,dict) or not isinstance(t.get('text',''),str) or len(t.get('text',''))>100000 for t in items):raise ValueError('Richiesta embedding non valida.')
+        for item in items:
+            text=item.get('text','');image=item.get('image')
+            if image:
+                if not self.visual:raise ValueError('Indicizzazione immagini Ovis disattivata.')
+                from PIL import Image
+                Image.MAX_IMAGE_PIXELS=20_000_000
+                path=Path(image)
+                if not path.is_absolute() or not path.is_file() or path.stat().st_size>32*1024**2:raise ValueError('Immagine embedding non valida.')
+                with Image.open(path) as picture:
+                    if picture.width*picture.height>20_000_000:raise ValueError('Immagine embedding troppo grande.')
+                    formatted=self.processor.apply_chat_template(messages(text[:1600],False,str(path)),tokenize=False,add_generation_prompt=True)
+                    inputs=self.processor(text=formatted,images=[picture.convert('RGB')],return_tensors='pt',images_kwargs={'min_pixels':3136,'max_pixels':602112}).to(self.device)
+                if inputs.input_ids.shape[-1]>4096:raise ValueError('Pagina troppo complessa per Ovis: riduci il testo associato.')
+            else:
+                formatted=self.tokenizer.apply_chat_template(messages(text,bool(request.get('query'))),tokenize=False,add_generation_prompt=True)
+                inputs=self.tokenizer(formatted,return_tensors='pt',truncation=True,max_length=2048).to(self.device)
             with torch.inference_mode():
                 hidden=self.model(**inputs,use_cache=False,return_dict=True).logits
                 positions=torch.arange(inputs.attention_mask.shape[-1],device=hidden.device)

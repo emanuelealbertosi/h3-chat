@@ -35,9 +35,11 @@ class OvisTests(unittest.TestCase):
         header=json.dumps({'thinker.model.weights':{'shape':[3000000,1024]},'thinker.visual.unused':{'shape':[1000000,1024]}}).encode()
         (self.folder/'weights.safetensors').write_bytes(struct.pack('<Q',len(header))+header)
         hardware={'ram':{'free_mb':32*1024},'gpu':[{'vendor':'NVIDIA','free_mb':16*1024}]}
-        cpu=memory_assessment(self.settings,hardware);gpu=memory_assessment(self.settings|{'rag_device':'gpu'},hardware)
+        cpu=memory_assessment(self.settings|{'rag_visual':False},hardware);gpu=memory_assessment(self.settings|{'rag_device':'gpu','rag_visual':False},hardware)
         self.assertEqual(cpu['status'],'ok');self.assertAlmostEqual(cpu['ram_gb'],12.9,delta=.1)
         self.assertEqual(gpu['status'],'ok');self.assertAlmostEqual(gpu['vram_gb'],6.7,delta=.1)
+        visual=memory_assessment(self.settings|{'rag_device':'gpu'},hardware)
+        self.assertGreater(visual['vram_gb'],gpu['vram_gb'])
         self.assertEqual(memory_assessment(self.settings,{'ram':{'free_mb':1024}})['status'],'oom')
         self.assertEqual(memory_assessment(self.settings|{'rag_device':'gpu'},hardware|{'gpu':[{'vendor':'NVIDIA','free_mb':1024}]})['status'],'oom')
     def test_shutdown_cancels_active_embedding_before_waiting_for_its_lock(self):

@@ -163,6 +163,7 @@ class Handler(BaseHTTPRequestHandler):
                 target=ROOT/'models/embeddinggemma/embeddinggemma-300M-Q8_0.gguf'
                 if not target.is_file():raise ValueError('Scarica prima EmbeddingGemma dalle Preferenze.')
                 return self.json({'path':str(target)})
+            if path=='/api/knowledge/options' and method=='POST':return self.json(self.app.save_rag_options(body))
             if path=='/api/projects' and method=='POST':return self.json(self.app.knowledge.save(body),201)
             if len(parts)>=3 and parts[:2]==['api','projects']:
                 ident=parts[2]

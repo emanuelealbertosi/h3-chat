@@ -39,8 +39,9 @@ citazioni letterali con gli estratti: non certifica la correttezza di tutte le
 affermazioni. Gli snapshot restano consultabili anche dopo modifiche agli originali.
 L'opzione **Rispondi solo dalle fonti** istruisce il modello a dichiarare le lacune;
 la qualità dipende comunque dall'LLM. Il contesto può contenere solo estratti,
-non necessariamente tutto il progetto. PDF scansionati senza testo richiedono
-Vision tramite allegato alla chat; l'indice RAG non esegue OCR.
+non necessariamente tutto il progetto. Ovis con immagini RAG attive può cercare
+anche le pagine scansionate visivamente; non esegue una trascrizione OCR completa.
+Gli embedding solo testo richiedono un PDF con testo OCR.
 
 Limiti: 500 documenti per progetto, **512 MB per documento**, **3.000 pagine per
 PDF**, dieci milioni di caratteri estratti e 20.000 estratti per documento.
@@ -52,7 +53,7 @@ cambiano, le richieste successive riutilizzano l'indice.
 
 Cartelle fino a quattro livelli, massimo 12 estratti per risposta.
 Gli allegati diretti alla chat mantengono il limite separato di 25 MB e 300 pagine.
-Per un libro scansionato prepara prima un PDF con testo OCR.
+Per ricerca lessicale o embedding solo testo, prepara un PDF scansionato con OCR.
 Indicizzazione fallita o file cancellati
 non restituiscono vecchi contenuti. Percorsi mancanti/errori sono visibili nella
 gestione del progetto.
@@ -67,7 +68,11 @@ non vengono copiati. Sono accettate sia la cartella con `config.json`, tokenizer
 template, indice e tre shard `.safetensors`, sia la cartella superiore `model/`
 del repository ufficiale.
 
-Il dispositivo si sceglie in **Ricerca semantica RAG**: CPU oppure GPU NVIDIA.
+Il dispositivo si sceglie sia in **Ricerca semantica RAG** nelle Preferenze sia
+con i pulsanti **CPU / GPU NVIDIA CUDA** nella finestra **Documenti del progetto**.
+La scelta vale per tutti i progetti, si salva subito e non interrompe lavori attivi.
+Nella stessa finestra puoi attivare/disattivare **Indicizza immagini e pagine
+illustrate con Ovis**, attivo di default. Dopo una modifica premi **Aggiorna indice**.
 La stima nelle Preferenze considera i pesi effettivamente usati e la memoria libera.
 Il backend testuale carica circa 6,2 GB di pesi a precisione ridotta su GPU,
 oppure circa 12,3 GB in float32 su CPU, più lo spazio di lavoro. I tempi CPU
@@ -80,10 +85,32 @@ trasformati in vettori da 2048 dimensioni, conservati nel database locale;
 la ricerca combina somiglianza semantica e parole chiave. Caricamento e
 indicizzazione compaiono nell'avanzamento del progetto o della risposta.
 
-Questa integrazione indicizza il **testo estratto** da PDF, Word e file testuali.
-La capacità multimodale del modello non equivale ancora a indicizzare immagini,
-audio, video o PDF scansionati nel RAG. Non vengono caricati gli encoder non
-utilizzati. Il modello ufficiale e i suoi pesi restano invariati.
+Con immagini RAG attive, Ovis indicizza testo e contenuti visivi: ogni pagina PDF
+con foto, tracciati vettoriali o diagrammi viene renderizzata mantenendo il rapporto
+tra i lati e associata al numero di pagina. Le figure Word vengono associate al
+blocco di origine. Sono accettati anche PNG/JPEG/WebP originali nei progetti
+(massimo 32 MB e 20 milioni di pixel per singola immagine). Le pagine sono
+processate a risoluzione contenuta, fino a circa 0,6 MP; dettagli minuscoli possono
+non essere recuperati. Audio e video non vengono indicizzati.
+
+Le immagini pertinenti appaiono in **Fonti e file**, accanto alle citazioni. Vengono
+copiate nell’output della chat e inviate al modello soltanto con Vision attivo e
+compatibile, rispettando il limite di riferimenti; immagini non inviate sono
+segnalate esplicitamente. Con un provider LLM esterno, le immagini selezionate e
+gli estratti vengono inviati al provider soltanto se Vision è abilitato.
+
+La ricerca mantiene un unico spazio di vettori da 2048 dimensioni per testo e
+immagini. Gli indici precedenti vengono aggiornati al prossimo utilizzo o con
+Aggiorna indice, senza reimportare gli originali. Le pagine prive di testo possono
+essere cercate visivamente, ma non ricevono una trascrizione OCR né una didascalia
+inventata. Gli encoder audio e generazione restano esclusi. Disattivando immagini
+RAG si torna al solo testo e viene escluso anche l’encoder visivo.
+
+Il RAG GPU e le generazioni locali vengono serializzati. Con memoria a richiesta,
+i modelli precedenti sono scaricati prima di Ovis; in modalità residenti restano
+caricati e occorre VRAM sufficiente. La stima considera anche il modulo visivo
+quando attivo. La lettura dei PDF rimane CPU, il calcolo degli embedding segue
+il dispositivo scelto. Il modello ufficiale e i suoi pesi restano invariati.
 
 Fonte e licenza: [Ovis ufficiale, Apache 2.0](https://huggingface.co/ATH-MaaS/Ovis-Omni-Embedding-3B).
 

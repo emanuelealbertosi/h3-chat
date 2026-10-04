@@ -2,9 +2,10 @@
 import json,math,struct
 from pathlib import Path
 
-QUERY_INSTRUCTION='Represent this query for retrieving relevant passages.'
+QUERY_INSTRUCTION='Represent this query for retrieving relevant content.'
 DOCUMENT_INSTRUCTION='Represent this passage for retrieval.'
-FORMAT_VERSION='ovis-native-last-token-v1'
+IMAGE_INSTRUCTION='Represent this visual document for retrieval.'
+FORMAT_VERSION='ovis-native-text-image-v2'
 
 def checkpoint(path):
     folder=Path(path)
@@ -21,14 +22,18 @@ def checkpoint(path):
             if not isinstance(name,str) or Path(name).name!=name or '/' in name or '\\' in name or not name.endswith('.safetensors'):raise ValueError()
         files=[folder/name for name in sorted(names)]
         files += [folder/name for name in ('config.json','model.safetensors.index.json','tokenizer.json','tokenizer_config.json','chat_template.jinja')]
+        files += [folder/name for name in ('processor_config.json','preprocessor_config.json') if (folder/name).is_file()]
         if not all(p.is_file() and p.stat().st_size>0 for p in files):raise ValueError()
     except (OSError,ValueError,KeyError,TypeError) as error:
         raise ValueError('Cartella Ovis incompleta o incompatibile: servono configurazione, tokenizer, template e tutti i pesi safetensors.') from error
     return folder.resolve(),files
 
-def messages(text,query):
-    return [{'role':'system','content':QUERY_INSTRUCTION if query else DOCUMENT_INSTRUCTION},
-            {'role':'user','content':[{'type':'text','text':text}]}]
+def visual_enabled(settings):return settings.get('rag_embedding_profile')=='ovis' and bool(settings.get('rag_embedding_model')) and settings.get('rag_visual',True)
+
+def messages(text,query,image=None):
+    content=([{'type':'image','image':image}] if image else [])+[{'type':'text','text':text}]
+    return [{'role':'system','content':QUERY_INSTRUCTION if query else IMAGE_INSTRUCTION if image else DOCUMENT_INSTRUCTION},
+            {'role':'user','content':content}]
 
 def runtime_ready(root):
     return all((Path(root)/'runtime/vision/packages'/p).is_file() for p in (
@@ -47,7 +52,7 @@ def memory_assessment(settings,hardware):
                 if not 2<=length<=16*1024**2:raise ValueError()
                 header=json.loads(stream.read(length))
             for name,tensor in header.items():
-                if not name.startswith('thinker.model.'):continue
+                if not (name.startswith('thinker.model.') or visual_enabled(settings) and name.startswith('thinker.visual.')):continue
                 shape=tensor['shape']
                 if not isinstance(shape,list) or len(shape)>8 or any(type(v) is not int or not 0<=v<=10**9 for v in shape):raise ValueError()
                 count+=math.prod(shape)
@@ -55,7 +60,7 @@ def memory_assessment(settings,hardware):
         gpu=settings.get('rag_device')=='gpu';weights=count*(2 if gpu else 4)/1024**3
         ram=weights+1.5;vram=weights+1.0 if gpu else 0
         result.update(ram_gb=round(ram,1),vram_gb=round(vram,1),status='ok',title='OK stimato · Ovis')
-        result['advice']='Stima del backbone testuale e del caricamento, con margine. '+('Calcolo GPU; nessun offload automatico. ' if gpu else 'Calcolo CPU: indicizzare molti documenti può richiedere tempo. ')+'Il modello viene rilasciato dopo la ricerca.'
+        result['advice']='Stima del backbone '+('e del modulo immagini' if visual_enabled(settings) else 'testuale')+', con margine. '+('Calcolo GPU; nessun offload automatico. ' if gpu else 'Calcolo CPU: indicizzare molti documenti può richiedere tempo. ')+'Il modello viene rilasciato dopo la ricerca.'
         free=hardware.get('ram',{}).get('free_mb')
         if free is None:result.update(status='unknown',title='RAM libera non rilevata')
         elif ram>max(0,free/1024-.5):result.update(status='oom',title='Rischio OOM · Ovis',advice='La RAM libera è inferiore alla stima Ovis. Libera memoria o scegli un embedding più piccolo.')

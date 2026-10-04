@@ -15,6 +15,7 @@ import threading
 import time
 import urllib.request
 from pathlib import Path
+from contextlib import contextmanager
 from .downloads import Cancelled, safe_join
 from .residency import Session
 from .store import uid
@@ -22,6 +23,8 @@ from .document_limits import RAG_FILE_BYTES,RAG_TEXT_CHARS,RAG_CHUNKS,IMPORT_CHU
 
 TEXT_EXTENSIONS={'.txt','.md','.csv','.json','.py','.js','.ts','.html','.css','.tex'}
 EXTENSIONS=TEXT_EXTENSIONS|{'.pdf','.docx'}
+IMAGE_EXTENSIONS={'.png','.jpg','.jpeg','.webp'}
+EXTENSIONS|=IMAGE_EXTENSIONS
 
 def import_metadata(body):
     name=body.get('name','');defer=body.get('defer',False)
@@ -49,6 +52,7 @@ def scan_folder(path):
 
 def validate(settings):
     if type(settings['rag_enabled']) is not bool:raise ValueError('RAG: scegli On oppure Off.')
+    if type(settings.get('rag_visual',True)) is not bool:raise ValueError('RAG immagini: scegli attivo o disattivo.')
     if type(settings['rag_top_k']) is not int or not 1<=settings['rag_top_k']<=12:raise ValueError('RAG: scegli da 1 a 12 estratti.')
     if settings['rag_embedding_profile'] not in ('embeddinggemma','plain','e5','nomic','ovis'):raise ValueError('Profilo embedding non valido.')
     model=settings['rag_embedding_model']
@@ -72,7 +76,7 @@ class Embeddings:
         if settings['rag_embedding_profile']=='ovis':
             from .ovis import checkpoint,FORMAT_VERSION
             folder,files=checkpoint(settings['rag_embedding_model'])
-            return hashlib.sha256(json.dumps([str(folder),[(p.name,p.stat().st_size,p.stat().st_mtime_ns) for p in files],FORMAT_VERSION,settings.get('rag_device','cpu')]).encode()).hexdigest()
+            return hashlib.sha256(json.dumps([str(folder),[(p.name,p.stat().st_size,p.stat().st_mtime_ns) for p in files],FORMAT_VERSION,settings.get('rag_visual',True),settings.get('rag_device','cpu')]).encode()).hexdigest()
         p=Path(settings['rag_embedding_model']);st=p.stat()
         return hashlib.sha256(json.dumps([str(p.resolve()),st.st_size,st.st_mtime_ns,settings['rag_embedding_profile'],settings.get('rag_device','cpu')]).encode()).hexdigest()
     def close(self):
@@ -115,8 +119,14 @@ class Embeddings:
                 if [r['index'] for r in rows]!=list(range(len(batch))):raise ValueError('Risposta embedding incompleta.')
                 result.extend(normalize(r['embedding']) for r in rows)
             return result
-    def encode_ovis(self,texts,settings,cancel,stage,query):
-        from .ovis import runtime_ready
+    def encode_items(self,items,settings,cancel,stage):
+        if not any(b.get('image_path') for b in items):return self.encode([b['text'] for b in items],settings,cancel,stage)
+        if settings['rag_embedding_profile']!='ovis':raise ValueError('Le immagini RAG richiedono Ovis.')
+        payload=[{'text':b['text'],**({'image':str(safe_join(self.data,b['image_path']))} if b.get('image_path') else {})} for b in items]
+        return self.encode_ovis([],settings,cancel,stage,False,items=payload)
+    def encode_ovis(self,texts,settings,cancel,stage,query,items=None):
+        from .ovis import runtime_ready,visual_enabled
+        entries=items if items is not None else texts
         with self.lock:
             if not runtime_ready(self.root):raise ValueError('Installa i componenti Ovis / Vision nelle Preferenze per usare questo embedding.')
             key=self.key(settings);device='cuda' if settings.get('rag_device')=='gpu' else 'cpu'
@@ -126,15 +136,15 @@ class Embeddings:
                     stage('RAG · avvio motore Ovis · '+device.upper())
                     s.start([self.root/'runtime/python/python.exe','-X','utf8',self.root/'native/embedding-worker.py'],ipc=True,cwd=self.root)
                     s.wait('hello',cancel,90,stage)
-                    s.send({'op':'load','path':settings['rag_embedding_model'],'device':device,'threads':settings['threads']})
+                    s.send({'op':'load','path':settings['rag_embedding_model'],'device':device,'threads':settings['threads'],'visual':visual_enabled(settings)})
                     s.wait('loaded',cancel,600,stage)
                 result=[]
-                for start in range(0,len(texts),8):
+                for start in range(0,len(entries),8):
                     if cancel.is_set():raise Cancelled()
-                    stage(f'RAG · Ovis · {device.upper()} · estratti {start+1}–{min(start+8,len(texts))}/{len(texts)}')
-                    self.session.send({'op':'encode','texts':texts[start:start+8],'query':query})
+                    stage(f'RAG · Ovis · {device.upper()} · elementi {start+1}–{min(start+8,len(entries))}/{len(entries)}')
+                    self.session.send({'op':'encode','items' if items is not None else 'texts':entries[start:start+8],'query':query})
                     vectors=self.session.wait('result',cancel,600,stage).get('vectors',[])
-                    if len(vectors)!=len(texts[start:start+8]) or any(not isinstance(v,list) or len(v)!=2048 for v in vectors):raise ValueError('Risposta Ovis incompleta.')
+                    if len(vectors)!=len(entries[start:start+8]) or any(not isinstance(v,list) or len(v)!=2048 for v in vectors):raise ValueError('Risposta Ovis incompleta.')
                     result.extend(normalize(v) for v in vectors)
                 return result
             except BaseException:
@@ -147,8 +157,22 @@ class Knowledge:
     def __init__(self,root,store):
         self.root,self.store,self.data=Path(root),store,store.root
         self.embeddings=Embeddings(root,self.data);self.index_lock=threading.RLock();self.tasks={};self.lock=threading.RLock();self.closed=threading.Event();self.readers=set()
+        self.compute_lock=threading.RLock();self.release_gpu=None
         from .project_uploads import ProjectUploads
         self.uploads=ProjectUploads(self)
+    @contextmanager
+    def resource(self,settings,cancel):
+        gpu=settings.get('rag_device')=='gpu' and bool(settings.get('rag_embedding_model'));locked=False
+        try:
+            if gpu:
+                while not self.compute_lock.acquire(timeout=.2):
+                    if cancel.is_set():raise Cancelled()
+                locked=True
+                if cancel.is_set():raise Cancelled()
+                if self.release_gpu and settings.get('memory_policy')!='resident':self.release_gpu()
+            yield
+        finally:
+            if locked:self.compute_lock.release()
     def list(self):return self.store.all('SELECT p.*, (SELECT COUNT(*) FROM project_sources s WHERE s.project_id=p.id) AS source_count FROM projects p ORDER BY name')
     def project(self,ident):
         p=self.store.one('SELECT * FROM projects WHERE id=?',(ident,))
@@ -259,7 +283,8 @@ class Knowledge:
             self.tasks[ident]={'status':'running','stage':'Indicizzazione in attesa','error':''}
         def work():
             try:
-                with self.index_lock:self.index(ident,self.store.settings(),self.closed,lambda s:self.progress(ident,s))
+                settings=self.store.settings()
+                with self.resource(settings,self.closed),self.index_lock:self.index(ident,settings,self.closed,lambda s:self.progress(ident,s))
                 with self.lock:self.tasks[ident].update(status='done',stage='Indice aggiornato')
             except Exception as e:
                 with self.lock:self.tasks[ident].update(status='failed',error=str(e),stage='Indicizzazione interrotta')
@@ -270,6 +295,7 @@ class Knowledge:
     def read(self,source,cancel,stage):
         path=Path(source['path'])
         if path.stat().st_size>RAG_FILE_BYTES:raise ValueError('Documento oltre 512 MB.')
+        if path.suffix.lower() in IMAGE_EXTENSIONS:return [],[]
         if path.suffix.lower() in TEXT_EXTENSIONS:
             with path.open(encoding='utf-8-sig',errors='replace') as inp:text=inp.read(RAG_TEXT_CHARS+1)
             if len(text)>RAG_TEXT_CHARS:raise ValueError('Massimo dieci milioni di caratteri per documento RAG.')
@@ -290,6 +316,9 @@ class Knowledge:
         finally:
             session.stop()
             with self.lock:self.readers.discard(session)
+    def read_visuals(self,source,blocks,cancel,stage):
+        from .rag_visual import extract
+        return extract(self,source,blocks,cancel,stage)
     def index(self,ident,settings,cancel,stage,*,release=True):
         model_key=self.embeddings.key(settings) if settings['rag_embedding_model'] else ''
         excluded={r['path'] for r in self.store.all('SELECT path FROM project_exclusions WHERE project_id=?',(ident,))}
@@ -305,19 +334,24 @@ class Knowledge:
                 if cancel.is_set():raise Cancelled()
                 stage(f"RAG · documento {n}/{len(sources)} · {source['name']}")
                 try:
-                    path=Path(source['path']);st=path.stat();fingerprint=f'{st.st_mtime_ns}:{st.st_size}'
-                    if source['fingerprint']!=fingerprint or source['status']!='ready':
+                    from .ovis import visual_enabled
+                    path=Path(source['path']);st=path.stat();fingerprint=f'{st.st_mtime_ns}:{st.st_size}'+(':visual-v2' if visual_enabled(settings) else '')
+                    missing_visual=visual_enabled(settings) and any(not safe_join(self.data,row['image_path']).is_file() for row in self.store.all("SELECT image_path FROM rag_chunks WHERE source_id=? AND image_path!=''",(source['id'],)))
+                    if source['fingerprint']!=fingerprint or source['status']!='ready' or missing_visual:
                         self.store.execute("UPDATE project_sources SET status='indexing',error='' WHERE id=?",(source['id'],))
                         blocks,warnings=self.read(source,cancel,stage)
                         # Bound pathological single lines and preserve the original location.
                         chunks=[b|{'text':b['text'][j:j+1600]} for b in blocks for j in range(0,len(b['text']),1600) if b['text'][j:j+1600].strip()]
+                        if visual_enabled(settings) and path.suffix.lower() in ({'.pdf','.docx'}|IMAGE_EXTENSIONS):
+                            visual_chunks,visual_warnings=self.read_visuals(source,blocks,cancel,stage);chunks+=visual_chunks;warnings+=visual_warnings
+                        elif path.suffix.lower() in IMAGE_EXTENSIONS:raise ValueError('Per indicizzare immagini scegli Ovis e attiva immagini nel RAG.')
                         if not chunks:raise ValueError('Il documento non contiene testo estraibile. Per un libro scansionato crea prima una copia con OCR.')
                         if len(chunks)>RAG_CHUNKS:raise ValueError('Troppi estratti nel documento: massimo 20.000.')
                         self.replace_chunks(source,chunks,warnings,settings,model_key,st,fingerprint,cancel,stage)
                     elif model_key:
-                        chunks=self.store.all('SELECT id,text FROM rag_chunks WHERE source_id=? AND embedding_key!=?',(source['id'],model_key))
+                        chunks=self.store.all('SELECT id,text,image_path FROM rag_chunks WHERE source_id=? AND embedding_key!=?',(source['id'],model_key))
                         for start in range(0,len(chunks),32):
-                            part=chunks[start:start+32];vectors=self.embeddings.encode([b['text'] for b in part],settings,cancel,stage)
+                            part=chunks[start:start+32];vectors=self.embeddings.encode_items(part,settings,cancel,stage)
                             with self.store.connect() as db:db.executemany('UPDATE rag_chunks SET embedding=?,embedding_key=? WHERE id=?',[(json.dumps(v),model_key,b['id']) for b,v in zip(part,vectors)])
                 except Cancelled:raise
                 except Exception as e:
@@ -332,28 +366,28 @@ class Knowledge:
         try:
             if model_key:
                 staged=sqlite3.connect(temporary);staged.execute('PRAGMA journal_mode=OFF')
-                staged.execute('CREATE TABLE chunks (location TEXT,page INTEGER,text TEXT,embedding TEXT)')
+                staged.execute('CREATE TABLE chunks (location TEXT,page INTEGER,text TEXT,embedding TEXT,modality TEXT,image_path TEXT)')
                 for start in range(0,len(chunks),32):
                     if cancel.is_set():raise Cancelled()
                     part=chunks[start:start+32]
                     def update(message):stage(f"RAG · {source['name']} · estratti {start+1}–{start+len(part)}/{len(chunks)} · "+message)
-                    vectors=self.embeddings.encode([b['text'] for b in part],settings,cancel,update)
+                    vectors=self.embeddings.encode_items(part,settings,cancel,update)
                     if len(vectors)!=len(part):raise ValueError('Embedding del documento incompleti.')
-                    staged.executemany('INSERT INTO chunks VALUES (?,?,?,?)',((b['location'],b.get('page'),b['text'],json.dumps(v)) for b,v in zip(part,vectors)));staged.commit()
-                rows=staged.execute('SELECT location,page,text,embedding FROM chunks')
-            else:rows=((b['location'],b.get('page'),b['text'],None) for b in chunks)
+                    staged.executemany('INSERT INTO chunks VALUES (?,?,?,?,?,?)',((b['location'],b.get('page'),b['text'],json.dumps(v),b.get('modality','text'),b.get('image_path','')) for b,v in zip(part,vectors)));staged.commit()
+                rows=staged.execute('SELECT location,page,text,embedding,modality,image_path FROM chunks')
+            else:rows=((b['location'],b.get('page'),b['text'],None,b.get('modality','text'),b.get('image_path','')) for b in chunks)
             if cancel.is_set():raise Cancelled()
             path=Path(source['path']);current=path.stat()
             if current.st_mtime_ns!=st.st_mtime_ns or current.st_size!=st.st_size:raise ValueError('Documento modificato durante la lettura; aggiorna l’indice.')
             with self.store.connect() as db:
                 db.execute('DELETE FROM rag_chunks WHERE source_id=?',(source['id'],))
-                db.executemany('INSERT INTO rag_chunks(source_id,location,page,text,embedding,embedding_key) VALUES (?,?,?,?,?,?)',((source['id'],location,page,text,vector,model_key) for location,page,text,vector in rows))
+                db.executemany('INSERT INTO rag_chunks(source_id,location,page,text,embedding,embedding_key,modality,image_path) VALUES (?,?,?,?,?,?,?,?)',((source['id'],location,page,text,vector,model_key,modality,image_path) for location,page,text,vector,modality,image_path in rows))
                 db.execute("UPDATE project_sources SET status='ready',fingerprint=?,error=?,updated=? WHERE id=?",(fingerprint,' '.join(warnings),time.time(),source['id']))
         finally:
             if staged:staged.close()
             temporary.unlink(missing_ok=True)
     def retrieve(self,ident,query,settings,cancel,stage,source_ids=None):
-        with self.index_lock:
+        with self.resource(settings,cancel),self.index_lock:
             try:return self._retrieve(ident,query,settings,cancel,stage,source_ids)
             finally:self.embeddings.close()
     def _retrieve(self,ident,query,settings,cancel,stage,source_ids=None):

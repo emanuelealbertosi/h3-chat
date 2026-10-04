@@ -65,6 +65,7 @@ class Service:
         self.token = secrets.token_hex(32)
         self.wake, self.closed = threading.Event(), threading.Event()
         self.lock = threading.RLock()
+        self.compute_lock=threading.RLock();self.knowledge.compute_lock=self.compute_lock;self.knowledge.release_gpu=self.engine.stop
         self.current_id, self.cancel_event = None, None
         self.worker = threading.Thread(target=self.run, daemon=True)
         if start_worker:
@@ -259,6 +260,17 @@ class Service:
             if not self.current_id:
                 self.engine.configure(settings)
         return settings
+
+    def save_rag_options(self,patch):
+        if not isinstance(patch,dict) or not patch or set(patch)-{'rag_device','rag_visual'}:raise ValueError('Opzioni RAG non valide.')
+        if not self.knowledge.index_lock.acquire(blocking=False):raise ValueError('Attendi il completamento della ricerca o dell’indicizzazione.')
+        try:
+            with self.lock,self.knowledge.lock:
+                if self.current_id or self.store.one("SELECT id FROM jobs WHERE status IN ('queued','running')") or any(v.get('status')=='running' for v in self.knowledge.tasks.values()):raise ValueError('Attendi il completamento dei lavori prima di cambiare dispositivo RAG.')
+                settings=self.store.settings()|patch;validate_devices(settings);validate_rag(settings)
+                self.knowledge.embeddings.close();self.store.save_settings(patch)
+                return {k:settings[k] for k in ('rag_device','rag_visual')}
+        finally:self.knowledge.index_lock.release()
 
     def release_memory(self):
         with self.lock:
@@ -478,7 +490,13 @@ class Service:
     def execute_job(self, job, cancel):
         text = ""
         meta = {}
+        locked=False
         try:
+            while not self.compute_lock.acquire(timeout=.2):
+                if cancel.is_set():raise Cancelled()
+                self.store.execute("UPDATE jobs SET stage='Attesa indicizzazione RAG sulla GPU' WHERE id=?",(job['id'],))
+            locked=True
+            if cancel.is_set():raise Cancelled()
             payload = json.loads(job["payload"])
             settings = DEFAULTS | payload["settings"]
             history = self.store.messages(job["chat_id"], payload["until"])
@@ -520,7 +538,8 @@ class Service:
                         if len(excerpt_text)+180>remaining:
                             if remaining<330:continue
                             excerpt_text=excerpt_text[:remaining-180].rsplit(' ',1)[0]
-                        rag_sources.append({'citation':'R'+str(len(rag_sources)+1),'chunk_id':row['id'],'source_id':row['source_id'],'name':row['name'],'location':row['location'],'page':row['page'],'text':excerpt_text,'url':row['source_url']})
+                        rag_sources.append({'citation':'R'+str(len(rag_sources)+1),'chunk_id':row['id'],'source_id':row['source_id'],'name':row['name'],'location':row['location'],'page':row['page'],'text':excerpt_text,'url':row['source_url'],
+                            **({'image_path':row['image_path'],'modality':'image'} if row.get('image_path') else {})})
                         remaining-=len(excerpt_text)+180
                     if project['sources_only']:
                         settings['system_prompt']+='\nRispondi solo usando le fonti RAG fornite. Se non contengono la risposta, dichiaralo. Non colmare le lacune con conoscenze generali.'
@@ -546,6 +565,10 @@ class Service:
                     tool_meta['_slide_assets']=extract_assets(self,job,slide_documents,rag_sources,project_id,cancel,stage,log_path)
                 visual_history=history
                 transcript_media=self.engine.transcript_files(transcripts,job['id'])
+            from .rag_visual import attach as attach_rag_visuals
+            visual_options=settings if not selected_route or selected_route['intent'] in ('chat','slides','manim','calculate','voice') else settings|{'vision_enabled':False}
+            tool_meta.update(attach_rag_visuals(self,job,history,rag_sources,visual_options))
+            if selected_route and selected_route['intent']=='slides':tool_meta['_slide_assets']=([s['image'] for s in rag_sources if s.get('image')]+tool_meta.get('_slide_assets',[]))[:32]
             if project_id and settings.get('_rag',settings['rag_enabled']):
                 block='\n\n'.join(f"[{s['citation']}] {s['name']} · {s['location']}\n{s['text']}" for s in rag_sources)
                 history[-1]['content']+='\n\n<fonti_progetto>\n'+(block or 'Nessun estratto pertinente trovato nelle fonti selezionate.')+'\n</fonti_progetto>'
@@ -786,7 +809,9 @@ class Service:
             self.store.update_answer(job, text, status, meta=meta | {"error": error})
             self.store.execute("UPDATE jobs SET status=?,error=?,stage=? WHERE id=?", (status, error, error, job["id"]))
         finally:
-            self.store.execute("UPDATE chats SET updated=? WHERE id=?", (time.time(), job["chat_id"]))
+            try:self.store.execute("UPDATE chats SET updated=? WHERE id=?", (time.time(), job["chat_id"]))
+            finally:
+                if locked:self.compute_lock.release()
 
     def save_artifact(self, chat_id, title, content, media):
         job = self.store.one("SELECT id,message_id FROM jobs WHERE chat_id=? AND status IN ('queued','running') ORDER BY created DESC LIMIT 1", (chat_id,))

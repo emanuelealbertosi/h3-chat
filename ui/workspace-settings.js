@@ -5,10 +5,10 @@ export function renderWorkspaceSettings(host,{draft,state,api,pickFile,pickDirec
  const profile=$('[data-setting="rag_embedding_profile"]');
  profile.add(new Option('Ovis-Omni-Embedding-3B · cartella safetensors','ovis'));
  profile.value=draft.rag_embedding_profile;
- const description=host.querySelector('p');description.textContent='La ricerca per parole è subito disponibile. Per cercare per significato scegli un embedding GGUF oppure la cartella locale di Ovis. I documenti vengono indicizzati attraverso il testo estratto.';
+ const description=host.querySelector('p');description.textContent='La ricerca per parole è subito disponibile. Per cercare per significato scegli un embedding GGUF oppure la cartella locale di Ovis. Ovis può indicizzare anche immagini e pagine illustrate; gli altri embedding usano il testo estratto.';
  path.closest('label').querySelector('span').textContent='Modello embedding · file GGUF o cartella Ovis originale';
  const ovis=document.createElement('div');ovis.innerHTML=`<div class="project-actions"><button id="rag-download-ovis" type="button" class="btn small">Scarica Ovis · 11,1 GB</button><button id="rag-use-ovis" type="button" class="btn small">Usa Ovis scaricato</button><button id="rag-install-ovis" type="button" class="btn small">${state.vision_runtime?.ready?'Componenti Ovis installati':'Installa componenti Ovis / Vision'}</button></div><div data-download-status="ovis-omni-3b"></div><div data-download-status="vision"></div><p class="small-note">Ovis usa la cartella scelta senza copiare i pesi. Il dispositivo segue “Ricerca semantica RAG”: CPU di default, con maggiore uso di RAM e tempi più lunghi; GPU NVIDIA facoltativa. Il modello viene rilasciato dopo la ricerca. Cambiando embedding, il progetto ricostruisce l’indice al prossimo utilizzo.</p>`;
- host.querySelector('.project-actions').after(ovis);
+ host.querySelector('.project-actions').after(ovis);const visual=document.createElement('label');visual.className='check';visual.innerHTML=`<input type="checkbox" data-setting="rag_visual" ${draft.rag_visual!==false?'checked':''}> Indicizza immagini e pagine illustrate con Ovis`;ovis.append(visual);
  const busy=state.downloads.some(d=>d.status==='running');
  $('#rag-download-ovis').disabled=busy;$('#rag-install-ovis').disabled=busy||state.vision_runtime?.ready;
  $('#rag-download-ovis').onclick=async()=>{try{await api('/downloads',{id:'ovis-omni-3b',kind:'tool_model'});notify('Download Ovis avviato.');await refresh();}catch(e){notify(e.message,true);}};

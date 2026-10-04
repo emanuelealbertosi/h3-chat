@@ -124,12 +124,65 @@ def assets(path, pages, output, limit=16):
                 if len(result)>=limit:break
     return result
 
+def visuals(path,output):
+    """Index every illustrated PDF page and raster image in Word, on disk."""
+    from PIL import Image
+    import io,hashlib
+    Image.MAX_IMAGE_PIXELS=20_000_000
+    path=Path(path);folder=Path(output);folder.mkdir(parents=True,exist_ok=True)
+    result=[];warnings=[];seen=set()
+    def save(raw,location,page=None):
+        key=hashlib.sha256(raw).hexdigest()
+        if key in seen:return
+        if len(raw)>32*1024**2:raise ValueError('Una figura è troppo grande per il RAG: massimo 32 MB.')
+        with Image.open(io.BytesIO(raw)) as image:
+            if image.width*image.height>20_000_000:raise ValueError('Una figura supera 20 milioni di pixel.')
+            image.thumbnail((1600,1600));target=folder/f'image-{len(result)+1}.png';image.convert('RGB').save(target)
+        seen.add(key);result.append({'path':target.name,'location':location,'page':page})
+        if len(result)>RAG_PDF_PAGES:raise ValueError('Massimo 3.000 immagini per documento RAG.')
+    if path.suffix.lower()=='.pdf':
+        import pypdfium2 as pdfium
+        doc=pdfium.PdfDocument(path)
+        try:
+            if len(doc)>RAG_PDF_PAGES:raise ValueError('PDF: massimo 3.000 pagine per il RAG.')
+            for i in range(len(doc)):
+                emit('stage',message=f'RAG · analisi figure · pagina {i+1}/{len(doc)}')
+                page=doc[i]
+                try:
+                    # Image, vector path and shading objects include photos,
+                    # plots and diagrams. Text objects alone do not create a vector.
+                    if not any(obj.type in (2,3,5) for obj in page.get_objects()):continue
+                    w,h=page.get_size();scale=min(1600/max(w,h),(602112/(w*h))**.5)
+                    bitmap=page.render(scale=scale)
+                    try:
+                        target=folder/f'page-{i+1}.png';bitmap.to_pil().convert('RGB').save(target)
+                        result.append({'path':target.name,'location':f'pagina {i+1} · contenuto visivo','page':i+1})
+                    finally:bitmap.close()
+                finally:page.close()
+        finally:doc.close()
+    elif path.suffix.lower()=='.docx':
+        validate_docx(path,'rag')
+        from docx import Document
+        doc=Document(path)
+        for number,item in enumerate(doc.iter_inner_content(),1):
+            for blip in item._element.xpath('.//a:blip'):
+                rel=blip.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed')
+                if rel and rel in doc.part.related_parts:
+                    part=doc.part.related_parts[rel]
+                    if not part.content_type.startswith('image/'):continue
+                    try:save(part.blob,f'blocco {number} · immagine')
+                    except OSError:warnings.append(f'Figura del blocco {number} non decodificabile; non indicizzata.')
+    else:
+        if path.stat().st_size>32*1024**2:raise ValueError('Immagine RAG troppo grande: massimo 32 MB.')
+        save(path.read_bytes(),'immagine')
+    return {'visuals':result,'warnings':warnings}
+
 emit('hello',engine='documents')
 for line in sys.stdin:
     try:
         request=json.loads(line)
-        result=(read(request['path'],request.get('profile','chat')) if request['op']=='read' else assets(request['path'],request.get('pages',[]),request['output'],request.get('limit',16)) if request['op']=='assets' else render(request['path'],request['pages'],request['output']))
-        if request['op']=='read':
+        result=(read(request['path'],request.get('profile','chat')) if request['op']=='read' else visuals(request['path'],request['folder']) if request['op']=='visuals' else assets(request['path'],request.get('pages',[]),request['output'],request.get('limit',16)) if request['op']=='assets' else render(request['path'],request['pages'],request['output']))
+        if request['op'] in ('read','visuals'):
             target=Path(request['output']);target.parent.mkdir(parents=True,exist_ok=True);part=target.with_suffix('.writing');part.write_text(json.dumps(result,ensure_ascii=False),encoding='utf-8');part.replace(target);result={'path':str(target)}
         emit('result',result=result)
     except Exception as e:emit('error',message=str(e))

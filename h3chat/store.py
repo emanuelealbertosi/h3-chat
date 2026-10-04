@@ -18,7 +18,7 @@ DEFAULTS = {
     "llm_timeout": 1800,
     "lab_auto": True, "manim_device": "cpu", "manim_duration": 8, "manim_fps": 15, "manim_width": 854, "manim_height": 480, "manim_timeout": 600, "manim_memory_gb": 4,
     "llm_device": "inherit", "image_device": "inherit", "rag_device": "cpu", "asr_device": "cpu",
-    "rag_enabled": True, "rag_embedding_model": "", "rag_embedding_profile": "embeddinggemma", "rag_top_k": 6,
+    "rag_enabled": True, "rag_embedding_model": "", "rag_embedding_profile": "embeddinggemma", "rag_top_k": 6, "rag_visual": True,
     "web_auto": True, "web_provider": "duckduckgo", "web_searxng_url": "", "web_max_results": 3,
     "transcribe_auto": True, "asr_model": "whisper-small", "asr_language": "auto", "asr_threads": 4, "asr_beam": 3,
     "video_model": "", "video_auto": True, "video_advanced": False, "video_overrides": {}, "video_prompt_max_tokens": 3000,
@@ -90,6 +90,9 @@ class Store:
                 db.execute('ALTER TABLE chats ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL')
             if 'source_url' not in {row['name'] for row in db.execute('PRAGMA table_info(project_sources)')}:
                 db.execute("ALTER TABLE project_sources ADD COLUMN source_url TEXT NOT NULL DEFAULT ''")
+            for name,definition in (('modality',"TEXT NOT NULL DEFAULT 'text'"),('image_path',"TEXT NOT NULL DEFAULT ''")):
+                if name not in {row['name'] for row in db.execute('PRAGMA table_info(rag_chunks)')}:
+                    db.execute(f'ALTER TABLE rag_chunks ADD COLUMN {name} {definition}')
             db.execute("UPDATE project_sources SET status='pending' WHERE status='indexing'")
             # One-time migration preserves the user's existing active model settings.
             if not db.execute("SELECT 1 FROM settings WHERE key='llm_overrides'").fetchone():

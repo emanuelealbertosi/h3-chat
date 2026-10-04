@@ -11,6 +11,13 @@ const lines=createInterface({input:child.stdout}),timer=setTimeout(()=>child.kil
 const browser=await chromium.launch({channel:'msedge',headless:true}),page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
 try{
   await page.goto(fixture.url);await page.click('#new-project');await page.fill('#project-name','Documenti facili');await page.click('#project-save');await page.waitForSelector('#project-files');
+  const gpu=page.locator('[data-project-rag-device="gpu"]'),cpu=page.locator('[data-project-rag-device="cpu"]');
+  await page.waitForFunction(()=>!document.querySelector('[data-project-rag-device="gpu"]').disabled);await gpu.click();
+  await page.waitForFunction(()=>document.querySelector('[data-project-rag-device="gpu"]').getAttribute('aria-pressed')==='true'&&!document.querySelector('[data-project-rag-device="gpu"]').disabled);
+  assert.equal(await page.evaluate(async()=> (await (await fetch('/api/state')).json()).settings.rag_device),'gpu');
+  await cpu.click();await page.waitForFunction(()=>document.querySelector('[data-project-rag-device="cpu"]').getAttribute('aria-pressed')==='true'&&!document.querySelector('[data-project-rag-device="cpu"]').disabled);
+  assert.equal(await page.locator('[data-project-rag-visual]').isDisabled(),true);
+  assert.match(await page.locator('#project-dropzone').innerText(),/512 MB/);
   const chooserEvent=page.waitForEvent('filechooser');await page.click('#project-files');const chooser=await chooserEvent;assert.ok(chooser.isMultiple());
   await chooser.setFiles([{name:'Introduzione.md',mimeType:'text/markdown',buffer:Buffer.from('Introduzione verificata 1234.')},{name:'Risultati.txt',mimeType:'text/plain',buffer:Buffer.from('Risultati verificati 5678.')}]);
   await page.waitForFunction(()=>document.querySelectorAll('#project-source-list .project-source').length===2&&document.querySelector('#project-source-list').textContent.includes('Indicizzato'));await page.waitForFunction(()=>!document.querySelector('#project-files').disabled);
@@ -25,6 +32,17 @@ try{
   await page.evaluate(()=>{const file=new File(['Cartella trascinata 3333.'],'Drag.md',{type:'text/markdown'});const entry={isFile:true,name:'Drag.md',file:callback=>callback(file)};const folder={isFile:false,name:'Cartella trascinata',createReader:()=>{let read=false;return {readEntries:callback=>{callback(read?[]:[entry]);read=true;}}}};const event=new Event('drop',{bubbles:true,cancelable:true});Object.defineProperty(event,'dataTransfer',{value:{items:[{kind:'file',webkitGetAsEntry:()=>folder}],files:[]}});document.querySelector('#project-dropzone').dispatchEvent(event);});
   await page.waitForFunction(()=>document.querySelectorAll('#project-source-list .project-source').length===5&&document.querySelector('#project-source-list').textContent.includes('Cartella trascinata/Drag.md'));await page.waitForFunction(()=>!document.querySelector('#project-files').disabled);
   await page.locator('#project-file-input').setInputFiles({name:'Errore.pdf',mimeType:'application/pdf',buffer:Buffer.from('Not a PDF')});await page.waitForSelector('#project-error:visible');assert.match(await page.locator('#project-error').innerText(),/PDF valido/);assert.equal(await page.locator('#project-source-list .project-source').count(),5);
+  const embedding=resolve('work/project-import-qa/ovis');await mkdir(embedding,{recursive:true});
+  for(const name of ['tokenizer.json','tokenizer_config.json','chat_template.jinja','weights.safetensors'])await writeFile(embedding+'/'+name,'{}');
+  await writeFile(embedding+'/config.json',JSON.stringify({model_type:'qwen2_5_omni',thinker_config:{text_config:{hidden_size:2048}}}));
+  await writeFile(embedding+'/model.safetensors.index.json',JSON.stringify({weight_map:{'thinker.model.weight':'weights.safetensors'}}));
+  await page.evaluate(async path=>{const s=await(await fetch('/api/state')).json();const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json','X-H3-Token':s.token},body:JSON.stringify({rag_embedding_model:path,rag_embedding_profile:'ovis'})});if(!r.ok)throw Error(await r.text());},embedding);
+  await page.waitForFunction(()=>!document.querySelector('[data-project-rag-visual]').disabled);
+  await page.locator('[data-project-rag-visual]').uncheck();await page.waitForFunction(()=>!document.querySelector('[data-project-rag-visual]').checked&&!document.querySelector('[data-project-rag-visual]').disabled);
+  assert.equal(await page.evaluate(async()=> (await(await fetch('/api/state')).json()).settings.rag_visual),false);
+  await page.locator('[data-project-rag-visual]').check();await page.waitForFunction(()=>document.querySelector('[data-project-rag-visual]').checked&&!document.querySelector('[data-project-rag-visual]').disabled);
+  assert.equal(await page.evaluate(async()=> (await(await fetch('/api/state')).json()).settings.rag_visual),true);
   await page.setViewportSize({width:390,height:844});assert.ok(await page.locator('#project-dropzone').isVisible());await mkdir('work/project-import-qa',{recursive:true});await page.screenshot({path:'work/project-import-qa/mobile.png',fullPage:true});
+  assert.equal(await page.locator('#project-dialog').evaluate(e=>e.scrollWidth>e.clientWidth+1),false);
   assert.deepEqual(errors,[]);console.log('Projects: native multiple file chooser, import, index, duplicate detection, drag and drop, validation, private copy labels and mobile passed.');
 }finally{await browser.close();child.kill();}
