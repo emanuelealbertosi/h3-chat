@@ -57,7 +57,9 @@ class VideoEngine:
         request={'op':'generate','output':str(output),'plan':plan,'options':opts,'format_prompt':prompt if prompt is not None else plan['prompt'],
                  'images':[str(safe_join(self.data,x['path'])) for x in refs if x['mime'].startswith('image/')],
                  'audios':[str(safe_join(self.data,x['path'])) for x in refs if x['mime'].startswith('audio/')]}
-        if scene:request.update(sequence=scene['sequence'],scene_index=scene['index'],canvas=scene.get('canvas'))
+        if scene:
+            request.update(sequence=scene['sequence'],scene_index=scene['index'],canvas=scene.get('canvas'),audio_tail_padding=bool(scene.get('last')))
+            if scene.get('resume_memory'):request['resume_memory']=scene['resume_memory']
         (folder/'video-plan.json').write_text(json.dumps({'plan':plan,'parameters':opts},ensure_ascii=False,indent=2),encoding='utf-8')
         startup_started=time.monotonic()
         session=self.start_video(model,settings,folder/'engine.log',cancel,stage)
@@ -105,26 +107,50 @@ class VideoEngine:
         return scripts
 
     def generate_long_video(self,model,settings,plan,refs,job_id,cancel,stage,*,prompt):
-        from .video_timeline import timeline,scene_plan
-        from .soundtrack import compose
+        from .video_timeline import timeline,scene_plan,validate_audio_interval
+        from .video_resume import checkpoint,save as save_checkpoint
+        from .soundtrack import compose,probe
         scenes=timeline(settings['_video_duration']);soundtrack=settings['_video_soundtrack']
         if model.get('remote_media') and len(scenes)>1:raise ValueError('Video a più scene con memoria: seleziona il motore MiniMax H3 standalone. Il server esterno deve supportare esplicitamente questa funzione.')
         index=next(i for i,m in enumerate([r for r in refs if r['mime'].startswith('audio/')],1) if m['id']==soundtrack['id'])
         scripts=[plan['prompt']]*len(scenes)
         folder=self.data/'outputs'/job_id;folder.mkdir(parents=True,exist_ok=True)
-        if len(scenes)>1 and settings.get('_assistant',True):
+        resumed=checkpoint(self.data,settings['_video_resume']) if settings.get('_video_resume') else None
+        if resumed and (resumed['timeline']!=scenes or resumed.get('model',model.get('id',''))!=model.get('id','')):raise ValueError('Il modello o la durata audio sono cambiati: il video salvato non può essere ripreso.')
+        # Validate every exact source interval BEFORE spending GPU time. The
+        # selected track's decoded length was already measured by the service.
+        durations={index:settings['_video_duration']}
+        audios=[r for r in refs if r['mime'].startswith('audio/')]
+        for position,scene in enumerate(scenes):
+            local=scene_plan(plan,scene|{'last':position==len(scenes)-1},index)
+            for entry in local['audios']:
+                if entry['role'] not in ('reuse','lipsync'):continue
+                ordinal=entry['index']
+                if ordinal not in durations:durations[ordinal]=probe(self,self.data,audios[ordinal-1],cancel,stage,folder/'engine.log')['duration']
+                validate_audio_interval(durations[ordinal],entry['start'],scene['duration'],tail=position==len(scenes)-1)
+        if resumed:scripts=resumed['prompts'];plan=resumed['plan']
+        elif len(scenes)>1 and settings.get('_assistant',True):
             stage(f'Assistant · sceneggiatura continua in {len(scenes)} scene')
             llm=self.require_model(settings['chat_model'],'chat');self.start_llama(llm,settings,folder/'engine.log',cancel,stage=stage)
             scripts=self.scene_scripts(plan,scenes,settings,cancel,stage,prompt=prompt)
-        outputs=[];parameters=[];canvas=None
+        outputs=[safe_join(self.data,path) for path in resumed['outputs']] if resumed else []
+        parameters=list(resumed['parameters']) if resumed else [];canvas=None
+        def saved_canvas(p):return {'width':p['canvas_width'],'height':p['canvas_height'],'output_width':p['width'],'output_height':p['height'],'aspect':p['aspect'],'aspect_source':p['aspect_source'],'format_image':p.get('format_image')}
+        if parameters and 'canvas_width' in parameters[0]:canvas=saved_canvas(parameters[0])
+        record={'timeline':scenes,'prompts':scripts,'plan':plan,'model':model.get('id',''),'completed':len(outputs),'parameters':parameters,'outputs':[p.relative_to(self.data).as_posix() for p in outputs]}
+        save_checkpoint(folder,record)
+        completed=len(outputs)
         for position,scene in enumerate(scenes):
+            if position<completed:continue
             if cancel.is_set():raise Cancelled()
             scoped=scene|{'last':position==len(scenes)-1,'sequence':job_id,'canvas':canvas}
+            if resumed and position==completed:
+                scoped['resume_memory']={'opening':str(outputs[0]),'recent':[str(p) for p in outputs[-2:]]}
             local=scene_plan(plan,scoped,index,scripts[position])
             def report(label):stage(f'Scena {position+1}/{len(scenes)} · '+label)
             item=self.generate_video(model,settings,local,refs,job_id+f'/scene-{position+1:03d}',cancel,report,prompt=prompt,scene=scoped)
             outputs.append(safe_join(self.data,item['path']));p=item['generation'];parameters.append(p)
-            if not canvas and 'canvas_width' in p:canvas={'width':p['canvas_width'],'height':p['canvas_height'],'output_width':p['width'],'output_height':p['height'],'aspect':p['aspect'],'aspect_source':p['aspect_source'],'format_image':p.get('format_image')}
-            (folder/'scenes.json').write_text(json.dumps({'timeline':scenes,'prompts':scripts,'completed':position+1,'parameters':parameters},ensure_ascii=False,indent=2),encoding='utf-8')
+            if not canvas and 'canvas_width' in p:canvas=saved_canvas(p)
+            record.update(completed=position+1,outputs=[p.relative_to(self.data).as_posix() for p in outputs]);save_checkpoint(folder,record)
         result=compose(self,outputs,safe_join(self.data,soundtrack['path']),folder/'video.mp4',cancel,stage,folder/'engine.log')
-        return {'id':job_id,'name':'Video MiniMax H3.mp4','mime':'video/mp4','path':(folder/'video.mp4').relative_to(self.data).as_posix(),'generation':parameters[0]|{'duration':result['duration'],'scenes':len(scenes),'scene_parameters':parameters,'audio_preserved':True,'visual_memory':len(scenes)>1}}
+        return {'id':job_id,'name':'Video MiniMax H3.mp4','mime':'video/mp4','path':(folder/'video.mp4').relative_to(self.data).as_posix(),'generation':parameters[0]|{'duration':result['duration'],'scenes':len(scenes),'scene_parameters':parameters,'audio_preserved':True,'visual_memory':len(scenes)>1,'recovered_scenes':completed}}

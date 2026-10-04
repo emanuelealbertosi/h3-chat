@@ -84,7 +84,7 @@ def chunked_attention(torch,attention,chunks):
         return output if skip_output_reshape else output.transpose(1,2).reshape(b,seq,heads*dim)
     return run
 
-def read_audio(path,start,seconds,exact=False):
+def read_audio(path,start,seconds,exact=False,tail_padding=False):
     """Decode a bounded source interval. PyAV is bundled; no external ffmpeg."""
     import av
     import numpy as np
@@ -113,8 +113,13 @@ def read_audio(path,start,seconds,exact=False):
             if n:chunks.append(data[:,:n].copy());count+=n
         if not count:raise ValueError('La posizione richiesta è oltre la fine dell’audio.')
     waveform=np.concatenate(chunks,axis=-1)
-    # Padding belongs only to the unused model grid, never fake missing input.
-    if exact and count<wanted:raise ValueError(f'Audio troppo corto: servono {seconds:g} secondi dalla posizione {start:g}.')
+    if exact and count<wanted:
+        # The final clip is rounded UP to a 24 fps boundary. Conditioning may
+        # pad that sub-frame tail; final composition uses the original track.
+        from h3chat.video_timeline import tail_padding_samples
+        try:padding=tail_padding_samples(count,wanted,rate,tail=tail_padding)
+        except ValueError:raise ValueError(f'Audio troppo corto: servono {seconds:g} secondi dalla posizione {start:g}.') from None
+        waveform=np.pad(waveform,((0,0),(0,padding)))
     return {'waveform':torch.from_numpy(waveform)[None],'sample_rate':rate}
 
 def write_video(path,pixels,audio,frames):
@@ -144,6 +149,21 @@ def write_video(path,pixels,audio,frames):
             for packet in stream.encode(None):output.mux(packet)
 
 class Worker:
+    def restore_memory(self,record):
+        import av
+        import numpy as np
+        def frame(path,first=False):
+            image=None
+            with av.open(path,options={'protocol_whitelist':'file'}) as source:
+                for decoded in source.decode(source.streams.video[0]):
+                    image=decoded
+                    if first:break
+            if image is None:raise ValueError('La scena salvata per la memoria visiva è vuota.')
+            return self.torch.from_numpy(image.to_ndarray(format='rgb24').astype(np.float32)/255)[None]
+        emit('stage',message='Video · recupero apertura e memoria visiva delle scene salvate')
+        self.anchor=frame(record['opening'],True)
+        self.recent=[frame(path) for path in record['recent'][-2:]]
+
     def load(self,request):
         import comfy.cli_args
         args=comfy.cli_args.args
@@ -281,7 +301,7 @@ class Worker:
             items.append({'type':'image','data':image})
         master=None;master_z=None
         for entry in plan['audios']:
-            audio=read_audio(request['audios'][entry['index']-1],entry['start'],opts['frames']/24,entry['role'] in ('lipsync','reuse'))
+            audio=read_audio(request['audios'][entry['index']-1],entry['start'],opts['frames']/24,entry['role'] in ('lipsync','reuse'),request.get('audio_tail_padding',False))
             z,t=h3._encode_ref_audio(self.audio_vae,audio)
             blocks.append({'kind':'audio','ref_audio_t':t,'audio_latent':z});items.append({'type':'audio'})
             if entry['role'] in ('lipsync','reuse'):master,master_z=audio,z
@@ -317,6 +337,7 @@ class Worker:
         images=self.images(request['images'])
         if request.get('sequence')!=getattr(self,'sequence',None) or request.get('scene_index',0)==0:
             self.sequence=request.get('sequence');self.anchor=None;self.recent=[]
+        if request.get('resume_memory'):self.restore_memory(request['resume_memory'])
         opts=resolve_canvas(request['options'],request['plan'],[(im.shape[2],im.shape[1]) for im in images],request.get('format_prompt',request['plan'].get('prompt','')))
         if request.get('canvas'):opts.update(request['canvas'])
         request=request|{'options':opts}

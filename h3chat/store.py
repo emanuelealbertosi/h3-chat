@@ -196,11 +196,19 @@ class Store:
             # Keep attachments, controls, per-model settings and the original
             # history/canvas snapshot. A retry must not consume its own answer.
             payload = original['payload']
+            value=json.loads(payload)
+            value['settings'].pop('_video_resume',None)
+            if original['status'] in ('failed','cancelled'):
+                try:
+                    from .video_resume import checkpoint
+                    saved=checkpoint(self.root,original['id'])
+                except (OSError,ValueError,TypeError,KeyError):saved=None
+                if saved:
+                    value['settings']['_video_resume']=original['id']
             if llm_settings is not None:
                 from .llm_options import KEYS
-                value=json.loads(payload)
                 value['settings'].update({key:llm_settings[key] for key in ('chat_model','llm_device','vision_enabled',*KEYS)})
-                payload=json.dumps(value)
+            payload=json.dumps(value)
             answer_id = original['message_id']
             self.canvas_history.backfill(db, chat_id)
             db.execute("UPDATE messages SET content='',media='[]',meta='{}',status='queued',created=? WHERE id=?", (now, answer_id))

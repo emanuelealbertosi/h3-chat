@@ -81,6 +81,18 @@ viene arrotondato al fotogramma e ritagliato alla durata dell’audio.
 10 minuti di audio. La memoria visiva aiuta la continuità, ma non garantisce
 che il modello riproduca ogni dettaglio o un lip-sync perfetto.
 
+La durata dell'ultima scena viene arrotondata al fotogramma: il motore può
+riempire meno di un fotogramma audio solo per il calcolo dell'ultima scena.
+La traccia del montaggio finale resta quella originale, alla durata reale.
+Gli intervalli delle tracce sono controllati prima della generazione.
+
+Se un video a scene fallisce o viene interrotto, **Rigenera** riprende le
+scene mancanti dal checkpoint, mantenendo piano, formato, apertura e ultimi
+fotogrammi. Le scene completate vengono riutilizzate senza copiarle. Se il
+video era completato, Rigenera crea invece un nuovo video da zero. La ripresa
+richiede la stessa durata e lo stesso modello. I vecchi checkpoint senza
+piano globale possono recuperare soltanto l'ultima scena già pianificata.
+
 Il video lungo con memoria è disponibile nel motore **standalone MiniMax H3**.
 Per un server esterno questa funzione richiede un protocollo multiscena
 compatibile; H3-Chat segnala il limite invece di inviare un clip troncato.

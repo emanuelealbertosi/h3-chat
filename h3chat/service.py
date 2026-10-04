@@ -695,7 +695,12 @@ class Service:
                     settings=settings|{'_video_duration':audio_info['duration'],'_video_soundtrack':soundtrack}
                 else:settings=with_prompt_duration(settings,payload['prompt'])
                 meta['model']=video_model['name'];self.store.update_answer(job,text,meta=meta)
-                if settings.get('_video_plan'):
+                if settings.get('_video_resume'):
+                    from .video_resume import checkpoint
+                    saved=checkpoint(self.data,settings['_video_resume'])
+                    plan,assistant_info=saved['plan'],None
+                    stage(f'Recupero video · {saved["completed"]}/{len(saved["timeline"])} scene già salvate')
+                elif settings.get('_video_plan'):
                     plan,assistant_info=settings['_video_plan'],None
                 else:plan,assistant_info=self.engine.refine_video(history,payload['prompt'],refs,video_model,settings,cancel,log_path,stage)
                 media=self.engine.generate_long_video(video_model,settings,plan,refs,job['id'],cancel,stage,prompt=payload['prompt']) if soundtrack else self.engine.generate_video(video_model,settings,plan,refs,job['id'],cancel,stage,prompt=payload['prompt'])

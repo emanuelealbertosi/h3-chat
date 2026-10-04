@@ -2,6 +2,17 @@
 import copy
 import math
 
+def tail_padding_samples(count,wanted,rate,*,tail=False):
+    missing=wanted-count
+    if missing<=0:return 0
+    if count>0 and tail and missing<=math.ceil(rate/24)+1:return missing
+    raise ValueError('La traccia non copre l’intervallo audio richiesto.')
+
+def validate_audio_interval(duration,start,seconds,*,tail=False):
+    if not all(math.isfinite(v) for v in (duration,start,seconds)) or duration<=0 or start<0 or seconds<=0:raise ValueError('Intervallo audio non valido.')
+    tolerance=1/24+1/8000 if tail else 1/192000
+    if start>=duration or start+seconds>duration+tolerance:raise ValueError(f'Audio troppo corto: servono {seconds:g} secondi dalla posizione {start:g}.')
+
 def timeline(duration):
     if not math.isfinite(duration) or not 0<duration<=600:raise ValueError('Video con audio: durata massima 10 minuti.')
     frames=math.ceil(duration*24)

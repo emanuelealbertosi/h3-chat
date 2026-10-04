@@ -46,7 +46,7 @@ Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle 
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.16.8-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.16.8/H3-Chat-0.16.8-windows-x64.zip) dalla [release v0.16.8](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.16.8), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.16.9-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.16.9/H3-Chat-0.16.9-windows-x64.zip) dalla [release v0.16.9](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.16.9), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 
