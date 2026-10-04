@@ -7,7 +7,44 @@ import sys
 import time
 from h3chat.voice import resolve_model
 import hashlib
-def stable_seed(value):return int.from_bytes(hashlib.sha256(value.encode()).digest()[:4], "big")
+def stable_seed(value):
+    # Preserve H3-Audio's speaker seed, including its signed 31-bit range.
+    return int.from_bytes(hashlib.sha256(value.encode()).digest()[:4], "big") % (2**31)
+
+
+def reference_waveform(path, rate, torch):
+    """Decode at the original rate, average channels and use Higgs' sinc filter.
+
+    A different downmix/resampler changes the codec tokens used for voice cloning.
+    Keep the same preparation as H3-Audio's soundfile + _encode_reference,
+    while supporting the portable PyAV runtime and compressed references.
+    """
+    import av
+    import numpy as np
+    parts=[];samples=0
+    with av.open(str(path),options={'protocol_whitelist':'file'}) as inp:
+        if not inp.streams.audio:raise ValueError('Il campione non contiene audio.')
+        stream=inp.streams.audio[0];sr=stream.codec_context.sample_rate
+        if not sr or not 8000<=sr<=192000:raise ValueError('Frequenza del campione non supportata.')
+        decoder=av.AudioResampler(format='fltp')
+        def collect(pieces):
+            nonlocal samples
+            for piece in pieces:
+                if piece.sample_rate!=sr:raise ValueError('Frequenza del campione variabile.')
+                samples+=piece.samples
+                if samples>sr*30:raise ValueError('Il riferimento deve durare al massimo 30 secondi.')
+                parts.append(piece.to_ndarray().mean(axis=0))
+        for frame in inp.decode(stream):collect(decoder.resample(frame))
+        collect(decoder.resample(None))
+    if not parts:raise ValueError('Campione vocale vuoto.')
+    signal=np.concatenate(parts)
+    if not np.isfinite(signal).all():raise ValueError('Campione vocale non valido.')
+    wav=torch.from_numpy(signal)[None,None,:]
+    if sr!=rate:
+        from h3_voice_resample import resample
+        wav=resample(wav,sr,rate)
+    if wav.shape[-1]<rate:wav=torch.nn.functional.pad(wav,(0,rate-wav.shape[-1]))
+    return wav
 DATA=Path(__file__).resolve().parents[1]/"runtime/voice"
 
 
@@ -86,23 +123,7 @@ class Engine:
     def reference(self, voice):
         key = voice['reference']
         if key not in self.refs:
-            import av
-            import numpy as np
-            source=Path(key)
-            parts=[];samples=0;rate=self.sample_rate
-            with av.open(str(source),options={'protocol_whitelist':'file'}) as inp:
-                if not inp.streams.audio:raise ValueError('Il campione non contiene audio.')
-                resampler=av.AudioResampler(format='fltp',layout='mono',rate=rate)
-                for frame in inp.decode(inp.streams.audio[0]):
-                    for piece in resampler.resample(frame):
-                        parts.append(piece.to_ndarray().reshape(-1));samples+=piece.samples
-                        if samples>rate*30:raise ValueError('Il riferimento deve durare al massimo 30 secondi.')
-                for piece in resampler.resample(None):parts.append(piece.to_ndarray().reshape(-1))
-            if not parts:raise ValueError('Campione vocale vuoto.')
-            wav=self.torch.from_numpy(np.concatenate(parts))
-            sr=rate
-            wav=wav[None,None,:].to(self.model.device,dtype=self.torch.float32)
-            if wav.shape[-1]<sr:wav=self.torch.nn.functional.pad(wav,(0,sr-wav.shape[-1]))
+            wav=reference_waveform(key,self.sample_rate,self.torch).to(self.model.device,dtype=self.torch.float32)
             with self.torch.inference_mode():
                 self.refs[key]=self.model.get_audio_codec().encode(wav).audio_codes.squeeze(0).transpose(0,1).long().cpu()
         return self.refs[key]

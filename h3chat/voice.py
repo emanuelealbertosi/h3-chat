@@ -15,6 +15,13 @@ DEFAULTS={'voice_model_path':'','voice_codec_path':'','voice_device':'gpu','voic
 FIELDS={'gender':('female','male'),'pitch':('normal','low','high'),'speed':('normal','slow','fast'),
  'emotion':('neutral','affection','enthusiasm','contemplation','determination','sadness'),'mode':('read','compose')}
 
+def reference_identity(path,gender):
+    """Match H3-Audio's base speakers; custom references remain path-portable."""
+    name=Path(path).stem.casefold()
+    known={'english_female':'aurora','french_female':'luna','korean_female':'mia',
+           'arabic_female':'ada','spanish_male':'leo','german_male':'andrea','japanese_male':'ettore'}
+    return known.get(name,gender+':'+name)
+
 def resolve_model(folder,kind='tts'):
     path=absolute_path(folder)
     for candidate in [path,*sorted(path.glob('snapshots/*'),reverse=True),*sorted(path.glob('models--*/snapshots/*'),reverse=True)]:
@@ -108,7 +115,7 @@ def configuration(root,settings,prompt):
     choice,acting=controls(settings,prompt);ref=settings['voice_references'][choice['gender']]
     if not ref['path'] or not Path(ref['path']).is_file():raise ValueError('Configura un campione per questa voce nel Setup → Voice.')
     cfg={'model_path':model_path,'codec_path':codec,'device':'cuda' if settings['voice_device']=='gpu' else 'cpu','precision':settings['voice_precision'],'temperature':settings['voice_temperature'],'pause_ms':settings['voice_pause_ms']}
-    return cfg,choice,acting,{'id':choice['gender'],'reference':ref['path'],'transcript':ref['transcript']}
+    return cfg,choice,acting,{'id':reference_identity(ref['path'],choice['gender']),'reference':ref['path'],'transcript':ref['transcript']}
 
 def synthesize(app,folder,parts,settings,prompt,cancel,stage,log,meta):
     cfg,choice,acting,voice=configuration(app.root,settings,prompt)
@@ -124,7 +131,7 @@ def synthesize(app,folder,parts,settings,prompt,cancel,stage,log,meta):
     (folder/'testo-voce.txt').write_text('\n\n'.join(p['text'] for p in parts),encoding='utf-8')
     if settings.get('memory_policy')!='resident':stage('Voice · rilascio modelli prima della sintesi');app.engine.stop()
     result=app.engine.tool_call('voice-worker.py',{'config':cfg,'segments':segments,'output':str(folder)},cancel,stage,log,timeout=14400)
-    meta.update(voice_model=Path(cfg['model_path']).name,voice_controls=choice,voice_tags=acting['tags'],voice_duration=result['duration'],assistant_on=settings.get('_assistant',True))
+    meta.update(voice_model=Path(cfg['model_path']).name,voice_identity=voice['id'],voice_reference=Path(voice['reference']).name,voice_controls=choice,voice_tags=acting['tags'],voice_duration=result['duration'],assistant_on=settings.get('_assistant',True))
     if settings['voice_device']=='cpu':meta['device_warning']='La sintesi vocale sulla CPU può richiedere molto tempo e molta RAM.'
     return result,[{'id':uid(),'name':name,'mime':mime,'path':(folder/name).resolve().relative_to(app.data.resolve()).as_posix()} for name,mime in [('voce.wav','audio/wav'),('testo-voce.txt','text/plain'),('voce.srt','application/x-subrip')]]
 

@@ -12,6 +12,12 @@ Configura un campione femminile e uno maschile di 1–30 secondi. Il campione
 determina timbro e accento; la sua trascrizione è facoltativa. Sono accettati
 WAV, MP3, FLAC e OGG nei percorsi originali. Su altre installazioni questi
 percorsi si scelgono nuovamente: campioni e pesi non sono distribuiti su GitHub.
+Per una pronuncia italiana scegli preferibilmente un campione parlato in italiano:
+un riferimento inglese può trasferire anche il proprio accento. La trascrizione
+deve corrispondere alle parole effettive del campione, nella sua lingua originale.
+Il motore prepara il riferimento con lo stesso filtro sinc e la stessa media
+dei canali di H3-Audio. I suoi campioni di base mantengono anche l’identità di
+sintesi (Aurora, Luna, Leo e le altre voci), indipendentemente dalla cartella.
 
 Premi **Voice** in chat, apri **Voce e interpretazione** e scegli:
 
