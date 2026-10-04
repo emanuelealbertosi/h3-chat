@@ -42,8 +42,18 @@ la qualità dipende comunque dall'LLM. Il contesto può contenere solo estratti,
 non necessariamente tutto il progetto. PDF scansionati senza testo richiedono
 Vision tramite allegato alla chat; l'indice RAG non esegue OCR.
 
-Limiti: 500 documenti per progetto, 25 MB per documento, cartelle fino a quattro
-livelli, massimo 12 estratti per risposta. Indicizzazione fallita o file cancellati
+Limiti: 500 documenti per progetto, **512 MB per documento**, **3.000 pagine per
+PDF**, dieci milioni di caratteri estratti e 20.000 estratti per documento.
+Il caricamento trasferisce blocchi da 2 MB con percentuale visibile; gli embedding
+sono preparati in piccoli gruppi e conservati temporaneamente su disco prima di
+pubblicare l'indice completo. La prima indicizzazione di un libro può richiedere
+tempo, soprattutto con embedding grandi su CPU. Se il file e il modello non
+cambiano, le richieste successive riutilizzano l'indice.
+
+Cartelle fino a quattro livelli, massimo 12 estratti per risposta.
+Gli allegati diretti alla chat mantengono il limite separato di 25 MB e 300 pagine.
+Per un libro scansionato prepara prima un PDF con testo OCR.
+Indicizzazione fallita o file cancellati
 non restituiscono vecchi contenuti. Percorsi mancanti/errori sono visibili nella
 gestione del progetto.
 

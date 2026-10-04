@@ -4,6 +4,7 @@ import {validateChart} from '../ui/chart-schema.js';
 import {chartData} from '../ui/pptx-chart-data.js';
 import {validateDesign} from '../ui/slide-design.js';
 import {parseColor,composite,contrastRatio,readableColor,colorHex} from '../ui/color-contrast.js';
+import {uploadProjectDocument,projectUploadLimits} from '../ui/project-upload.js';
 test('preserves quantitative coordinates and discards executable options',()=>{
  const spec=validateChart({type:'scatter',datasets:[{label:'x²',data:[{x:-2,y:4},{x:0,y:0},{x:2,y:4}],onclick:'alert(1)'}],options:{plugins:'evil'}});
  assert.deepEqual(spec.datasets[0].data,[{x:-2,y:4},{x:0,y:0},{x:2,y:4}]);assert.equal(spec.options,undefined);assert.equal(spec.datasets[0].onclick,undefined);
@@ -38,4 +39,40 @@ test('automatic foreground correction preserves hue and fixes unsafe combination
    assert.ok(contrastRatio(parseColor(colorHex(corrected)),parseColor(bg),alpha)>=4.5,`${fg} on ${bg}`);
  }
  const teal=readableColor(parseColor('#087f8c'),parseColor('#143c45'));assert.ok(teal[1]>teal[0]);
+});
+
+test('a book larger than 25 MB is sent as bounded raw blocks with token and progress',async()=>{
+ const size=26*1024**2+37,id='1'.repeat(32),calls=[],progress=[];
+ const file={name:'book.pdf',size,slice:(start,end)=>new Blob([new Uint8Array(end-start)])};
+ const api=async(path,body,method)=>{calls.push({path,body,method});return path.endsWith('/start')?{id,chunk_bytes:projectUploadLimits.upload_chunk_bytes}:{id:'source'};};
+ let received=0,count=0;
+ const fetcher=async(path,options)=>{
+  assert.equal(path,'/api/projects/project/import/'+id);assert.equal(options.method,'PATCH');
+  assert.equal(options.headers['X-H3-Offset'],String(received));assert.equal(options.headers['X-H3-Token'],'session');
+  assert.equal(options.headers['Content-Type'],'application/octet-stream');assert.ok(options.body instanceof Blob);
+  assert.ok(options.body.size<=2*1024**2);received+=options.body.size;count++;
+  return {ok:true,json:async()=>({received})};
+ };
+ const result=await uploadProjectDocument(file,{project:'project',relativePath:'Books/book.pdf',api,getToken:()=> 'session',fetcher,onProgress:(bytes,total)=>progress.push([bytes,total])});
+ assert.equal(received,size);assert.equal(count,14);assert.deepEqual(progress.at(-1),[size,size]);
+ assert.deepEqual(calls.map(c=>c.path),['/projects/project/import/start','/projects/project/import/'+id+'/finish']);
+ assert.equal(calls[0].body.relative_path,'Books/book.pdf');assert.equal(calls[0].body.defer,true);assert.equal(result.id,'source');
+});
+
+test('failed or incomplete book blocks are cancelled without publishing a document',async()=>{
+ for(const failure of ['response','offset']){
+  const id='2'.repeat(32),calls=[];
+  const api=async(path,body,method)=>{calls.push({path,method});return {id,chunk_bytes:1024};};
+  const file={name:'book.pdf',size:1024,slice:()=>new Blob(['PDF'])};
+  await assert.rejects(uploadProjectDocument(file,{project:'project',api,getToken:()=> 'session',fetcher:async()=>({ok:failure!=='response',json:async()=>({error:'Upload failed',received:512})})}));
+  assert.equal(calls.length,2);assert.equal(calls[1].method,'DELETE');assert.ok(calls[1].path.endsWith('/'+id));
+ }
+});
+
+test('book size is checked before creating a transfer',async()=>{
+ for(const size of [0,projectUploadLimits.file_bytes+1]){
+  let called=false;
+  await assert.rejects(uploadProjectDocument({name:'book.pdf',size},{project:'project',api:()=>{called=true;},getToken:()=>''}));
+  assert.equal(called,false);
+ }
 });

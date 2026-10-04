@@ -20,6 +20,7 @@ from h3chat.external_models import browse, suggest
 from h3chat.pdf_export import export_pdf
 from h3chat.store import uid
 from h3chat.tailscale_access import TailscaleAccess
+from h3chat.document_limits import IMPORT_CHUNK_BYTES
 
 ROOT = Path(__file__).resolve().parent
 LOG = logging.getLogger("h3chat.http")
@@ -135,6 +136,15 @@ class Handler(BaseHTTPRequestHandler):
                         raise PermissionError("File non disponibile.")
                     return self.file(safe_join(self.app.data, relative))
                 return self.json({"error": "Risorsa non trovata."}, 404)
+            # Binary project blocks have their own small bound; other requests
+            # retain the existing JSON/body limits and CSRF guard above.
+            if len(parts)==5 and parts[:2]==['api','projects'] and parts[3]=='import' and method=='PATCH':
+                if self.headers.get('Content-Type','').split(';')[0]!='application/octet-stream':raise ValueError('Blocco documento non valido.')
+                length=int(self.headers.get('Content-Length','0'))
+                if not 0<length<=IMPORT_CHUNK_BYTES:raise ValueError('Blocco documento troppo grande.')
+                offset=int(self.headers.get('X-H3-Offset','-1'));raw=self.rfile.read(length)
+                if len(raw)!=length:raise ValueError('Blocco documento incompleto.')
+                return self.json(self.app.knowledge.uploads.append(parts[2],parts[4],offset,raw))
             body = self.read_body()
             if path == '/api/network/refresh' and method == 'POST':
                 return self.json(self.server.network.refresh())
@@ -160,6 +170,9 @@ class Handler(BaseHTTPRequestHandler):
                 if len(parts)==3 and method=='DELETE':return self.json(self.app.knowledge.delete(ident))
                 if len(parts)==4 and parts[3]=='sources' and method=='POST':return self.json(self.app.knowledge.add(ident,body),202)
                 if len(parts)==4 and parts[3]=='import' and method=='POST':return self.json(self.app.knowledge.import_file(ident,body),201)
+                if len(parts)==5 and parts[3:]==['import','start'] and method=='POST':return self.json(self.app.knowledge.uploads.start(ident,body),201)
+                if len(parts)==6 and parts[3]=='import' and parts[5]=='finish' and method=='POST':return self.json(self.app.knowledge.uploads.finish(ident,parts[4]),201)
+                if len(parts)==5 and parts[3]=='import' and method=='DELETE':return self.json(self.app.knowledge.uploads.cancel(ident,parts[4]))
                 if len(parts)==4 and parts[3]=='refresh' and method=='POST':return self.json(self.app.knowledge.refresh(ident),202)
                 if len(parts)==4 and parts[3]=='web-sources' and method=='POST':return self.json(self.app.save_web_sources(ident,body),202)
                 if len(parts)==5 and parts[3]=='sources' and method=='DELETE':return self.json(self.app.knowledge.remove(ident,parts[4]))

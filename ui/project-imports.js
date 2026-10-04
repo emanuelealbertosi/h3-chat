@@ -1,3 +1,4 @@
+import {uploadProjectDocument,projectUploadLimits} from './project-upload.js';
 const extensions=new Set(['pdf','docx','txt','md','csv','json','py','js','ts','html','css','tex']);
 const supported=file=>extensions.has(file.name.split('.').at(-1).toLowerCase());
 const relativePaths=new WeakMap();
@@ -18,10 +19,11 @@ async function droppedFiles(transfer){
   return files;
 }
 
-export function initProjectImports({api,getProjectId,onChange,showError,notify}){
+export function initProjectImports({api,getProjectId,getToken,getLimits,onChange,showError,notify}){
   const $=s=>document.querySelector(s);let busy=false,indexingState=false;
+  const initialLimits=getLimits?.()||projectUploadLimits;
   $('#project-documents').querySelector('p').textContent='Importa documenti dal tuo dispositivo: la copia del progetto resta disponibile anche nelle prossime chat.';
-  $('#project-documents').querySelector('.field').insertAdjacentHTML('beforebegin',`<div class="project-import-actions"><button id="project-files" class="btn primary">Scegli file…</button><button id="project-import-folder" class="btn">Importa cartella…</button><input id="project-file-input" type="file" multiple accept=".pdf,.docx,.txt,.md,.csv,.json,.py,.js,.ts,.html,.css,.tex" hidden><input id="project-folder-input" type="file" multiple webkitdirectory hidden></div><div id="project-dropzone" class="project-dropzone" role="button" tabindex="0" aria-label="Scegli o trascina documenti per il progetto"><strong>Trascina qui file o cartelle</strong><span>PDF, Word e testo · fino a 25 MB per file</span><small>I documenti vengono copiati nel progetto. Gli originali restano sul tuo dispositivo.</small></div><p id="project-import-status" role="status" aria-live="polite" hidden></p>`);
+  $('#project-documents').querySelector('.field').insertAdjacentHTML('beforebegin',`<div class="project-import-actions"><button id="project-files" class="btn primary">Scegli file…</button><button id="project-import-folder" class="btn">Importa cartella…</button><input id="project-file-input" type="file" multiple accept=".pdf,.docx,.txt,.md,.csv,.json,.py,.js,.ts,.html,.css,.tex" hidden><input id="project-folder-input" type="file" multiple webkitdirectory hidden></div><div id="project-dropzone" class="project-dropzone" role="button" tabindex="0" aria-label="Scegli o trascina documenti per il progetto"><strong>Trascina qui file o cartelle</strong><span>PDF, Word e testo · fino a ${Math.round(initialLimits.file_bytes/1024**2)} MB per file · PDF fino a ${initialLimits.pdf_pages||3000} pagine</span><small>I documenti vengono copiati nel progetto. Gli originali restano sul tuo dispositivo.</small></div><p id="project-import-status" role="status" aria-live="polite" hidden></p>`);
   const pathField=$('#project-paths').closest('label'),actions=$('#project-folder').parentElement;
   const advanced=document.createElement('details');advanced.className='project-path-options';advanced.innerHTML='<summary>Collega percorsi originali · senza copia</summary><p>Usa file e cartelle sul computer dove gira H3-Chat. Le cartelle collegate vengono controllate per nuovi documenti e modifiche.</p>';
   pathField.before(advanced);advanced.append(pathField,actions);$('#project-folder').textContent='Collega cartella originale…';
@@ -31,14 +33,14 @@ export function initProjectImports({api,getProjectId,onChange,showError,notify})
     const chosen=[...files].filter(supported),skipped=files.length-chosen.length;
     if(!chosen.length)throw Error('Scegli PDF, Word .docx oppure documenti di testo/codice.');
     if(chosen.length>500)throw Error('Seleziona fino a 500 documenti per volta.');
-    const oversized=chosen.find(f=>f.size>25*1024**2||f.size===0);if(oversized)throw Error(oversized.name+': il documento è vuoto o supera 25 MB.');
+    const limits=getLimits?.()||projectUploadLimits;
+    const oversized=chosen.find(f=>f.size>limits.file_bytes||f.size===0);if(oversized)throw Error(oversized.name+': il documento è vuoto o supera '+Math.round(limits.file_bytes/1024**2)+' MB.');
     busy=true;controls();$('#project-error').hidden=true;$('#project-add').disabled=true;$('#project-refresh').disabled=true;$('#project-delete').disabled=true;
     const status=$('#project-import-status');status.hidden=false;let imported=0,duplicates=0;
     try{
       for(const [index,file] of chosen.entries()){
         status.textContent=`Importazione ${index+1}/${chosen.length} · ${file.name}`;
-        const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=()=>reject(Error('Impossibile leggere '+file.name));reader.readAsDataURL(file);});
-        const result=await api('/projects/'+id+'/import',{name:file.name,relative_path:file.webkitRelativePath||relativePaths.get(file)||file.name,data,defer:true});if(result.duplicate)duplicates++;else imported++;
+        const result=await uploadProjectDocument(file,{project:id,relativePath:file.webkitRelativePath||relativePaths.get(file)||file.name,api,getToken,limits,onProgress:(bytes,total)=>{status.textContent=`Importazione ${index+1}/${chosen.length} · ${file.name} · ${Math.round(bytes/total*100)}%`;}});if(result.duplicate)duplicates++;else imported++;
       }
       status.textContent=`${imported} documenti importati${duplicates?' · '+duplicates+' già presenti':''}${skipped?' · '+skipped+' file non supportati ignorati':''}. Indicizzazione in corso…`;
       notify(status.textContent);

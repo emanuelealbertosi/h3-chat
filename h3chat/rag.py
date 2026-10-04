@@ -1,6 +1,7 @@
 """Project knowledge on local SQLite; optional GGUF semantic retrieval."""
 from __future__ import annotations
 import hashlib
+import heapq
 import base64
 import binascii
 import json
@@ -9,6 +10,7 @@ import os
 import re
 import secrets
 import socket
+import sqlite3
 import threading
 import time
 import urllib.request
@@ -16,9 +18,20 @@ from pathlib import Path
 from .downloads import Cancelled, safe_join
 from .residency import Session
 from .store import uid
+from .document_limits import RAG_FILE_BYTES,RAG_TEXT_CHARS,RAG_CHUNKS,IMPORT_CHUNK_BYTES,INLINE_IMPORT_BYTES
 
 TEXT_EXTENSIONS={'.txt','.md','.csv','.json','.py','.js','.ts','.html','.css','.tex'}
 EXTENSIONS=TEXT_EXTENSIONS|{'.pdf','.docx'}
+
+def import_metadata(body):
+    name=body.get('name','');defer=body.get('defer',False)
+    if not isinstance(name,str) or not 1<=len(name)<=200 or any(x in name for x in ('/','\\','\0')):raise ValueError('Nome documento non valido.')
+    label=body.get('relative_path') or name
+    if not isinstance(label,str) or len(label)>1200 or label.startswith('/') or any(x in label for x in ('\\',':','\0')) or any(part in ('','..','.') for part in label.split('/')) or label.split('/')[-1]!=name:raise ValueError('Nome della cartella importata non valido.')
+    extension=Path(name).suffix.lower()
+    if extension not in EXTENSIONS:raise ValueError('Usa PDF, Word .docx oppure file di testo/codice.')
+    if type(defer) is not bool:raise ValueError('Importazione documento non valida.')
+    return name,label,extension,defer
 
 def scan_folder(path):
     root=Path(path).resolve();files=[];seen=0
@@ -134,6 +147,8 @@ class Knowledge:
     def __init__(self,root,store):
         self.root,self.store,self.data=Path(root),store,store.root
         self.embeddings=Embeddings(root,self.data);self.index_lock=threading.RLock();self.tasks={};self.lock=threading.RLock();self.closed=threading.Event();self.readers=set()
+        from .project_uploads import ProjectUploads
+        self.uploads=ProjectUploads(self)
     def list(self):return self.store.all('SELECT p.*, (SELECT COUNT(*) FROM project_sources s WHERE s.project_id=p.id) AS source_count FROM projects p ORDER BY name')
     def project(self,ident):
         p=self.store.one('SELECT * FROM projects WHERE id=?',(ident,))
@@ -158,32 +173,42 @@ class Knowledge:
         if self.tasks.get(ident,{}).get('status')=='running':raise ValueError('Attendi il completamento dell’indicizzazione.')
         if self.store.one("SELECT j.id FROM jobs j JOIN chats c ON c.id=j.chat_id WHERE c.project_id=? AND j.status IN ('queued','running')",(ident,)):raise ValueError('Attendi o interrompi i lavori nel progetto.')
     def delete(self,ident):
-        with self.index_lock:self.mutable(ident);self.store.execute('DELETE FROM projects WHERE id=?',(ident,))
+        with self.index_lock:
+            self.mutable(ident);self.uploads.cancel_project(ident);self.store.execute('DELETE FROM projects WHERE id=?',(ident,))
         return {'ok':True}
     def import_file(self,ident,body):
         """Browser-selected files have no trustworthy original filesystem path."""
-        name=body.get('name','');encoded=body.get('data','');defer=body.get('defer',False)
-        if not isinstance(name,str) or not 1<=len(name)<=200 or any(x in name for x in ('/','\\','\0')):
-            raise ValueError('Nome documento non valido.')
-        extension=Path(name).suffix.lower()
-        label=body.get('relative_path') or name
-        if not isinstance(label,str) or len(label)>1200 or label.startswith('/') or any(x in label for x in ('\\',':','\0')) or any(part in ('','..','.') for part in label.split('/')) or label.split('/')[-1]!=name:
-            raise ValueError('Nome della cartella importata non valido.')
-        if extension not in EXTENSIONS:raise ValueError('Usa PDF, Word .docx oppure file di testo/codice.')
+        import_metadata(body);encoded=body.get('data','');defer=body.get('defer',False)
+        # Compatibility endpoint only. The UI uses bounded binary blocks for books.
         if not isinstance(encoded,str) or len(encoded)>35*1024**2 or type(defer) is not bool:raise ValueError('Documento non valido o oltre 25 MB.')
         try:raw=base64.b64decode(encoded,validate=True)
         except (ValueError,binascii.Error):raise ValueError('Contenuto documento non valido.')
-        if not raw or len(raw)>25*1024**2:raise ValueError('Documento vuoto o oltre 25 MB.')
-        if extension=='.pdf' and not raw.startswith(b'%PDF-'):raise ValueError('Il file non è un PDF valido.')
+        if not raw or len(raw)>INLINE_IMPORT_BYTES:raise ValueError('Documento vuoto o oltre 25 MB.')
+        temporary=self.uploads.folder/(uid()+'.partial')
+        try:
+            temporary.write_bytes(raw)
+            return self.register_import(ident,body,temporary)
+        finally:temporary.unlink(missing_ok=True)
+
+    def register_import(self,ident,body,path):
+        """Register a complete private staging file without loading its bytes."""
+        name,label,extension,defer=import_metadata(body);path=Path(path)
+        if self.closed.is_set():raise ValueError('Applicazione in chiusura.')
+        if not 0<path.stat().st_size<=RAG_FILE_BYTES:raise ValueError('Documento vuoto o oltre 512 MB.')
+        with path.open('rb') as inp:
+            if extension=='.pdf' and inp.read(5)!=b'%PDF-':raise ValueError('Il file non è un PDF valido.')
         if extension=='.docx':
-            import io,zipfile
+            import zipfile
             try:
-                with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                with zipfile.ZipFile(path) as z:
                     items=z.infolist();names={x.filename for x in items}
-                    if not {'[Content_Types].xml','word/document.xml'}<=names or len(items)>10000 or sum(x.file_size for x in items)>100*1024**2 or any('vbaproject' in n.lower() for n in names):
+                    if not {'[Content_Types].xml','word/document.xml'}<=names or len(items)>10000 or sum(x.file_size for x in items)>RAG_FILE_BYTES or any('vbaproject' in n.lower() for n in names):
                         raise ValueError('Documento Word non valido, troppo grande o con macro.')
             except zipfile.BadZipFile:raise ValueError('Documento Word non valido.')
-        digest=hashlib.sha256(label.encode('utf-8')+b'\0'+raw).hexdigest()
+        hasher=hashlib.sha256(label.encode('utf-8')+b'\0')
+        with path.open('rb') as inp:
+            for piece in iter(lambda:inp.read(IMPORT_CHUNK_BYTES),b''):hasher.update(piece)
+        digest=hasher.hexdigest()
         with self.index_lock:
             self.mutable(ident)
             target=safe_join(self.data,'project-imports/'+ident+'/'+digest+'/document'+extension)
@@ -192,9 +217,7 @@ class Knowledge:
             if not duplicate and self.store.one('SELECT COUNT(*) AS n FROM project_sources WHERE project_id=?',(ident,))['n']>=500:raise ValueError('Massimo 500 documenti per progetto.')
             target.parent.mkdir(parents=True,exist_ok=True)
             if not duplicate or not target.is_file():
-                temporary=target.with_name(uid()+'.writing')
-                try:temporary.write_bytes(raw);temporary.replace(target)
-                finally:temporary.unlink(missing_ok=True)
+                path.replace(target)
             source_id=existing['id'] if existing else uid()
             self.store.execute('INSERT OR IGNORE INTO project_sources(id,project_id,path,name) VALUES (?,?,?,?)',(source_id,ident,str(target),label))
         if not defer:self.refresh(ident)
@@ -216,7 +239,7 @@ class Knowledge:
             with self.store.connect() as db:
                 for p in roots:db.execute('INSERT OR IGNORE INTO project_roots VALUES (?,?,?)',(uid(),ident,str(p)))
                 for p in files:
-                    if p.stat().st_size>25*1024**2:raise ValueError('Documento oltre 25 MB: '+p.name)
+                    if p.stat().st_size>RAG_FILE_BYTES:raise ValueError('Documento oltre 512 MB: '+p.name)
                     db.execute('INSERT OR IGNORE INTO project_sources(id,project_id,path,name) VALUES (?,?,?,?)',(uid(),ident,str(p.resolve()),p.name))
                     db.execute('DELETE FROM project_exclusions WHERE project_id=? AND path=?',(ident,str(p.resolve())))
                 if db.execute('SELECT COUNT(*) FROM project_sources WHERE project_id=?',(ident,)).fetchone()[0]>500:raise ValueError('Massimo 500 documenti per progetto.')
@@ -246,10 +269,10 @@ class Knowledge:
         with self.lock:self.tasks[ident]['stage']=stage
     def read(self,source,cancel,stage):
         path=Path(source['path'])
-        if path.stat().st_size>25*1024**2:raise ValueError('Documento oltre 25 MB.')
+        if path.stat().st_size>RAG_FILE_BYTES:raise ValueError('Documento oltre 512 MB.')
         if path.suffix.lower() in TEXT_EXTENSIONS:
-            text=path.read_text(encoding='utf-8-sig',errors='replace')
-            if len(text)>2000000:raise ValueError('Massimo due milioni di caratteri per documento.')
+            with path.open(encoding='utf-8-sig',errors='replace') as inp:text=inp.read(RAG_TEXT_CHARS+1)
+            if len(text)>RAG_TEXT_CHARS:raise ValueError('Massimo dieci milioni di caratteri per documento RAG.')
             blocks=[];lines=text.splitlines(keepends=True);current='';first=1
             for n,line in enumerate(lines,1):
                 if current and len(current)+len(line)>1600:blocks.append({'location':f'righe {first}–{n-1}','page':None,'text':current});current='';first=n
@@ -262,7 +285,7 @@ class Knowledge:
         with self.lock:self.readers.add(session)
         try:
             session.start([self.root/'runtime/python/python.exe','-X','utf8',self.root/'native/document-worker.py'],ipc=True,cwd=self.root)
-            session.wait('hello',cancel,30,stage);session.send({'op':'read','path':str(path),'output':str(output)});session.wait('result',cancel,90,stage)
+            session.wait('hello',cancel,30,stage);session.send({'op':'read','profile':'rag','path':str(path),'output':str(output)});session.wait('result',cancel,1800,stage)
             document=json.loads(output.read_text(encoding='utf-8'));return document['blocks'],document['warnings']
         finally:
             session.stop()
@@ -288,13 +311,9 @@ class Knowledge:
                         blocks,warnings=self.read(source,cancel,stage)
                         # Bound pathological single lines and preserve the original location.
                         chunks=[b|{'text':b['text'][j:j+1600]} for b in blocks for j in range(0,len(b['text']),1600) if b['text'][j:j+1600].strip()]
-                        if len(chunks)>5000:raise ValueError('Troppi estratti nel documento.')
-                        vectors=self.embeddings.encode([b['text'] for b in chunks],settings,cancel,stage) if model_key and chunks else [None]*len(chunks)
-                        if path.stat().st_mtime_ns!=st.st_mtime_ns or path.stat().st_size!=st.st_size:raise ValueError('Documento modificato durante la lettura; aggiorna l’indice.')
-                        with self.store.connect() as db:
-                            db.execute('DELETE FROM rag_chunks WHERE source_id=?',(source['id'],))
-                            db.executemany('INSERT INTO rag_chunks(source_id,location,page,text,embedding,embedding_key) VALUES (?,?,?,?,?,?)',[(source['id'],b['location'],b.get('page'),b['text'],json.dumps(v) if v else None,model_key) for b,v in zip(chunks,vectors)])
-                            db.execute("UPDATE project_sources SET status='ready',fingerprint=?,error=?,updated=? WHERE id=?",(fingerprint,' '.join(warnings),time.time(),source['id']))
+                        if not chunks:raise ValueError('Il documento non contiene testo estraibile. Per un libro scansionato crea prima una copia con OCR.')
+                        if len(chunks)>RAG_CHUNKS:raise ValueError('Troppi estratti nel documento: massimo 20.000.')
+                        self.replace_chunks(source,chunks,warnings,settings,model_key,st,fingerprint,cancel,stage)
                     elif model_key:
                         chunks=self.store.all('SELECT id,text FROM rag_chunks WHERE source_id=? AND embedding_key!=?',(source['id'],model_key))
                         for start in range(0,len(chunks),32):
@@ -305,6 +324,34 @@ class Knowledge:
                     self.store.execute("UPDATE project_sources SET status='error',error=? WHERE id=?",(str(e),source['id']))
         finally:
             if release:self.embeddings.close()
+
+    def replace_chunks(self,source,chunks,warnings,settings,model_key,st,fingerprint,cancel,stage):
+        """Stage embeddings on disk in small batches; publish the index atomically."""
+        temporary=self.data/'project-cache'/(uid()+'.index.sqlite');temporary.parent.mkdir(parents=True,exist_ok=True)
+        staged=None
+        try:
+            if model_key:
+                staged=sqlite3.connect(temporary);staged.execute('PRAGMA journal_mode=OFF')
+                staged.execute('CREATE TABLE chunks (location TEXT,page INTEGER,text TEXT,embedding TEXT)')
+                for start in range(0,len(chunks),32):
+                    if cancel.is_set():raise Cancelled()
+                    part=chunks[start:start+32]
+                    def update(message):stage(f"RAG · {source['name']} · estratti {start+1}–{start+len(part)}/{len(chunks)} · "+message)
+                    vectors=self.embeddings.encode([b['text'] for b in part],settings,cancel,update)
+                    if len(vectors)!=len(part):raise ValueError('Embedding del documento incompleti.')
+                    staged.executemany('INSERT INTO chunks VALUES (?,?,?,?)',((b['location'],b.get('page'),b['text'],json.dumps(v)) for b,v in zip(part,vectors)));staged.commit()
+                rows=staged.execute('SELECT location,page,text,embedding FROM chunks')
+            else:rows=((b['location'],b.get('page'),b['text'],None) for b in chunks)
+            if cancel.is_set():raise Cancelled()
+            path=Path(source['path']);current=path.stat()
+            if current.st_mtime_ns!=st.st_mtime_ns or current.st_size!=st.st_size:raise ValueError('Documento modificato durante la lettura; aggiorna l’indice.')
+            with self.store.connect() as db:
+                db.execute('DELETE FROM rag_chunks WHERE source_id=?',(source['id'],))
+                db.executemany('INSERT INTO rag_chunks(source_id,location,page,text,embedding,embedding_key) VALUES (?,?,?,?,?,?)',((source['id'],location,page,text,vector,model_key) for location,page,text,vector in rows))
+                db.execute("UPDATE project_sources SET status='ready',fingerprint=?,error=?,updated=? WHERE id=?",(fingerprint,' '.join(warnings),time.time(),source['id']))
+        finally:
+            if staged:staged.close()
+            temporary.unlink(missing_ok=True)
     def retrieve(self,ident,query,settings,cancel,stage,source_ids=None):
         with self.index_lock:
             try:return self._retrieve(ident,query,settings,cancel,stage,source_ids)
@@ -330,12 +377,14 @@ class Knowledge:
         if settings['rag_embedding_model']:
             try:
                 key=self.embeddings.key(settings);vector=self.embeddings.encode([query],settings,cancel,stage,query=True)[0]
-                rows=self.store.all(base+' AND c.embedding_key=? AND c.embedding IS NOT NULL',args+[key])
-                scored=[]
-                for row in rows:
-                    values=json.loads(row['embedding'])
-                    if len(values)==len(vector):scored.append((sum(a*b for a,b in zip(vector,values)),row))
-                for i,(_,row) in enumerate(sorted(scored,key=lambda x:-x[0])[:80]):
+                def scores(rows):
+                    for row in rows:
+                        values=json.loads(row['embedding'])
+                        if len(values)==len(vector):yield sum(a*b for a,b in zip(vector,values)),dict(row)
+                with self.store.connect() as db:
+                    rows=db.execute(base+' AND c.embedding_key=? AND c.embedding IS NOT NULL',args+[key])
+                    top=heapq.nlargest(80,scores(rows),key=lambda item:item[0])
+                for i,(_,row) in enumerate(top):
                     entry=rank.setdefault(row['id'],[0,row]);entry[0]+=1/(60+i)
                 mode='ibrida · '+('GPU' if settings.get('rag_device')=='gpu' else 'CPU')
             finally:self.embeddings.close()
@@ -346,6 +395,7 @@ class Knowledge:
         return selected,mode
     def close(self):
         self.closed.set()
+        self.uploads.close()
         with self.lock:
             for s in list(self.readers):s.stop()
         self.embeddings.close()

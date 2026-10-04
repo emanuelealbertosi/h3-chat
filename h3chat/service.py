@@ -90,8 +90,9 @@ class Service:
             return list(fresh.values())
 
     def state(self):
+        from .document_limits import RAG_LIMITS
         models = self.refresh_models()
-        return {"token": self.token, "version": __version__, "settings": self.store.settings(), "profiles": PROFILES,
+        return {"token": self.token, "version": __version__, "settings": self.store.settings(), "profiles": PROFILES,"project_limits":RAG_LIMITS,
                 "api_providers":self.providers.list(),"api_presets":API_PRESETS,"voice_runtime":{"ready":voice_ready(self.root)},
                 "media_providers":self.media_providers.list(),
                 "media_server":self.media_server.status(),

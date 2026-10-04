@@ -50,7 +50,7 @@ Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle 
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.16.12-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.16.12/H3-Chat-0.16.12-windows-x64.zip) dalla [release v0.16.12](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.16.12), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.16.13-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.16.13/H3-Chat-0.16.13-windows-x64.zip) dalla [release v0.16.13](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.16.13), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 
@@ -73,6 +73,8 @@ Le chiavi sono protette con Windows DPAPI e non vengono mostrate o registrate ne
 ## Progetti, fonti e animazioni
 
 Crea un **Progetto**, collega PDF/Word/testi o cartelle e usa **RAG** per recuperare estratti nella chat. Le citazioni aprono il pannello **Fonti e file**, con documento, pagina/righe e testo evidenziato. La ricerca web funziona anche senza progetto; gli snapshot delle fonti web possono essere salvati e indicizzati nel progetto. Ricerca per parole inclusa, ricerca semantica opzionale con un GGUF embedding (EmbeddingGemma scaricabile dall’admin).
+
+Per i **libri nel RAG** usa **Scegli file…**, trascina file/cartelle nel progetto oppure collega i percorsi originali senza copiarli. Sono ammessi fino a **512 MB per documento**, **3.000 pagine per PDF** e dieci milioni di caratteri estratti (massimo 20.000 estratti). Il caricamento mostra la percentuale e invia blocchi da 2 MB; gli embedding sono indicizzati in piccoli gruppi su disco. La prima indicizzazione di un libro può richiedere tempo, soprattutto con Ovis su CPU; le richieste successive riutilizzano l’indice se il file e il modello non cambiano. Le citazioni conservano il numero di pagina. Un PDF scansionato senza testo deve prima essere convertito in un PDF con testo OCR. Gli allegati diretti della chat mantengono il limite separato di 25 MB e 300 pagine.
 
 **Strumenti → Interprete numerico** esegue calcoli e dati dei grafici con sintassi Python limitata. Installa **Manim** dal Setup e chiedi «Ricava dal PDF allegato un’animazione Manim»: lo stesso LLM scrive Python Manim completo: scene 2D/3D, camera, trasformazioni, updaters, immagini e formule Tex/MathTex. Installa anche **LaTeX** dal Setup per le formule. MP4 riproducibile, codice Python modificabile e file LaTeX scaricabili in chat o nel canvas. La durata esplicita (ad esempio 30s) prevale sul preset ed è verificata; il codice generato può essere corretto automaticamente fino a due volte. Il rendering Windows usa AppContainer senza capacità di rete e limiti di RAM/tempo. Gli storyboard già salvati restano utilizzabili. [Uso e limiti](docs/projects-and-animations.md).
 
