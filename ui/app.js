@@ -13,6 +13,8 @@ import {initProjects} from './projects.js';
 import {renderWorkspaceSettings} from './workspace-settings.js';
 import {renderMediaProviders,renderServer} from './media-providers.js';
 import {modelLabel,modelIdentityHtml,initModelIdentity} from './model-identity.js';
+import {initChatModels} from './chat-models.js';
+import {renderVoiceSettings} from './voice.js';
 import {readDeck,renderSlides,exportSlides,transferSlideView} from './slides.js';
 
 const $=s=>document.querySelector(s);
@@ -22,9 +24,11 @@ let canvasHistory={items:[],active_id:null},canvasFollow=true,canvasSaving=null,
 let loading=false,pollTimer,lastSidebar='',lastCanvas='',renderQueue=Promise.resolve();
 const drafts=new Map();
 let assessmentTimer,assessmentRequest=0,lastAssessment=0,thinkSaving=false;
+let chatModels;
 const api=async(path,body,method='POST')=>{
+  const modelRevision=chatModels?.revision();
   const response=await fetch('/api'+path,{cache:'no-store',method:body===undefined?'GET':method,headers:body===undefined?{}:{'Content-Type':'application/json','X-H3-Token':state?.token||''},body:body===undefined?undefined:JSON.stringify(body)});
-  const data=await response.json();if(!response.ok)throw Error(data.error||'Operazione non riuscita.');return data;
+  const data=await response.json();if(!response.ok)throw Error(data.error||'Operazione non riuscita.');return path==='/state'&&chatModels?chatModels.reconcile(data,modelRevision):data;
 };
 function toast(text,error=false){
   const notice=$('#toast');
@@ -56,6 +60,7 @@ const localModels=initLocalModels({api,getState:()=>state,notify:toast,onChange:
 }});
 const loraUI=initLoras({api,getState:()=>state,getChatId:()=>current,pickDirectory:(path,callback)=>localModels.pickDirectory(path,callback),openPreferences:()=>openSettings('advanced'),notify:toast,onChange:()=>scheduleAssessment()});
 const projects=initProjects({api,getState:()=>state,getChat:()=>chat,refresh,notify:toast,act,select:act(async id=>{project=id;collection=null;filter='all';lastSidebar='';renderSidebar();if(id&&chat?.project_id!==id){const existing=state.chats.find(c=>c.project_id===id&&!c.archived);if(existing)await openChat(existing.id);else await newChat();}}),showCanvas:value=>value===null?($('#canvas-panel').hidden=!canvasOpen,$('#workspace').classList.toggle('has-canvas',canvasOpen)):toggleCanvas(value),pickDirectory:(path,callback)=>localModels.pickDirectory(path,callback)});
+chatModels=initChatModels({api,getState:()=>state,notify:toast,onChange:settings=>{if(settings)state.settings=settings;renderStatus();}});
 $('#rag-enabled').closest('label').insertAdjacentHTML('afterend','<label class="think-control">Strumenti <select id="lab-tool" aria-label="Strumenti della chat"><option value="auto">Automatico · dal prompt</option><option value="calculate">Interprete numerico</option><option value="manim">Animazione Manim</option><option value="slides">Slide · HTML in tempo reale</option></select></label><span id="slides-options" hidden><label>Slide <input id="slides-count" aria-label="Numero di slide" type="number" min="1" max="30" value="8" style="width:65px"></label> <label>Formato <select id="slides-format" aria-label="Formato slide"><option>16:9</option><option>4:3</option><option>16:10</option><option>1:1</option></select></label></span>');
 $('#lab-tool').onchange=()=>{$('#slides-options').hidden=$('#lab-tool').value!=='slides';};
 $('#slides-options').insertAdjacentHTML('beforeend',' <label>Stile <select id="slides-design"><option value="professional">Serio / professionale</option><option value="playful">Giocoso / colorato</option><option value="comic">Fumettoso</option></select></label> <label>Contenuto <select id="slides-detail"><option value="concise">Sintesi</option><option value="full">Testi completi</option></select></label>');
@@ -92,6 +97,7 @@ function renderSidebar(){
   $('#chat-list').innerHTML=chats.map(c=>`<div class="chat-row ${current===c.id?'active':''}"><button class="chat-link" data-chat="${c.id}">${c.pinned?'<span class="pin-mark">⌖</span>':''}${esc(c.title)}</button><button class="chat-options" data-chat-menu="${c.id}" aria-label="Opzioni ${esc(c.title)}">⋯</button></div>`).join('')||'<div class="side-empty">Le tue conversazioni appariranno qui.</div>';
 }
 function renderStatus(){
+  chatModels.render();
   projects.controls();
   let mode=document.getElementById('execution-hint');if(!mode){mode=document.createElement('p');mode.id='execution-hint';mode.className='mode-hint';$('#composer').after(mode);}const activeModels=[['LLM','chat_model','llm_device'],['Immagini','create_model','image_device'],['Musica','music_model','music_backend'],['Video','video_model','video_device']];let slow=false;mode.textContent=activeModels.map(([label,key,deviceKey])=>{const m=state.models.find(m=>m.id===state.settings[key]);if(!m)return null;if(m.api||m.remote_media){const p=state.media_providers?.find(p=>p.id===m.id);if(p?.device==='cpu'&&p.adapter==='h3'&&label!=='LLM')slow=true;return label+': server esterno';}const choice=state.settings[deviceKey];const cpu=label==='Video'?false:choice==='cpu'||(choice==='inherit'||choice==='auto')&&(state.settings.profile==='cpu'||state.settings.backend==='cpu'||label==='Musica'&&state.settings.backend!=='cuda');if(cpu&&['Immagini','Musica'].includes(label))slow=true;return label+': '+(cpu?'CPU':'GPU');}).filter(Boolean).join(' · ')+(slow?' · Su CPU immagini e musica possono richiedere molto tempo.':'');
   loraUI.render();visualControls.render();
@@ -114,7 +120,9 @@ function renderStatus(){
   $('#vision-badge').title=vision?.projector?'Proiettore automatico: '+vision.projector:vision?.warning||'Scegli un modello nelle impostazioni.';
   $('#vision-warning').hidden=!model||!!vision?.enabled;
   $('#vision-warning').textContent=vision?.warning||'';
-  $('#think-level').disabled=!thinking?.supported||thinkSaving;
+  $('#think-level').disabled=!thinking?.supported||thinkSaving||chatModels.busy();
+  $('#vision-enabled').disabled=chatModels.busy();
+  $('#send').disabled=chatModels.busy();
   if(!thinkSaving)$('#think-level').value=thinking?.supported?state.settings.think_level:'off';
   $('#think-note').textContent=thinking?.supported?(model.api?'Thinking · API':'Budget di ragionamento'):'Non supportato dal modello';
   $('#think-note').title=thinking?.note||'';
@@ -190,7 +198,7 @@ async function renderChat(){
       });actions.append(toCanvas);
       if(message.meta.finish_reason==='length'){const note=document.createElement('span');note.textContent='Limite di risposta raggiunto';actions.append(note);}
     }
-    if(message.role==='user'){const repeat=document.createElement('button');repeat.className='text-button';repeat.textContent='Riutilizza';repeat.onclick=()=>{$('#prompt').value=message.content;attachments=[...message.media];loraUI.setSelections(message.meta.loras||[]);visualControls.set({image_model:message.meta.image_model||'',assistant:message.meta.assistant??true,video:message.meta.video||false,web:message.meta.web||false,transcribe:message.meta.transcribe||false,music:message.meta.music||false,music_fields:message.meta.music_fields||{}});renderAttachments();$('#prompt').focus();};actions.append(repeat);}
+    if(message.role==='user'){const repeat=document.createElement('button');repeat.className='text-button';repeat.textContent='Riutilizza';repeat.onclick=()=>{$('#prompt').value=message.content;attachments=[...message.media];loraUI.setSelections(message.meta.loras||[]);visualControls.set({voice:message.meta.voice||false,voice_fields:message.meta.voice_fields||{},image_model:message.meta.image_model||'',assistant:message.meta.assistant??true,video:message.meta.video||false,web:message.meta.web||false,transcribe:message.meta.transcribe||false,music:message.meta.music||false,music_fields:message.meta.music_fields||{}});renderAttachments();$('#prompt').focus();};actions.append(repeat);}
   }
   if(atBottom)scroll.scrollTop=scroll.scrollHeight;
 }
@@ -215,7 +223,7 @@ async function uploadFiles(files){
 }
 async function send(event){event.preventDefault();if(activeJob())return;const prompt=$('#prompt').value.trim();if(!prompt)return;
   $('#send').disabled=true;
-  try{if(!current){const fresh=await api('/chats',{collection_id:collection,project_id:project});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
+  try{await chatModels.wait();if(!current){const fresh=await api('/chats',{collection_id:collection,project_id:project});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
     await persistCanvas();const sent=await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,...visualControls.read(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='slides'?{slides:{count:Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()});
     if(sent.intent==='slides'){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}
     $('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);await refresh();
@@ -225,7 +233,7 @@ async function send(event){event.preventDefault();if(activeJob())return;const pr
 async function regenerate(){
   if(!current||activeJob())return;
   $('#regenerate').disabled=true;
-  try{await api('/chats/'+current+'/regenerate',{});const previous=chat?.messages.findLast(m=>m.role==='assistant');if(previous?.meta?.canvas||previous?.meta?.intent==='slides'){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}await refresh();}
+  try{await chatModels.wait();await api('/chats/'+current+'/regenerate',{});const previous=chat?.messages.findLast(m=>m.role==='assistant');if(previous?.meta?.canvas||previous?.meta?.intent==='slides'){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}await refresh();}
   finally{renderStatus();}
 }
 
@@ -340,7 +348,9 @@ async function updateAssessment(){
     const info=$('#hardware-info');if(info)info.textContent=summary+(gpus?' · '+gpus:' · Nessuna GPU rilevata');
     const roles={chat_model:'Chat / vision',create_model:'Creazione immagini',edit_model:'Modifica immagini',diagram_model:'Grafici e diagrammi',music_model:'Musica',video_model:'Video MiniMax H3'};
     box.innerHTML=`<div class="assessment-head"><h3>Memoria per i modelli predefiniti</h3><button type="button" id="refresh-hardware" class="text-button">Aggiorna</button></div><p class="small-note">${esc(summary)}${gpus?'<br>'+esc(gpus):''}</p><p class="small-note">Stime per ${report.references} riferiment${report.references===1?'o':'i'}, contesto LLM ${settingsDraft.context} e parametri immagini dei rispettivi preset. ${esc(report.overall.note)}</p><article class="memory-total ${report.overall.status}"><strong>${esc(report.overall.title)} · ${report.overall.unique_models} modelli distinti</strong><p>${esc(report.overall.advice)}</p><small>Totale stimato RAM ${report.overall.ram_gb} GiB · VRAM ${report.overall.vram_gb} GiB</small></article>${report.memory.models.length?'<p class="small-note">Ci sono modelli già caricati: la memoria libera ne include l’occupazione. Per una previsione a freddo premi Libera memoria e Aggiorna.</p>':''}`+report.models.map((m,i)=>`<article class="memory-result ${m.status}"><div><strong>${roles[m.role]} · ${esc(m.name)}</strong><span class="badge">${esc(m.title)}</span></div><p>${esc(m.advice)}</p><small>Stima RAM ${m.ram_gb} GiB · VRAM ${m.vram_gb} GiB${m.gpu_name?' · '+esc(m.gpu_name):''}</small>${m.assumptions.length?`<details><summary>Come viene stimata</summary><p>${esc(m.assumptions.join(' '))}</p></details>`:''}${Object.keys(m.recommended_patch).length?`<button type="button" class="btn small" data-memory-patch="${i}">Applica suggerimento</button>`:''}</article>`).join('')+(!report.models.length?'<p class="small-note">Seleziona i modelli per vedere la stima prima di scaricarli.</p>':'')+`<p class="small-note">${esc(h.note)}</p>`;
-    $('#refresh-hardware').onclick=scheduleAssessment;
+    if(report.rag_embedding){const e=report.rag_embedding;box.insertAdjacentHTML('beforeend',`<article class="memory-result ${esc(e.status)}"><div><strong>RAG · Ovis-Omni-Embedding-3B</strong><span class="badge">${esc(e.title)}</span></div><p>${esc(e.advice)}</p>${e.ram_gb!=null?`<small>Stima RAM ${e.ram_gb} GiB · VRAM ${e.vram_gb} GiB · fase RAG, prima della risposta LLM</small>`:''}</article>`);}
+      if(report.voice){const e=report.voice;box.insertAdjacentHTML('beforeend',`<article class="memory-result ${esc(e.status)}"><strong>${esc(e.title)}</strong><p>${esc(e.advice)}</p><small>Stima RAM ${e.ram_gb} GiB · VRAM ${e.vram_gb} GiB</small></article>`);}
+      $('#refresh-hardware').onclick=scheduleAssessment;
     box.querySelectorAll('[data-memory-patch]').forEach(b=>b.onclick=()=>{collectSettings();Object.assign(settingsDraft,report.models[Number(b.dataset.memoryPatch)].recommended_patch);renderSettings();});
   }catch(e){if(ticket===assessmentRequest)box.textContent='Stima non disponibile: '+e.message;}
   finally{box.removeAttribute('aria-busy');}
@@ -384,9 +394,10 @@ function renderSettings(){
   if(settingsTab==='setup'||settingsTab==='advanced'){
     const media=document.createElement('section');media.className='card workspace-settings';body.append(media);renderMediaProviders(media,{state,api,changed:async()=>{collectSettings();const next=await api('/state');for(const key of ['chat_model','create_model','edit_model','music_model','video_model'])if(settingsDraft[key]===state.settings[key])settingsDraft[key]=next.settings[key];state=next;renderSettings();renderStatus();},notify:toast,act});
     const server=document.createElement('section');server.className='card workspace-settings';body.append(server);renderServer(server,{state,api,act,refresh});
-    const workspace=document.createElement('section');workspace.className='card workspace-settings';body.append(workspace);renderWorkspaceSettings(workspace,{draft:settingsDraft,state,api,pickFile:localModels.pickFile,refresh,notify:toast,changed:scheduleAssessment});
+    const workspace=document.createElement('section');workspace.className='card workspace-settings';body.append(workspace);renderWorkspaceSettings(workspace,{draft:settingsDraft,state,api,pickFile:localModels.pickFile,pickDirectory:localModels.pickDirectory,refresh,notify:toast,changed:scheduleAssessment});
     const tools=document.createElement('section');tools.className='card tools-settings';body.append(tools);renderToolsSettings(tools,{state,draft:settingsDraft,pickDirectory:localModels.pickDirectory,changed:scheduleAssessment,install:act(async kind=>{await api('/downloads',{id:'tools_'+kind,kind:'runtime'});await refresh();}),download:act(async id=>{await api('/downloads',{id,kind:'tool_model'});await refresh();})});
     const video=document.createElement('section');video.className='card video-settings';body.append(video);
+    const voice=document.createElement('section');voice.className='card voice-settings';body.append(voice);renderVoiceSettings(voice,{state,draft:settingsDraft,pickDirectory:localModels.pickDirectory,pickFile:localModels.pickFile,changed:scheduleAssessment,install:act(async id=>{await api('/downloads',{id,kind:'runtime'});await refresh();})});
     renderVideoSettings(video,{state,draft:settingsDraft,link:()=>localModels.open(null,'minimax-h3'),edit:localModels.open,changed:scheduleAssessment,install:act(async()=>{await api('/downloads',{id:'vision',kind:'runtime'});await refresh();})});
     const music=document.createElement('section');music.className='card music-settings';body.append(music);
     renderMusicSettings(music,{state,draft:settingsDraft,link:()=>localModels.open(null,'yue2'),edit:localModels.open,changed:()=>{updateDownloads();scheduleAssessment();},

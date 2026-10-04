@@ -172,6 +172,9 @@ class Downloads:
                     from .native_runtime import install_redist
                     install_redist(self.root,destination)
             # Marker is only written after every model component has been verified.
+            if task['kind']=='runtime' and task['id']=='voice':
+                from .voice import mark_ready
+                mark_ready(self.root)
             if task['kind']=='runtime' and task['id'].startswith('tools_'):
                 from .tools_runtime import mark_ready
                 mark_ready(self.root,task['id'].removeprefix('tools_'))

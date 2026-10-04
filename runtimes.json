@@ -716,5 +716,23 @@
         "version": "3.6"
       }
     ]
+  },
+  "voice": {
+    "files": [
+      {
+        "url": "https://files.pythonhosted.org/packages/a8/db/253133d7e7cb40d3af384bb2f5c0b4a2b7fdcffbc95c688cc67a20a3c103/accelerate-1.14.0-py3-none-any.whl",
+        "size": 389246,
+        "sha256": "e94390c2863b873be18f623f9df48a0d8fe5eff13ea7f1a00092b0a7904888c6",
+        "path": "runtime/archives/accelerate-1.14.0-py3-none-any.whl",
+        "extract_to": "runtime/voice/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/b6/d4/501655842ad6771fb077f576d78cbedb5445d15b1c3c91343ed58ca46f0e/bitsandbytes-0.49.2-py3-none-win_amd64.whl",
+        "size": 55372289,
+        "sha256": "2e0ddd09cd778155388023cbe81f00afbb7c000c214caef3ce83386e7144df7d",
+        "path": "runtime/archives/bitsandbytes-0.49.2-py3-none-win_amd64.whl",
+        "extract_to": "runtime/voice/packages"
+      }
+    ]
   }
 }

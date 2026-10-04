@@ -7,6 +7,7 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from .llm_options import KEYS as LLM_KEYS, merge as merge_llm_settings
+from .voice import DEFAULTS as VOICE_DEFAULTS
 
 PROFILES = {
     "cpu": {"context": 4096, "gpu_layers": 0, "width": 512, "height": 512},
@@ -14,6 +15,7 @@ PROFILES = {
     "balanced": {"context": 8192, "gpu_layers": 99, "width": 768, "height": 768},
 }
 DEFAULTS = {
+    "llm_timeout": 1800,
     "lab_auto": True, "manim_device": "cpu", "manim_duration": 8, "manim_fps": 15, "manim_width": 854, "manim_height": 480, "manim_timeout": 600, "manim_memory_gb": 4,
     "llm_device": "inherit", "image_device": "inherit", "rag_device": "cpu", "asr_device": "cpu",
     "rag_enabled": True, "rag_embedding_model": "", "rag_embedding_profile": "embeddinggemma", "rag_top_k": 6,
@@ -32,6 +34,8 @@ DEFAULTS = {
     "setup_done": False, "think_level": "off", "mtp_enabled": False, "mtp_draft_tokens": 3, "memory_policy": "on_demand", "ram_cache_gb": 2,
 }
 
+
+DEFAULTS.update(VOICE_DEFAULTS)
 
 def uid():
     return uuid.uuid4().hex
@@ -151,7 +155,7 @@ class Store:
     def enqueue(self, chat_id, prompt, media, settings, canvas=False, loras=None):
         job_id, user_id, answer_id, now = uid(), uid(), uid(), time.time()
         loras=loras or []
-        lora_meta={"web":settings.get("_web",False),"transcribe":settings.get("_transcribe",False),"video":settings.get("_video",False),"music":settings.get("_music",False),"music_fields":settings.get("_music_fields",{}),"image_model":settings.get("_image_model",""),"assistant":settings.get("_assistant",True),"loras":[{k:l[k] for k in ("id","name","weight","model_id","model_name")} for l in loras]}
+        lora_meta={"voice":settings.get("_voice",False),"voice_fields":settings.get("_voice_fields",{}),"web":settings.get("_web",False),"transcribe":settings.get("_transcribe",False),"video":settings.get("_video",False),"music":settings.get("_music",False),"music_fields":settings.get("_music_fields",{}),"image_model":settings.get("_image_model",""),"assistant":settings.get("_assistant",True),"loras":[{k:l[k] for k in ("id","name","weight","model_id","model_name")} for l in loras]}
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             chat = db.execute("SELECT * FROM chats WHERE id=?", (chat_id,)).fetchone()

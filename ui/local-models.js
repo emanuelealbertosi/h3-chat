@@ -16,7 +16,7 @@ export function initLocalModels({api,getState,onChange,notify}){
       <nav><button id="model-browser-roots" class="text-button">Unità</button><button id="model-browser-up" class="text-button">↑ Cartella superiore</button></nav>
       <div id="model-browser-list"></div><p id="model-browser-error" class="local-error" role="alert"></p>
       <footer><button id="model-browser-close" class="btn">Annulla</button><button id="model-browser-choose-directory" class="btn primary" hidden>Usa questa cartella</button></footer></dialog>`);
-  let draft=null,selectedInput=null,parent='',browseTicket=0,suggestTicket=0,directoryCallback=null,fileCallback=null,currentDirectory='';
+  let draft=null,selectedInput=null,parent='',browseTicket=0,suggestTicket=0,directoryCallback=null,fileCallback=null,currentDirectory='',fileKind='model';
   const guarded=fn=>async(...args)=>{try{await fn(...args);}catch(e){notify(e.message,true);}};
   const read=()=>{draft.name=$('#local-model-name').value;for(const f of $('#local-model-files').querySelectorAll('[data-local-role]'))draft.files[f.dataset.localRole]=f.value;
     draft.projector_mode=$('#local-projector-mode')?.value||'auto';};
@@ -71,7 +71,7 @@ export function initLocalModels({api,getState,onChange,notify}){
   async function showDirectory(path){
     const ticket=++browseTicket;currentDirectory='';$('#model-browser-choose-directory').disabled=true;$('#model-browser-path').value=path;$('#model-browser-error').textContent='';$('#model-browser-list').textContent='Lettura della cartella…';
     try{
-      const value=await api('/model-files/browse',{path});if(ticket!==browseTicket)return;
+      const value=await api('/model-files/browse',{path,kind:fileCallback?fileKind:'model'});if(ticket!==browseTicket)return;
       currentDirectory=value.path;$('#model-browser-choose-directory').disabled=!currentDirectory;
       if($('#model-browser-path').value===path)$('#model-browser-path').value=value.path;parent=value.parent;$('#model-browser-up').disabled=value.parent===null;
       if(directoryCallback)value.entries=value.entries.filter(entry=>entry.directory);
@@ -90,6 +90,6 @@ export function initLocalModels({api,getState,onChange,notify}){
   $('#model-browser-close').onclick=()=>{$('#model-browser').close();browseTicket++;};
   $('#model-browser-choose-directory').onclick=()=>{if(directoryCallback&&currentDirectory){const callback=directoryCallback;directoryCallback=null;$('#model-browser').close();browseTicket++;callback(currentDirectory);}};
   const pickDirectory=async(path,callback)=>{$('#model-browser-title').textContent='Scegli una cartella';$('#model-browser-description').textContent='Puoi collegare cartelle su più unità, senza spostare i file.';fileCallback=null;directoryCallback=callback;currentDirectory='';$('#model-browser-choose-directory').hidden=false;$('#model-browser-choose-directory').disabled=true;$('#model-browser').showModal();await showDirectory(path||'');};
-  const pickFile=async(path,callback)=>{fileCallback=callback;directoryCallback=null;$('#model-browser-title').textContent='Scegli un modello GGUF';$('#model-browser-description').textContent='Il file resta nella cartella originale.';$('#model-browser-choose-directory').hidden=true;$('#model-browser').showModal();await showDirectory(path||'');};
+  const pickFile=async(path,callback,kind='model')=>{fileKind=kind;fileCallback=callback;directoryCallback=null;$('#model-browser-title').textContent=kind==='audio'?'Scegli un campione audio':'Scegli un modello GGUF';$('#model-browser-description').textContent='Il file resta nella cartella originale.';$('#model-browser-choose-directory').hidden=true;$('#model-browser').showModal();await showDirectory(path||'');};
   return {open,pickDirectory,pickFile,remove:guarded(async model=>{await api('/external-models/'+model.id,{},'DELETE');await onChange(null,model.id);notify('Collegamento rimosso. I file originali restano al loro posto.');})};
 }

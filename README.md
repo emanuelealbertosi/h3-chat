@@ -1,13 +1,28 @@
 # H3-Chat
 
+**Voice** genera letture, lezioni e riassunti con Higgs Audio v3 nel motore
+integrato. Modello, codec, campioni vocali, CPU/GPU e interpretazione si
+configurano dal Setup. Manim applica gli audio allegati dopo il rendering;
+MiniMax H3 può creare video lunghi quanto l’audio, divisi in scene con memoria.
+[Guida a voce, colonne sonore e video lunghi](docs/voice-and-soundtracks.md).
+
 I provider LLM esterni si configurano da **Impostazioni → Provider LLM**:
 DeepSeek, OpenRouter oppure un endpoint personalizzato compatibile con Chat
 Completions. Inserisci indirizzo, chiave API e ID modello, salva il collegamento
 e premi **Usa in chat** per usarlo anche nel router e nell’Assistant.
 
+Il menu **LLM** direttamente nella chat permette di passare tra modelli locali
+e provider API. Recupera il preset del modello scelto e lo usa dalla risposta
+successiva, mantenendo conversazione e fonti. **Rigenera** usa la selezione attuale.
+
 Il RAG mantiene l’argomento nelle richieste successive come «ricrea l’animazione»,
 anche cambiando LLM. Domande nuove con un argomento esplicito avviano una nuova
 ricerca; progetto e selezione delle fonti rimangono vincolanti.
+
+Il RAG supporta anche **Ovis-Omni-Embedding-3B**, scaricabile dalle Preferenze o
+collegabile alla sua cartella originale. CPU/GPU sono selezionabili; la stima
+di memoria è visibile prima dell'uso. Questa integrazione cerca nel testo
+estratto dai documenti. [Configurazione Ovis](docs/projects-and-animations.md#ovis-omni-embedding-3b).
 
 **Slide dal vivo:** chiedi «Crea 10 slide dal PDF» oppure scegli
 **Strumenti → Slide · HTML in tempo reale**. Il canvas compone le pagine mentre
@@ -31,7 +46,7 @@ Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle 
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.16.4-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.16.4/H3-Chat-0.16.4-windows-x64.zip) dalla [release v0.16.4](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.16.4), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.16.5-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.16.5/H3-Chat-0.16.5-windows-x64.zip) dalla [release v0.16.5](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.16.5), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 

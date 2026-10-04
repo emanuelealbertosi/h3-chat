@@ -1,4 +1,5 @@
 import {escape as esc} from './render.js';
+import {initVoiceControls} from './voice.js';
 
 // These are conversation preferences, captured with each queued request.
 export function initVisualControls({getState,getChatId}){
@@ -6,8 +7,10 @@ export function initVisualControls({getState,getChatId}){
  const key=id=>'h3.visual-options.'+(id||'new');
  const read=()=>{try{return {image_model:'',assistant:true,music:false,video:false,web:false,transcribe:false,music_fields:{},...JSON.parse(localStorage.getItem(key(getChatId()))||'{}')};}catch{return {image_model:'',assistant:true,music:false,video:false,web:false,transcribe:false,music_fields:{}};}};
  function save(value){localStorage.setItem(key(getChatId()),JSON.stringify(value));render();}
+ const voice=initVoiceControls({read,save,getState});
  function render(){
   const state=getState();if(!state)return;
+  voice.render();
   const value=read(),items=state.models.filter(m=>m.capabilities.includes('create'));
   const signature=JSON.stringify(items.map(m=>[m.id,m.name,m.ready]));
   if(model.dataset.signature!==signature){model.innerHTML='<option value="">Automatico · dal prompt</option>'+items.map(m=>`<option value="${esc(m.id)}" ${m.ready?'':'disabled'}>${esc(m.name)}${m.ready?'':' · non disponibile'}</option>`).join('');model.dataset.signature=signature;}
@@ -24,11 +27,11 @@ export function initVisualControls({getState,getChatId}){
   for(const input of document.querySelectorAll('[data-music-field]'))if(document.activeElement!==input){const field=value.music_fields?.[input.dataset.musicField];if(input.type==='checkbox')input.checked=!!field;else input.value=field||'';}
   document.querySelector('#image-assistant-label').textContent='Assistant '+(value.assistant?'On':'Off');
  }
- model.onchange=()=>save({...read(),image_model:model.value,music:false,video:false,transcribe:false});
- document.querySelector('#music-toggle').onclick=()=>save({...read(),music:!read().music,image_model:'',video:false,transcribe:false});
- document.querySelector('#video-toggle').onclick=()=>save({...read(),video:!read().video,image_model:'',music:false,transcribe:false});
+ model.onchange=()=>save({...read(),image_model:model.value,music:false,video:false,transcribe:false,voice:false});
+ document.querySelector('#music-toggle').onclick=()=>save({...read(),music:!read().music,image_model:'',video:false,transcribe:false,voice:false});
+ document.querySelector('#video-toggle').onclick=()=>save({...read(),video:!read().video,image_model:'',music:false,transcribe:false,voice:false});
  document.querySelector('#web-toggle').onclick=()=>save({...read(),web:!read().web});
- document.querySelector('#transcribe-toggle').onclick=()=>save({...read(),transcribe:!read().transcribe,image_model:'',music:false,video:false});
+ document.querySelector('#transcribe-toggle').onclick=()=>save({...read(),transcribe:!read().transcribe,image_model:'',music:false,video:false,voice:false});
  for(const input of document.querySelectorAll('[data-music-field]'))input.oninput=()=>save({...read(),music_fields:{...read().music_fields,[input.dataset.musicField]:input.type==='checkbox'?input.checked:input.value}});
  assistant.onchange=()=>save({...read(),assistant:assistant.checked});
  return {render,read,set:save,migrateNew(id){const value=read();localStorage.setItem(key(id),JSON.stringify(value));localStorage.removeItem(key(null));}};

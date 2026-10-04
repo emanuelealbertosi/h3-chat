@@ -6,6 +6,7 @@ def options(settings,role):
     if choice=='cpu':return settings|{'profile':'cpu','backend':'cpu','gpu_layers':0}
     return settings|{'profile':'low' if settings['profile']=='cpu' else settings['profile'],'backend':settings['backend'] if settings['backend'] in ('cuda','vulkan') else 'cuda'}
 def label(settings,role):
+    if role=='voice':return 'CPU' if settings.get('voice_device')=='cpu' else 'GPU · CUDA'
     if role=='video':return 'GPU · CUDA'
     if role=='music':
         from .music_runtime import backend

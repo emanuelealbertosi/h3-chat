@@ -47,6 +47,36 @@ livelli, massimo 12 estratti per risposta. Indicizzazione fallita o file cancell
 non restituiscono vecchi contenuti. Percorsi mancanti/errori sono visibili nella
 gestione del progetto.
 
+### Ovis-Omni-Embedding-3B
+
+In **Impostazioni → Preferenze → Progetti e ricerca nei documenti** puoi scegliere
+**Ovis-Omni-Embedding-3B** come formato embedding. Installa i componenti
+**Ovis / Vision**, poi usa **Scarica Ovis** (circa 11,1 GB) e **Usa Ovis scaricato**.
+Se i pesi sono già presenti, scegli **Sfoglia** e indica la cartella originale:
+non vengono copiati. Sono accettate sia la cartella con `config.json`, tokenizer,
+template, indice e tre shard `.safetensors`, sia la cartella superiore `model/`
+del repository ufficiale.
+
+Il dispositivo si sceglie in **Ricerca semantica RAG**: CPU oppure GPU NVIDIA.
+La stima nelle Preferenze considera i pesi effettivamente usati e la memoria libera.
+Il backend testuale carica circa 6,2 GB di pesi a precisione ridotta su GPU,
+oppure circa 12,3 GB in float32 su CPU, più lo spazio di lavoro. I tempi CPU
+possono essere lunghi su raccolte grandi. Non è previsto offload automatico
+durante il calcolo GPU. Il processo si chiude dopo la ricerca e all'annullamento.
+
+Salva e aggiorna il progetto, oppure invia una domanda con RAG attivo: l'indice
+viene ricostruito automaticamente quando cambi embedding. I documenti sono
+trasformati in vettori da 2048 dimensioni, conservati nel database locale;
+la ricerca combina somiglianza semantica e parole chiave. Caricamento e
+indicizzazione compaiono nell'avanzamento del progetto o della risposta.
+
+Questa integrazione indicizza il **testo estratto** da PDF, Word e file testuali.
+La capacità multimodale del modello non equivale ancora a indicizzare immagini,
+audio, video o PDF scansionati nel RAG. Non vengono caricati gli encoder non
+utilizzati. Il modello ufficiale e i suoi pesi restano invariati.
+
+Fonte e licenza: [Ovis ufficiale, Apache 2.0](https://huggingface.co/ATH-MaaS/Ovis-Omni-Embedding-3B).
+
 ## Ricerca web anche senza progetto
 
 Premi **Web** oppure chiedi una ricerca esplicita, se il riconoscimento automatico
@@ -83,8 +113,9 @@ Lo stesso LLM della chat genera Python `Scene` o `ThreeDScene`: API Manim,
 trasformazioni, `ValueTracker`, updaters, `ThreeDAxes`, `Surface`, `ImageMobject`,
 `Tex` e `MathTex`, oltre alle librerie del runtime. Le pagine PDF possono essere
 lette da Vision, se abilitato. I dati illeggibili non vengono inventati dall’app.
-La durata richiesta prevale sul preset; l’MP4 è verificato e, se troppo corto,
-la scena generata viene corretta fino a due volte. RAM e tempo massimo sono
+La durata richiesta prevale sul preset; l’MP4 viene verificato e la durata
+effettiva viene indicata quando differisce da quella richiesta. Una differenza
+di durata non elimina un video valido. RAM e tempo massimo sono
 modificabili nelle preferenze. Un errore lascia codice e log consultabili.
 
 Con **Canvas** attivo, video e codice compaiono soltanto nel canvas. Apri **Sorgente**,
@@ -93,6 +124,14 @@ Il codice modificato viene eseguito direttamente, senza un secondo LLM. Puoi
 scaricare MP4, `.py`, configurazione JSON, formule `.tex` e log di rendering.
 Il commento `# h3_scene: NomeClasse` seleziona la scena se il file ne contiene più
 di una. Gli storyboard JSON precedenti conservano il pulsante di rendering.
+
+Quando chiedi una nuova animazione o una ricreazione, il vecchio programma Manim
+viene escluso dal contesto fornito al modello, mantenendo richieste e fonti.
+Quando chiedi modifiche specifiche, il sorgente precedente resta disponibile.
+Gli esempi Python da illustrare vengono conservati. Le istruzioni Manim prevalgono
+sulle regole di formattazione della chat ordinaria anche quando sono presenti
+documenti. La varietà e qualità della regia restano dipendenti dal LLM scelto;
+il renderer esegue il codice generato senza imporre una sequenza di scene.
 
 Il codice libero usa AppContainer Windows: lettura delle librerie e scrittura
 nella sola cartella temporanea del lavoro. I dati privati dell’app sono esclusi;
@@ -105,8 +144,10 @@ nel runtime prima del rendering. Cairo è il default CPU e supporta anche scene
 
 **Video MiniMax H3** accetta singoli clip da 1 a 15 secondi. Una durata esplicita
 aggiorna il preset per quella richiesta; oltre 15 secondi la chat mostra un errore
-chiaro, senza generare silenziosamente un clip più corto. Per 30 secondi di
-animazione matematica scegli Manim.
+chiaro quando non è allegata una colonna sonora. Con un audio da conservare,
+il motore standalone divide il video in scene da massimo 15 secondi e copre
+la durata della traccia con memoria visiva e montaggio automatico.
+[Voce, audio in Manim e video multiscena](voice-and-soundtracks.md).
 
 ## Riquadri e visualizzazioni
 

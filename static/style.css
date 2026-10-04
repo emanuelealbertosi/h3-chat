@@ -41,3 +41,5 @@
 @media(prefers-reduced-motion:reduce){.thinking i{animation:none}}
 
 .video-output video{display:block;width:100%;max-height:70vh;border-radius:12px;background:#101918}.video-output figcaption{margin-top:8px}.audio-attachment{display:grid;place-items:center;height:64px;width:72px;font-size:30px}.video-settings{margin-top:20px}.video-settings .check{margin:12px 0}
+
+.chat-model-control{min-width:0;max-width:100%;flex:1}.chat-model-control select{min-width:0;max-width:100%;flex:1}.voice-settings details{margin:12px 0}.voice-settings summary{cursor:pointer}

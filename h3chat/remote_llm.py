@@ -64,7 +64,7 @@ class Client:
                 headers={'Accept':'text/event-stream, application/json','Content-Type':content_type,'User-Agent':'H3-Chat'}
                 if key:headers['Authorization']='Bearer '+key
                 request=urllib.request.Request(config['base_url']+path,data=None if body is None else body if isinstance(body,bytes) else json.dumps(body,ensure_ascii=False).encode('utf-8'),headers=headers)
-                response=urllib.request.build_opener(NoRedirect()).open(request,timeout=30)
+                response=urllib.request.build_opener(NoRedirect()).open(request,timeout=min(timeout,300))
                 with self.lock:self.requests[stop]=response
                 if stop.is_set():return
                 if isinstance(body,dict) and body.get('stream'):
@@ -124,7 +124,7 @@ class Client:
             if len(content)>1000000:raise ValueError('Risposta API troppo lunga.')
             finish=choices[0].get('finish_reason') or finish
             if on_text:on_text(content)
-        value=self.exchange(config,key,cancel,body=body,path='/chat/completions',on_event=event)
+        value=self.exchange(config,key,cancel,body=body,path='/chat/completions',on_event=event,timeout=settings.get('llm_timeout',1800))
         if on_text is None:
             try:content=value['choices'][0]['message']['content'];finish=value['choices'][0].get('finish_reason')
             except (KeyError,IndexError,TypeError):raise RuntimeError('Risposta API non compatibile con Chat Completions.')

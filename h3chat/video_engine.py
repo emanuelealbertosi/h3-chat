@@ -22,6 +22,7 @@ class VideoEngine:
 
     def refine_video(self,history,prompt,refs,model,settings,cancel,log_path,stage):
         opts=options(model,settings,False)
+        opts['duration']=settings.get('_video_duration',opts['duration'])
         if not settings.get('_assistant',True):return direct_plan(prompt,refs,opts['duration']),None
         llm=self.require_model(settings['chat_model'],'chat')
         stage('Assistant · istruzioni, fotogrammi e audio del video')
@@ -43,9 +44,10 @@ class VideoEngine:
         except (ValueError,TypeError) as exc:raise ValueError('Assistant: piano video non valido. '+str(exc)) from exc
         return plan,{'model':llm['name'],'max_tokens':tuning['max_tokens']}
 
-    def generate_video(self,model,settings,plan,refs,job_id,cancel,stage,*,prompt=None):
+    def generate_video(self,model,settings,plan,refs,job_id,cancel,stage,*,prompt=None,scene=None):
         if model.get('remote_media'):return self.remote_generate(model,settings,prompt if prompt is not None else plan['prompt'],refs,job_id,cancel,stage,plan=plan)
         opts=options(model,settings)
+        if scene:opts.update(duration=scene['duration'],frames=scene['frames'])
         plan=validate_plan(plan,refs,opts['duration'])
         if any(a['role']=='lipsync' for a in plan['audios']) and opts['steps']<8:
             opts['steps']=8;stage('Lip-sync · uso almeno 8 passi standard')
@@ -54,6 +56,7 @@ class VideoEngine:
         request={'op':'generate','output':str(output),'plan':plan,'options':opts,'format_prompt':prompt if prompt is not None else plan['prompt'],
                  'images':[str(safe_join(self.data,x['path'])) for x in refs if x['mime'].startswith('image/')],
                  'audios':[str(safe_join(self.data,x['path'])) for x in refs if x['mime'].startswith('audio/')]}
+        if scene:request.update(sequence=scene['sequence'],scene_index=scene['index'],canvas=scene.get('canvas'))
         (folder/'video-plan.json').write_text(json.dumps({'plan':plan,'parameters':opts},ensure_ascii=False,indent=2),encoding='utf-8')
         startup_started=time.monotonic()
         session=self.start_video(model,settings,folder/'engine.log',cancel,stage)
@@ -68,3 +71,33 @@ class VideoEngine:
         actual=opts|done.get('parameters',{})|{'startup_seconds':startup_seconds}
         (folder/'video-plan.json').write_text(json.dumps({'plan':plan,'parameters':actual},ensure_ascii=False,indent=2),encoding='utf-8')
         return {'id':job_id,'name':'Video MiniMax H3.mp4','mime':'video/mp4','path':output.relative_to(self.data).as_posix(),'generation':actual}
+
+    def generate_long_video(self,model,settings,plan,refs,job_id,cancel,stage,*,prompt):
+        from .video_timeline import timeline,scene_plan
+        from .soundtrack import compose
+        scenes=timeline(settings['_video_duration']);soundtrack=settings['_video_soundtrack']
+        if model.get('remote_media') and len(scenes)>1:raise ValueError('Video a più scene con memoria: seleziona il motore MiniMax H3 standalone. Il server esterno deve supportare esplicitamente questa funzione.')
+        index=next(i for i,m in enumerate([r for r in refs if r['mime'].startswith('audio/')],1) if m['id']==soundtrack['id'])
+        scripts=[plan['prompt']]*len(scenes)
+        folder=self.data/'outputs'/job_id;folder.mkdir(parents=True,exist_ok=True)
+        if len(scenes)>1 and settings.get('_assistant',True):
+            stage(f'Assistant · sceneggiatura continua in {len(scenes)} scene')
+            schema={'type':'object','properties':{'scenes':{'type':'array','minItems':len(scenes),'maxItems':len(scenes),'items':{'type':'string'}}},'required':['scenes'],'additionalProperties':False}
+            brief=BRIEF+'\nNow return {"scenes":[English prompt per clip]}. Preserve Picture/Audio identities and language. Describe one continuous progression, no repeated opening. Do not invent unheard lyrics. Durations and global keyframe locations are supplied. Translate them into LOCAL clip times in each prompt. Visual memory of the opening and last two clips will be supplied automatically.'
+            llm=self.require_model(settings['chat_model'],'chat');self.start_llama(llm,settings,folder/'engine.log',cancel,stage=stage)
+            raw,finish=self.completion([{'role':'system','content':brief},{'role':'user','content':json.dumps({'request':prompt,'plan':plan,'timeline':scenes},ensure_ascii=False)}],settings|{'max_tokens':min(settings['context']//2,settings['video_prompt_max_tokens'])},cancel,on_text=lambda _:None,schema=schema)
+            value=json.loads(raw).get('scenes')
+            if finish=='length' or not isinstance(value,list) or len(value)!=len(scenes) or any(not isinstance(s,str) or not s.strip() for s in value):raise ValueError('Piano delle scene incompleto. Aumenta i token Assistant video o riduci la durata dell’audio.')
+            scripts=value
+        outputs=[];parameters=[];canvas=None
+        for position,scene in enumerate(scenes):
+            if cancel.is_set():raise Cancelled()
+            scoped=scene|{'last':position==len(scenes)-1,'sequence':job_id,'canvas':canvas}
+            local=scene_plan(plan,scoped,index,scripts[position])
+            def report(label):stage(f'Scena {position+1}/{len(scenes)} · '+label)
+            item=self.generate_video(model,settings,local,refs,job_id+f'/scene-{position+1:03d}',cancel,report,prompt=prompt,scene=scoped)
+            outputs.append(safe_join(self.data,item['path']));p=item['generation'];parameters.append(p)
+            if not canvas and 'canvas_width' in p:canvas={'width':p['canvas_width'],'height':p['canvas_height'],'output_width':p['width'],'output_height':p['height'],'aspect':p['aspect'],'aspect_source':p['aspect_source'],'format_image':p.get('format_image')}
+            (folder/'scenes.json').write_text(json.dumps({'timeline':scenes,'prompts':scripts,'completed':position+1,'parameters':parameters},ensure_ascii=False,indent=2),encoding='utf-8')
+        result=compose(self,outputs,safe_join(self.data,soundtrack['path']),folder/'video.mp4',cancel,stage,folder/'engine.log')
+        return {'id':job_id,'name':'Video MiniMax H3.mp4','mime':'video/mp4','path':(folder/'video.mp4').relative_to(self.data).as_posix(),'generation':parameters[0]|{'duration':result['duration'],'scenes':len(scenes),'scene_parameters':parameters,'audio_preserved':True,'visual_memory':len(scenes)>1}}

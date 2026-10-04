@@ -285,6 +285,15 @@ class Worker:
             z,t=h3._encode_ref_audio(self.audio_vae,audio)
             blocks.append({'kind':'audio','ref_audio_t':t,'audio_latent':z});items.append({'type':'audio'})
             if entry['role'] in ('lipsync','reuse'):master,master_z=audio,z
+        # Internal memory follows explicit references, preserving Picture ordinals.
+        # Opening anchor and two recent endings are visible to the text encoder.
+        if request.get('scene_index',0)>0:
+            memory=[self.anchor,*self.recent]
+            for image in memory:
+                if image is not None:items.append({'type':'image','data':image})
+            if self.recent and not any(g['resolved_frame_index']==0 for g in guides):
+                z=self.vae.encode(self.fit_frame(self.recent[-1],opts))
+                guides.append({'resolved_frame_index':0,'latent':z})
         tokens=self.clip.tokenize(plan['prompt'],minimax_ref_items=items) if items else self.clip.tokenize(plan['prompt'])
         positive=self.clip.encode_from_tokens_scheduled(tokens)
         import node_helpers
@@ -306,7 +315,10 @@ class Worker:
         generation_started=time.monotonic();timings={}
         torch,comfy=self.torch,self.comfy
         images=self.images(request['images'])
+        if request.get('sequence')!=getattr(self,'sequence',None) or request.get('scene_index',0)==0:
+            self.sequence=request.get('sequence');self.anchor=None;self.recent=[]
         opts=resolve_canvas(request['options'],request['plan'],[(im.shape[2],im.shape[1]) for im in images],request.get('format_prompt',request['plan'].get('prompt','')))
+        if request.get('canvas'):opts.update(request['canvas'])
         request=request|{'options':opts}
         emit('stage',message=f"Video · formato {opts['aspect']} · {opts['output_width']}×{opts['output_height']} · "+('dall’immagine guida' if opts['aspect_source']=='image' else 'dal prompt' if opts['aspect_source']=='prompt' else 'dal preset'))
         preparation_started=time.monotonic()
@@ -359,6 +371,9 @@ class Worker:
             if len(pixels)<opts['frames']:raise RuntimeError('Il VAE non ha decodificato tutti i fotogrammi.')
             left=(opts['width']-opts['output_width'])//2;top=(opts['height']-opts['output_height'])//2
             pixels=pixels[:,top:top+opts['output_height'],left:left+opts['output_width'],:]
+            if request.get('sequence'):
+                if self.anchor is None:self.anchor=pixels[:1].detach().cpu().clone()
+                self.recent=[*self.recent[-1:],pixels[opts['frames']-1:opts['frames']].detach().cpu().clone()]
             timings['video_decode']=time.monotonic()-decode_started
             emit('stage',message='Video · preparazione audio e salvataggio MP4')
             self.phase='Video · preparazione audio e salvataggio MP4'

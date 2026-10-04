@@ -109,13 +109,14 @@ def validate_plan(plan,refs,duration):
     return result
 
 
-def prompt_duration(prompt):
+def prompt_duration(prompt,has_audio=False):
     """An explicit clip duration must not be replaced by a preset silently."""
     pattern=r'\b(?:durata|duration|dura|lasting|di|da|per|for|video|clip|filmato|animazione|animation)\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*(second[io]|seconds?|sec|s|minut[io]|minutes?|min)\b'
     match=re.search(pattern,prompt,re.I)
     if not match:return None
     value=float(match[1].replace(',','.'))*(60 if match[2].lower().startswith('min') else 1)
-    if not 1<=value<=15:raise ValueError(f'Video MiniMax H3: richiesti {value:g} secondi, ma un singolo clip supporta da 1 a 15 secondi. Per un’animazione di 30 secondi usa Manim o crea più clip. La durata non viene ridotta automaticamente.')
+    if has_audio and 0<value<=600:return value
+    if not 1<=value<=15:raise ValueError(f'Video MiniMax H3: richiesti {value:g} secondi, ma un singolo clip supporta da 1 a 15 secondi. Allega una traccia audio per creare automaticamente più scene fino alla sua durata, oppure usa Manim.')
     return value
 
 

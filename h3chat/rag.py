@@ -37,12 +37,15 @@ def scan_folder(path):
 def validate(settings):
     if type(settings['rag_enabled']) is not bool:raise ValueError('RAG: scegli On oppure Off.')
     if type(settings['rag_top_k']) is not int or not 1<=settings['rag_top_k']<=12:raise ValueError('RAG: scegli da 1 a 12 estratti.')
-    if settings['rag_embedding_profile'] not in ('embeddinggemma','plain','e5','nomic'):raise ValueError('Profilo embedding non valido.')
+    if settings['rag_embedding_profile'] not in ('embeddinggemma','plain','e5','nomic','ovis'):raise ValueError('Profilo embedding non valido.')
     model=settings['rag_embedding_model']
     if not isinstance(model,str) or len(model)>2000:raise ValueError('Percorso embedding non valido.')
     if model:
         p=Path(model)
-        if not p.is_absolute() or p.suffix.lower()!='.gguf' or not p.is_file():raise ValueError('Scegli un file embedding GGUF esistente.')
+        if settings['rag_embedding_profile']=='ovis':
+            from .ovis import checkpoint
+            checkpoint(p)
+        elif not p.is_absolute() or p.suffix.lower()!='.gguf' or not p.is_file():raise ValueError('Scegli un file embedding GGUF esistente.')
 
 def normalize(vector):
     if not isinstance(vector,list) or not 8<=len(vector)<=8192 or any(type(x) not in (int,float) or not math.isfinite(x) for x in vector):raise ValueError('Vettore embedding non valido.')
@@ -53,12 +56,17 @@ def normalize(vector):
 class Embeddings:
     def __init__(self,root,data):self.root,self.data=Path(root),Path(data);self.lock=threading.RLock();self.session=None
     def key(self,settings):
+        if settings['rag_embedding_profile']=='ovis':
+            from .ovis import checkpoint,FORMAT_VERSION
+            folder,files=checkpoint(settings['rag_embedding_model'])
+            return hashlib.sha256(json.dumps([str(folder),[(p.name,p.stat().st_size,p.stat().st_mtime_ns) for p in files],FORMAT_VERSION,settings.get('rag_device','cpu')]).encode()).hexdigest()
         p=Path(settings['rag_embedding_model']);st=p.stat()
         return hashlib.sha256(json.dumps([str(p.resolve()),st.st_size,st.st_mtime_ns,settings['rag_embedding_profile'],settings.get('rag_device','cpu')]).encode()).hexdigest()
     def close(self):
         with self.lock:
             if self.session:self.session.stop();self.session=None
     def encode(self,texts,settings,cancel,stage,query=False):
+        if settings['rag_embedding_profile']=='ovis':return self.encode_ovis(texts,settings,cancel,stage,query)
         from .engine import runtime_executable
         with self.lock:
             key=self.key(settings)
@@ -94,6 +102,30 @@ class Embeddings:
                 if [r['index'] for r in rows]!=list(range(len(batch))):raise ValueError('Risposta embedding incompleta.')
                 result.extend(normalize(r['embedding']) for r in rows)
             return result
+    def encode_ovis(self,texts,settings,cancel,stage,query):
+        from .ovis import runtime_ready
+        with self.lock:
+            if not runtime_ready(self.root):raise ValueError('Installa i componenti Ovis / Vision nelle Preferenze per usare questo embedding.')
+            key=self.key(settings);device='cuda' if settings.get('rag_device')=='gpu' else 'cpu'
+            try:
+                if not self.session or self.session.key!=key or not self.session.alive():
+                    self.close();s=Session(key,'embedding-ovis',{}, {},settings,self.data/'logs/embeddings.log');self.session=s
+                    stage('RAG · avvio motore Ovis · '+device.upper())
+                    s.start([self.root/'runtime/python/python.exe','-X','utf8',self.root/'native/embedding-worker.py'],ipc=True,cwd=self.root)
+                    s.wait('hello',cancel,90,stage)
+                    s.send({'op':'load','path':settings['rag_embedding_model'],'device':device,'threads':settings['threads']})
+                    s.wait('loaded',cancel,600,stage)
+                result=[]
+                for start in range(0,len(texts),8):
+                    if cancel.is_set():raise Cancelled()
+                    stage(f'RAG · Ovis · {device.upper()} · estratti {start+1}–{min(start+8,len(texts))}/{len(texts)}')
+                    self.session.send({'op':'encode','texts':texts[start:start+8],'query':query})
+                    vectors=self.session.wait('result',cancel,600,stage).get('vectors',[])
+                    if len(vectors)!=len(texts[start:start+8]) or any(not isinstance(v,list) or len(v)!=2048 for v in vectors):raise ValueError('Risposta Ovis incompleta.')
+                    result.extend(normalize(v) for v in vectors)
+                return result
+            except BaseException:
+                self.close();raise
     def exchange(self,path,body,timeout):
         s=self.session;req=urllib.request.Request(f'http://127.0.0.1:{s.port}'+path,data=json.dumps(body).encode() if body is not None else None,headers={'Authorization':'Bearer '+s.api_key,'Content-Type':'application/json'})
         return urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req,timeout=timeout)
@@ -235,7 +267,7 @@ class Knowledge:
         finally:
             session.stop()
             with self.lock:self.readers.discard(session)
-    def index(self,ident,settings,cancel,stage):
+    def index(self,ident,settings,cancel,stage,*,release=True):
         model_key=self.embeddings.key(settings) if settings['rag_embedding_model'] else ''
         excluded={r['path'] for r in self.store.all('SELECT path FROM project_exclusions WHERE project_id=?',(ident,))}
         with self.store.connect() as db:
@@ -271,10 +303,15 @@ class Knowledge:
                 except Cancelled:raise
                 except Exception as e:
                     self.store.execute("UPDATE project_sources SET status='error',error=? WHERE id=?",(str(e),source['id']))
-        finally:self.embeddings.close()
+        finally:
+            if release:self.embeddings.close()
     def retrieve(self,ident,query,settings,cancel,stage,source_ids=None):
+        with self.index_lock:
+            try:return self._retrieve(ident,query,settings,cancel,stage,source_ids)
+            finally:self.embeddings.close()
+    def _retrieve(self,ident,query,settings,cancel,stage,source_ids=None):
         project=self.project(ident)
-        with self.index_lock:self.index(ident,settings,cancel,stage)
+        self.index(ident,settings,cancel,stage,release=False)
         if source_ids is not None and (not isinstance(source_ids,list) or any(not isinstance(x,str) for x in source_ids)):raise ValueError('Selezione fonti non valida.')
         where="s.project_id=? AND s.status='ready'";args=[ident]
         if source_ids is not None:

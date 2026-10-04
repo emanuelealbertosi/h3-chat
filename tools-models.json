@@ -1,7 +1,7 @@
 {
   "whisper-small": {
     "id": "whisper-small",
-    "name": "Whisper Small \u00b7 multilingue",
+    "name": "Whisper Small · multilingue",
     "revision": "536b0662742c02347bc0e980a01041f333bce120",
     "license": "MIT",
     "files": [
@@ -39,7 +39,7 @@
   },
   "whisper-tiny": {
     "id": "whisper-tiny",
-    "name": "Whisper Tiny \u00b7 multilingue",
+    "name": "Whisper Tiny · multilingue",
     "revision": "d90ca5fe260221311c53c58e660288d3deb8d356",
     "license": "MIT",
     "files": [
@@ -77,7 +77,7 @@
   },
   "embeddinggemma": {
     "id": "embeddinggemma",
-    "name": "EmbeddingGemma 300M Q8 \u00b7 multilingue",
+    "name": "EmbeddingGemma 300M Q8 · multilingue",
     "license": "Gemma terms of use",
     "revision": "0f741b5a6585bd53aeb15cd1372c56f2a0f65e12",
     "files": [
@@ -86,6 +86,80 @@
         "url": "https://huggingface.co/ggml-org/embeddinggemma-300M-GGUF/resolve/0f741b5a6585bd53aeb15cd1372c56f2a0f65e12/embeddinggemma-300M-Q8_0.gguf",
         "size": 333590944,
         "sha256": "b5ce9d77a3fc4b3b39ccb5643c36777911cc4eb46a66962eadfa3f5f60490d63"
+      }
+    ]
+  },
+  "ovis-omni-3b": {
+    "id": "ovis-omni-3b",
+    "name": "Ovis-Omni-Embedding-3B · 2048 dimensioni",
+    "license": "Apache-2.0",
+    "revision": "08547b8479edc10edc9878597438ebd076f74dff",
+    "files": [
+      {
+        "url": "https://huggingface.co/ATH-MaaS/Ovis-Omni-Embedding-3B/resolve/08547b8479edc10edc9878597438ebd076f74dff/model/chat_template.jinja",
+        "path": "models/Ovis-Omni-Embedding-3B/chat_template.jinja",
+        "size": 1281,
+        "sha256": "d027e14db2e64eb2c23597240d42ea747b4fd5efd6e6a7604a990949c610f79c"
+      },
+      {
+        "url": "https://huggingface.co/ATH-MaaS/Ovis-Omni-Embedding-3B/resolve/08547b8479edc10edc9878597438ebd076f74dff/model/config.json",
+        "path": "models/Ovis-Omni-Embedding-3B/config.json",
+        "size": 13094,
+        "sha256": "72994013703d375aeaccf764b712454169e2d1944fd70b2dda5d0861a059ef2a"
+      },
+      {
+        "url": "https://huggingface.co/ATH-MaaS/Ovis-Omni-Embedding-3B/resolve/08547b8479edc10edc9878597438ebd076f74dff/model/generation_config.json",
+        "path": "models/Ovis-Omni-Embedding-3B/generation_config.json",
+        "size": 154,
+        "sha256": "3717d1cae1c8d49cc7b0d53f659afb22ff4a8b545d6179ae99ea5f9fffb01dd8"
+      },
+      {
+        "url": "https://huggingface.co/ATH-MaaS/Ovis-Omni-Embedding-3B/resolve/08547b8479edc10edc9878597438ebd076f74dff/model/model-00001-of-00003.safetensors",
+        "path": "models/Ovis-Omni-Embedding-3B/model-00001-of-00003.safetensors",
+        "size": 4985032488,
+        "sha256": "3859069435a04d363906c0ad05a5fcf480917225de6686f3a37489a27241d9ad"
+      },
+      {
+        "url": "https://huggingface.co/ATH-MaaS/Ovis-Omni-Embedding-3B/resolve/08547b8479edc10edc9878597438ebd076f74dff/model/model-00002-of-00003.safetensors",
+        "path": "models/Ovis-Omni-Embedding-3B/model-00002-of-00003.safetensors",
+        "size": 4999949856,
+        "sha256": "2ab4c3c8ab840be3614be89ac5521e6f6df48dce62a03adfac31cc83f0209ce4"
+      },
+      {
+        "url": "https://huggingface.co/ATH-MaaS/Ovis-Omni-Embedding-3B/resolve/08547b8479edc10edc9878597438ebd076f74dff/model/model-00003-of-00003.safetensors",
+        "path": "models/Ovis-Omni-Embedding-3B/model-00003-of-00003.safetensors",
+        "size": 1089579000,
+        "sha256": "6eebd641ef74ae7f865f8ca817ccbf3c6fe20a1b9107f8085f2ec79b2b519556"
+      },
+      {
+        "url": "https://huggingface.co/ATH-MaaS/Ovis-Omni-Embedding-3B/resolve/08547b8479edc10edc9878597438ebd076f74dff/model/model.safetensors.index.json",
+        "path": "models/Ovis-Omni-Embedding-3B/model.safetensors.index.json",
+        "size": 241759,
+        "sha256": "4e755a4c9ec7ce099290f8d99b4d17c44ee85844274f7141a0b676b29a0fcfaa"
+      },
+      {
+        "url": "https://huggingface.co/ATH-MaaS/Ovis-Omni-Embedding-3B/resolve/08547b8479edc10edc9878597438ebd076f74dff/model/preprocessor_config.json",
+        "path": "models/Ovis-Omni-Embedding-3B/preprocessor_config.json",
+        "size": 667,
+        "sha256": "b47055ce61463ce143e9aab741d55c0aa520801a0a5d63be73c5b17cecb6bc69"
+      },
+      {
+        "url": "https://huggingface.co/ATH-MaaS/Ovis-Omni-Embedding-3B/resolve/08547b8479edc10edc9878597438ebd076f74dff/model/processor_config.json",
+        "path": "models/Ovis-Omni-Embedding-3B/processor_config.json",
+        "size": 2750,
+        "sha256": "b07d090716b6ee577b99152b7f95cdcafe2f2cdc2a14f96697f5061c68de879c"
+      },
+      {
+        "url": "https://huggingface.co/ATH-MaaS/Ovis-Omni-Embedding-3B/resolve/08547b8479edc10edc9878597438ebd076f74dff/model/tokenizer.json",
+        "path": "models/Ovis-Omni-Embedding-3B/tokenizer.json",
+        "size": 11421866,
+        "sha256": "1ab7a851e5c63d5fafbfdac72e3b4a8d08613f6bbb06ee39036fdf870ef59c93"
+      },
+      {
+        "url": "https://huggingface.co/ATH-MaaS/Ovis-Omni-Embedding-3B/resolve/08547b8479edc10edc9878597438ebd076f74dff/model/tokenizer_config.json",
+        "path": "models/Ovis-Omni-Embedding-3B/tokenizer_config.json",
+        "size": 939,
+        "sha256": "c88b95614738ea500b4c6313b2209dc497092c4bf1f7b57d42be2578ad7ff38f"
       }
     ]
   }

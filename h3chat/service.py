@@ -21,6 +21,7 @@ from .remote_llm import Client as ApiClient
 from .visual_routing import visual_route
 from .music_routing import route as music_route
 from .video_routing import route as video_route
+from .voice import route as voice_route, validate as validate_voice, validate_fields as validate_voice_fields, runtime_ready as voice_ready
 from .video_options import validate as validate_video_options, DEFAULTS as VIDEO_DEFAULTS, ASPECTS as VIDEO_ASPECTS
 from .tools_runtime import status as tools_status,validate as validate_tools,pure_transcription
 from .web_search import requested as web_requested,sources_markdown
@@ -91,7 +92,7 @@ class Service:
     def state(self):
         models = self.refresh_models()
         return {"token": self.token, "version": __version__, "settings": self.store.settings(), "profiles": PROFILES,
-                "api_providers":self.providers.list(),"api_presets":API_PRESETS,
+                "api_providers":self.providers.list(),"api_presets":API_PRESETS,"voice_runtime":{"ready":voice_ready(self.root)},
                 "media_providers":self.media_providers.list(),
                 "media_server":self.media_server.status(),
                 "llm_options":{"keys":LLM_KEYS,"defaults":{profile:llm_defaults(profile) for profile in PROFILES},"max_context":MAX_CONTEXT,"max_output_tokens":MAX_OUTPUT_TOKENS},
@@ -99,7 +100,7 @@ class Service:
                 "video_options":{"defaults":VIDEO_DEFAULTS,"aspects":VIDEO_ASPECTS},
                 "tools_runtime":tools_status(self.root),"transcription_models":[m|{'ready':all(safe_join(self.root,f['path']).is_file() for f in m['files'])} for m in self.downloads.tool_models.values() if m['id'].startswith('whisper-')],
                 "vision_runtime":vision_status(self.root), "models": models,"image_options":{"samplers":NATIVE_SAMPLERS,"schedulers":NATIVE_SCHEDULERS,"vision_samplers":VISION_SAMPLERS,"vision_schedulers":VISION_SCHEDULERS,"defaults":{k:DEFAULTS[k] for k in IMAGE_DEFAULT_KEYS}},"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
-                "runtimes": {key: {"ready": tools_status(self.root).get(key.removeprefix('tools_'),{}).get('ready',False) if key.startswith('tools_') else vision_status(self.root)["ready"] if key=="vision" else music_status(self.root).get(key.removeprefix("music_"),{}).get("ready",False) if key.startswith("music_") else all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
+                "runtimes": {key: {"ready": tools_status(self.root).get(key.removeprefix('tools_'),{}).get('ready',False) if key.startswith('tools_') else voice_ready(self.root) if key=="voice" else vision_status(self.root)["ready"] if key=="vision" else music_status(self.root).get(key.removeprefix("music_"),{}).get("ready",False) if key.startswith("music_") else all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
                                     "size": sum(f["size"] for f in r["files"])} for key, r in self.runtimes.items()},
                 "chats": self.store.all("SELECT * FROM chats ORDER BY pinned DESC,updated DESC"),
                 "collections": self.store.all("SELECT * FROM collections ORDER BY name"),
@@ -182,7 +183,9 @@ class Service:
         current=self.store.settings()
         if 'llm_overrides' in patch:validate_llm_presets(patch['llm_overrides'],patch.get('profile',current['profile']))
         s = merge_llm_settings(current,patch)
+        if type(s['llm_timeout']) is not int or not 60<=s['llm_timeout']<=14400:raise ValueError('Tempo massimo LLM: da 60 a 14400 secondi.')
         validate_tools(s)
+        validate_voice(s)
         validate_rag(s)
         validate_devices(s)
         if type(s['lab_auto']) is not bool:raise ValueError('Routing interprete/Manim non valido.')
@@ -264,6 +267,7 @@ class Service:
         return self.engine.snapshot()
 
     def assess(self, body):
+        from .ovis import memory_assessment
         settings = self.validate_settings(body.get("settings", {}))
         refs = body.get("references", 1)
         if type(refs) is not int or not 0 <= refs <= 12:
@@ -279,7 +283,8 @@ class Service:
                 model=model|{"active_lora_bytes":sum(l["size"] for l in chosen_loras if l["model_id"]==model["id"] and l["weight"]!=0)}
                 selected_models.append(model)
                 selected.append(assess_model(model, settings, hardware, refs) | {"role":key})
-        return {"hardware":hardware,"models":selected,"references":refs,
+        from .voice import memory_assessment as assess_voice
+        return {"hardware":hardware,"models":selected,"references":refs,"rag_embedding":memory_assessment(settings,hardware),"voice":assess_voice(settings,hardware),
                 "overall":assess_selection(selected_models,settings,hardware,refs),"memory":self.engine.snapshot()}
 
     def upload(self, body):
@@ -358,15 +363,18 @@ class Service:
         assistant = body.get('assistant',True)
         if type(assistant) is not bool:raise ValueError('Assistant: scegli On oppure Off.')
         music=body.get('music',False)
+        voice=body.get('voice',False)
+        if type(voice) is not bool:raise ValueError('Voice: scegli attivo o disattivo.')
         video=body.get('video',False)
         web=body.get('web',False);transcribe=body.get('transcribe',False)
         if type(web) is not bool or type(transcribe) is not bool:raise ValueError('Web/Trascrivi: scegli attivo o disattivo.')
         if transcribe and not any(x['mime'].startswith('audio/') for x in media):raise ValueError('Allega un audio per trascriverlo.')
         if type(video) is not bool:raise ValueError('Video: scegli attivo o disattivo.')
         if type(music) is not bool:raise ValueError('Music: scegli attivo o disattivo.')
-        if sum((bool(selection),music,video,transcribe))>1:raise ValueError('Scegli Video, Music, Trascrivi oppure un modello immagini esplicito.')
+        if sum((bool(selection),music,video,transcribe,voice))>1:raise ValueError('Scegli una sola modalità esplicita fra Voice, Video, Music, Trascrivi e immagini.')
         fields=validate_music_fields(body.get('music_fields',{}))
         settings = settings | {'_image_model':selection,'_assistant':assistant,'_music':music,'_music_fields':fields,'_video':video,'_web':web,'_transcribe':transcribe}
+        settings.update(_voice=voice,_voice_fields=validate_voice_fields(body.get('voice_fields',{})))
         rag=body.get('rag',settings['rag_enabled'])
         if type(rag) is not bool:raise ValueError('RAG: scegli On oppure Off.')
         source_ids=body.get('rag_sources')
@@ -380,7 +388,7 @@ class Service:
         if lab=='slides' and source:raise ValueError('Modifica il sorgente delle slide direttamente nel canvas.')
         current_canvas=self.store.canvas_history.get(chat_id) if body.get('canvas') or slides_requested(prompt) else {}
         editing_slides=slides_edit(prompt,current_canvas.get('content',''))
-        slide_request=lab=='slides' or (lab=='auto' and not any((selection,music,video,transcribe)) and (slides_requested(prompt) or editing_slides))
+        slide_request=lab=='slides' or (lab=='auto' and not any((selection,music,video,transcribe,voice)) and (slides_requested(prompt) or editing_slides))
         if slide_request:
             slide_defaults=slides_edit_options(prompt,current_canvas['content']) if editing_slides and lab=='auto' else body.get('slides')
             lab='slides'
@@ -390,9 +398,9 @@ class Service:
         settings.update(_lab=lab,_lab_source=source)
         if lab not in ('manim','calculate','slides') and not (lab=='auto' and settings.get('lab_auto',True) and lab_route(prompt)=='manim') and video_route([{'content':prompt}],settings):
             from .video_options import prompt_duration
-            prompt_duration(prompt)
+            prompt_duration(prompt,has_audio=any(x['mime'].startswith('audio/') for x in media))
         request_history=[{'content':prompt,'media':media}]
-        direct_media=video_route(request_history,settings) or music_route(request_history,settings) or visual_route(request_history,settings) or explicit_route(request_history) in ('create','edit')
+        direct_media=voice_route(request_history,settings) or video_route(request_history,settings) or music_route(request_history,settings) or visual_route(request_history,settings) or explicit_route(request_history) in ('create','edit')
         pure=transcribe or (not direct_media and pure_transcription(prompt,[x for x in media if x['mime'].startswith('audio/')]))
         if not source and not pure and (assistant or not direct_media):
             self.engine.require_model(settings["chat_model"], "chat")
@@ -514,9 +522,9 @@ class Service:
                         settings['system_prompt']+='\nRispondi solo usando le fonti RAG fornite. Se non contengono la risposta, dichiaralo. Non colmare le lacune con conoscenze generali.'
                     settings['_context_reserved']=sum(len(s['text'])+180 for s in rag_sources)
             visual_history=[m|{"media":[x for x in m["media"] if x.get("mime", "").startswith("image/")]} for m in history]
-            selected_route = video_route(history,settings) or music_route(history,settings) or visual_route(visual_history,settings)
+            selected_route = voice_route(history,settings) or video_route(history,settings) or music_route(history,settings) or visual_route(visual_history,settings)
             lab=settings.get('_lab','auto')
-            if lab=='auto':lab=lab_route(payload['prompt']) if settings['lab_auto'] and not any(settings.get(k) for k in ('_image_model','_music','_video','_transcribe')) else None
+            if lab=='auto':lab=lab_route(payload['prompt']) if settings['lab_auto'] and not any(settings.get(k) for k in ('_image_model','_music','_video','_transcribe','_voice')) and not (selected_route and selected_route['intent']=='voice') else None
             if lab:selected_route={'intent':lab}
             if settings.get('_transcribe'):selected_route={'intent':'transcribe'}
             direct = explicit_route(visual_history)
@@ -540,7 +548,7 @@ class Service:
             if pure:selected_route={'intent':'transcribe'}
             elif not selected_route and (sources or tool_meta.get('documents') or transcripts or project_id):selected_route={'intent':'chat'}
             if not pure and not settings.get('_lab_source'):self.engine.prepare(settings, cancel, stage)
-            direct_media=((selected_route and selected_route['intent'] in ('create','edit','music','video','transcribe')) or (not selected_route and direct in ('create','edit'))) and not settings.get('_assistant',True)
+            direct_media=((selected_route and selected_route['intent'] in ('create','edit','music','video','voice','transcribe')) or (not selected_route and direct in ('create','edit'))) and not settings.get('_assistant',True)
             model={} if direct_media or pure or settings.get('_lab_source') else self.engine.require_model(settings["chat_model"], "chat")
             if selected_route:
                 route = selected_route
@@ -577,7 +585,15 @@ class Service:
             if intent!='chat':
                 for key in ('think_level','think_budget','model_warning'):meta.pop(key,None)
             self.store.update_answer(job,text,meta=meta)
-            if intent=='slides':
+            if intent=='voice':
+                from .voice import build as build_voice
+                media=build_voice(self,job,payload,history,settings,model,cancel,stage,log_path,meta)
+                if payload.get('canvas'):
+                    artifact={'title':'Voce','content':'','media':media};meta['artifact']=artifact
+                    self.save_artifact(job['chat_id'],artifact['title'],'',media);self.store.update_answer(job,'Ho creato la voce nel canvas.','done',[],meta)
+                else:self.store.update_answer(job,'Ecco la voce.','done',media,meta)
+                stage('Voce pronta')
+            elif intent=='slides':
                 from .slides import build as build_slides
                 meta['artifact']=build_slides(self,job,payload,history,settings,model,cancel,stage,log_path,meta)
                 self.store.update_answer(job,f"Ho creato {meta['slides_count']} slide nel canvas. Puoi sfogliarle ed esportarle."+(' '+meta['slide_warning'] if meta.get('slide_warning') else ''),'done',[],meta)
@@ -666,16 +682,23 @@ class Service:
                 stage("Risposta completata" if finish != "length" else "Limite di risposta raggiunto: puoi chiedere di continuare")
             elif intent == "video":
                 from .video_options import with_prompt_duration
-                settings=with_prompt_duration(settings,payload['prompt'])
                 video_model=self.engine.require_model(settings['video_model'],'video')
                 refs=payload['media']
                 if not refs and re.search(r'\b(questa|questo|allegat\w*|precedente|this|previous)\b',payload['prompt'],re.I):
                     refs=next(([x for x in m['media'] if x['mime'].startswith(('image/','audio/'))] for m in reversed(history[:-1]) if any(x['mime'].startswith(('image/','audio/')) for x in m['media'])),[])
+                from .soundtrack import select as choose_soundtrack, probe as probe_soundtrack
+                soundtrack=choose_soundtrack(payload['prompt'],refs)
+                if soundtrack:
+                    audio_info=probe_soundtrack(self.engine,self.data,soundtrack,cancel,stage,log_path)
+                    from .video_timeline import timeline
+                    timeline(audio_info['duration'])
+                    settings=settings|{'_video_duration':audio_info['duration'],'_video_soundtrack':soundtrack}
+                else:settings=with_prompt_duration(settings,payload['prompt'])
                 meta['model']=video_model['name'];self.store.update_answer(job,text,meta=meta)
                 if settings.get('_video_plan'):
                     plan,assistant_info=settings['_video_plan'],None
                 else:plan,assistant_info=self.engine.refine_video(history,payload['prompt'],refs,video_model,settings,cancel,log_path,stage)
-                media=self.engine.generate_video(video_model,settings,plan,refs,job['id'],cancel,stage,prompt=payload['prompt'])
+                media=self.engine.generate_long_video(video_model,settings,plan,refs,job['id'],cancel,stage,prompt=payload['prompt']) if soundtrack else self.engine.generate_video(video_model,settings,plan,refs,job['id'],cancel,stage,prompt=payload['prompt'])
                 meta.update(assistant_on=settings.get('_assistant',True),assistant=assistant_info,video_plan=plan,video_parameters=media['generation'],references=refs,video_selection=route.get('selection','auto'))
                 meta['loras_skipped']=public_loras(payload.get('loras',[]))
                 if payload.get('canvas'):
@@ -758,11 +781,11 @@ class Service:
     def close(self):
         self.media_server.close()
         self.media_providers.client.abort()
-        self.knowledge.close()
         self.closed.set()
         self.wake.set()
         if self.cancel_event:
             self.cancel_event.set()
+        self.knowledge.close()
         for task in self.downloads.snapshot():
             self.downloads.cancel(task["id"])
         self.engine.stop()

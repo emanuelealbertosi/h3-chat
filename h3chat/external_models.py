@@ -185,7 +185,7 @@ def browse(body):
                 if i>=10000 or len(items)>=1000:truncated=True;break
                 try:
                     is_dir=f.is_dir()
-                    if is_dir or Path(f.name).suffix.lower() in EXTENSIONS:
+                    if is_dir or Path(f.name).suffix.lower() in ({'.wav','.mp3','.flac','.ogg'} if body.get('kind')=='audio' else EXTENSIONS):
                         items.append({'name':f.name,'path':str(p/f.name),'directory':is_dir,'size':0 if is_dir else f.stat().st_size})
                 except OSError:continue
     except OSError as exc:raise ValueError('Impossibile leggere questa cartella.') from exc

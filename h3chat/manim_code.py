@@ -2,6 +2,22 @@
 import ast
 import re
 
+def generation_history(history,prompt):
+    """Fresh scenes retain facts and user turns without inheriting old programs."""
+    fresh=bool(re.search(r'\b(da zero|from scratch|completamente (?:divers\w*|nuov\w*)|riparti|redesign)\b',prompt,re.I))
+    edit=not fresh and bool(re.search(r'\b(modific\w*|corregg\w*|sostituisc\w*|aggiung\w*|rimuov\w*|allung\w*|accorci\w*|cambi\w*|spost\w*|ingrandisc\w*|riduci|mantieni|conserva|edit|modify|fix|replace|keep|add|remove|move|change|extend|shorten|resize)\b',prompt,re.I))
+    if edit:return history
+    result=[]
+    for message in history:
+        content=message.get('content','')
+        if (message.get('role')=='assistant' or message.get('seq')==-1) and isinstance(content,str):
+            def omit(match):
+                if match[1]=='python' and not re.search(r'\b(?:from\s+manim\s+import|import\s+manim\b)',match[2]):return match[0]
+                return '[Previous animation source omitted: develop a new visual explanation from the user requests and sources.]'
+            content=re.sub(r'```(manim-python|manim|python)\b[^\n]*\n(.*?)```',omit,content,flags=re.S)
+        result.append(message|{'content':content})
+    return result
+
 SCHEMA={'type':'object','properties':{'title':{'type':'string'},'code':{'type':'string'},'scene_name':{'type':'string'}},
         'required':['title','code','scene_name'],'additionalProperties':False}
 BRIEF=r'''Create a complete executable Manim Community 0.21 Python scene.
