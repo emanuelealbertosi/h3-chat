@@ -42,6 +42,43 @@ segnalata come errore e non pubblicata come audio completo.
 
 ## Audio nelle animazioni Manim
 
+### Voice + Manim in una sola richiesta
+
+Seleziona **Strumenti → Animazione Manim** e attiva **Voice**. Oppure, con
+riconoscimento automatico attivo, scrivi «Crea un diagramma Manim con voce
+narrante che spieghi il circuito, usando le fonti del progetto».
+
+Assistant On prepara un copione condiviso: per ogni scena scrive il parlato
+completo e descrive le trasformazioni da mostrare. Usa il RAG del progetto,
+le fonti selezionate, gli allegati PDF/Word, le immagini e le fonti web attive
+come nelle altre richieste della chat. Le citazioni RAG restano consultabili.
+La durata richiesta è un obiettivo per la lunghezza del copione: la durata
+finale segue il parlato effettivamente generato, senza tagliare spiegazioni.
+
+La voce viene sintetizzata prima del video e i tempi sono misurati sui campioni
+audio. Manim riceve il copione e i tempi dei segmenti di ogni scena; il montaggio
+adatta ciascun clip al proprio intervallo, incluse le pause. Non applica un
+unico adattamento di velocità a tutta l'animazione. La sincronizzazione è per
+scena/segmento narrativo, non un allineamento garantito di ogni singola parola.
+
+Ogni scena usa **Python Manim completo**, con 2D, 3D e LaTeX quando installato.
+Sono disponibili nel canvas o nella chat il video, il WAV (anche esportabile
+MP3), il testo, i sottotitoli SRT, il copione con tempi e i sorgenti Python
+delle scene. I controlli di voce, timbro e interpretazione restano quelli del
+Setup e della chat. Voice e Manim seguono le rispettive scelte CPU/GPU.
+
+Per un testo esatto inserisci `Testo: ...` dopo le istruzioni visuali. Questo
+testo viene letto senza riscriverlo. **Assistant Off** richiede questo formato;
+il LLM selezionato continua a scrivere il codice Manim, come per le animazioni
+ordinarie. Un sorgente Python manuale può essere accompagnato da un singolo
+testo vocale fino a 500 caratteri.
+
+Se il lavoro viene interrotto, **Rigenera** riutilizza copione, voce e scene
+già completate e renderizza solo quelle mancanti. La ripresa verifica che i
+file salvati non siano stati modificati. Rigenera su un lavoro completato
+crea invece un nuovo risultato. Massimo 10 minuti di narrazione e 24 scene;
+nessun vincolo dichiarativo sugli oggetti o sulle animazioni Python.
+
 Allega una traccia e chiedi «Crea un’animazione Manim usando questo audio».
 Il motore applica la traccia originale **dopo** il rendering: l’LLM non
 deve ricordarsi di inserirla nel codice Python. L’animazione intera viene

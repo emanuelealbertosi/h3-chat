@@ -19,7 +19,7 @@ def run(request):
     count=len(request['segments']);index=0
     def progress(**kw):emit('stage',message=f"Voice · segmento {index+1}/{count} · "+kw.get('message',f"sintesi · {kw.get('frames',0)} fotogrammi audio"))
     engine=module.Engine(request['config'],progress);rate=engine.sample_rate
-    folder=Path(request['output']);partial=folder/'voce.partial.wav';cursor=0;srt=[]
+    folder=Path(request['output']);partial=folder/'voce.partial.wav';cursor=0;srt=[];timeline=[]
     try:
         with wave.open(str(partial),'wb') as out:
             out.setnchannels(1);out.setsampwidth(2);out.setframerate(rate)
@@ -30,10 +30,13 @@ def run(request):
                 if peak>.98:wav*=.98/peak
                 start=cursor/rate;out.writeframes((wav*32767).astype('<i2').tobytes());cursor+=len(wav)
                 srt.append(f'{index+1}\n{stamp(start)} --> {stamp(cursor/rate)}\n{segment["text"].strip()}')
+                timeline.append({'scene_id':segment.get('scene_id'),'text':segment['text'],'start':start,'end':cursor/rate,'start_sample':round(start*rate),'end_sample':cursor})
                 if index<count-1:
                     pause=round(rate*request['config']['pause_ms']/1000);out.writeframes(bytes(pause*2));cursor+=pause
         partial.replace(folder/'voce.wav');(folder/'voce.srt').write_text('\n\n'.join(srt),encoding='utf-8')
-        return {'duration':cursor/rate,'sample_rate':rate,'segments':count}
+        result={'duration':cursor/rate,'sample_rate':rate,'segments':count,'timeline':timeline}
+        (folder/'voce-timeline.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
+        return result
     finally:partial.unlink(missing_ok=True)
 
 if __name__=='__main__':

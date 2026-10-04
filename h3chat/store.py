@@ -198,6 +198,7 @@ class Store:
             payload = original['payload']
             value=json.loads(payload)
             value['settings'].pop('_video_resume',None)
+            value['settings'].pop('_manim_voice_resume',None)
             if original['status'] in ('failed','cancelled'):
                 try:
                     from .video_resume import checkpoint
@@ -205,6 +206,12 @@ class Store:
                 except (OSError,ValueError,TypeError,KeyError):saved=None
                 if saved:
                     value['settings']['_video_resume']=original['id']
+                if value['settings'].get('_manim_voice'):
+                    try:
+                        from .narrated_manim import checkpoint as narration_checkpoint
+                        narration_checkpoint(self.root,original['id'])
+                    except (OSError,ValueError,TypeError,KeyError):pass
+                    else:value['settings']['_manim_voice_resume']=original['id']
             if llm_settings is not None:
                 from .llm_options import KEYS
                 value['settings'].update({key:llm_settings[key] for key in ('chat_model','llm_device','vision_enabled',*KEYS)})

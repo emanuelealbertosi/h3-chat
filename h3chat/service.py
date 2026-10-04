@@ -396,6 +396,9 @@ class Service:
             self.engine.require_model(settings['chat_model'],'chat')
         if source and lab=='auto':raise ValueError('Specifica lo strumento per eseguire il sorgente.')
         settings.update(_lab=lab,_lab_source=source)
+        from .narrated_manim import requested as narrated_requested
+        settings['_manim_voice']=narrated_requested(prompt,settings)
+        if settings['_manim_voice'] and not source:self.engine.require_model(settings['chat_model'],'chat')
         if lab not in ('manim','calculate','slides') and not (lab=='auto' and settings.get('lab_auto',True) and lab_route(prompt)=='manim') and video_route([{'content':prompt}],settings):
             from .video_options import prompt_duration
             prompt_duration(prompt,has_audio=any(x['mime'].startswith('audio/') for x in media))
@@ -524,7 +527,9 @@ class Service:
             visual_history=[m|{"media":[x for x in m["media"] if x.get("mime", "").startswith("image/")]} for m in history]
             selected_route = voice_route(history,settings) or video_route(history,settings) or music_route(history,settings) or visual_route(visual_history,settings)
             lab=settings.get('_lab','auto')
-            if lab=='auto':lab=lab_route(payload['prompt']) if settings['lab_auto'] and not any(settings.get(k) for k in ('_image_model','_music','_video','_transcribe','_voice')) and not (selected_route and selected_route['intent']=='voice') else None
+            from .narrated_manim import requested as narrated_requested
+            if narrated_requested(payload['prompt'],settings):settings['_manim_voice']=True;lab='manim'
+            elif lab=='auto':lab=lab_route(payload['prompt']) if settings['lab_auto'] and not any(settings.get(k) for k in ('_image_model','_music','_video','_transcribe','_voice')) and not (selected_route and selected_route['intent']=='voice') else None
             if lab:selected_route={'intent':lab}
             if settings.get('_transcribe'):selected_route={'intent':'transcribe'}
             direct = explicit_route(visual_history)
@@ -561,6 +566,7 @@ class Service:
                 route = self.engine.route(history, settings, cancel)
             intent = route["intent"]
             meta = {"intent": intent, "model": model.get("name", ""), "settings": settings, "prompt": payload["prompt"], "canvas": payload.get("canvas", False)}
+            if intent=='manim' and settings.get('_manim_voice'):meta['narrated_manim']=True
             if intent == 'chat' and model.get('identity'):
                 meta['model_identity'] = model['identity']
             if model.get('api'):meta['api']=True
@@ -598,13 +604,16 @@ class Service:
                 meta['artifact']=build_slides(self,job,payload,history,settings,model,cancel,stage,log_path,meta)
                 self.store.update_answer(job,f"Ho creato {meta['slides_count']} slide nel canvas. Puoi sfogliarle ed esportarle."+(' '+meta['slide_warning'] if meta.get('slide_warning') else ''),'done',[],meta)
             elif intent=='manim':
-                from .manim_artifact import build as build_manim
+                if settings.get('_manim_voice'):
+                    from .narrated_manim import build as build_manim
+                else:
+                    from .manim_artifact import build as build_manim
                 title,content,media=build_manim(self,job,payload,visual_history,settings,model,cancel,stage,log_path,meta)
                 meta['artifact']={'title':title,'content':content,'media':media}
                 if payload.get('canvas'):
                     self.save_artifact(job['chat_id'],title,content,media);self.store.update_answer(job,'Ho creato l’animazione nel canvas.','done',[],meta)
                 else:self.store.update_answer(job,content,'done',media,meta)
-                stage('Animazione Manim pronta')
+                stage('Animazione Manim con voce pronta' if settings.get('_manim_voice') else 'Animazione Manim pronta')
             elif intent=='calculate':
                 stage('Interprete numerico')
                 if settings.get('_lab_source'):prepared={'title':'Calcolo','code':settings['_lab_source']}

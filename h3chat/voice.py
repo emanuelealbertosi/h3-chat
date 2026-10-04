@@ -101,11 +101,35 @@ def controls(settings,prompt):
     base.append('prosody:expressive_low' if value['emotion']=='neutral' else 'emotion:'+value['emotion'])
     return value,direction(prompt,base=base)
 
-def build(app,job,payload,history,settings,model,cancel,stage,log,meta):
-    if not runtime_ready(app.root):raise ValueError('Installa il motore Voice dal Setup (base Vision e componenti voce).')
+def configuration(root,settings,prompt):
+    """Resolve the same portable voice engine for speech and narrated animation."""
+    if not runtime_ready(root):raise ValueError('Installa il motore Voice dal Setup (base Vision e componenti voce).')
     model_path=resolve_model(settings['voice_model_path']);codec=resolve_model(settings['voice_codec_path'],'codec')
-    choice,acting=controls(settings,payload['prompt']);ref=settings['voice_references'][choice['gender']]
+    choice,acting=controls(settings,prompt);ref=settings['voice_references'][choice['gender']]
     if not ref['path'] or not Path(ref['path']).is_file():raise ValueError('Configura un campione per questa voce nel Setup → Voice.')
+    cfg={'model_path':model_path,'codec_path':codec,'device':'cuda' if settings['voice_device']=='gpu' else 'cpu','precision':settings['voice_precision'],'temperature':settings['voice_temperature'],'pause_ms':settings['voice_pause_ms']}
+    return cfg,choice,acting,{'id':choice['gender'],'reference':ref['path'],'transcript':ref['transcript']}
+
+def synthesize(app,folder,parts,settings,prompt,cancel,stage,log,meta):
+    cfg,choice,acting,voice=configuration(app.root,settings,prompt)
+    segments=[]
+    for part in parts:
+        phrases=[part['text']]
+        if part.get('sentence_cues'):
+            ends=[m.end() for m in re.finditer(r'[.!?][”"\']?\s+(?=\S)',part['text'])]
+            points=[0,*ends,len(part['text'])];phrases=[part['text'][a:b] for a,b in zip(points,points[1:])]
+        for text in [chunk for phrase in phrases for chunk in split_text(phrase,settings['voice_chunk_chars'])]:
+            if text.strip():segments.append({'text':text,'spoken':apply_direction(text,acting['prefix']),'voice':voice,'scene_id':part.get('scene_id')})
+    folder=Path(folder);folder.mkdir(parents=True,exist_ok=True)
+    (folder/'testo-voce.txt').write_text('\n\n'.join(p['text'] for p in parts),encoding='utf-8')
+    if settings.get('memory_policy')!='resident':stage('Voice · rilascio modelli prima della sintesi');app.engine.stop()
+    result=app.engine.tool_call('voice-worker.py',{'config':cfg,'segments':segments,'output':str(folder)},cancel,stage,log,timeout=14400)
+    meta.update(voice_model=Path(cfg['model_path']).name,voice_controls=choice,voice_tags=acting['tags'],voice_duration=result['duration'],assistant_on=settings.get('_assistant',True))
+    if settings['voice_device']=='cpu':meta['device_warning']='La sintesi vocale sulla CPU può richiedere molto tempo e molta RAM.'
+    return result,[{'id':uid(),'name':name,'mime':mime,'path':(folder/name).resolve().relative_to(app.data.resolve()).as_posix()} for name,mime in [('voce.wav','audio/wav'),('testo-voce.txt','text/plain'),('voce.srt','application/x-subrip')]]
+
+def build(app,job,payload,history,settings,model,cancel,stage,log,meta):
+    _,choice,_,_=configuration(app.root,settings,payload['prompt'])
     text=payload['prompt'];compose=choice.get('mode')=='compose' or (choice.get('mode')!='read' and bool(re.search(r'\b(?:lezione|riassunto|spiega|racconta|summary|lesson|explain)\b',text,re.I)))
     if compose and settings.get('_assistant',True):
         stage('Voice · preparazione del testo con il modello chat');app.engine.start_llama(model,settings,log,cancel,stage=stage)
@@ -124,13 +148,7 @@ def build(app,job,payload,history,settings,model,cancel,stage,log,meta):
         elif not settings.get('_voice'):
             text=re.sub(r'^(?:leggi(?:mi)?|pronuncia|recita|read aloud|speak)(?:\s+(?:questo testo|ad alta voce))?\s*[:\-]?\s*','',text,flags=re.I)
     if not text.strip():raise ValueError('Scrivi il testo da pronunciare.')
-    voice={'id':choice['gender'],'reference':ref['path'],'transcript':ref['transcript']}
-    segments=[{'text':part,'spoken':apply_direction(part,acting['prefix']),'voice':voice} for part in split_text(text,settings['voice_chunk_chars']) if part.strip()]
     folder=app.data/'outputs'/job['id'];folder.mkdir(parents=True,exist_ok=True)
-    (folder/'testo-voce.txt').write_text(text,encoding='utf-8')
-    if settings.get('memory_policy')!='resident':stage('Voice · rilascio modelli prima della sintesi');app.engine.stop()
-    cfg={'model_path':model_path,'codec_path':codec,'device':'cuda' if settings['voice_device']=='gpu' else 'cpu','precision':settings['voice_precision'],'temperature':settings['voice_temperature'],'pause_ms':settings['voice_pause_ms']}
-    result=app.engine.tool_call('voice-worker.py',{'config':cfg,'segments':segments,'output':str(folder)},cancel,stage,log,timeout=14400)
-    meta.update(model=Path(model_path).name,voice_controls=choice,voice_tags=acting['tags'],voice_duration=result['duration'],assistant_on=settings.get('_assistant',True),execution_mode='Standalone · '+('GPU · CUDA' if settings['voice_device']=='gpu' else 'CPU')+' · Voice')
-    if settings['voice_device']=='cpu':meta['device_warning']='La sintesi vocale sulla CPU può richiedere molto tempo e molta RAM.'
-    return [{'id':uid(),'name':name,'mime':mime,'path':(folder/name).relative_to(app.data).as_posix()} for name,mime in [('voce.wav','audio/wav'),('testo-voce.txt','text/plain'),('voce.srt','application/x-subrip')]]
+    _,media=synthesize(app,folder,[{'text':text}],settings,payload['prompt'],cancel,stage,log,meta)
+    meta.update(model=meta['voice_model'],execution_mode='Standalone · '+('GPU · CUDA' if settings['voice_device']=='gpu' else 'CPU')+' · Voice')
+    return media
