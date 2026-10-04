@@ -63,7 +63,13 @@ mantiene la normale durata del clip. Per il lip-sync chiedi esplicitamente
 di sincronizzare le labbra con l’audio.
 
 Assistant On prepara un piano continuo per le scene con lo stesso LLM
-selezionato in chat. Assistant Off usa le istruzioni originali. Ogni scena
+selezionato in chat. Il piano viene scritto in gruppi di massimo tre scene,
+conservando l'apertura e le ultime due istruzioni per la continuità. I token
+Assistant video sono separati dal limite della chat; il thinking viene
+disattivato solo per il piano strutturato. Risposte incomplete vengono
+suddivise ulteriormente; una singola scena può essere ritentata una volta.
+Gli errori di connessione o credito non vengono ritentati automaticamente.
+Assistant Off usa le istruzioni originali. Ogni scena
 riceve il tratto temporale corretto della traccia e conserva i numeri dei
 riferimenti. La memoria interna mantiene un fotogramma di apertura e le
 ultime due conclusioni; l’ultimo fotogramma guida l’avvio della scena

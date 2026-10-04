@@ -25,7 +25,7 @@ from .video_options import options as video_options
 from .video_routing import route as video_route
 from .music_runtime import backend as music_backend
 from .tools_engine import ToolsEngine
-from .remote_llm import Client as ApiClient
+from .remote_llm import Client as ApiClient, EmptyCompletion
 
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
@@ -393,7 +393,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                     finish = choices[0].get("finish_reason") or finish
                     on_text(content)
                 if not content.strip():
-                    raise RuntimeError("Il modello ha restituito una risposta vuota. Riduci i riferimenti o scegli un modello chat/vision più capace.")
+                    raise EmptyCompletion("Il modello ha restituito una risposta vuota. Riduci i riferimenti o scegli un modello chat/vision più capace.")
                 if finish is None:
                     raise RuntimeError("Il motore ha interrotto lo stream prima di completare la risposta.")
                 return content, finish

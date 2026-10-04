@@ -8,6 +8,12 @@ import urllib.error
 import urllib.request
 from .downloads import Cancelled
 
+class EmptyCompletion(RuntimeError):
+    """A completed exchange that produced no usable text."""
+
+class StructuredCompletionError(ValueError):
+    """Usable transport, but invalid structured model output."""
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):raise ValueError('Il provider reindirizza la richiesta. Imposta direttamente il suo indirizzo API finale.')
 
@@ -128,10 +134,10 @@ class Client:
         if on_text is None:
             try:content=value['choices'][0]['message']['content'];finish=value['choices'][0].get('finish_reason')
             except (KeyError,IndexError,TypeError):raise RuntimeError('Risposta API non compatibile con Chat Completions.')
-        if not isinstance(content,str) or not content.strip():raise RuntimeError('Il provider ha restituito una risposta vuota.')
+        if not isinstance(content,str) or not content.strip():raise EmptyCompletion('Il provider ha esaurito i token prima di produrre testo. Riduci il thinking o aumenta il limite di output.' if finish=='length' else 'Il provider ha restituito una risposta vuota.')
         if finish is None:raise RuntimeError('Il provider ha interrotto la risposta prima di completarla.')
         if finish not in ('stop','length'):raise RuntimeError('Risposta API non completata: '+str(finish)[:60])
         if schema and finish!='length':
             try:parsed=json.loads(content);check_schema(parsed,schema)
-            except (ValueError,TypeError,KeyError):raise ValueError('Il provider non ha rispettato il formato JSON richiesto per router, Assistant o canvas. Cambia formato JSON nelle impostazioni API o scegli un altro modello.')
+            except (ValueError,TypeError,KeyError):raise StructuredCompletionError('Il provider non ha rispettato il formato JSON richiesto per router, Assistant o canvas. Cambia formato JSON nelle impostazioni API o scegli un altro modello.')
         return (content,finish) if on_text else content

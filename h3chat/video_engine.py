@@ -5,6 +5,7 @@ from .downloads import Cancelled, safe_join
 from .video_options import options, validate_plan
 from .video_routing import BRIEF, PLAN_SCHEMA, direct_plan
 from .vision_runtime import status
+from .remote_llm import EmptyCompletion, StructuredCompletionError
 
 class VideoEngine:
     def start_video(self,model,settings,log_path,cancel,stage=None):
@@ -72,6 +73,37 @@ class VideoEngine:
         (folder/'video-plan.json').write_text(json.dumps({'plan':plan,'parameters':actual},ensure_ascii=False,indent=2),encoding='utf-8')
         return {'id':job_id,'name':'Video MiniMax H3.mp4','mime':'video/mp4','path':output.relative_to(self.data).as_posix(),'generation':actual}
 
+    def scene_scripts(self,plan,scenes,settings,cancel,stage,*,prompt):
+        """Bound each structured call; retain continuity across prompt batches."""
+        budget=min(settings['context']//2,settings['video_prompt_max_tokens'])
+        tuning=settings|{'max_tokens':budget,'think_level':'off'}
+        size=max(1,min(3,budget//768));scripts=[]
+        brief=BRIEF.replace('Return JSON prompt, images, audios.','Return only JSON {"scenes":[English prompt per requested clip]}.')+'\nDescribe one continuous film, preserving Picture/Audio labels, identities, style and the language of any supplied dialogue. Do not invent unheard lyrics. Return only the requested clips, in order. Use supplied previous prompts and opening as visual continuity, not as repeated action. No opening restart or finale before the last clip. Translate global keyframe times into LOCAL clip times. Each prompt must be concise while retaining the required MiniMax section labels; never return images/audios arrays.'
+        def produce(group):
+            schema={'type':'object','properties':{'scenes':{'type':'array','minItems':len(group),'maxItems':len(group),'items':{'type':'string'}}},'required':['scenes'],'additionalProperties':False}
+            for attempt in range(2 if len(group)==1 else 1):
+                if cancel.is_set():raise Cancelled()
+                first,last=group[0]['index']+1,group[-1]['index']+1
+                stage(f'Assistant · sceneggiatura · scene {first}–{last}/{len(scenes)}'+(' · nuovo tentativo conciso' if attempt else ''))
+                context={'request':prompt,'plan':plan,'total_scenes':len(scenes),'film_duration':scenes[-1]['start']+scenes[-1]['duration'],'clips':group,'opening':scripts[0] if scripts else None,'previous':scripts[-2:]}
+                instructions=brief+f'\nOutput budget: {budget} tokens for {len(group)} clip(s). Aim for at most {max(40,min(220,budget//(3*len(group))))} words per clip.'
+                if attempt:instructions+=' Previous output was empty or incomplete. Return short, complete JSON immediately.'
+                try:
+                    raw,finish=self.completion([{'role':'system','content':instructions},{'role':'user','content':json.dumps(context,ensure_ascii=False)}],tuning,cancel,on_text=lambda _:None,schema=schema)
+                    if finish=='length':raise StructuredCompletionError('Output limit reached')
+                    try:value=json.loads(raw)
+                    except (ValueError,TypeError) as exc:raise StructuredCompletionError('Incomplete scene JSON') from exc
+                    value=value.get('scenes') if isinstance(value,dict) and set(value)=={'scenes'} else None
+                    if not isinstance(value,list) or len(value)!=len(group) or any(not isinstance(s,str) or not s.strip() for s in value):raise StructuredCompletionError('Incomplete scene list')
+                    scripts.extend(value);return
+                except (EmptyCompletion,StructuredCompletionError) as exc:
+                    if len(group)>1:
+                        stage('Assistant · piano incompleto · divido il gruppo di scene')
+                        middle=len(group)//2;produce(group[:middle]);produce(group[middle:]);return
+                    if attempt:raise ValueError(f'Assistant video non ha completato la scena {first} dopo due tentativi. Aumenta i token Assistant video o scegli un altro LLM; puoi usare Assistant Off. Nessun video è stato avviato.') from exc
+        for start in range(0,len(scenes),size):produce(scenes[start:start+size])
+        return scripts
+
     def generate_long_video(self,model,settings,plan,refs,job_id,cancel,stage,*,prompt):
         from .video_timeline import timeline,scene_plan
         from .soundtrack import compose
@@ -82,13 +114,8 @@ class VideoEngine:
         folder=self.data/'outputs'/job_id;folder.mkdir(parents=True,exist_ok=True)
         if len(scenes)>1 and settings.get('_assistant',True):
             stage(f'Assistant · sceneggiatura continua in {len(scenes)} scene')
-            schema={'type':'object','properties':{'scenes':{'type':'array','minItems':len(scenes),'maxItems':len(scenes),'items':{'type':'string'}}},'required':['scenes'],'additionalProperties':False}
-            brief=BRIEF+'\nNow return {"scenes":[English prompt per clip]}. Preserve Picture/Audio identities and language. Describe one continuous progression, no repeated opening. Do not invent unheard lyrics. Durations and global keyframe locations are supplied. Translate them into LOCAL clip times in each prompt. Visual memory of the opening and last two clips will be supplied automatically.'
             llm=self.require_model(settings['chat_model'],'chat');self.start_llama(llm,settings,folder/'engine.log',cancel,stage=stage)
-            raw,finish=self.completion([{'role':'system','content':brief},{'role':'user','content':json.dumps({'request':prompt,'plan':plan,'timeline':scenes},ensure_ascii=False)}],settings|{'max_tokens':min(settings['context']//2,settings['video_prompt_max_tokens'])},cancel,on_text=lambda _:None,schema=schema)
-            value=json.loads(raw).get('scenes')
-            if finish=='length' or not isinstance(value,list) or len(value)!=len(scenes) or any(not isinstance(s,str) or not s.strip() for s in value):raise ValueError('Piano delle scene incompleto. Aumenta i token Assistant video o riduci la durata dell’audio.')
-            scripts=value
+            scripts=self.scene_scripts(plan,scenes,settings,cancel,stage,prompt=prompt)
         outputs=[];parameters=[];canvas=None
         for position,scene in enumerate(scenes):
             if cancel.is_set():raise Cancelled()
