@@ -137,7 +137,8 @@ class VideoEngine:
         parameters=list(resumed['parameters']) if resumed else [];canvas=None
         def saved_canvas(p):return {'width':p['canvas_width'],'height':p['canvas_height'],'output_width':p['width'],'output_height':p['height'],'aspect':p['aspect'],'aspect_source':p['aspect_source'],'format_image':p.get('format_image')}
         if parameters and 'canvas_width' in parameters[0]:canvas=saved_canvas(parameters[0])
-        record={'timeline':scenes,'prompts':scripts,'plan':plan,'model':model.get('id',''),'completed':len(outputs),'parameters':parameters,'outputs':[p.relative_to(self.data).as_posix() for p in outputs]}
+        def relative_output(path):return path.resolve().relative_to(self.data.resolve()).as_posix()
+        record={'timeline':scenes,'prompts':scripts,'plan':plan,'model':model.get('id',''),'completed':len(outputs),'parameters':parameters,'outputs':[relative_output(p) for p in outputs]}
         save_checkpoint(folder,record)
         completed=len(outputs)
         for position,scene in enumerate(scenes):
@@ -151,6 +152,6 @@ class VideoEngine:
             item=self.generate_video(model,settings,local,refs,job_id+f'/scene-{position+1:03d}',cancel,report,prompt=prompt,scene=scoped)
             outputs.append(safe_join(self.data,item['path']));p=item['generation'];parameters.append(p)
             if not canvas and 'canvas_width' in p:canvas=saved_canvas(p)
-            record.update(completed=position+1,outputs=[p.relative_to(self.data).as_posix() for p in outputs]);save_checkpoint(folder,record)
+            record.update(completed=position+1,outputs=[relative_output(p) for p in outputs]);save_checkpoint(folder,record)
         result=compose(self,outputs,safe_join(self.data,soundtrack['path']),folder/'video.mp4',cancel,stage,folder/'engine.log')
         return {'id':job_id,'name':'Video MiniMax H3.mp4','mime':'video/mp4','path':(folder/'video.mp4').relative_to(self.data).as_posix(),'generation':parameters[0]|{'duration':result['duration'],'scenes':len(scenes),'scene_parameters':parameters,'audio_preserved':True,'visual_memory':len(scenes)>1,'recovered_scenes':completed}}

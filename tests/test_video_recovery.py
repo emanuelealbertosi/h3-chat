@@ -41,7 +41,7 @@ class RecoveryTests(unittest.TestCase):
 
     def test_recovers_only_missing_clip_with_visual_memory_and_full_audio(self):
         with tempfile.TemporaryDirectory() as tmp:
-            data=Path(tmp);ident='a'*32;plan,outputs=self.fixture(data,ident)
+            data=Path(tmp).resolve();ident='a'*32;plan,outputs=self.fixture(data,ident)
             engine=VideoEngine();engine.data=data;engine.scene_scripts=Mock(side_effect=AssertionError('No replanning'));calls=[]
             def generate(model,settings,local,refs,job,cancel,stage,**kwargs):
                 calls.append(kwargs['scene']);out=data/'outputs'/job/'video.mp4';out.parent.mkdir(parents=True);out.write_bytes(b'fixture')
