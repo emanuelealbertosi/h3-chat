@@ -184,6 +184,39 @@ class VisualModelsTests(unittest.TestCase):
             self.assertEqual('--no-mmproj-offload' in commands[0],vision)
             self.app.engine.stop()
 
+    def test_vision_device_switch_restarts_projector_and_preserves_llm_layers(self):
+        class Response(io.BytesIO):status=200
+        class Process:
+            pid=123;stdin=None;stdout=None
+            def poll(self):return None
+            def terminate(self):pass
+            def wait(self,timeout):return 0
+        commands=[]
+        def start(session,args):commands.append(args);session.process=Process()
+        base=self.settings|{'backend':'cuda','profile':'low','gpu_layers':7,'vision_enabled':True}
+        with patch('h3chat.engine.runtime_executable',return_value='llama-server.exe'),patch('h3chat.residency.Session.start',start),patch('h3chat.engine.urllib.request.urlopen',side_effect=lambda *a,**kw:Response(b'{}')):
+            for device in ('cpu','gpu','cpu'):
+                self.app.engine.start_llama(self.llm,base|{'vision_device':device},self.base/'vision.log',threading.Event())
+        self.assertEqual(len(commands),3)
+        for command,device in zip(commands,('cpu','gpu','cpu')):
+            self.assertIn('--mmproj-offload' if device=='gpu' else '--no-mmproj-offload',command)
+            self.assertNotIn('--no-mmproj-offload' if device=='gpu' else '--mmproj-offload',command)
+            self.assertEqual(command[command.index('--n-gpu-layers')+1],7)
+        self.assertEqual(self.app.save_settings({'vision_device':'gpu'})['vision_device'],'gpu')
+        for value in ('auto',True,None):
+            with self.assertRaises(ValueError):self.app.validate_settings({'vision_device':value})
+        with self.assertRaisesRegex(ValueError,'CUDA o Vulkan'):
+            self.app.engine.start_llama(self.llm,base|{'profile':'cpu','vision_device':'gpu'},self.base/'vision.log',threading.Event())
+
+    def test_vision_gpu_memory_accounts_for_projector(self):
+        model=self.llm|{'vision':{'enabled':True,'projector_size':1024**3}}
+        hardware={'ram':{'free_mb':60000,'total_mb':64000},'gpu':[{'name':'Fixture GPU','vendor':'NVIDIA','free_mb':23000,'total_mb':24000}]}
+        settings=self.settings|{'backend':'cuda','profile':'low','gpu_layers':7}
+        cpu=assess_model(model,settings|{'vision_device':'cpu'},hardware)
+        gpu=assess_model(model,settings|{'vision_device':'gpu'},hardware)
+        self.assertGreater(gpu['vram_gb'],cpu['vram_gb']+1)
+        self.assertLess(gpu['ram_gb'],cpu['ram_gb'])
+
     def test_semantic_diagram_edit_routes_to_ming_with_previous_reference(self):
         history=[{'role':'user','status':'done','seq':1,'content':'immagine','media':[{'path':'x.png'}]},
                  {'role':'user','status':'done','seq':2,'content':'Vorrei un altro arco tra i due nodi del disegno precedente','media':[]}]

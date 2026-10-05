@@ -1,3 +1,4 @@
+import {htmlPage,htmlOverflow,flattenHtml,mountHtmlEditor} from './slide-html.js';
 import {renderRich,saveBlob} from './render.js';
 import hljs from 'highlight.js';
 import {exportPdf,exportDocx,exportPng} from './exports.js';
@@ -8,12 +9,14 @@ import {repairSlideContrast} from './slide-contrast.js';
 export const slideFormats={'16:9':720,'4:3':960,'16:10':800,'1:1':1280};
 export function readDeck(content){
   if(!content.startsWith('```h3-slides\n'))return null;
-  if(content.length>200000||!content.endsWith('\n```'))throw Error('Sorgente slide incompleto o troppo grande.');
+  if(content.length>2600000||!content.endsWith('\n```'))throw Error('Sorgente slide incompleto o troppo grande.');
   const deck=JSON.parse(content.slice(13,-4));
   if(deck.version!==1||!Object.hasOwn(slideFormats,deck.format)||!Array.isArray(deck.pages)||!deck.pages.length||deck.pages.length>30)throw Error('Presentazione non valida.');
   if(deck.title!==undefined&&(typeof deck.title!=='string'||deck.title.length>150))throw Error('Titolo presentazione non valido.');
   deck.title||='Presentazione';deck.references||=[];
+  if(!['llm','deterministic'].includes(deck.engine||'deterministic'))throw Error('Motore slide non valido.');
   for(const page of deck.pages){
+    if(deck.engine==='llm'){if(typeof page.html!=='string'&&page.html!==undefined||typeof page.html==='string'&&page.html.length>80000)throw Error('HTML slide non valido.');continue;}
     if(typeof page.title!=='string'||page.title.length>150||!Array.isArray(page.nodes)||page.nodes.length>40)throw Error('Pagina slide non valida.');
     const groups=new Map([['root',0]]),ids=new Set(['root']);
     for(const node of page.nodes){
@@ -21,7 +24,7 @@ export function readDeck(content){
       ids.add(node.id);if(node.kind==='group')groups.set(node.id,groups.get(node.parent)+1);
     }
   }
-  validateDesign(deck);return deck;
+  if(deck.engine!=='llm')validateDesign(deck);return deck;
 }
 const selections=new Map();
 export function transferSlideView(oldId,newId){if(selections.has(oldId))selections.set(newId,selections.get(oldId));}
@@ -36,6 +39,7 @@ function applyStyle(element,style={}){
 }
 
 async function pageElement(deck,page,index,media,options,mount){
+  if(deck.engine==='llm')return htmlPage(deck,page,index,media,mount);
   const frame=document.createElement('article');frame.className='h3-slide-page slide-theme-'+(deck.theme||'lagoon')+' slide-typography-'+(deck.typography||'modern')+' slide-design-'+(deck.design||'professional');frame.style.setProperty('--slide-height',slideFormats[deck.format]+'px');frame.dataset.page=String(index+1);
   const roots=page.nodes.filter(n=>n.parent==='root');
   if(index===0&&roots.length<=4&&!page.nodes.some(n=>['code','chart','mermaid'].includes(n.kind)))frame.classList.add('slide-cover');
@@ -84,14 +88,15 @@ export async function renderSlides(target,value,options={}){
   const viewport=document.createElement('div');viewport.className='slides-viewport';target.append(viewport);
   const page=deck.pages[selected.index];const frame=await pageElement(deck,page,selected.index,value.media,options,viewport);
   await document.fonts.ready;await Promise.all([...frame.querySelectorAll('img')].map(img=>img.decode().catch(()=>{})));
-  const frames=layoutSlide(frame,page.title);
+  const frames=deck.engine==='llm'?[frame]:layoutSlide(frame,page.title);
   for(const f of frames)for(const link of f.querySelectorAll('a.rag-citation')){
     const source=options.sources?.find(s=>'#rag-'+s.citation===link.getAttribute('href'));
     if(source&&options.onCitation)link.onclick=e=>{e.preventDefault();options.onCitation(source,options.sources);};
   }
-  const warning=document.createElement('p');warning.className='slide-layout-warning no-export';warning.hidden=frames.length===1;warning.textContent=`Contenuto distribuito in ${frames.length} pagine di continuazione, mantenendo il testo leggibile.`;target.append(warning);
+  const warning=document.createElement('p');warning.className='slide-layout-warning no-export';warning.hidden=frames.length===1;warning.textContent=`Contenuto distribuito in ${frames.length} pagine di continuazione, mantenendo il testo leggibile.`;if(deck.engine==='llm'&&htmlOverflow(frame)){warning.hidden=false;warning.textContent='Un elemento supera i bordi della slide. Puoi correggerlo con Modifica grafica o chiedere al modello di adattare la pagina.';}target.append(warning);
   const resize=()=>{const scale=Math.max(.1,(viewport.clientWidth||600)/1280);let top=0;for(const f of frames){f.style.position='absolute';f.style.top=top+'px';f.style.transform='scale('+scale+')';top+=f.offsetHeight*scale+16;}viewport.style.height=top+'px';};resize();const observer=new ResizeObserver(resize);observer.observe(viewport);observerByTarget.set(target,observer);
-  if(selected.editing&&options.editable){const {mountEditor}=await import('./slide-editor.js');mountEditor(target,deck,selected.index,frames,async content=>{await assertLayouts(deck,value.media,options);await options.onChange(content);},selected);}
+  if(selected.editing&&options.editable&&deck.engine==='llm')mountHtmlEditor(target,deck,selected.index,frame,options.onChange,options,value.media);
+  if(selected.editing&&options.editable&&deck.engine!=='llm'){const {mountEditor}=await import('./slide-editor.js');mountEditor(target,deck,selected.index,frames,async (content,media)=>{await assertLayouts(deck,media||value.media,options);await options.onChange(content,media);},selected,options,value.media);}
   const notes=document.createElement('details');notes.className='slide-notes no-export';const summary=document.createElement('summary');summary.textContent='Note e fonti della slide';notes.append(summary);
   const text=document.createElement('p');text.textContent=page.notes||'Nessuna nota.';notes.append(text);
   for(const id of page.sources||[]){const ref=(deck.references||[]).find(r=>r.id===id);if(!ref)continue;const p=document.createElement('p');p.textContent='['+id+'] '+ref.label;const rag=options.sources?.find(s=>s.citation===id);if(rag&&options.onCitation){p.className='rag-citation';p.tabIndex=0;p.onclick=()=>options.onCitation(rag,options.sources);p.onkeydown=e=>{if(e.key==='Enter')p.click();};}notes.append(p);}target.append(notes);
@@ -106,7 +111,7 @@ async function assertLayouts(deck,media,options){
       if(pageNotReady(page))continue;
       const frame=await pageElement(deck,page,index,media,options,root);
       await document.fonts.ready;await Promise.all([...frame.querySelectorAll('img')].map(img=>img.decode().catch(()=>{})));
-      layoutSlide(frame,page.title);
+      if(deck.engine!=='llm')layoutSlide(frame,page.title);
     }
   }finally{await renderRich(root,'');root.remove();}
 }
@@ -119,7 +124,7 @@ export async function exportSlides(value,kind,token){
       await pageElement(deck,page,i,value.media,{},root);
     }
     await document.fonts.ready;await Promise.all([...root.querySelectorAll('img')].map(img=>img.decode().catch(()=>{})));
-    for(const frame of [...root.children])layoutSlide(frame,deck.pages[Number(frame.dataset.page)-1].title);
+    for(const frame of [...root.children]){if(deck.engine==='llm')flattenHtml(frame);else layoutSlide(frame,deck.pages[Number(frame.dataset.page)-1].title);}
     if(kind==='pptx')return await (await import('./slide-pptx.js')).exportPowerPoint(root,deck,value.title);
     if(kind==='pdf')return await exportPdf(root,value.title,token,{slide_format:deck.format});
     if(kind==='docx')return await exportDocx(root,value.title);

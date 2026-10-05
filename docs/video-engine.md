@@ -58,7 +58,7 @@ Assistant switch and per-model settings.
 
 **Assistant On** uses the existing chat LLM to prepare English narrative prompts,
 stable Picture/Audio labels, reference roles and keyframe positions. Dialogues and
-lyrics retain their supplied wording and language. It uses the chat's CPU mmproj
+lyrics retain their supplied wording and language. It uses the chat's mmproj on the selected CPU/GPU device
 when Vision is enabled and the LLM supports the number of supplied images. When
 images cannot be shown to that LLM, the preparation explicitly states that they
 are unseen and does not invent image details. Audio is never presented to the
@@ -128,7 +128,7 @@ even. A 4:3 image at 0.7 MP produces 992×744, sampled on a 992×768 grid.
 
 Inference requires NVIDIA CUDA. Diffusion, the H3 encoder and both VAEs compute on
 the GPU, including when inactive weights are offloaded to RAM. The chat mmproj is
-a separate component and remains on the CPU. CUDA Toolkit and H3-Studio are not
+a separate component and follows the chat Vision CPU/GPU choice (default CPU). CUDA Toolkit and H3-Studio are not
 required. Compatible NVIDIA drivers are required by the bundled CUDA runtime.
 
 **A richiesta** releases the previous chat/image/music process before loading

@@ -38,7 +38,7 @@ LLM della chat e il medesimo processo se già caricato, senza un secondo LLM.
 Off passa direttamente il prompt. La scelta e il modello immagini vengono salvati
 con ogni messaggio e non cambiano retroattivamente i lavori in coda.
 
-**Vision On / Off** è attivo di default. On carica l'eventuale mmproj sulla CPU,
+**Vision On / Off** è attivo di default. On carica l'eventuale mmproj sul dispositivo CPU/GPU scelto in chat,
 anche in modalità Residenti, lasciando VRAM all'LLM. Off non carica il proiettore.
 Si applica alla chat e alla lettura dei riferimenti da parte di Assistant; il modello
 immagini riceve comunque i riferimenti necessari all'editing. Un LLM senza vision
@@ -49,7 +49,7 @@ Con A richiesta il processo LLM termina prima di caricare il modello immagini;
 creazione e modifica con gli stessi pesi riutilizzano il processo. Con CUDA,
 encoder, diffusore e VAE usano la GPU anche a richiesta. Residenti mantiene più
 processi e richiede più
-memoria; il proiettore dell'LLM resta comunque sulla CPU. Le stime di memoria sono
+memoria; il proiettore dell'LLM usa CPU o GPU secondo la scelta Vision in chat. Le stime di memoria sono
 indicative. Non è garantita l'assenza di OOM per ogni modello/risoluzione/hardware.
 
 Assistant migliora le istruzioni, ma non garantisce precisione numerica, topologica

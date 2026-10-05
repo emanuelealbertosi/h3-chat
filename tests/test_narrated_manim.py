@@ -121,6 +121,30 @@ class FlowTests(unittest.TestCase):
         for messages in self.completions:
             self.assertIn(fact,messages[-1]['content']);self.assertIn('[R1]',messages[-1]['content'])
             self.assertIn('Rispondi solo usando le fonti RAG',messages[0]['content'])
+    def test_visual_rag_content_parts_stay_valid_in_plan_and_each_scene(self):
+        import sys
+        sys.path.insert(0,str(ROOT/'runtime/tools/documents'))
+        from PIL import Image
+        self.model['vision']={'enabled':True,'max_refs':4}
+        self.app.catalog['fixture']=self.model
+        path=self.app.data/'uploads'/'fixture-rag.png';path.parent.mkdir(parents=True,exist_ok=True)
+        Image.new('RGB',(100,100),'blue').save(path)
+        job=self.create(rag=True);payload=json.loads(job['payload']);payload['project_id']='synthetic-project';payload['settings'].update(chat_model='fixture',vision_enabled=True)
+        self.app.store.execute('UPDATE jobs SET payload=? WHERE id=?',(json.dumps(payload),job['id']));job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(job['id'],))
+        self.model['vision']={'enabled':True,'max_refs':4}
+        self.app.catalog['fixture']=self.model
+        row={'id':1,'source_id':'s','name':'Circuito.pdf','location':'pagina 2','page':2,'text':'La batteria ha 12 volt.','source_url':'','image_path':'uploads/fixture-rag.png'}
+        with patch.object(self.app.knowledge,'project',return_value={'instructions':'Usa il documento','sources_only':True}),patch.object(self.app.knowledge,'retrieve',return_value=([row],'lexical')):answer=self.execute(job)
+        self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
+        self.assertEqual(len(self.completions),3)
+        for messages in self.completions:
+            parts=messages[-1]['content'];self.assertIsInstance(parts,list)
+            self.assertTrue(all(isinstance(p,dict) and p.get('type') in ('text','image_url') for p in parts))
+            self.assertTrue(any(p['type']=='image_url' for p in parts))
+            text=''.join(p['text'] for p in parts if p['type']=='text');self.assertIn('12 volt',text);self.assertIn('[R1]',text)
+        self.assertIn('Approximate desired speaking time',self.completions[0][-1]['content'][-1]['text'])
+        self.assertIn('Previous visual scene',self.completions[-1][-1]['content'][-1]['text'])
+
     def test_verbatim_assistant_off_does_not_rewrite_narration(self):
         from h3chat.narrated_manim import _plan
         exact='La batteria alimenta il circuito.'

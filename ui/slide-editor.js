@@ -1,7 +1,8 @@
 import {themes,typography,designs,encodeDeck,applyOverride,validateDesign} from './slide-design.js';
 import {parseColor,colorHex} from './color-contrast.js';
 import {effectiveBackground} from './slide-contrast.js';
-export function mountEditor(target,deck,index,frames,onChange,session={}){
+import {imagePicker} from './slide-image-picker.js';
+export function mountEditor(target,deck,index,frames,onChange,session={},options={},media=[]){
   const page=deck.pages[index];session.undo||=[];session.redo||=[];
   const panel=document.createElement('section');panel.className='slide-editor no-export';panel.ariaLabel='Modifica grafica delle slide';
   panel.innerHTML='<div class="slide-editor-top"><label>Tema <select id="slide-theme"></select></label><label>Caratteri <select id="slide-typography"></select></label><button id="slide-add-text">+ Testo</button><button id="slide-undo">Annulla</button><button id="slide-redo">Ripeti</button></div><p class="slide-editor-help">Seleziona un elemento. Usa ↕ per spostarlo e ↘ per ridimensionarlo. Le modifiche vengono salvate nel canvas.</p><form id="slide-properties" hidden><label>Elemento <select id="slide-element"></select></label><label class="slide-editor-text">Testo / codice / didascalia<textarea id="slide-text" rows="3" maxlength="16000"></textarea></label><label>Dimensione carattere<input id="slide-font-size" type="number" min="16" max="88" step="1"></label><label>Carattere<select id="slide-font"><option>Manrope</option><option>Cormorant</option><option>Consolas</option></select></label><label>Testo<input id="slide-color" type="color"></label><label>Sfondo<input id="slide-background" type="color"></label><label>Allineamento<select id="slide-align"><option value="left">Sinistra</option><option value="center">Centro</option><option value="right">Destra</option></select></label><label>Larghezza<input id="slide-width" type="number" min="40" max="1164"></label><label>Altezza minima<input id="slide-height" type="number" min="20" max="1164"></label><div class="slide-editor-actions"><button type="submit">Applica</button><button type="button" id="slide-reset">Ripristina stile</button><button type="button" id="slide-duplicate">Duplica</button><button type="button" id="slide-delete">Elimina</button></div></form><p id="slide-editor-error" role="alert" hidden></p>';
@@ -30,6 +31,12 @@ export function mountEditor(target,deck,index,frames,onChange,session={}){
   q('slide-add-text').onclick=()=>commit(()=>{if(page.nodes.length>=40)throw Error('La pagina può contenere al massimo 40 elementi.');const id=newId();page.nodes.push({id,parent:'root',kind:'text',text:'Nuovo testo',asset_id:'',language:'text',style:{flow:'stack',columns:[1,1],surface:'soft',gap:16}});session.selected=id;});
   for(const node of page.nodes){const option=document.createElement('option');option.value=node.id;option.textContent=node.kind+' · '+(node.text.slice(0,55)||node.id);q('slide-element').append(option);}
   let selected=null;
+  if(options.api)imagePicker(target,{api:options.api,chatId:options.chatId,media,onSelect:async asset=>{
+    if(!media.some(m=>m.id===asset.id)){if(media.length>=64)throw Error('Massimo 64 immagini per presentazione.');media.push(asset);}
+    let node=selected?.kind==='image'?selected:null;
+    if(!node){if(page.nodes.length>=40)throw Error('La pagina contiene già 40 elementi.');node={id:newId(),parent:'root',kind:'image',text:asset.name,asset_id:'',language:'text',style:{flow:'stack',columns:[1,1],surface:'plain',gap:16}};page.nodes.push(node);}
+    node.asset_id=asset.id;session.selected=node.id;await onChange(encodeDeck(deck),media);
+  }});
   const select=id=>{
     selected=page.nodes.find(n=>n.id===id);if(!selected)return;session.selected=id;
     target.querySelectorAll('[data-node-id]').forEach(el=>el.classList.toggle('slide-selected',el.dataset.nodeId===id));

@@ -160,7 +160,8 @@ class Session:
             gpu=backend(self.settings)!='cpu'
         return {'id':self.model['id'],'name':model_label(self.model),'kind':self.kind,
                 'ready':self.ready and self.alive(),'pid':self.process.pid if self.alive() else None,
-                'location':('RAM / VRAM · componenti a richiesta' if gpu else 'RAM') if self.kind=='music' else 'VRAM · Vision CPU' if gpu and self.kind=='chat' and 'mmproj' in self.files and self.settings.get('memory_policy')=='resident' else 'VRAM' if gpu and self.settings.get('memory_policy')=='resident' else 'RAM / VRAM' if gpu else 'RAM',
+                'location':('RAM / VRAM · componenti a richiesta' if gpu else 'RAM') if self.kind=='music' else ('VRAM · Vision GPU' if self.settings.get('vision_device','cpu')=='gpu' else 'VRAM · Vision CPU') if gpu and self.kind=='chat' and 'mmproj' in self.files and self.settings.get('memory_policy')=='resident' else 'VRAM' if gpu and self.settings.get('memory_policy')=='resident' else 'RAM / VRAM' if gpu else 'RAM',
+                'vision_device':self.settings.get('vision_device','cpu') if self.kind=='chat' and 'mmproj' in self.files else None,
                 'mtp_tokens':next((v for k,v in self.key[2] if k=='mtp_tokens'),0) if self.ready else 0,
                 'loras':getattr(self,'active_loras',[]),
                 'uses':self.uses,'started':self.started}

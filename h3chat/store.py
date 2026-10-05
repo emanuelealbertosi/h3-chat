@@ -26,7 +26,7 @@ DEFAULTS = {
     "profile": "low", "backend": "vulkan", "chat_model": "", "create_model": "",
     "music_model": "yue2-q8", "music_auto": True, "music_backend": "cuda", "music_threads": 8,
     "music_advanced": False, "music_overrides": {}, "music_prompt_max_tokens": 2200,
-    "edit_model": "", "diagram_model": "", "diagram_auto": True, "vision_enabled": True, "prompt_max_tokens": 2200, "context": 4096, "gpu_layers": 20, "max_tokens": 1024,
+    "edit_model": "", "diagram_model": "", "diagram_auto": True, "vision_enabled": True, "vision_device": "cpu", "prompt_max_tokens": 2200, "context": 4096, "gpu_layers": 20, "max_tokens": 1024,
     "image_advanced": False, "chat_advanced": False, "image_overrides": {}, "image_cfg": 7,
     "lora_dirs": [], "image_sampler": "auto", "image_scheduler": "auto", "seed": -1, "negative_prompt": "",
     "temperature": 0.7, "width": 512, "height": 512, "steps": 20,
@@ -218,6 +218,7 @@ class Store:
             if llm_settings is not None:
                 from .llm_options import KEYS
                 value['settings'].update({key:llm_settings[key] for key in ('chat_model','llm_device','vision_enabled',*KEYS)})
+                value['settings']['vision_device']=llm_settings.get('vision_device','cpu')
             payload=json.dumps(value)
             answer_id = original['message_id']
             self.canvas_history.backfill(db, chat_id)

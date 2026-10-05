@@ -94,7 +94,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         if path.suffix.lower() in ('.html','.js','.css'):
             self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'self'")
+        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; frame-src 'self'; base-uri 'self'; form-action 'self'")
         self.end_headers()
         self.wfile.write(body)
 
@@ -208,6 +208,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(self.app.assess(body))
             if path == "/api/settings" and method == "POST":
                 return self.json(self.app.save_settings(body))
+            if len(parts)==4 and parts[:3]==['api','slides','images'] and method=='POST':
+                from h3chat.slide_images import request
+                return self.json(request(self.app,parts[3],body))
             if path == "/api/uploads" and method == "POST":
                 return self.json(self.app.upload(body), 201)
             if path == "/api/chats" and method == "POST":

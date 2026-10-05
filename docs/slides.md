@@ -1,109 +1,71 @@
-# Slide HTML nel canvas
+# Slide nel canvas
 
-Allega PDF, documenti Word `.docx` o immagini e chiedi, ad esempio:
+Scegli **Strumenti → Slide** oppure chiedi una presentazione nel prompt. PDF,
+Word, immagini, fonti RAG e ricerca web possono fornire il contenuto. Il canvas
+si apre automaticamente e mostra la pagina mentre viene scritta; nella chat
+resta il testo di accompagnamento. Le versioni precedenti restano nella cronologia.
 
-> Crea 10 slide in 4:3 da questi documenti, con formule, immagini e un diagramma.
+## Due motori
 
-Oppure scegli **Strumenti → Slide · HTML in tempo reale**, imposta il numero
-(1–30; default 8), il formato (16:9 predefinito, 4:3, 16:10, 1:1), lo stile e
-il dettaglio del testo. Le scelte esplicite nel prompt prevalgono sui controlli. Il canvas
-si apre automaticamente; nella chat resta il messaggio di accompagnamento.
+**LLM · HTML libero** è il default per le nuove presentazioni. Il modello scelto
+in chat progetta sequenza e direzione artistica, poi scrive direttamente HTML e
+CSS per ogni pagina. Sceglie composizione, palette, font, grafica e SVG: il
+renderer non applica il vecchio template. Puoi chiedere stili seri, professionali,
+giocosi, colorati o fumettosi e scegliere **Sintesi** oppure **Testi completi**.
+La qualità dipende anche dal modello e dai token disponibili; non è una replica
+di Gamma. Per pagine articolate aumenta Max token nelle preferenze del modello.
 
-Come la creazione V2 di H3-Slides, l'LLM progetta prima la sequenza, poi ogni
-pagina con un albero di gruppi, colonne, titoli, testi, immagini, codice e
-diagrammi. Il browser interpreta questi elementi come HTML, mostrando anche
-il testo ancora in scrittura. Il sorgente è dichiarativo e modificabile: non
-viene eseguito HTML, CSS o JavaScript arbitrario prodotto dal modello.
-H3-Slides non deve essere installato.
+**Deterministico** conserva il precedente generatore di elementi strutturati,
+con temi, colonne e impaginazione automatica. Le presentazioni già salvate senza
+un motore esplicito continuano a usare questo percorso. La loro modifica tramite
+prompt conserva il motore precedente.
 
-## Contenuto e stile
+Sono disponibili 1–30 slide (default 8) e formati 16:9 (default), 4:3, 16:10 e
+1:1. Le istruzioni esplicite nel prompt prevalgono per numero, formato e stile.
+Nel motore LLM la pagina mantiene il formato richiesto: eventuali elementi oltre
+i bordi vengono segnalati. Puoi correggerli graficamente o chiedere al modello
+di adattare la pagina. Il motore deterministico può creare continuazioni per
+testi molto lunghi.
 
-**Sintesi** è il valore predefinito. **Testi completi** chiede paragrafi,
-spiegazioni ed esempi nel corpo delle slide: non li riduce a headline e non li
-nasconde nelle note. Puoi chiedere «Crea 5 slide con testi completi, stile
-fumettoso» oppure «Presentazione discorsiva, seria e professionale». Lo stile
-non impone la brevità: ogni stile supporta entrambi i livelli di dettaglio.
+## Fonti e immagini
 
-Sono disponibili gli stili **Serio / professionale**, **Giocoso / colorato** e
-**Fumettoso**, tre palette (petrolio, indaco, corallo) e caratteri moderni o
-editoriali. Il prompt può specificare altri toni e indicazioni di contenuto;
-il canvas applica i preset visivi disponibili. Colori e font dei singoli
-elementi sono modificabili nell'editor.
+Le figure di allegati e RAG sono disponibili insieme agli estratti testuali.
+Vision riusa il modello chat e il relativo proiettore sul dispositivo CPU/GPU
+scelto in chat. Le descrizioni preliminari sono brevi, con Thinking Off e un
+limite separato dalla risposta finale. Se Vision non è disponibile o una
+descrizione è incompleta, la figura resta inseribile e viene segnalata come non
+analizzata. Selezione delle fonti, budget del contesto e progetto restano validi.
 
-Il renderer misura lo spazio dopo aver caricato font, figure e diagrammi.
-Riduce moderatamente la composizione e, se necessario, crea pagine di
-continuazione, conservando testo, codice, elenchi e tabelle. Il numero richiesto
-indica i capitoli logici: una pagina densa può produrre più pagine fisiche
-nell'anteprima e nei download. Il canvas indica quante continuazioni ci sono.
+In **Modifica grafica → Immagini della slide** puoi inserire o sostituire figure:
 
-## Fonti
+- **Dal PC** apre il selettore file; immagini raster decodificabili dal browser,
+  entro 12 MB, vengono normalizzate a massimo 4096 px.
+- **Allegati** riusa le immagini della presentazione.
+- **Dal RAG** mostra le figure già indicizzate del progetto della chat, con ricerca
+  per documento/testo associato e paginazione. Non avvia una nuova indicizzazione.
+- **Internet** cerca su Wikimedia Commons, conservando autore, licenza e origine.
 
-- PDF/Word: testo, tabelle e figure incorporate; i PDF senza testo possono
-  fornire pagine a Vision attraverso il normale trattamento degli allegati.
-- Immagini della conversazione: analizzate in gruppi compatibili con il limite
-  di riferimenti del modello. Vengono riutilizzati il medesimo LLM e il normale
-  proiettore Vision su CPU; nessun secondo LLM. Con Vision disattivata o non
-  disponibile le figure sono inseribili ma il contenuto non viene interpretato;
-  la risposta lo segnala.
-- RAG: estratti delle fonti selezionate nel progetto corrente. Una richiesta
-  generica di slide può recuperare una panoramica dell'indice; restano validi
-  selezione delle fonti, budget del contesto e isolamento del progetto.
-- Web e trascrizioni: disponibili con i normali controlli della chat.
+Nel canvas HTML seleziona un elemento per cambiare testo, font, dimensioni, colore
+e sfondo; trascinalo per spostarlo. Puoi aggiungere testo, duplicare o eliminare
+elementi e modificare larghezza/altezza delle immagini. **Applica e salva** conserva
+la copia di lavoro con i suoi media. **Annulla modifiche** recupera la versione
+presente all'apertura dell'editor. Durante la generazione l'editor è disabilitato.
 
-La presentazione conserva il catalogo delle fonti e le note per pagina.
-I riferimenti RAG nelle note e nel testo aprono gli estratti utilizzati.
-Sono supportati Markdown, codice evidenziato, LaTeX, Mermaid e grafici Chart.js
-con dati verificabili. Il modello deve rispettare le fonti; i controlli sui
-riferimenti non certificano tutte le affermazioni.
+## Anteprima ed export
 
-Le fonti molto lunghe vengono selezionate entro il contesto dell'LLM. Non vengono
-lette necessariamente tutte le pagine: la chat conserva i dettagli sugli
-estratti e sulle pagine Vision. Le figure incorporate sono limitate a 16 per
-documento e 32 per richiesta, oltre alle immagini riutilizzate della chat;
-non includono ogni oggetto vettoriale o ogni grafico disegnato nel PDF. Per un
-grafico specifico indica la pagina nel prompt e usa Vision. L'indice RAG non
-esegue OCR sui PDF scansionati. Usa almeno 2048 token di risposta per pagine
-ricche; se si raggiunge il limite, l'anteprima viene conservata con l'avviso.
+HTML/CSS sono sanitizzati e renderizzati in un frame locale isolato: niente
+JavaScript prodotto dal modello, form, URL remoti, rete o file locali. Le immagini
+provengono esclusivamente dal catalogo autorizzato. I font locali Manrope/Cormorant
+e KaTeX vengono forniti dall'app; sono disponibili anche i font di sistema.
+Il contrasto del testo viene corretto su sfondi solidi quando insufficiente;
+gradienti, immagini e composizioni SVG richiedono anche la verifica visiva.
 
-## Navigazione, modifiche e download
+**PDF** conserva formato e grafica della pagina, con testi e SVG vettoriali quando
+disponibili. **PowerPoint** contiene testi e superfici modificabili e immagini/
+diagrammi spostabili e ridimensionabili; gradienti e grafica complessa possono
+diventare immagini. Non tutti gli effetti CSS hanno un equivalente PPTX.
+**HTML** è apribile offline con immagini incorporate; **PNG** esporta la sequenza;
+**Word** contiene immagini delle pagine. **.md** conserva il sorgente completo.
 
-Usa frecce/menu delle pagine e **Segui scrittura** per seguire la nuova pagina
-oppure mantenere quella scelta. La cronologia del canvas conserva anche le
-presentazioni precedenti. Se una generazione si interrompe, restano le pagine
-completate e l'ultima anteprima.
-
-Con il canvas attivo e Strumenti su Automatico puoi scrivere «Riduci il testo
-della seconda pagina» oppure «Aggiungi una slide sui risultati». Il modello
-ricompone la presentazione usando il contenuto esistente; le versioni precedenti
-restano nella cronologia. **Sorgente slide** consente modifiche dirette al JSON
-dentro il blocco `h3-slides`, con controllo degli elementi e delle immagini.
-
-**Modifica grafica** seleziona gli elementi della pagina: modifica testo o
-codice, font, dimensioni, colori e allineamento; usa le maniglie ↕ e ↘ per
-spostare e ridimensionare. Puoi aggiungere testo, duplicare o eliminare
-elementi, cambiare tema/stile/caratteri e annullare o ripetere le modifiche.
-Il salvataggio è automatico in una copia di lavoro nella cronologia; la versione
-generata resta recuperabile. Durante la generazione l'editor è disabilitato.
-
-**HTML** scarica un documento autonomo con figure e font incorporati, apribile
-offline nel browser. **PDF** produce una pagina per slide nel formato scelto,
-con testo e diagrammi vettoriali quando disponibili. **PNG** esporta l'intera
-sequenza come immagine; **Word** contiene immagini delle pagine per conservarne
-la composizione. **PowerPoint** esporta `.pptx` con testi, riquadri e grafici
-dati nativi modificabili, oltre a note e fonti. Formule, diagrammi Mermaid e
-immagini restano oggetti grafici spostabili e ridimensionabili. I caratteri
-moderni/editoriali usano Arial/Cambria nell'export PowerPoint per portabilità;
-codice Courier New e stile fumettoso Comic Sans MS, se disponibile sul PC.
-**.md** conserva il sorgente dichiarativo. Le pagine di continuazione sono
-incluse in tutti gli export e non nascondono il testo.
-
-Funziona con LLM locali oppure provider API, secondo la normale configurazione.
-Per gli allegati serve il componente Documenti incluso nell'installazione;
-per l'esportazione PDF serve Microsoft Edge.
-
-Il colore dei testi viene verificato sullo sfondo effettivo, anche nei riquadri
-annidati, nelle tabelle, nel codice e nelle formule. I colori già leggibili
-restano invariati; quelli poco contrastati vengono corretti automaticamente.
-La verifica si applica anche alle slide salvate in precedenza e alle modifiche
-grafiche. PDF, HTML e PowerPoint conservano testi leggibili e superfici del
-canvas; l'export PowerPoint mantiene anche gli sfondi di codice e figure.
+Funziona con LLM locali o provider API. H3-Slides non è richiesto. Il componente
+Documenti è incluso nell'installazione; per il PDF serve Microsoft Edge.

@@ -1,4 +1,5 @@
 """Full Manim generation, editing, bounded repair and artifact preservation."""
+from .message_content import append_text
 import json
 import math
 import re
@@ -77,8 +78,8 @@ def build(app,job,payload,history,settings,model,cancel,stage,log_path,meta):
         app.engine.start_llama(model,settings,log_path,cancel,stage=stage)
         from .manim_code import generation_history
         messages=app.engine.chat_messages(generation_history(history,payload['prompt']),model,settings,format_instructions=BRIEF)
-        messages[-1]['content']+='\nManim rendering options: '+json.dumps(opts)+'\nRequired total timeline: '+str(opts['duration'])+' seconds. The sum of play()/wait() timings must equal this duration.\nAvailable assets (relative paths): '+json.dumps([{'path':'assets/'+a['name'],'original':a['original']} for a in assets],ensure_ascii=False)
-        if soundtrack:messages[-1]['content']+='\nThe host adds the original soundtrack after rendering and fits the entire animation to its duration. Do not call add_sound or add a final frozen frame. Plan meaningful movement throughout the audio duration.'
+        append_text(messages[-1], '\nManim rendering options: '+json.dumps(opts)+'\nRequired total timeline: '+str(opts['duration'])+' seconds. The sum of play()/wait() timings must equal this duration.\nAvailable assets (relative paths): '+json.dumps([{'path':'assets/'+a['name'],'original':a['original']} for a in assets],ensure_ascii=False))
+        if soundtrack:append_text(messages[-1], '\nThe host adds the original soundtrack after rendering and fits the entire animation to its duration. Do not call add_sound or add a final frozen frame. Plan meaningful movement throughout the audio duration.')
         stage('Manim · scrittura del codice della scena')
         last_progress=[0]
         def progress(label):

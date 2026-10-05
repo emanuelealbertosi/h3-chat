@@ -26,7 +26,7 @@ class SchemaTests(unittest.TestCase):
             # The last request explicitly describes an image; media selection
             # takes precedence at the service boundary.
             if 'immagine' not in prompt:self.assertFalse(requested(prompt))
-        self.assertEqual(options('Crea 12 slide in 4:3'),{'count':12,'format':'4:3'})
+        self.assertEqual(options('Crea 12 slide in 4:3'),{'count':12,'format':'4:3','engine':'llm'})
         for count in (0,31,True,'8'):
             with self.assertRaises(ValueError):options('',{'count':count})
 
@@ -44,7 +44,7 @@ class SchemaTests(unittest.TestCase):
     def test_full_text_and_styles_are_independent_and_prompt_wins(self):
         for word,design in (('professionale','professional'),('giocoso','playful'),('colorato','playful'),('fumettoso','comic')):
             chosen=options('Crea 5 slide con testi completi in stile '+word,{'detail':'concise','design':'professional'})
-            self.assertEqual(chosen,{'count':5,'format':'16:9','detail':'full','design':design})
+            self.assertEqual(chosen,{'count':5,'format':'16:9','detail':'full','design':design,'engine':'llm'})
         self.assertEqual(options('non solo headlines')['detail'],'full')
         content=encode({'version':1,'format':'4:3','design':'comic','detail':'full','pages':[{'title':'A','nodes':[]}]})
         self.assertEqual(edit_options('Cambia il titolo',content)['detail'],'full')
@@ -64,8 +64,8 @@ class SchemaTests(unittest.TestCase):
     def test_editing_preserves_format_and_resolves_addition(self):
         content=encode({'version':1,'format':'4:3','pages':[{'title':'A','nodes':[]},{'title':'B','nodes':[]}]})
         self.assertTrue(edit_request('Riduci il testo della seconda pagina',content))
-        self.assertEqual(edit_options('Riduci il testo',content),{'count':2,'format':'4:3'})
-        self.assertEqual(edit_options('Aggiungi 2 slide in 16:9',content),{'count':4,'format':'16:9'})
+        self.assertEqual(edit_options('Riduci il testo',content),{'count':2,'format':'4:3','engine':'deterministic'})
+        self.assertEqual(edit_options('Aggiungi 2 slide in 16:9',content),{'count':4,'format':'16:9','engine':'deterministic'})
 
     def test_model_labels_forward_groups_and_root_container(self):
         raw={'nodes':[node(id='2. Testo',parent='layout principale'),
@@ -114,6 +114,7 @@ class GenerationTests(unittest.TestCase):
 
     def enqueue(self,prompt='Crea 2 slide dal documento',**body):
         chat=self.app.store.create_chat()
+        body['slides']={'engine':'deterministic'}|body.get('slides',{})
         with patch.object(self.app.engine,'require_model',return_value=self.model):
             sent=self.app.send(chat['id'],{'prompt':prompt,**body})
         return self.app.store.one('SELECT * FROM jobs WHERE id=?',(sent['job_id'],))
@@ -214,7 +215,7 @@ class GenerationTests(unittest.TestCase):
             self.app.store.execute('INSERT INTO project_sources(id,project_id,path,name) VALUES (?,?,?,?)',(ident,project['id'],str(path),path.name))
         chat=self.app.store.create_chat(project_id=project['id'])
         with patch.object(self.app.engine,'require_model',return_value=self.model):
-            sent=self.app.send(chat['id'],{'prompt':'Crea 2 slide','rag':True,'rag_sources':['chosen']})
+            sent=self.app.send(chat['id'],{'prompt':'Crea 2 slide','rag':True,'rag_sources':['chosen'],'slides':{'engine':'deterministic'}})
         job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(sent['job_id'],));answer=self.execute(job)
         self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
         context=json.dumps(self.calls,ensure_ascii=False);self.assertIn('1234',context);self.assertNotIn('999999',context)
@@ -242,5 +243,10 @@ class GenerationTests(unittest.TestCase):
         result=export_html(ROOT,self.app.data,{'title':'Slides','slide_format':'4:3','html':'<article class="h3-slide-page"><h1>Test</h1><script>alert(1)</script><img src="https://private.invalid/image"><p onclick="alert(1)">Text</p></article>'})
         source=(self.app.data/result['url'].lstrip('/')).read_text(encoding='utf-8')
         self.assertIn('1280px 960px',source);self.assertNotIn('<script',source);self.assertNotIn('onclick',source);self.assertNotIn('private.invalid',source);self.assertIn('script-src \'none\'',source)
+
+    def test_free_html_grid_and_semantic_containers_survive_export(self):
+        result=export_html(ROOT,self.app.data,{'title':'Layout','slide_format':'16:9','html':'<main style="display:grid;grid-template-columns:2fr 1fr"><section><header>Titolo</header><p>Spiegazione</p></section><aside>Figura</aside></main><footer>Fonte</footer>'})
+        html=(self.app.data/result['url'].lstrip('/')).read_text(encoding='utf-8')
+        self.assertIn('<main style="display:grid',html);self.assertIn('<section>',html);self.assertIn('<aside>',html);self.assertIn('<footer>',html)
 
 if __name__=='__main__':unittest.main()

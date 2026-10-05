@@ -52,7 +52,7 @@ Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle 
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.16.14-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.16.14/H3-Chat-0.16.14-windows-x64.zip) dalla [release v0.16.14](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.16.14), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.16.16-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.16.16/H3-Chat-0.16.16-windows-x64.zip) dalla [release v0.16.16](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.16.16), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 
@@ -124,7 +124,7 @@ Nella stessa chat premi **Video** oppure chiedi «Crea un video», «Genera un f
 
 Modello predefinito: **Hybrid**, selezionabile e sostituibile dall’admin tramite i file originali. Default per modello: **15 secondi, 0,7 MP, 16:9 (1152×640), 24 fps, 12 step, CFG 1, Res Multistep/Simple**. In **Avanzate** puoi cambiare durata, risoluzione, formato, passi, sampler, scheduler, seed e shift. L’offload è attivo per contenere la VRAM; il calcolo resta sulla GPU. Encoder e VAE vengono liberati dopo il condizionamento; il diffusore dopo il campionamento, prima di ricaricare i VAE necessari alla decodifica. Questo evita il crash nativo osservato su Windows nel trasferimento GPU→CPU dell’encoder quantizzato NVFP4/AWQ. Disattivare l’offload richiede memoria sufficiente per tutti i componenti. **A richiesta** libera l’altro motore prima del video; **Residenti** conserva il processo e rispetta comunque l’offload del preset.
 
-Allega fino a **9 immagini e 3 audio** (WAV, MP3, FLAC, OGG). Scrivi, per esempio: «Immagine 1 come frame iniziale, immagine 2 a 7 secondi, immagine 3 come riferimento del personaggio. Usa audio 1 con lip-sync». **Assistant On** prepara istruzioni inglesi, ruoli e tempi usando lo stesso LLM chat; dialoghi e parole restano nella lingua richiesta. Vision On usa il mmproj chat sulla CPU quando disponibile. Assistant non trascrive audio; il motore video riceve la traccia originale. **Assistant Off** passa il prompt direttamente e riconosce indicazioni esplicite come `immagine 2 a 7 secondi`; [guida e limiti](docs/video-engine.md).
+Allega fino a **9 immagini e 3 audio** (WAV, MP3, FLAC, OGG). Scrivi, per esempio: «Immagine 1 come frame iniziale, immagine 2 a 7 secondi, immagine 3 come riferimento del personaggio. Usa audio 1 con lip-sync». **Assistant On** prepara istruzioni inglesi, ruoli e tempi usando lo stesso LLM chat; dialoghi e parole restano nella lingua richiesta. Vision On usa il mmproj chat sul dispositivo CPU/GPU scelto quando disponibile. Assistant non trascrive audio; il motore video riceve la traccia originale. **Assistant Off** passa il prompt direttamente e riconosce indicazioni esplicite come `immagine 2 a 7 secondi`; [guida e limiti](docs/video-engine.md).
 
 Il lip-sync usa l’audio per condizionare la generazione con denoise audio zero e almeno 8 passi standard, poi conserva la traccia sorgente nel MP4. La sincronizzazione visiva dipende dal modello. Una traccia da conservare deve coprire la durata scelta; i brevi riferimenti di voce o stile non devono coprire tutto il video. Il limite di output dell’Assistant si salva per ciascun LLM. **Avanzate in chat** mostra istruzioni, ruoli e parametri effettivi del video.
 
@@ -144,11 +144,11 @@ I componenti PDF/Word sono inclusi nello ZIP Windows e preparati da `install.bat
 
 ## Vision e modelli locali
 
-Il composer offre **Vision On / Off** (On di default) e indica **Vision · CPU**, **Vision disattivata** oppure **Non vision**, con un avviso se manca il proiettore. Il nome commerciale del modello non basta: l'app verifica la presenza del `mmproj`. Nei modelli del catalogo usa esclusivamente il componente associato; non prende proiettori di altri modelli dalla cache condivisa. Se il proiettore viene rimosso da un modello già installato, i pesi verificati restano utilizzabili per il testo e il catalogo permette di completare di nuovo il download.
+Il composer offre **Vision On / Off** (On di default) e indica **Vision · CPU/GPU**, **Vision disattivata** oppure **Non vision**, con un avviso se manca il proiettore. Il nome commerciale del modello non basta: l'app verifica la presenza del `mmproj`. Nei modelli del catalogo usa esclusivamente il componente associato; non prende proiettori di altri modelli dalla cache condivisa. Se il proiettore viene rimosso da un modello già installato, i pesi verificati restano utilizzabili per il testo e il catalogo permette di completare di nuovo il download.
 
 Per usare un GGUF già scaricato, apri **Catalogo modelli → Collega un modello → Chat / vision** e scegli il file con **Sfoglia** oppure incolla il suo percorso completo. Non serve copiarlo in H3-Chat. In modalità mmproj Automatico l’app cerca il proiettore nella stessa cartella: se ne trova uno lo usa, se ne trova più di uno segnala l’ambiguità e puoi sceglierlo manualmente. Le vecchie cartelle `models/local/NomeModello/` continuano a essere rilevate. I metadati GGUF vengono letti senza eseguire codice; il proiettore presente nella stessa cartella viene passato automaticamente al motore. Se ci sono più proiettori non viene scelto arbitrariamente. La presenza del file non certifica l'abbinamento: un proiettore incompatibile viene rifiutato dal motore. Il GGUF deve essere supportato dalla versione integrata di llama.cpp. I file locali non sono scaricati né verificati contro un hash del catalogo.
 
-Il proiettore vision usa sempre la CPU, anche con modelli Residenti. Vision Off evita di caricarlo e libera la sua RAM; i token delle immagini continuano a occupare contesto LLM quando Vision è On.
+Il menu **Vision CPU / GPU** in chat sceglie dove elaborare le immagini, dal prossimo messaggio. CPU è il default e risparmia VRAM; GPU usa il backend LLM CUDA o Vulkan e richiede VRAM aggiuntiva. Il modello LLM e i suoi layer restano impostati come prima. Vision Off evita di caricare il proiettore. Il RAG Ovis ha una scelta del dispositivo separata.
 
 Senza vision, la chat testuale continua a funzionare e le risposte conservano l'indicazione. Una richiesta di lettura delle immagini viene fermata con un messaggio esplicito; creazione e modifica artistica continuano a usare il proprio motore immagini.
 
@@ -195,7 +195,7 @@ istruzioni descrittive, con indicazioni precise per grafici e diagrammi. FLUX us
 istruzioni descrittive. Il testo da inserire visibilmente nelle immagini conserva
 la lingua richiesta. Con Off il prompt originale passa direttamente e le richieste
 immagini esplicite non richiedono un LLM installato. Vision On consente anche ad Assistant di
-leggere i riferimenti tramite il proiettore sulla CPU; Vision Off lascia comunque
+leggere i riferimenti tramite il proiettore sul dispositivo Vision scelto; Vision Off lascia comunque
 passare i riferimenti al modello immagini per l'editing. Scelte, prompt effettivo,
 parametri e destinazione canvas sono conservati con ogni lavoro.
 
@@ -240,7 +240,7 @@ La scelta è salvata e fotografata in ogni richiesta, anche con canvas attivo. I
 In **Impostazioni → Setup → Modelli in memoria** scegli:
 
 - **A richiesta** (predefinito): conserva il modello corrente fra i messaggi. Prima di usarne uno diverso, termina il processo precedente per liberare RAM/VRAM. Chat → creazione → editing → chat comporta i cambi necessari; se crea ed edit condividono lo stesso modello, il processo e i pesi vengono riutilizzati. Le richieste immagini esplicite non caricano inutilmente il router LLM; quelle ambigue possono richiederlo.
-- **Residenti**: al prossimo messaggio carica tutti i modelli selezionati e già installati, poi li conserva fino al cambio di configurazione, al rilascio manuale o alla chiusura. Sulla GPU richiede tutti i layer LLM e i componenti dei modelli immagini; il mmproj resta sulla CPU; con CPU conserva tutto in RAM. I modelli non scaricati non vengono caricati automaticamente. Il numero di layer GPU nelle Preferenze vale per A richiesta.
+- **Residenti**: al prossimo messaggio carica tutti i modelli selezionati e già installati, poi li conserva fino al cambio di configurazione, al rilascio manuale o alla chiusura. Sulla GPU richiede tutti i layer LLM e i componenti dei modelli immagini; il mmproj segue la scelta Vision CPU/GPU; con CPU conserva tutto in RAM. I modelli non scaricati non vengono caricati automaticamente. Il numero di layer GPU nelle Preferenze vale per A richiesta.
 
 Durante il lavoro, l’animazione nella risposta distingue **creazione immagini, modifica immagini, musica, video e scrittura nel canvas**, con fase corrente e tempo trascorso. I motori comunicano caricamento o riuso del modello e avanzamento della generazione. Per Qwen Image 2.1 con CFG 1 viene evitata l’elaborazione della condizione negativa, che non partecipa al risultato.
 
@@ -307,7 +307,7 @@ Sono supportati `line`, `bar`, `scatter`, `pie` e `doughnut`. Per `scatter` i da
 
 Vulkan copre NVIDIA, AMD e Intel con driver compatibili. CUDA è per NVIDIA; la release dei motori fissa il proprio runtime CUDA. I profili sono modificabili. Il setup rileva CPU, RAM e GPU e stima il rischio di memoria per i modelli selezionati, usando anche la memoria attualmente libera; non garantisce un consumo massimo. Memoria occupata da altre applicazioni, modello, risoluzione e numero di riferimenti possono richiedere CPU, meno layer GPU o dimensioni inferiori.
 
-Il motore immagini C++ usa batch singolo e VAE a tasselli. Con backend GPU, diffusore, encoder e VAE usano la GPU; A richiesta cambia la durata di permanenza dei modelli, non il dispositivo di calcolo. Ming e Qwen 2.1 usano invece offload dinamico e spostano encoder/VAE a richiesta; il proiettore vision dell’LLM resta sempre sulla CPU. FLUX.2 klein e quattro riferimenti richiedono più RAM e tempo dei modelli di base. La CPU permette di lavorare senza VRAM, con prestazioni inferiori.
+Il motore immagini C++ usa batch singolo e VAE a tasselli. Con backend GPU, diffusore, encoder e VAE usano la GPU; A richiesta cambia la durata di permanenza dei modelli, non il dispositivo di calcolo. Ming e Qwen 2.1 usano invece offload dinamico e spostano encoder/VAE a richiesta; il proiettore Vision dell’LLM segue la scelta CPU/GPU della chat. FLUX.2 klein e quattro riferimenti richiedono più RAM e tempo dei modelli di base. La CPU permette di lavorare senza VRAM, con prestazioni inferiori.
 
 ## Catalogo iniziale
 

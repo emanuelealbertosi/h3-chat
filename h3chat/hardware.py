@@ -152,7 +152,11 @@ def assess_model(model, settings, hardware, references=1):
         all_gpu=weights*1.15+kv
         vram=all_gpu*frac+(.45 if frac else 0)
         needed_ram=weights*(1-frac)*1.15+weights*.15+projector*1.2+kv*(1-frac)+workspace
-        if vision:assumptions.append('Il proiettore vision usa sempre CPU e RAM; i token immagine continuano a occupare il contesto LLM.')
+        if vision:
+            if settings.get('vision_device','cpu')=='gpu' and backend!='cpu':
+                vram+=projector*1.2;needed_ram-=projector*1.2;needed_ram+=projector*.15
+                assumptions.append('Il proiettore Vision usa GPU e VRAM; i token immagine occupano anche il contesto LLM.')
+            else:assumptions.append('Il proiettore Vision usa CPU e RAM; i token immagine continuano a occupare il contesto LLM.')
         cpu_ram=weights*1.3+projector*1.2+kv+workspace
         draft=mtp_tokens(model,settings)
         if draft:
@@ -232,7 +236,8 @@ def assess_model(model, settings, hardware, references=1):
             if cpu_ram<=max(0,free_ram-.75):
                 status='offload';title='Offload necessario'
                 if chat:
-                    fit=max(0,int(max(0,gpu['free_mb']/1024-.95)/all_gpu*(layers+1)))
+                    vision_reserve=projector*1.2 if settings.get('vision_device','cpu')=='gpu' else 0
+                    fit=max(0,int(max(0,gpu['free_mb']/1024-.95-vision_reserve)/all_gpu*(layers+1)))
                     patches={'gpu_layers':min(fit,settings['gpu_layers'])}
                     if resident: patches['memory_policy']='on_demand'
                     advice=f'Con i layer attuali rischi OOM sulla GPU. Riduci a circa {patches["gpu_layers"]} layer GPU; il resto userà la RAM.'

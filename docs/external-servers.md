@@ -6,7 +6,7 @@ In **Setup/Preferenze → Dispositivo per funzione** imposta LLM, immagini, Whis
 e ricerca semantica RAG. LLM/immagini possono seguire il profilo generale o scegliere
 CPU/GPU. L'LLM conserva anche i layer GPU e i parametri del proprio preset. Immagini
 native usano CPU, CUDA o Vulkan; Ming/Qwen usano CPU o CUDA. Nessun ripiego silenzioso
-alla CPU se il backend scelto non è disponibile. Vision/mmproj della chat resta CPU.
+alla CPU se il backend scelto non è disponibile. Vision/mmproj della chat usa il dispositivo CPU/GPU scelto in chat (default CPU).
 Musica ha il proprio selettore CPU/CUDA, Manim CPU/Cairo o GPU/OpenGL. MiniMax H3
 video usa solo CUDA. PDF/Word, web e interprete numerico usano CPU.
 

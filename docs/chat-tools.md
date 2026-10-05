@@ -31,7 +31,7 @@ with selectable text and embedded figures. PDFium renders locally at a maximum
 1600-pixel edge; the chat model's image limit is respected, with at most four
 pages per document. Each image is labelled with filename and original page.
 Other pages are explicitly described as unread. Vision must be enabled and have
-a compatible CPU mmproj. Word images, headers, footers, comments, tracked changes
+a compatible mmproj on the chat-selected CPU/GPU device. Word images, headers, footers, comments, tracked changes
 and original layout are not interpreted by the Word text importer. Vision/OCR
 accuracy and tables' reading order depend on the document and chosen model.
 

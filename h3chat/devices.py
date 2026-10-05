@@ -15,6 +15,7 @@ def label(settings,role):
         effective=options(settings,role);device='cpu' if effective['profile']=='cpu' else effective['backend']
     return 'CPU' if device=='cpu' else 'GPU · '+device.upper()
 def validate(settings):
+    if settings.get('vision_device','cpu') not in ('cpu','gpu'):raise ValueError('Modalità Vision CPU/GPU non valida.')
     for key in ('llm_device','image_device'):
         if settings[key] not in ('inherit','cpu','gpu'):raise ValueError('Modalità CPU/GPU non valida: '+key)
     for key in ('rag_device','asr_device','manim_device'):

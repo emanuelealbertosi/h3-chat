@@ -1,4 +1,5 @@
 """One request: shared script, measured narration, full Python scenes and timed mux."""
+from .message_content import append_text
 import hashlib
 import json
 import math
@@ -143,11 +144,11 @@ def _plan(app,payload,history,settings,model,cancel,stage,log):
     stage('Voice + Manim · preparazione del copione condiviso')
     app.engine.start_llama(model,settings,log,cancel,stage=stage)
     messages=app.engine.chat_messages(generation_history(history,payload['prompt']),model,settings,format_instructions=PLAN_BRIEF)
-    messages[-1]['content']+='\nApproximate desired speaking time: '+str(seconds)+' seconds. Return complete prose, not headlines.'
+    append_text(messages[-1], '\nApproximate desired speaking time: '+str(seconds)+' seconds. Return complete prose, not headlines.')
     schema=json.loads(json.dumps(PLAN_SCHEMA))
     if count:
         schema['properties']['scenes'].update(minItems=count,maxItems=count)
-        messages[-1]['content']+=f'\nREQUIRED: exactly {count} distinct entries in the scenes JSON array. Do not combine them into one entry.'
+        append_text(messages[-1], f'\nREQUIRED: exactly {count} distinct entries in the scenes JSON array. Do not combine them into one entry.')
     for attempt in range(2):
         plan=validate_plan(complete_json(app.engine,messages,settings|{'think_level':'off'},cancel,stage,schema,'Voice + Manim · scrittura del copione'))
         if count and len(plan['scenes'])!=count:
@@ -224,8 +225,8 @@ def build(app,job,payload,history,settings,model,cancel,stage,log,meta):
         else:
             app.engine.start_llama(model,settings,log,cancel,stage=stage)
             messages=app.engine.chat_messages(generation_history(history,payload['prompt']),model,settings,format_instructions=BRIEF)
-            messages[-1]['content']+='\nShared narrated script (data): '+json.dumps(transcript,ensure_ascii=False)+'\nGenerate ONLY scene '+str(i+1)+'. Use the same visual style as the other scenes.\nMeasured voice cues for this scene (seconds from its start): '+json.dumps(timings[i],ensure_ascii=False)+'\nAnimate the diagram elements as the corresponding sentences are spoken. Sum play/wait durations to '+str(timings[i]['duration'])+' seconds. Avoid a frozen ending. The host adds speech; do NOT use add_sound.\nRendering options: '+json.dumps(opts)+'\nAssets: '+json.dumps([{'path':'assets/'+a['name'],'original':a['original']} for a in assets],ensure_ascii=False)
-            if completed:messages[-1]['content']+='\nPrevious visual scene for continuity (use its design, develop this scene’s own mechanisms): '+completed[-1]['source']['code'][-12000:]
+            append_text(messages[-1], '\nShared narrated script (data): '+json.dumps(transcript,ensure_ascii=False)+'\nGenerate ONLY scene '+str(i+1)+'. Use the same visual style as the other scenes.\nMeasured voice cues for this scene (seconds from its start): '+json.dumps(timings[i],ensure_ascii=False)+'\nAnimate the diagram elements as the corresponding sentences are spoken. Sum play/wait durations to '+str(timings[i]['duration'])+' seconds. Avoid a frozen ending. The host adds speech; do NOT use add_sound.\nRendering options: '+json.dumps(opts)+'\nAssets: '+json.dumps([{'path':'assets/'+a['name'],'original':a['original']} for a in assets],ensure_ascii=False))
+            if completed:append_text(messages[-1], '\nPrevious visual scene for continuity (use its design, develop this scene’s own mechanisms): '+completed[-1]['source']['code'][-12000:])
         for attempt in range(3 if not source else 1):
             if cancel.is_set():raise Cancelled()
             if source is None:

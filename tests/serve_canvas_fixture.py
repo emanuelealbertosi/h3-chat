@@ -116,7 +116,19 @@ def main():
                             pages=[{'title':title,'status':'ready','nodes':nodes,'notes':'Collaudo sintetico del contrasto.','sources':[]} for title,nodes in (('Copertina',cover),('Superfici',cases),('Grafici',charts))]
                             pages[1]['overrides']={'text-plain':{'color':'#ffffff','background':'#ffffff'},'text-soft':{'color':'#000000','background':'#000000'}}
                             deck={'version':1,'format':'16:9','theme':fixture_body.get('theme','lagoon'),'design':fixture_body.get('design','professional'),'title':'Collaudo contrasto','references':[],'pages':pages,'active':0}
-                        finished=phase in ('done','design','contrast')
+                        if phase in ('html','html-stream'):
+                            if not active:
+                                ident=app.store.enqueue(chat,'Slide HTML sintetiche',[],DEFAULTS,True);active=app.store.one('SELECT * FROM jobs WHERE id=?',(ident,));app.store.execute("UPDATE jobs SET status='running' WHERE id=?",(ident,))
+                            raw='<style>body{background:#102e45;color:#faf3d7;font:30px Georgia;padding:60px}h1{font-size:70px;color:#ffd166;margin:0 0 30px}main{display:grid;grid-template-columns:2fr 1fr;gap:40px}img{width:350px;height:240px;object-fit:contain}svg{width:220px;height:180px}</style><h1>Pagina creata dal modello</h1><main><p>Spiegazione completa, grafica originale e font scelti liberamente [R1].</p><img data-asset-id="'+('a'*32)+'"></main><svg viewBox="0 0 200 150"><circle cx="80" cy="70" r="60" fill="#ef476f"/></svg><script>parent.__h3Injected=true</script><img src="https://example.com/tracker.png" onerror="parent.__h3Injected=true"><style>@import url(https://example.com/leak.css);</style>'
+                            if phase=='html-stream':raw=raw[:raw.index('</main>')]
+                            if phase=='html':raw=raw.replace('scelti liberamente [R1]','scelti liberamente $A=\\pi r^2$ [R1]')+'<div style="position:absolute;top:20px;right:20px;width:240px;height:24px;background:linear-gradient(90deg,#ef476f,#ffd166)"></div>'
+                            deck={'version':1,'engine':'llm','format':'16:9','title':'HTML originale','references':[{'id':'R1','label':'Documento sintetico · pagina 2'}],'pages':[{'title':'Pagina libera','html':raw,'nodes':[],'status':'ready' if phase=='html' else 'writing','notes':'','sources':['R1']}],'active':0}
+                            if not app.store.chat(chat).get('project_id'):
+                                p=app.knowledge.save({'name':'Figure sintetiche'})
+                                app.store.execute('UPDATE chats SET project_id=? WHERE id=?',(p['id'],chat))
+                                app.store.execute('INSERT INTO project_sources(id,project_id,path,name) VALUES (?,?,?,?)',('fig-source',p['id'],str(outputs/'fixture.png'),'Libro illustrato.pdf'))
+                                app.store.execute('INSERT INTO rag_chunks(source_id,location,page,text,image_path,modality) VALUES (?,?,?,?,?,?)',('fig-source','pagina 12',12,'Figura della batteria','outputs/fixture.png','image'))
+                        finished=phase in ('done','design','contrast','html')
                         value={'title':deck['title'],'content':encode(deck),'media':image['media']}
                         app.save_artifact(chat,value['title'],value['content'],value['media'])
                         app.store.update_answer(active,'Slide nel canvas.','done' if finished else 'running',[],{'canvas':True,'intent':'slides','artifact':value,'rag_sources':[{'citation':'R1','name':'Fonte sintetica','location':'pagina 2','text':'Una formula precisa','source_id':'synthetic','chunk_id':1,'page':2,'url':''}]})

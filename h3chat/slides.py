@@ -1,7 +1,7 @@
-"""Progressive, declarative HTML slides, inspired by H3-Slides V2.
+"""Progressive decks: LLM-authored HTML/CSS and legacy declarative composition.
 
-The selected chat LLM designs each page. Model output is data, never executable
-HTML/CSS/JS. The canvas history stores a portable, versioned deck in Markdown.
+The canvas history stores a portable, versioned deck in Markdown. The browser
+isolates authored HTML/CSS and never executes model-generated JavaScript.
 """
 import json
 import re
@@ -93,7 +93,7 @@ def edit_options(prompt,content):
     if extra:count+=1 if extra[1].lower() in ('un','una') else int(extra[1])
     # An addition specifies an increment, not the new total.
     return options(prompt[:extra.start()]+prompt[extra.end():] if extra else prompt,
-                   {'count':count,'format':deck['format']}|{k:deck[k] for k in ('theme','typography','design','detail') if k in deck})
+                   {'count':count,'format':deck['format'],'engine':deck.get('engine','deterministic')}|{k:deck[k] for k in ('theme','typography','design','detail','engine') if k in deck})
 
 
 def options(prompt, body=None):
@@ -108,6 +108,8 @@ def options(prompt, body=None):
     if type(count) is not int or not 1 <= count <= 30 or not isinstance(aspect,str) or aspect not in FORMATS:
         raise ValueError('Slide: scegli da 1 a 30 pagine e un formato 16:9, 4:3, 16:10 oppure 1:1.')
     result={'count': count, 'format': aspect}
+    if body.get('engine','llm') not in ('llm','deterministic'):raise ValueError('Motore slide non valido.')
+    result['engine']=body.get('engine','llm')
     for key,allowed in (('theme',THEMES),('typography',TYPOGRAPHY),('design',DESIGNS),('detail',('concise','full'))):
         if key in body:
             if body[key] not in allowed:raise ValueError('Tema o tipografia delle slide non validi.')
@@ -277,7 +279,7 @@ def partial_page(raw, assets, references):
 
 def encode(deck):
     content=PREFIX+json.dumps(deck, ensure_ascii=False, separators=(',', ':'))+'\n```'
-    if len(content)>200000: raise ValueError('Presentazione troppo grande: usa meno slide o meno testo.')
+    if len(content)>2600000: raise ValueError('Presentazione troppo grande: usa meno slide o meno testo.')
     return content
 
 
@@ -287,6 +289,7 @@ def validate_content(content, media):
     deck=json.loads(content[len(PREFIX):-4]); assets={m['id'] for m in media if m['mime'].startswith('image/')}
     if not isinstance(deck, dict) or deck.get('version')!=1 or deck.get('format') not in FORMATS or not isinstance(deck.get('pages'), list) or not 1<=len(deck['pages'])<=30:
         raise ValueError('Presentazione non valida.')
+    if deck.get('engine','deterministic') not in ('llm','deterministic'):raise ValueError('Motore slide non valido.')
     if deck.get('theme','lagoon') not in THEMES or deck.get('typography','modern') not in TYPOGRAPHY:raise ValueError('Tema slide non valido.')
     if deck.get('design','professional') not in DESIGNS or deck.get('detail','concise') not in ('concise','full'):raise ValueError('Stile o dettaglio slide non valido.')
     if 'title' in deck and (not isinstance(deck['title'],str) or len(deck['title'])>150):raise ValueError('Titolo presentazione non valido.')
@@ -294,6 +297,14 @@ def validate_content(content, media):
     if not isinstance(refs,list) or len(refs)>100 or any(not isinstance(r,dict) or not isinstance(r.get('id'),str) or not isinstance(r.get('label'),str) or len(r['label'])>1000 for r in refs): raise ValueError('Fonti slide non valide.')
     for page in deck['pages']:
         if not isinstance(page,dict) or not isinstance(page.get('title'),str) or len(page['title'])>150: raise ValueError('Titolo slide non valido.')
+        if deck.get('engine')=='llm':
+            html=page.get('html','')
+            if not isinstance(html,str) or len(html)>80000:raise ValueError('HTML slide non valido.')
+            if page.get('status')=='ready':
+                from .slide_html import validate
+                validate(html)
+            if not isinstance(page.get('sources',[]),list) or any(x not in {r['id'] for r in refs} for x in page.get('sources',[])):raise ValueError('Fonti slide non valide.')
+            continue
         if not isinstance(page.get('nodes'),list):raise ValueError('Elementi slide non validi.')
         if page.get('nodes'): validate_page({k:page[k] for k in ('nodes','notes','sources') if k in page},assets,{r['id'] for r in refs},draft=page.get('status')!='ready')
         validate_overrides(page)
@@ -330,28 +341,26 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     descriptions={}
     vision=settings.get('vision_enabled',True) and model.get('vision',{}).get('enabled',False)
     if assets and vision:
-        batch_size=max(1,min(4,model.get('max_refs',4)))
-        schema={'type':'object','properties':{'descriptions':{'type':'array','items':TEXT}},'required':['descriptions'],'additionalProperties':False}
-        for offset in range(0,len(assets),batch_size):
-            batch=assets[offset:offset+batch_size];stage(f'Slide · analisi Vision delle immagini {offset+1}–{offset+len(batch)}/{len(assets)}')
-            visual=[{'role':'user','status':'done','seq':1,'media':batch,'content':'Descrivi fedelmente ciascuna immagine, nello stesso ordine: testo leggibile, dati, relazioni e contenuto visivo utile alle slide. Non inventare dati illeggibili. Rispondi con descriptions, una stringa per immagine.'}]
-            raw,finish=app.engine.completion(app.engine.chat_messages(visual,model,settings),settings|{'think_level':'off'},cancel,on_text=lambda _:None,schema=schema)
-            result=json.loads(raw).get('descriptions')
-            if finish=='length' or not isinstance(result,list) or len(result)!=len(batch) or any(not isinstance(x,str) for x in result):raise ValueError('Analisi immagini incompleta: aumenta Max token del modello LLM.')
-            descriptions.update({m['id']:d[:3000] for m,d in zip(batch,result)})
+        from .slide_vision import describe
+        descriptions=describe(app,assets,model,settings,cancel,stage,meta)
     elif assets:
         meta['slide_warning']='Vision non disponibile: immagini inseribili, contenuto visivo non analizzato.'
     from .context_tools import budget
     caption_budget=max(160,min(3000,budget(settings,history)//3//max(1,len(assets))))
     catalog=json.dumps([{'asset_id':m['id'],'description':descriptions.get(m['id'],m['name']+' (immagine non analizzata)')[:caption_budget], 'source':f'I{i}'} for i,m in enumerate(assets,1)],ensure_ascii=False)
     base=app.engine.chat_messages([m|{'media':[]} for m in history], model, settings)
-    base[0]['content']+='\n'+BRIEF
+    from .slide_html import BRIEF as HTML_BRIEF
+    base[0]['content']+='\n'+(HTML_BRIEF if opts['engine']=='llm' else BRIEF)
     base[0]['content']+='\nOPZIONI DELLA PRESENTAZIONE: '+json.dumps({k:opts.get(k,default) for k,default in (('design','professional'),('detail','concise'))},ensure_ascii=False)+'. detail=full richiede testi e spiegazioni completi, non una lista di headline.'
     base[-1]['content']+='\nCATALOGO IMMAGINI:\n'+catalog+'\nFONTI CITABILI:\n'+json.dumps(references,ensure_ascii=False)
     stage('Slide · progettazione della sequenza')
     outline_schema={'type':'object','properties':{'title':TEXT,'slides':{'type':'array','minItems':opts['count'],'maxItems':opts['count'],
         'items':{'type':'object','properties':{'title':TEXT,'purpose':TEXT},'required':['title','purpose'],'additionalProperties':False}}},'required':['title','slides'],'additionalProperties':False}
+    if opts['engine']=='llm':
+        outline_schema['properties']['visual_direction']=TEXT
+        outline_schema['required'].append('visual_direction')
     request=base+[{'role':'user','content':f"Progetta esattamente {opts['count']} slide, formato {opts['format']}. Solo titolo della presentazione e scaletta con titolo/obiettivo di ogni pagina. Rispetta la richiesta e le fonti già fornite."}]
+    if opts['engine']=='llm':request[-1]['content']+=' In visual_direction progetta una direzione artistica coerente: palette con contrasti leggibili, font di sistema, ritmo dei layout e trattamento delle immagini. Niente template di card ripetute.'
     raw,finish=app.engine.completion(request, settings, cancel, on_text=lambda _:None, schema=outline_schema)
     if finish=='length': raise ValueError('Scaletta incompleta: aumenta Max token del modello LLM.')
     outline=json.loads(raw)
@@ -360,9 +369,12 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     for row in outline['slides']:
         if not isinstance(row,dict) or any(not isinstance(row.get(k),str) or len(row[k])>1500 for k in ('title','purpose')): raise ValueError('Scaletta slide non valida.')
         pages.append({'title':row['title'][:150], 'purpose':row['purpose'], 'status':'pending','nodes':[], 'notes':'','sources':[]})
-    deck={'version':1,'format':opts['format'],'theme':opts.get('theme','lagoon'),'typography':opts.get('typography','modern'),
+    deck={'version':1,'engine':opts['engine'],'format':opts['format'],'theme':opts.get('theme','lagoon'),'typography':opts.get('typography','modern'),
           'design':opts.get('design','professional'),'detail':opts.get('detail','concise'),
           'title':outline['title'][:150] or 'Presentazione','references':references,'pages':pages,'active':0}
+    direction=outline.get('visual_direction','')
+    if not isinstance(direction,str):raise ValueError('Direzione artistica delle slide non valida.')
+    if opts['engine']=='llm':deck['visual_direction']=direction[:2500]
     def publish():
         content=encode(deck)
         meta['artifact']={'title':deck['title'],'content':content,'media':assets}
@@ -372,6 +384,27 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     for index,page in enumerate(pages):
         if cancel.is_set(): raise Cancelled()
         deck['active']=index; page['status']='writing'; publish(); stage(f"Slide · {index+1}/{len(pages)} · {page['title']}")
+        if opts['engine']=='llm':
+            from .slide_html import source,validate
+            previous=pages[index-1].get('html','') if index else ''
+            previous=previous[:max(800,min(4000,budget(settings,history)//4))]
+            request=base+([{'role':'assistant','content':previous}] if previous else [])+[{'role':'user','content':f"Crea SOLO la pagina {index+1}/{len(pages)}: {page['title']}\nObiettivo: {page['purpose']}\nViewport {FORMATS[opts['format']][0]}x{FORMATS[opts['format']][1]} px.\nSequenza completa: "+json.dumps(outline['slides'],ensure_ascii=False)+"\nMantieni coerenza con la pagina precedente, ma inventa una composizione adatta a questo contenuto. Restituisci subito HTML e CSS completi."}]
+            request[-1]['content']+='\nDirezione artistica: '+deck['visual_direction']
+            updated=0
+            def stream_html(raw):
+                nonlocal updated
+                if time.monotonic()-updated<.25:return
+                if len(raw)>80000:raise ValueError('HTML della pagina troppo grande.')
+                page['html']=source(raw);publish();updated=time.monotonic()
+            try:
+                raw,finish=app.engine.completion(request,settings,cancel,on_text=stream_html)
+                if finish=='length':raise ValueError(f'Slide {index+1} incompleta: aumenta Max token. Anteprima conservata.')
+                page['html']=validate(raw)
+                page['sources']=[r['id'] for r in references if '['+r['id']+']' in page['html']]
+                page['status']='ready';publish()
+            except Exception:
+                page['status']='interrupted';publish();raise
+            continue
         request=base+[{'role':'user','content':f"Componi la pagina {index+1}/{len(pages)}: {page['title']}\nObiettivo: {page['purpose']}\nFormato {opts['format']} ({FORMATS[opts['format']][0]}×{FORMATS[opts['format']][1]}).\nSequenza: "+json.dumps([p['title'] for p in pages],ensure_ascii=False)+'\nEmetti subito nodes, prima id,parent,kind,text in ogni elemento. Pagina completa e leggibile.'}]
         updated=0
         def stream(raw):

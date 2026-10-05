@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .message_content import append_text
 from . import __version__
 import base64
 import io
@@ -643,7 +644,7 @@ class Service:
                 if settings.get('_lab_source'):prepared={'title':'Calcolo','code':settings['_lab_source']}
                 else:
                     self.engine.start_llama(model,settings,log_path,cancel,stage=stage)
-                    messages=self.engine.chat_messages(visual_history,model,settings);messages[0]['content']+='\n'+LAB_BRIEF;messages[-1]['content']+='\nRequested artifact type: calculate'
+                    messages=self.engine.chat_messages(visual_history,model,settings);messages[0]['content']+='\n'+LAB_BRIEF;append_text(messages[-1], '\nRequested artifact type: calculate')
                     raw,finish=self.engine.completion(messages,settings|{'think_level':'off'},cancel,on_text=lambda _:None,schema=LAB_SCHEMA)
                     if finish=='length':raise ValueError('Il codice è incompleto: aumenta Max token nelle Preferenze.')
                     prepared=json.loads(raw)

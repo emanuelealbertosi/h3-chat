@@ -63,7 +63,7 @@ const projects=initProjects({api,getState:()=>state,getChat:()=>chat,refresh,not
 chatModels=initChatModels({api,getState:()=>state,notify:toast,onChange:settings=>{if(settings)state.settings=settings;renderStatus();}});
 $('#rag-enabled').closest('label').insertAdjacentHTML('afterend','<label class="think-control">Strumenti <select id="lab-tool" aria-label="Strumenti della chat"><option value="auto">Automatico · dal prompt</option><option value="calculate">Interprete numerico</option><option value="manim">Animazione Manim</option><option value="slides">Slide · HTML in tempo reale</option></select></label><span id="slides-options" hidden><label>Slide <input id="slides-count" aria-label="Numero di slide" type="number" min="1" max="30" value="8" style="width:65px"></label> <label>Formato <select id="slides-format" aria-label="Formato slide"><option>16:9</option><option>4:3</option><option>16:10</option><option>1:1</option></select></label></span>');
 $('#lab-tool').onchange=()=>{$('#slides-options').hidden=$('#lab-tool').value!=='slides';visualControls.render();};
-$('#slides-options').insertAdjacentHTML('beforeend',' <label>Stile <select id="slides-design"><option value="professional">Serio / professionale</option><option value="playful">Giocoso / colorato</option><option value="comic">Fumettoso</option></select></label> <label>Contenuto <select id="slides-detail"><option value="concise">Sintesi</option><option value="full">Testi completi</option></select></label>');
+$('#slides-options').insertAdjacentHTML('beforeend',' <label>Motore <select id="slides-engine" aria-label="Motore slide"><option value="llm">LLM · HTML libero</option><option value="deterministic">Deterministico</option></select></label> <label>Stile <select id="slides-design"><option value="professional">Serio / professionale</option><option value="playful">Giocoso / colorato</option><option value="comic">Fumettoso</option></select></label> <label>Contenuto <select id="slides-detail"><option value="concise">Sintesi</option><option value="full">Testi completi</option></select></label>');
 async function executeArtifact(lang,source){if(activeJob())throw Error('Attendi o interrompi il lavoro corrente.');if(!current)await newChat();await api('/chats/'+current+'/messages',{prompt:lang.startsWith('manim')?'Renderizza questa scena Manim':'Esegui questo calcolo con l’interprete',lab:lang.startsWith('manim')?'manim':'calculate',lab_source:source,canvas:canvasOpen,...projects.read()});await refresh();}
 function localCard(model){
   const m=model;
@@ -115,7 +115,7 @@ function renderStatus(){
   $('.local-badge').innerHTML='<i></i> '+(model?.api?'LLM tramite API':'Sul tuo computer');
   $('#engine-badge').innerHTML='<i></i> '+(any?'Lavoro in corso':model?.api?'LLM tramite API':'Motore locale');
   $('#vision-enabled').checked=state.settings.vision_enabled;$('#vision-toggle-label').textContent='Vision '+(state.settings.vision_enabled?'On':'Off');
-  $('#vision-badge').textContent=vision?.enabled?(state.settings.vision_enabled?(model.api?'Vision · API':'Vision · CPU'):'Vision disattivata'):model?'Non vision':'Vision da configurare';
+  $('#vision-badge').textContent=vision?.enabled?(state.settings.vision_enabled?(model.api?'Vision · API':'Vision · '+(state.settings.vision_device==='gpu'?'GPU':'CPU')):'Vision disattivata'):model?'Non vision':'Vision da configurare';
   $('#vision-badge').className='badge '+(vision?.enabled?'ready':'warning');
   $('#vision-badge').title=vision?.projector?'Proiettore automatico: '+vision.projector:vision?.warning||'Scegli un modello nelle impostazioni.';
   $('#vision-warning').hidden=!model||!!vision?.enabled;
@@ -175,6 +175,7 @@ async function renderChat(){
     appendMedia(content,message.media,{api});appendMusicDetails(content,message,state.settings.chat_advanced);appendVideoDetails(content,message,state.settings.chat_advanced);appendToolsDetails(content,message,state.settings.chat_advanced);
     if(message.role==='assistant')projects.append(content,message);
     if(message.meta.quote_warnings?.length){const warning=document.createElement('p');warning.className='render-error';warning.textContent='Citazione letterale da verificare: '+message.meta.quote_warnings.join(' ');content.append(warning);}
+    if(message.meta.slide_warning){const warning=document.createElement('p');warning.className='small-note';warning.textContent=message.meta.slide_warning;content.append(warning);}
     if(message.role==='assistant'&&message.meta.execution_mode){const hint=document.createElement('p');hint.className='mode-hint';hint.textContent=message.meta.execution_mode+(message.meta.device_warning?' · '+message.meta.device_warning:'');content.append(hint);}
     if(message.meta.loras?.length&&(message.role==='user'||state.settings.chat_advanced)){const row=document.createElement('div');row.className='message-loras';row.textContent=message.meta.loras.map(l=>'◇ '+l.name+' × '+l.weight+' · '+l.model_name).join(' / ');content.append(row);}
     if(message.meta.loras_skipped?.length){const note=document.createElement('p');note.className='small-note';note.textContent=message.meta.loras_skipped.length+' LoRA non applicati: associati a un altro modello o con peso 0.';content.append(note);}
@@ -224,7 +225,7 @@ async function uploadFiles(files){
 async function send(event){event.preventDefault();if(activeJob())return;const prompt=$('#prompt').value.trim();if(!prompt)return;
   $('#send').disabled=true;
   try{await chatModels.wait();if(!current){const fresh=await api('/chats',{collection_id:collection,project_id:project});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
-    await persistCanvas();const sent=await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,...visualControls.read(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='slides'?{slides:{count:Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()});
+    await persistCanvas();const sent=await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,...visualControls.read(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='slides'?{slides:{engine:$('#slides-engine').value,count:Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()});
     if(sent.intent==='slides'){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}
     $('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);await refresh();
   }finally{$('#send').disabled=false;}
@@ -291,12 +292,12 @@ async function setCanvas(value,force=true){if(!current){canvasHistory={items:[],
 async function renderCanvas(){
   const empty=!canvas.content&&!canvas.media.length;$('#canvas-empty').hidden=!empty||canvasEditing;$('#canvas-preview').hidden=canvasEditing||empty;$('#canvas-source').hidden=!canvasEditing;
   $('#canvas-preview-tab').classList.toggle('active',!canvasEditing);$('#canvas-source-tab').classList.toggle('active',canvasEditing);
-  const isDeck=canvas.content.startsWith('```h3-slides\n');$('#canvas-source-tab').textContent=isDeck?'Sorgente slide':'Modifica';$('#canvas-source').ariaLabel=isDeck?'Sorgente dichiarativo della presentazione':'Sorgente canvas';
+  const isDeck=canvas.content.startsWith('```h3-slides\n');$('#canvas-source-tab').textContent=isDeck?'Sorgente slide':'Modifica';$('#canvas-source').ariaLabel=isDeck?'Sorgente della presentazione':'Sorgente canvas';
   for(const kind of ['html','pptx']){const button=document.querySelector('[data-export="'+kind+'"]');if(button)button.hidden=!isDeck;}
   if(!canvasEditing){const value={...canvas,media:[...canvas.media]},entry=canvasHistory.items.find(x=>x.id===value.id),message=(chat?.messages||[]).find(m=>m.id===entry?.message_id)||[...(chat?.messages||[])].reverse().find(m=>m.meta?.artifact?.content===value.content||m.content===value.content);renderQueue=renderQueue.catch(()=>{}).then(async()=>{const options={final:!activeJob()?.canvas||value.id!==canvasHistory.active_id,sources:message?.meta?.rag_sources||[],onCitation:(s,all)=>projects.citation(s,all,message),onExecute:act(executeArtifact)};
-    if(isDeck){try{await renderSlides($('#canvas-preview'),value,{...options,editable:!activeJob()?.canvas,onChange:async content=>{
+    if(isDeck){try{await renderSlides($('#canvas-preview'),value,{...options,api,chatId:current,editable:!activeJob()?.canvas,onChange:async (content,media)=>{
       if(activeJob()?.canvas)throw Error('Attendi la fine della generazione prima di modificare.');
-      canvasFollow=false;canvasSelection++;canvas.content=content;canvasDirty=true;$('#canvas-source').value=content;
+      canvasFollow=false;canvasSelection++;canvas.content=content;if(media)canvas.media=media;canvasDirty=true;$('#canvas-source').value=content;
       await persistCanvas();await renderCanvas();
     }});}catch(e){$('#canvas-preview').textContent=e.message;}}
     else{$('#canvas-preview').classList.remove('slides-preview');await renderRich($('#canvas-preview'),value.content,options);appendMedia($('#canvas-preview'),value.media,{api});}
@@ -428,7 +429,7 @@ function updateDownloads(){
 
 $('#chat-advanced').onchange=act(async()=>{const value=$('#chat-advanced').checked;state.settings=await api('/settings',{chat_advanced:value});renderStatus();await renderChat();});
 $('#generation-settings').onclick=()=>openSettings('advanced');
-$('#vision-enabled').onchange=act(async()=>{state.settings=await api('/settings',{vision_enabled:$('#vision-enabled').checked});renderStatus();toast('Vision '+(state.settings.vision_enabled?(state.models.find(m=>m.id===state.settings.chat_model)?.api?'On · API':'On · CPU'):'Off')+' dal prossimo messaggio.');});
+$('#vision-enabled').onchange=act(async()=>{state.settings=await api('/settings',{vision_enabled:$('#vision-enabled').checked});renderStatus();toast('Vision '+(state.settings.vision_enabled?(state.models.find(m=>m.id===state.settings.chat_model)?.api?'On · API':'On · '+(state.settings.vision_device==='gpu'?'GPU':'CPU')):'Off')+' dal prossimo messaggio.');});
 $('#think-level').onchange=act(async()=>{const level=$('#think-level').value;thinkSaving=true;try{state.settings=await api('/settings',{think_level:level});}finally{thinkSaving=false;renderStatus();}});
 $('#composer').onsubmit=act(send);
 $('#prompt').onkeydown=act(async e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();await send(e);}});

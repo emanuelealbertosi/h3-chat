@@ -14,7 +14,7 @@ from pathlib import Path
 from .store import uid
 from .engine import CREATE_NO_WINDOW
 
-ALLOWED=set(('article div span p h1 h2 h3 h4 h5 h6 strong b em i s del sup sub br hr blockquote ul ol li pre code table thead tbody tr th td figure figcaption img '
+ALLOWED=set(('article main section header footer aside nav div span p h1 h2 h3 h4 h5 h6 strong b em i s del sup sub br hr blockquote ul ol li pre code table thead tbody tr th td figure figcaption img '
              'svg g path rect circle ellipse line polyline polygon text tspan defs marker clipPath mask pattern linearGradient radialGradient stop use title desc '
              'math semantics mrow mi mn mo msup msub mfrac mroot msqrt mtable mtr mtd annotation').lower().split())
 VOID={'br','hr','img'}

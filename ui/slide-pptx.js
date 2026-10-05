@@ -12,7 +12,7 @@ function color(raw){
   return {color:colorHex(values).slice(1).toUpperCase(),transparency:Math.round((1-values[3])*100)};
 }
 function box(element,frame){const r=element.getBoundingClientRect(),f=frame.getBoundingClientRect();return {x:(r.left-f.left)/96,y:(r.top-f.top)/96,w:r.width/96,h:r.height/96};}
-function font(style){return /Comic Sans/i.test(style.fontFamily)?'Comic Sans MS':/Consolas|monospace|Courier/i.test(style.fontFamily)?'Courier New':/Cormorant|Cambria|serif/i.test(style.fontFamily)&&!/sans-serif/i.test(style.fontFamily)?'Cambria':'Arial';}
+function font(style){return /Georgia/i.test(style.fontFamily)?'Georgia':/Segoe UI/i.test(style.fontFamily)?'Segoe UI':/Comic Sans/i.test(style.fontFamily)?'Comic Sans MS':/Consolas|monospace|Courier/i.test(style.fontFamily)?'Courier New':/Cormorant|Cambria|serif/i.test(style.fontFamily)&&!/sans-serif/i.test(style.fontFamily)?'Cambria':'Arial';}
 function addTextLines(slide,frame){
   const walker=document.createTreeWalker(frame,NodeFilter.SHOW_TEXT),lines=new Map();let node;
   while(node=walker.nextNode()){
@@ -73,6 +73,14 @@ async function rasterGraphic(element){
   try{return await toPng(wrapper,{width:rect.width,height:rect.height,pixelRatio:3,backgroundColor:'transparent',style:{margin:'0',transform:'none'},filter:n=>!n.classList?.contains('no-export')});}
   finally{wrapper.replaceWith(element);}
 }
+async function rasterDecoration(element){
+  const bounds=element.getBoundingClientRect(),paint=element.cloneNode(false),style=getComputedStyle(element);
+  paint.removeAttribute('id');paint.removeAttribute('class');
+  for(const property of style)paint.style.setProperty(property,style.getPropertyValue(property));
+  paint.style.position='relative';paint.style.inset='auto';paint.style.margin='0';paint.style.transform='none';paint.style.translate='none';paint.style.width=bounds.width+'px';paint.style.height=bounds.height+'px';
+  const host=document.createElement('div');host.style.cssText='position:fixed;left:-30000px;top:0';host.append(paint);document.body.append(host);
+  try{return await toPng(paint,{width:bounds.width,height:bounds.height,pixelRatio:2,backgroundColor:'transparent'});}finally{host.remove();}
+}
 export async function exportPowerPoint(root,deck,title){
   try{
   const pres=new pptxgen(),height=parseFloat(root.firstElementChild.style.getPropertyValue('--slide-height'));
@@ -83,7 +91,11 @@ export async function exportPowerPoint(root,deck,title){
     // labels: their readable text color depends on that background in the DOM.
     for(const element of frame.querySelectorAll('*')){
       if(element.closest('.no-export,svg,math,.katex')||getComputedStyle(element).display==='none')continue;
-      const style=getComputedStyle(element),fill=color(style.backgroundColor),border=parseFloat(style.borderTopWidth)||0;if(fill.transparency===100&&!border)continue;
+      const style=getComputedStyle(element),fill=color(style.backgroundColor),border=parseFloat(style.borderTopWidth)||0;
+      if(deck.engine==='llm'&&style.backgroundImage!=='none'){
+        const bounds=box(element,frame);if(bounds.w>0&&bounds.h>0)slide.addImage({data:await rasterDecoration(element),...bounds});continue;
+      }
+      if(fill.transparency===100&&!border)continue;
       const bounds=box(element,frame),line=border?{...color(style.borderTopColor),width:border*.75}:{...fill,transparency:100};if(bounds.w>0&&bounds.h>0)slide.addShape(parseFloat(style.borderRadius)?pres.ShapeType.roundRect:pres.ShapeType.rect,{...bounds,rectRadius:.12,fill:{...fill},line,radius:.12});
     }
     addTextLines(slide,frame);

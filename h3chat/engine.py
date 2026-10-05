@@ -158,7 +158,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                 fingerprint.append((role, path, None, None))
         keys = ('profile', 'backend', 'threads', 'memory_policy')
         if kind == 'chat':
-            keys += ('context', 'gpu_layers', 'vision_enabled')
+            keys += ('context', 'gpu_layers', 'vision_enabled', 'vision_device')
         runtime_options=tuple((k,settings.get(k, 'on_demand' if k=='memory_policy' else None)) for k in keys)
         if kind=='image':runtime_options+=(('image_engine',model.get('engine','native')),('architecture',model.get('architecture')))
         if kind=='music':runtime_options=(('music_backend',music_backend(settings)),('music_threads',settings['music_threads']),('memory_policy',settings.get('memory_policy','on_demand')))
@@ -300,10 +300,13 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
             session.uses += 1
             return
         backend = "cpu" if settings["profile"] == "cpu" else settings["backend"]
+        files = self.model_files(model,settings)
+        vision_gpu='mmproj' in files and settings.get('vision_device','cpu')=='gpu'
+        if vision_gpu and backend=='cpu':
+            raise ValueError('Per Vision GPU scegli un motore LLM CUDA o Vulkan nelle Preferenze. Puoi mantenere i layer LLM a zero.')
         exe = runtime_executable(self.root, backend, "llama")
         if not exe:
             raise ValueError(f"Installa il motore {backend.upper()} dal setup.")
-        files = self.model_files(model,settings)
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             session.port = sock.getsockname()[1]
@@ -319,7 +322,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         if "mmproj" in files:
             args += ["--mmproj", files["mmproj"], "--image-max-tokens", 512 if settings["context"] <= 4096 else 1024]
         if "mmproj" in files:
-            args += ["--no-mmproj-offload"]
+            args += ["--mmproj-offload" if vision_gpu else "--no-mmproj-offload"]
         with self.process_lock:
             if cancel.is_set():
                 raise Cancelled()

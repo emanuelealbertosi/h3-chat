@@ -59,3 +59,11 @@ class LlmPresetsTests(unittest.TestCase):
   self.assertEqual(request_body(cfg,[{'role':'user','content':'Synthetic request'}],saved,True,None)['max_tokens'],100000)
   for patch in ({'context':262144,'max_tokens':100001},{'context':262144,'max_tokens':True}):
    with self.assertRaises(ValueError):self.app.validate_settings(patch)
+
+ def test_regenerate_uses_current_vision_device_without_changing_original_request(self):
+  chat=self.app.store.create_chat();original=self.app.store.enqueue(chat['id'],'Descrivi la figura',[],self.app.store.settings())
+  self.app.cancel(original);self.app.save_settings({'vision_device':'gpu'})
+  replay=self.app.regenerate(chat['id'])['job_id']
+  value=json.loads(self.app.store.one('SELECT payload FROM jobs WHERE id=?',(replay,))['payload'])
+  self.assertEqual(value['settings']['vision_device'],'gpu');self.assertEqual(value['prompt'],'Descrivi la figura')
+  self.assertEqual(len(self.app.store.chat(chat['id'])['messages']),2)
