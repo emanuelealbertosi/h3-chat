@@ -162,6 +162,21 @@ class GenerationTests(unittest.TestCase):
         instructions=self.calls[0][0]['content'];self.assertIn('"detail": "full"',instructions);self.assertIn('"design": "comic"',instructions)
         self.assertIn('NON ridurli a headline',instructions)
 
+    def test_planning_does_not_inherit_final_answer_thinking_and_token_budget(self):
+        job=self.enqueue();payload=json.loads(job['payload']);payload['settings'].update(max_tokens=25000,context=50000,think_level='xhigh')
+        job=job|{'payload':json.dumps(payload)};seen=[]
+        original=self.completion
+        def complete(messages,settings,cancel,**kw):
+            seen.append((settings.copy(),'slides' in kw['schema']['properties']))
+            return original(messages,settings,cancel,**kw)
+        self.calls=[];self.job=job;self.progress=0;self.fail=False;self.documents=False
+        with patch.object(self.app.engine,'require_model',return_value=self.model),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete):
+            self.app.execute_job(job,self.cancel)
+        planning=next(settings for settings,is_plan in seen if is_plan)
+        self.assertEqual(planning['think_level'],'off');self.assertLessEqual(planning['max_tokens'],1000);self.assertLessEqual(planning['llm_timeout'],300)
+        for settings,is_plan in seen:
+            if not is_plan:self.assertEqual((settings['max_tokens'],settings['think_level']),(25000,'xhigh'))
+
     def test_generation_recovers_invalid_tree_and_streams_before_node_id(self):
         job=self.enqueue();page_calls=0;self.calls=[];self.job=job;self.progress=0;self.fail=False;self.documents=False
         def complete(messages,settings,cancel,**kw):

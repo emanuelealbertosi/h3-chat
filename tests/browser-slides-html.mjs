@@ -14,7 +14,7 @@ const post=path=>page.evaluate(async path=>{const {token}=await(await fetch('/ap
 const saved=()=>page.evaluate(async chat=>await(await fetch('/api/canvas/'+chat)).json(),fixture.chat);
 const iframe=()=>page.frameLocator('.h3-html-page iframe');
 try{
-  await mkdir('work/slides-html-qa',{recursive:true});await page.goto(fixture.url);await page.click(`[data-chat="${fixture.chat}"]`);await page.selectOption('#lab-tool','slides');assert.equal(await page.inputValue('#slides-engine'),'llm');
+  await mkdir('work/slides-html-qa',{recursive:true});await page.goto(fixture.url);await page.click(`[data-chat="${fixture.chat}"]`);await page.selectOption('#lab-tool','slides');assert.equal(await page.inputValue('#slides-engine'),'llm');assert.equal(await page.inputValue('#slides-vision'),'relevant');
   await post('/fixture/slides/html-stream');await page.click('#canvas-toggle');await iframe().locator('h1').waitFor();assert.match(await iframe().locator('h1').textContent(),/modello/);assert.equal(await page.locator('#slide-edit').isDisabled(),true);
   await post('/fixture/slides/html');await page.waitForFunction(()=>!document.querySelector('#slide-edit')?.disabled);await iframe().locator('svg').waitFor();
   await iframe().locator('.katex').waitFor();
@@ -37,5 +37,10 @@ try{
   await page.reload();await page.click(`[data-chat="${fixture.chat}"]`);await page.click('#canvas-toggle');await iframe().locator('h1').waitFor();assert.match(await iframe().locator('h1').textContent(),/Titolo modificato/);
   await page.setViewportSize({width:390,height:844});await page.waitForTimeout(300);assert.ok(await page.locator('.slides-viewport').evaluate(e=>e.getBoundingClientRect().width>100));assert.deepEqual(errors,[]);
   assert.ok(!remote.some(url=>url.includes('example.com')),'Generated HTML must not access the network');
+  const composer=await browser.newPage();await composer.goto(fixture.url);await composer.click(`[data-chat="${fixture.chat}"]`);
+  await composer.selectOption('#lab-tool','slides');await composer.selectOption('#slides-vision','all');
+  await composer.route('**/api/chats/*/messages',route=>route.fulfill({json:{job_id:'synthetic-only',intent:'slides',canvas:true}}));
+  const request=composer.waitForRequest(r=>r.method()==='POST'&&r.url().endsWith('/messages'));
+  await composer.fill('#prompt','Crea 4 slide');await composer.locator('#composer').evaluate(e=>e.requestSubmit());assert.equal((await request).postDataJSON().slides.vision_scope,'all');await composer.close();
   console.log('Free HTML: streaming, original CSS/SVG, isolation, graphical edits, RAG/PC image replacement, persistent media, editable PPTX, PDF, HTML and mobile passed.');
 }catch(e){console.error(diagnostics);await page.screenshot({path:'work/slides-html-qa/error.png',fullPage:true});throw e;}finally{await browser.close();child.kill();}

@@ -27,6 +27,10 @@ i bordi vengono segnalati. Puoi correggerli graficamente o chiedere al modello
 di adattare la pagina. Il motore deterministico può creare continuazioni per
 testi molto lunghi.
 
+La scaletta usa un budget breve e **Thinking Off**, separato dalle impostazioni
+delle pagine finali. La cronologia conserva richieste e riepiloghi delle vecchie
+presentazioni senza rimandarne tutto l'HTML al modello a ogni generazione.
+
 ## Fonti e immagini
 
 Le figure di allegati e RAG sono disponibili insieme agli estratti testuali.
@@ -35,6 +39,16 @@ scelto in chat. Le descrizioni preliminari sono brevi, con Thinking Off e un
 limite separato dalla risposta finale. Se Vision non è disponibile o una
 descrizione è incompleta, la figura resta inseribile e viene segnalata come non
 analizzata. Selezione delle fonti, budget del contesto e progetto restano validi.
+
+**Figure Vision → Rapida** analizza fino a otto figure nuove, dando precedenza
+alle fonti recuperate per la richiesta attuale. Le altre restano nel catalogo
+e sono indicate come non analizzate. **Completa** analizza tutte le figure e può
+essere lenta, soprattutto con il proiettore sulla CPU. Le descrizioni completate
+vengono conservate localmente e riutilizzate anche se la stessa figura viene
+estratta di nuovo in una cartella diversa; cambiare immagine o modello invalida
+il riuso. Un provider non Vision salta l'analisi e usa soltanto testo e metadati:
+non acquisisce il contenuto visivo delle immagini. La scelta CPU/GPU resta nel
+menu **Vision** della chat.
 
 In **Modifica grafica → Immagini · PC, allegati, RAG, Internet** puoi inserire o sostituire figure:
 

@@ -513,6 +513,9 @@ class Service:
             if snapshot:
                 history.insert(-1, {"role":"user", "content":"Canvas attuale da modificare se richiesto:\n" + snapshot["content"],
                                    "media":json.loads(snapshot["media"]), "status":"done", "seq":-1})
+            if settings.get('_lab')=='slides':
+                from .slide_context import compact_history
+                history=compact_history(history)
             log_path = self.data / "logs" / (job["id"] + ".log")
             log_path.parent.mkdir(parents=True, exist_ok=True)
             def stage(label):
