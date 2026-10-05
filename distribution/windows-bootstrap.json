@@ -1,7 +1,7 @@
 {
   "archive": "windows-bootstrap.zip",
-  "size": 3582941,
-  "sha256": "d19fba833809eb71884e41c79667abbb753af3d35bdac5a07993ff2506245ffa",
+  "size": 3586200,
+  "sha256": "53d735c6e407f3bba1eec0266b046e5755351b16d830bd5aa1cf3c08411195f6",
   "sources": {
     "ui/api-providers.js": "e655a70bf19b32109cb8ba889601a28d7e2372c9a54eb5a255ac7a3c7924ad90",
     "ui/app.js": "de5ec50ced8eac1c69e0fcdfefb123fc499bf07a4d21bf7acdb51c6ad9539c9f",
@@ -25,7 +25,8 @@
     "ui/slide-contrast.js": "bec9545602ca4fad10068f011b798ce2e09326ce7380af5ff01e523e58b967c7",
     "ui/slide-design.js": "1269b18ae8ad0da817fb8c1d1136bfe924929959999bdbaad601b0e8ce77fd08",
     "ui/slide-editor.js": "c36934f987fd0d25285cb5e2fc523a4fba58d8dcd7cfadaca2ee17820f072a79",
-    "ui/slide-html.js": "fd0173fba4a26c1d4181f2f50494280d0025e1441601758ddaf87c856bdcfadd",
+    "ui/slide-html-editing.js": "35900597de963c2d5a9cbff3899b349da2013eb47d18a00e40e0ae72c5822f45",
+    "ui/slide-html.js": "3e4b74cc921c1a1fbca0dcbfcc9ccdabfddd7d820f347ce5c8ebbef0b2768333",
     "ui/slide-image-picker.js": "c79171f44697dd8fbdddb3417df90e5d80a5afa4a2c6bdfad82f098c05401278",
     "ui/slide-layout.js": "45bfa274da862f13ede7eb15ae8a958a3d656b7ab90cc31c1563936024feb6ab",
     "ui/slide-pptx.js": "2a400a557af99b44ec1807a99f50842dea0bfe2b07ce18625083d3959ba66b44",
@@ -50,7 +51,7 @@
   "files": {
     "H3-Chat.exe": "776a15737dda9bc9fd90575430869e79def535989fa69c43f2a06df5e5eb0da9",
     "native/h3-sd-worker.exe": "8c29e2eacd15fa9a704b977cb69ed345d06495c2ec7e2702087d0278ba29fb00",
-    "static/app.js": "eb9c2592bdb73ce828e84a21515ee98b49882adb663ac35335b6c4bbd76e3851",
+    "static/app.js": "a5d470e4d96fb00b21145e99d552e29b5f11cd90d81b406c3fb4f5ca00d2ab37",
     "static/vendor/fonts/KaTeX_AMS-Regular.ttf": "68534840bcfdd2bffb6f0e8deb48684dd01e7f04ea2813267577afb906de1d13",
     "static/vendor/fonts/KaTeX_AMS-Regular.woff": "30da91e84c893f875e252689faebdc590b2871145e8adc7f9a9d4dbd8ce0b251",
     "static/vendor/fonts/KaTeX_AMS-Regular.woff2": "0cdd387c9590a1a9f9794560022dbb59654a7d86f187aa0c81495ad42d3a7308",

@@ -36,7 +36,7 @@ limite separato dalla risposta finale. Se Vision non è disponibile o una
 descrizione è incompleta, la figura resta inseribile e viene segnalata come non
 analizzata. Selezione delle fonti, budget del contesto e progetto restano validi.
 
-In **Modifica grafica → Immagini della slide** puoi inserire o sostituire figure:
+In **Modifica grafica → Immagini · PC, allegati, RAG, Internet** puoi inserire o sostituire figure:
 
 - **Dal PC** apre il selettore file; immagini raster decodificabili dal browser,
   entro 12 MB, vengono normalizzate a massimo 4096 px.
@@ -45,11 +45,32 @@ In **Modifica grafica → Immagini della slide** puoi inserire o sostituire figu
   per documento/testo associato e paginazione. Non avvia una nuova indicizzazione.
 - **Internet** cerca su Wikimedia Commons, conservando autore, licenza e origine.
 
-Nel canvas HTML seleziona un elemento per cambiare testo, font, dimensioni, colore
-e sfondo; trascinalo per spostarlo. Puoi aggiungere testo, duplicare o eliminare
-elementi e modificare larghezza/altezza delle immagini. **Applica e salva** conserva
-la copia di lavoro con i suoi media. **Annulla modifiche** recupera la versione
-presente all'apertura dell'editor. Durante la generazione l'editor è disabilitato.
+## Modificare le slide HTML
+
+Nel canvas scegli la pagina e premi **Modifica grafica**. Clicca un elemento:
+la maniglia **↕** lo sposta e **↘** ne cambia larghezza e altezza. Apri **Testo e
+dimensioni** per modificare testo, font, colori e misure precise. **Seleziona gruppo**
+risale al riquadro che contiene l'elemento; puoi premere di nuovo per selezionare
+un gruppo più grande.
+
+**+ Testo**, **+ Titolo** e **+ Blocco** aggiungono elementi nel gruppo selezionato;
+un blocco contiene un titolo e un paragrafo modificabili. **Duplica**, **Elimina**,
+**Sposta prima** e **Sposta dopo** operano sulla selezione. Per aggiungere un'immagine
+seleziona un testo o un gruppo; per sostituirla seleziona l'immagine esistente.
+
+In **Impaginazione** scegli una, due o tre colonne, seleziona **Intera slide** o
+**Gruppo selezionato**, poi premi **Applica impaginazione**. Il gruppo dispone
+i suoi blocchi in ordine, adatta le immagini e compatta il contenuto entro il
+formato senza cancellare testo. Nei gruppi automatici, aggiunte e modifiche fanno
+riordinare il contenuto; trascinare un blocco ne cambia l'ordine. Se il contenuto
+è eccessivo anche con testo leggibile, l'operazione viene annullata e viene chiesto
+di dividerlo. Questo comando è una modifica esplicita: il layout HTML originale
+del modello resta invariato finché non lo applichi. **Libero · trascinamento**
+disattiva il riordino automatico mantenendo la disposizione raggiunta.
+
+**Annulla** e **Ripeti** gestiscono le ultime 30 operazioni della sessione di modifica.
+**Applica e salva** conserva la copia di lavoro con i suoi media. Salva prima di
+cambiare pagina o terminare la modifica. Durante la generazione l'editor è disabilitato.
 
 ## Anteprima ed export
 
