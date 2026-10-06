@@ -18,6 +18,9 @@ ALLOWED=set(('article main section header footer aside nav div span p h1 h2 h3 h
              'svg g path rect circle ellipse line polyline polygon text tspan defs marker clipPath mask pattern linearGradient radialGradient stop use title desc '
              'math semantics mrow mi mn mo msup msub mfrac mroot msqrt mtable mtr mtd annotation').lower().split())
 VOID={'br','hr','img'}
+# Flattened slide CSS and embedded figures can exceed 16 MiB even in short
+# decks. Keep a bounded budget below the HTTP request limit (90 MiB).
+MAX_EXPORT_HTML_BYTES=64*1024*1024
 
 
 class Sanitizer(HTMLParser):
@@ -60,7 +63,10 @@ def embedded_css(root):
 
 def export_document(root,data,body):
     source=body.get('html','');title=body.get('title','Documento H3')
-    if not isinstance(source,str) or len(source)>16*1024*1024 or not isinstance(title,str) or len(title)>150:raise ValueError('Documento non valido o troppo grande.')
+    if not isinstance(source,str):raise ValueError('Il contenuto da esportare deve essere HTML.')
+    if len(source)>MAX_EXPORT_HTML_BYTES or len(source.encode('utf-8'))>MAX_EXPORT_HTML_BYTES:
+        raise ValueError('La presentazione o il documento supera il limite di 64 MB per l’esportazione. Dividilo in più parti o riduci le dimensioni delle immagini.')
+    if not isinstance(title,str) or len(title)>150:raise ValueError('Il titolo del documento deve essere un testo di massimo 150 caratteri.')
     parser=Sanitizer();parser.feed(source)
     slide_format=body.get('slide_format')
     if slide_format is not None:
