@@ -39,6 +39,8 @@ class SlideAITests(unittest.TestCase):
         job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(sent['job_id'],))
         def complete(messages,settings,cancel,**kw):
             self.assertIn('Palette calda',messages[-1]['content']);self.assertIn('1280, 960',messages[-1]['content'])
+            self.assertIn('STILE VISIVO: giocoso / colorato',messages[0]['content'])
+            self.assertIn('Illustrazioni: immaginative',messages[0]['content'])
             kw['on_text']('<main><h1>Nuovo')
             return '<main><h1>Nuovo titolo</h1><p>Testo corretto [R1]</p></main>','stop'
         with patch.object(self.app.engine,'require_model',side_effect=self.model_for),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete):

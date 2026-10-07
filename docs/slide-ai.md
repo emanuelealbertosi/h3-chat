@@ -1,5 +1,23 @@
 # Slide AI e voce naturale
 
+## Stile della presentazione
+
+Lo stile selezionato guida sia l'HTML libero sia le illustrazioni AI:
+
+- **Serio / professionale**: grafica editoriale sobria, palette misurata,
+  allineamenti precisi e illustrazioni raffinate.
+- **Giocoso / colorato**: colori vivaci coordinati, forme morbide o organiche,
+  titoli espressivi, composizioni dinamiche e illustrazioni immaginative.
+- **Fumettoso**: contorni a inchiostro, campiture, ombre grafiche e accenti da fumetto.
+
+Il LLM sceglie palette, font e impaginazione concrete nella scaletta, poi applica
+questa direzione a ogni pagina e al piano immagini. Non viene imposto un template.
+Anche la ricreazione di una singola pagina riceve lo stile del deck. Le preferenze
+esplicite nel prompt (per esempio fotografie o una palette precisa) restano valide.
+Figure originali da PC e RAG non vengono ridisegnate. Per applicare lo stile alle
+immagini già generate occorre una nuova generazione: la modifica di una singola
+slide conserva le immagini esistenti.
+
 Il flusso delle presentazioni resta invariato quando **Illustrazioni AI · tutte insieme**
 è disattivato (impostazione iniziale). Documenti, figure RAG e allegati continuano
 a essere disponibili al LLM.

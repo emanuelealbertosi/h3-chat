@@ -5,6 +5,7 @@ import time
 from .downloads import Cancelled
 from .slides import PREFIX,FORMATS,encode,validate_content
 from .slide_html import BRIEF,source,validate
+from .slide_style import brief as style_brief
 
 
 def enqueue(app,chat_id,body):
@@ -40,7 +41,7 @@ def build(app,job,payload,settings,model,cancel,stage,log_path,meta):
     room=budget(settings,[])
     sources='\n\n'.join(f"[{s['citation']}] {s['name']} · {s['location']}\n{s['text']}" for s in meta.get('rag_sources',[]))
     images=[{'asset_id':m['id'],'description':m['name']} for m in media if m['mime'].startswith('image/')]
-    request=[{'role':'system','content':settings['system_prompt']+'\n'+BRIEF},
+    request=[{'role':'system','content':settings['system_prompt']+'\n'+BRIEF+'\n'+style_brief(deck.get('design','professional'))},
         {'role':'user','content':payload['prompt']+'\nModifica esclusivamente questa pagina. Rispetta le fonti e lo stile della presentazione.\n'+
          f"Pagina {index+1}/{len(deck['pages'])}, viewport {FORMATS[deck['format']]}. Titolo: {page['title']}\n"+
          'Stile: '+json.dumps({k:deck.get(k,'') for k in ('visual_direction','design','detail')},ensure_ascii=False)+'\n'+

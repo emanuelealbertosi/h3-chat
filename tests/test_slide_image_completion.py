@@ -110,3 +110,23 @@ class SlideImageCompletionTests(unittest.TestCase):
                 images.assert_not_called()
                 stop.assert_not_called()
                 reload.assert_not_called()
+
+    def test_style_reaches_planner_and_actual_image_prompts_for_tags_and_prose(self):
+        for remote in (False,True):
+            for architecture in ('anima','flux2'):
+                for design,cue in (('professional','professional editorial visual style'),
+                                   ('playful','playful visual style'),('comic','comic book visual style')):
+                    with self.subTest(remote=remote,architecture=architecture,design=design):
+                        self.image['architecture']=architecture
+                        self.settings['_slides']['design']=design
+                        _,images,_,_,_=self.run_plan(remote)
+                        request=self.server.calls[-1]['messages'][-1]['content']
+                        self.assertIn('STILE VISIVO:',request)
+                        self.assertIn('Ogni prompt deve essere autosufficiente',request)
+                        for call in images.call_args_list:
+                            prompt=call.args[2]
+                            self.assertIn(cue,prompt)
+                            self.assertTrue(prompt.startswith('colorful illustration, '))
+                            self.assertEqual('\nVisual direction:' in prompt,architecture=='flux2')
+                        # The style does not add a second planning call or another image batch.
+                        self.assertEqual(images.call_count,2)

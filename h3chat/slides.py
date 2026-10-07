@@ -368,6 +368,8 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     from .slide_html import BRIEF as HTML_BRIEF
     base[0]['content']+='\n'+(HTML_BRIEF if opts['engine']=='llm' else BRIEF)
     base[0]['content']+='\nOPZIONI DELLA PRESENTAZIONE: '+json.dumps({k:opts.get(k,default) for k,default in (('design','professional'),('detail','concise'))},ensure_ascii=False)+'. detail=full richiede testi e spiegazioni completi, non una lista di headline.'
+    from .slide_style import brief as style_brief
+    base[0]['content']+='\n'+style_brief(opts.get('design','professional'))
     base[-1]['content']+='\nCATALOGO IMMAGINI:\n'+catalog+'\nFONTI CITABILI:\n'+json.dumps(references,ensure_ascii=False)
     planning=settings|{'think_level':'off','temperature':.2,'max_tokens':min(settings['max_tokens'],max(768,min(3500,384+opts['count']*96))),
                        'llm_timeout':min(settings.get('llm_timeout',1800),300)}
@@ -378,7 +380,7 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
         outline_schema['properties']['visual_direction']=TEXT
         outline_schema['required'].append('visual_direction')
     request=base+[{'role':'user','content':f"Progetta esattamente {opts['count']} slide, formato {opts['format']}. Solo titolo della presentazione e scaletta con titolo/obiettivo di ogni pagina. Rispetta la richiesta e le fonti già fornite."}]
-    if opts['engine']=='llm':request[-1]['content']+=' In visual_direction progetta una direzione artistica coerente: palette con contrasti leggibili, font di sistema, ritmo dei layout e trattamento delle immagini. Niente template di card ripetute.'
+    if opts['engine']=='llm':request[-1]['content']+=' In visual_direction rendi concreto lo STILE VISIVO scelto: indica palette con colori, font e gerarchie, forme, ritmo dei layout e trattamento delle immagini. Non usare una direzione generica intercambiabile tra serio, giocoso e fumettoso. Niente template di card ripetute.'
     started=time.monotonic();last=0
     def plan_progress(text):
         nonlocal last

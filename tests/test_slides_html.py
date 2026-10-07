@@ -8,7 +8,33 @@ from h3chat.slides import PREFIX, options,validate_content,encode,edit_options
 class HTMLTests(fixtures.GenerationTests):
     # Reuse fixture methods, not the declarative engine's test cases.
     def enqueue(self,prompt='Crea 2 slide con testi completi',**body):
-        return super().enqueue(prompt,**(body|{'slides':{'engine':'llm','design':'playful'}}))
+        return super().enqueue(prompt,**(body|{'slides':{'engine':'llm','design':'playful'}|body.get('slides',{})}))
+
+    def test_selected_style_reaches_outline_and_every_free_html_page(self):
+        instructions={}
+        for design,cue in (('professional','palette misurata'),('playful','forme morbide o organiche'),('comic','contorni a inchiostro')):
+            with self.subTest(design=design):
+                job=self.enqueue('Crea 2 slide sul polimorfismo',slides={'design':design});calls=[]
+                def complete(messages,settings,cancel,**kw):
+                    calls.append(messages[0]['content'])
+                    self.assertIn(cue,messages[0]['content'])
+                    self.assertIn('HTML e CSS ORIGINALI',messages[0]['content'])
+                    self.assertIn('nessun template obbligatorio',messages[0]['content'])
+                    if kw.get('schema'):
+                        self.assertIn('Non usare una direzione generica intercambiabile',messages[-1]['content'])
+                        return json.dumps({'title':'Corso','visual_direction':'Direzione scelta dal LLM',
+                            'slides':[{'title':t,'purpose':'Spiega il concetto'} for t in ('A','B')]}),'stop'
+                    self.assertIn('Direzione scelta dal LLM',messages[-1]['content'])
+                    return '<main><h1>Composizione libera del modello</h1></main>','stop'
+                with patch.object(self.app.engine,'require_model',return_value=self.model),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete):
+                    self.app.execute_job(job,threading.Event())
+                answer=self.app.store.messages(job['chat_id'])[-1]
+                self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
+                deck=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4])
+                self.assertEqual(deck['design'],design)
+                self.assertTrue(all(p['html']=='<main><h1>Composizione libera del modello</h1></main>' for p in deck['pages']))
+                self.assertEqual(len(calls),3);instructions[design]=calls[0]
+        self.assertEqual(len(set(instructions.values())),3)
 
     def test_html_is_streamed_verbatim_and_no_page_schema_or_layout_nodes(self):
         job=self.enqueue();self.job=job;calls=[]

@@ -6,6 +6,7 @@ from .downloads import Cancelled
 from .image_options import options as image_options
 from .visual_routing import assistant_format
 from .loras import for_model as loras_for_model
+from .slide_style import brief as style_brief,image_prompt
 
 
 def create(app,job,outline,history,settings,model,cancel,stage,log_path,meta):
@@ -19,7 +20,9 @@ def create(app,job,outline,history,settings,model,cancel,stage,log_path,meta):
         'required':['images'],'additionalProperties':False}
     request=history+[{'role':'user','content':'Prepara in UNA risposta tutte le immagini della presentazione. Massimo una per slide. Se l’utente chiede una immagine per ogni slide, pianificale per tutte; altrimenti ometti quelle dove non aiutano.\n'+
         'Scaletta: '+json.dumps(outline,ensure_ascii=False)+'\nStile: '+opts.get('design','professional')+'\n'+
+        style_brief(opts.get('design','professional'))+'\n'+
         'Il campo prompt deve contenere '+style+'. description è una breve descrizione italiana dell’illustrazione.\n'+
+        'Ogni prompt deve essere autosufficiente: traduci in inglese lo stile visivo e la direzione artistica della scaletta, includendo palette, trattamento e composizione coerenti. Il motore immagini non vede questa conversazione: non scrivere soltanto «come le slide» o un soggetto senza stile. Mantieni una stessa famiglia visiva per tutte le illustrazioni, variando soggetti e composizione.\n'+
         'Genera illustrazioni, scene o metafore pertinenti. Nessun testo piccolo, grafico numerico, formula o citazione dentro immagini: questi saranno HTML/SVG precisi. Non attribuire valore documentale alle illustrazioni generate.'}]
     planning=settings|{'think_level':'off','temperature':.3,'max_tokens':min(settings['context']//2,settings['prompt_max_tokens'],max(1024,len(outline['slides'])*240))}
     label='Slide · piano unico delle illustrazioni · '+image_model['name'];last=0
@@ -39,6 +42,7 @@ def create(app,job,outline,history,settings,model,cancel,stage,log_path,meta):
             raise ValueError('Il piano immagini contiene una slide non valida o ripetuta.')
         for key,limit in (('prompt',4000),('description',800)):
             if not isinstance(item.get(key),str) or not item[key].strip() or len(item[key])>limit:raise ValueError('Descrizione immagine non valida.')
+        item['prompt']=image_prompt(item['prompt'],opts.get('design','professional'),form)
         seen.add(item['slide'])
     meta['slide_image_plan']=plan
     tuning=settings|{'memory_policy':'on_demand','ram_cache_gb':0,'_image_model':image_model['id'],
