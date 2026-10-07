@@ -1,6 +1,6 @@
 # Slide AI e voce naturale
 
-Il flusso delle presentazioni resta invariato quando **Immagini AI · tutte insieme**
+Il flusso delle presentazioni resta invariato quando **Illustrazioni AI · tutte insieme**
 è disattivato (impostazione iniziale). Documenti, figure RAG e allegati continuano
 a essere disponibili al LLM.
 
@@ -15,7 +15,7 @@ prima. Le fonti RAG già utilizzate e le immagini del deck vengono conservate.
 
 ## Illustrazioni opzionali
 
-Quando selezioni **Strumenti → Slide**, puoi attivare **Immagini AI · tutte insieme**
+Quando selezioni **Slide**, puoi attivare **Illustrazioni AI · tutte insieme**
 e scegliere un modello immagini disponibile, oppure quello predefinito in admin.
 Si usano i suoi parametri di generazione configurati nelle Preferenze.
 
@@ -30,6 +30,22 @@ Non è un batch di immagini simultanee sulla GPU: ciascuna viene generata da sol
 per contenere la memoria. Il piano può omettere illustrazioni non utili, con al
 massimo una per slide. Grafici numerici, formule e diagrammi precisi restano
 HTML/SVG. Le illustrazioni generate non vengono presentate come prove documentali.
+Per chiedere una figura per ciascuna pagina, scrivi «una immagine per ogni slide»
+nel prompt. «Tutte insieme» indica che la generazione avviene in un solo ciclo
+di caricamento del modello, non che ogni pagina debba avere una fotografia.
+Ogni pagina riceve gli identificativi delle illustrazioni assegnate; se l’HTML
+le omette viene richiesta una sola correzione al LLM, senza rigenerare le immagini.
+Se vengono ancora omesse, il canvas mostra un avviso sulla pagina interessata.
+
+## Figure entro la pagina
+
+L’HTML mantiene il layout libero del LLM. Se una griglia o un contenitore flex
+sborda a causa delle dimensioni minime intrinseche, il visualizzatore rilassa
+solo questi vincoli. Le immagini troppo grandi vengono limitate preservandone
+le proporzioni; il viewBox dei diagrammi include le etichette fuori dai bordi.
+Le stesse correzioni si applicano alle presentazioni già create e agli export.
+Non vengono scelti nuovi template o ridotti i caratteri. Se rimane troppo testo
+o un altro tipo di sbordamento, resta visibile l’avviso per correggere la pagina.
 
 ## Espressività Voice
 

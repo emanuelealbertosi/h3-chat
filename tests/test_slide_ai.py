@@ -74,14 +74,20 @@ class SlideAITests(unittest.TestCase):
                 self.events.append('image-plan');self.assertIn('tag descrittivi in inglese',messages[-1]['content'])
                 return json.dumps({'images':[{'slide':i,'prompt':'colorful illustration, abstract shapes','description':'Illustrazione '+str(i)} for i in (1,2)]}),'stop'
             self.events.append('html');self.assertEqual(len(generated),2);self.assertTrue(all(image['id'] in str(messages) for image in generated))
-            html='<main><h1>Slide</h1><img data-asset-id="'+generated[0]['id']+'"></main>';kw['on_text'](html);return html,'stop'
+            repair=messages[-1]['content'].startswith('Questa pagina deve usare')
+            index=1 if repair or 'Crea SOLO la pagina 2/' in messages[-1]['content'] else 0
+            figure='' if index==1 and not repair else '<img data-asset-id="'+generated[index]['id']+'">'
+            html='<main><h1>Slide</h1>'+figure+'</main>';kw['on_text'](html);return html,'stop'
         def generate(model,settings,prompt,refs,ident,cancel,stage):
             self.events.append('image');self.assertEqual(settings['memory_policy'],'on_demand');self.assertEqual(settings['ram_cache_gb'],0)
             image={'id':ident,'mime':'image/png','name':'image.png','path':'outputs/'+ident+'/image.png'};generated.append(image);return image
         with patch.object(self.app.engine,'require_model',side_effect=self.model_for),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama') as llm,patch.object(self.app.engine,'generate',side_effect=generate),patch.object(self.app.engine,'completion',side_effect=complete):self.app.execute_job(job,threading.Event())
         answer=self.app.store.messages(chat)[-1];self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
-        self.assertEqual(self.events,['outline','image-plan','image','image','html','html']);self.assertEqual(llm.call_count,2)
+        self.assertEqual(self.events,['outline','image-plan','image','image','html','html','html']);self.assertEqual(llm.call_count,2)
         self.assertEqual(len(answer['meta']['artifact']['media']),2)
+        deck=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4])
+        for index,image in enumerate(generated):self.assertIn(image['id'],deck['pages'][index]['html'])
+        self.assertEqual([item['asset_id'] for item in deck['image_generation']['plan']],[image['id'] for image in generated])
         self.assertFalse(options('').get('generate_images',False))
         with self.assertRaises(ValueError):options('',{'generate_images':'yes'})
 

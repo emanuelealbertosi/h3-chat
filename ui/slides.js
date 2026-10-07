@@ -96,7 +96,10 @@ export async function renderSlides(target,value,options={}){
     const source=options.sources?.find(s=>'#rag-'+s.citation===link.getAttribute('href'));
     if(source&&options.onCitation)link.onclick=e=>{e.preventDefault();options.onCitation(source,options.sources);};
   }
-  const warning=document.createElement('p');warning.className='slide-layout-warning no-export';warning.hidden=frames.length===1;warning.textContent=`Contenuto distribuito in ${frames.length} pagine di continuazione, mantenendo il testo leggibile.`;if(deck.engine==='llm'&&htmlOverflow(frame)){warning.hidden=false;warning.textContent='Un elemento supera i bordi della slide. Puoi correggerlo con Modifica grafica o chiedere al modello di adattare la pagina.';}target.append(warning);
+  const warning=document.createElement('p');warning.className='slide-layout-warning no-export';const notices=[];
+  if(frames.length>1)notices.push(`Contenuto distribuito in ${frames.length} pagine di continuazione, mantenendo il testo leggibile.`);
+  if(deck.engine==='llm'&&htmlOverflow(frame))notices.push('Un elemento supera i bordi della slide. Puoi correggerlo con Modifica grafica o chiedere al modello di adattare la pagina.');
+  if(page.image_warning)notices.push(page.image_warning);warning.hidden=!notices.length;warning.textContent=notices.join(' ');target.append(warning);
   const resize=()=>{const scale=Math.max(.1,(viewport.clientWidth||600)/1280);let top=0;for(const f of frames){f.style.position='absolute';f.style.top=top+'px';f.style.transform='scale('+scale+')';top+=f.offsetHeight*scale+16;}viewport.style.height=top+'px';};resize();const observer=new ResizeObserver(resize);observer.observe(viewport);observerByTarget.set(target,observer);
   if(selected.editing&&options.editable&&deck.engine==='llm')mountHtmlEditor(target,deck,selected.index,frame,options.onChange,options,value.media);
   if(selected.editing&&options.editable&&deck.engine!=='llm'){const {mountEditor}=await import('./slide-editor.js');mountEditor(target,deck,selected.index,frames,async (content,media)=>{await assertLayouts(deck,media||value.media,options);await options.onChange(content,media);},selected,options,value.media);}

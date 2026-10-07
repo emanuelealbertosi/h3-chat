@@ -407,7 +407,8 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     direction=outline.get('visual_direction','')
     if not isinstance(direction,str):raise ValueError('Direzione artistica delle slide non valida.')
     if opts['engine']=='llm':deck['visual_direction']=direction[:2500]
-    if opts.get('generate_images'):deck['image_generation']={'model':meta['slide_image_model'],'count':len(generated)}
+    if opts.get('generate_images'):deck['image_generation']={'model':meta['slide_image_model'],'count':len(generated),
+        'plan':[{k:item[k] for k in ('slide','asset_id','description')} for item in meta['slide_image_plan']]}
     def publish():
         content=encode(deck)
         meta['artifact']={'title':deck['title'],'content':content,'media':assets}
@@ -418,11 +419,13 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
         if cancel.is_set(): raise Cancelled()
         deck['active']=index; page['status']='writing'; publish(); stage(f"Slide · {index+1}/{len(pages)} · {page['title']}")
         if opts['engine']=='llm':
-            from .slide_html import source,validate
+            from .slide_html import source,validate,include_planned_images
             previous=pages[index-1].get('html','') if index else ''
             previous=previous[:max(800,min(4000,budget(settings,history)//4))]
             request=base+([{'role':'assistant','content':previous}] if previous else [])+[{'role':'user','content':f"Crea SOLO la pagina {index+1}/{len(pages)}: {page['title']}\nObiettivo: {page['purpose']}\nViewport {FORMATS[opts['format']][0]}x{FORMATS[opts['format']][1]} px.\nSequenza completa: "+json.dumps(outline['slides'],ensure_ascii=False)+"\nMantieni coerenza con la pagina precedente, ma inventa una composizione adatta a questo contenuto. Restituisci subito HTML e CSS completi."}]
             request[-1]['content']+='\nDirezione artistica: '+deck['visual_direction']
+            planned=[{'id':item['asset_id'],'description':item['description']} for item in meta.get('slide_image_plan',[]) if item['slide']==index+1]
+            if planned:request[-1]['content']+='\nIllustrazioni già generate PER QUESTA PAGINA: '+json.dumps(planned,ensure_ascii=False)+'\nIncludile tutte come <img data-asset-id="ID">, conservando le proporzioni e i limiti della pagina.'
             updated=0
             def stream_html(raw):
                 nonlocal updated
@@ -432,7 +435,8 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
             try:
                 raw,finish=app.engine.completion(request,settings,cancel,on_text=stream_html)
                 if finish=='length':raise ValueError(f'Slide {index+1} incompleta: aumenta Max token. Anteprima conservata.')
-                page['html']=validate(raw)
+                page['html'],missing=include_planned_images(app.engine,request,settings,cancel,validate(raw),planned,stream_html,stage,index+1)
+                if missing:page['image_warning']='Il modello non ha inserito tutte le illustrazioni previste per questa pagina. Puoi aggiungerle con Modifica grafica.'
                 page['sources']=[r['id'] for r in references if '['+r['id']+']' in page['html']]
                 page['status']='ready';publish()
             except Exception:

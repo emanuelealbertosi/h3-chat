@@ -1,6 +1,7 @@
 import DOMPurify from 'dompurify';
 import renderMath from 'katex/contrib/auto-render';
 import {editHtmlSlide} from './slide-html-editing.js';
+import {contentOverflows,fitMediaBounds} from './slide-html-bounds.js';
 import {parseColor,composite,contrastRatio,readableColor,colorHex} from './color-contrast.js';
 
 const heights={'16:9':720,'4:3':960,'16:10':800,'1:1':1280};
@@ -59,12 +60,13 @@ export async function htmlPage(deck,page,index,media,mount){
   // Local bundled math CSS is trusted and does not enable generated scripts.
   if(doc.querySelector('.katex')){const style=document.createElement('style');style.dataset.h3Trusted='';style.textContent=await localMathCSS();doc.head.append(style);await doc.fonts.ready;}
   readableText(doc);
+  if(fitMediaBounds(doc,height))frame.dataset.layoutAdjusted='true';
   sessions.set(frame,{iframe,doc});return frame;
 }
 
 export function htmlOverflow(frame){
   const doc=sessions.get(frame)?.doc;if(!doc)return false;
-  return [...doc.body.querySelectorAll('*')].some(e=>{if(e.closest('style,[data-h3-editor]')||e.closest('svg')&&e.tagName.toLowerCase()!=='svg')return false;const b=e.getBoundingClientRect();return b.right>1282||b.bottom>frame.offsetHeight+2||b.left< -2||b.top< -2;});
+  return contentOverflows(doc,frame.offsetHeight);
 }
 
 export function flattenHtml(frame){

@@ -17,7 +17,7 @@ def create(app,job,outline,history,settings,model,cancel,stage,log_path,meta):
         'items':{'type':'object','properties':{'slide':{'type':'integer','minimum':1,'maximum':len(outline['slides'])},
              'prompt':{'type':'string'},'description':{'type':'string'}},'required':['slide','prompt','description'],'additionalProperties':False}}},
         'required':['images'],'additionalProperties':False}
-    request=history+[{'role':'user','content':'Prepara in UNA risposta tutte le immagini della presentazione. Massimo una per slide; ometti quelle dove non aiutano.\n'+
+    request=history+[{'role':'user','content':'Prepara in UNA risposta tutte le immagini della presentazione. Massimo una per slide. Se l’utente chiede una immagine per ogni slide, pianificale per tutte; altrimenti ometti quelle dove non aiutano.\n'+
         'Scaletta: '+json.dumps(outline,ensure_ascii=False)+'\nStile: '+opts.get('design','professional')+'\n'+
         'Il campo prompt deve contenere '+style+'. description è una breve descrizione italiana dell’illustrazione.\n'+
         'Genera illustrazioni, scene o metafore pertinenti. Nessun testo piccolo, grafico numerico, formula o citazione dentro immagini: questi saranno HTML/SVG precisi. Non attribuire valore documentale alle illustrazioni generate.'}]
