@@ -6,6 +6,13 @@ from tests import test_slides as fixtures
 from h3chat.slides import PREFIX, options,validate_content,encode,edit_options
 
 class HTMLTests(fixtures.GenerationTests):
+    def test_html_response_wrapper_is_not_rendered_as_slide_text(self):
+        from h3chat.slide_html import validate
+        html='<style>body{color:white}</style><main><h1>Una storia</h1><p>Testo completo.</p></main>'
+        self.assertEqual(validate('Ecco la scena richiesta:\n```html\n'+html+'\n```\nSpiegazione della regia.'),html)
+        self.assertEqual(validate('Ecco la scena richiesta:\n'+html),html)
+        self.assertEqual(validate(html),html)
+
     # Reuse fixture methods, not the declarative engine's test cases.
     def enqueue(self,prompt='Crea 2 slide con testi completi',**body):
         return super().enqueue(prompt,**(body|{'slides':{'engine':'llm','design':'playful'}|body.get('slides',{})}))

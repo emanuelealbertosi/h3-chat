@@ -1,5 +1,14 @@
 # H3-Chat
 
+**Infografica** crea grafica HTML/CSS originale dal prompt, dagli allegati e dal
+RAG, con formato verticale 9:16 iniziale. Può generare le illustrazioni in un
+solo batch, comporre voce e musica e produrre un MP4 con effetti, transizioni
+e angoli dritti o arrotondati. Nel canvas puoi modificare grafica, immagini e
+tempi, quindi riesportare il video conservando gli audio.
+**Galleria** raccoglie file caricati, documenti importati nel RAG, risultati
+generati ed esportazioni, riutilizzabili in tutte le modalità e separati per account.
+[Guida a infografiche e galleria](docs/infographics-and-gallery.md).
+
 **Voice** genera letture, lezioni e riassunti con Higgs Audio v3 nel motore
 integrato. Modello, codec, campioni vocali, CPU/GPU e interpretazione si
 configurano dal Setup. **Voice + Manim** crea copione, voce e diagrammi animati

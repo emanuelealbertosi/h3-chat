@@ -12,11 +12,16 @@ def uid():return uuid4().hex
 DEFAULTS={'voice_model_path':'','voice_codec_path':'','voice_device':'gpu','voice_precision':'8bit',
  'voice_temperature':.8,'voice_chunk_chars':280,'voice_pause_ms':220,'voice_auto':True,
  'voice_gender':'female','voice_pitch':'normal','voice_speed':'normal','voice_emotion':'neutral',
- 'voice_expressiveness':'natural',
+ 'voice_expressiveness':'natural','voice_delivery':'custom','voice_seed':-1,'voice_speed_factor':1.0,
  'voice_references':{'female':{'path':'','transcript':''},'male':{'path':'','transcript':''}}}
 FIELDS={'gender':('female','male'),'pitch':('normal','low','high'),'speed':('normal','slow','fast'),
  'emotion':('neutral','affection','enthusiasm','contemplation','determination','sadness'),
- 'expressiveness':('natural','low','high'),'mode':('read','compose')}
+ 'expressiveness':('natural','low','high'),'mode':('read','compose'),'delivery':('custom','serious','lively','spot','warm','radio')}
+DELIVERIES={'serious':{'emotion':'determination','expressiveness':'low','speed':'normal','temperature':.65},
+ 'lively':{'emotion':'enthusiasm','expressiveness':'high','speed':'normal','temperature':.75},
+ 'spot':{'emotion':'enthusiasm','expressiveness':'high','speed':'fast','temperature':.8},
+ 'warm':{'emotion':'affection','expressiveness':'high','speed':'normal','temperature':.7},
+ 'radio':{'emotion':'enthusiasm','expressiveness':'high','speed':'normal','temperature':.7}}
 DEFAULTS.update(voice_engines.DEFAULTS)
 FIELDS['engine']=tuple(voice_engines.ENGINES)
 
@@ -96,6 +101,9 @@ def validate(settings):
     for k,lo,hi in (('voice_chunk_chars',100,600),('voice_pause_ms',0,2000)):
         if type(settings[k]) is not int or not lo<=settings[k]<=hi:raise ValueError('Parametro Voice non valido: '+k)
     temp=settings['voice_temperature']
+    if type(settings['voice_seed']) is not int or not -1<=settings['voice_seed']<=2147483647:raise ValueError('Seed Higgs: -1 mantiene il seed del campione; oppure da 0 a 2147483647.')
+    pace=settings['voice_speed_factor']
+    if type(pace) not in (int,float) or not math.isfinite(pace) or not .9<=pace<=1.15:raise ValueError('Ritmo Higgs: da 0,90 a 1,15.')
     if type(temp) not in (int,float) or not math.isfinite(temp) or not .1<=temp<=1.5:raise ValueError('Temperatura Voice: da 0,1 a 1,5.')
     for k,kind in (('voice_model_path','tts'),('voice_codec_path','codec')):
         if not isinstance(settings[k],str):raise ValueError('Percorso Voice non valido.')
@@ -118,6 +126,9 @@ def route(history,settings):
 
 def controls(settings,prompt):
     value={k:settings['voice_'+k] for k in FIELDS if k!='mode'}|{k:v for k,v in settings.get('_voice_fields',{}).items() if k!='params'}
+    delivery=DELIVERIES.get(value.get('delivery'),{})
+    for key in ('emotion','expressiveness','speed'):
+        if key in delivery and key not in settings.get('_voice_fields',{}):value[key]=delivery[key]
     # In verbatim reading, the supplied speech is data, not acting instructions.
     prompt=re.split(r'\b(?:testo|text)\s*:',prompt,maxsplit=1,flags=re.I)[0]
     if 'gender' not in settings.get('_voice_fields',{}):
@@ -153,7 +164,9 @@ def configuration(root,settings,prompt):
     model_path=resolve_model(settings['voice_model_path']);codec=resolve_model(settings['voice_codec_path'],'codec')
     choice,acting=controls(settings,prompt);ref=settings['voice_references'][choice['gender']]
     if not ref['path'] or not Path(ref['path']).is_file():raise ValueError('Configura un campione per questa voce nel Setup → Voice.')
-    cfg={'engine':'higgs','model_path':model_path,'codec_path':codec,'device':'cuda' if settings['voice_device']=='gpu' else 'cpu','precision':settings['voice_precision'],'temperature':settings['voice_temperature'],'pause_ms':settings['voice_pause_ms']}
+    cfg={'engine':'higgs','model_path':model_path,'codec_path':codec,'device':'cuda' if settings['voice_device']=='gpu' else 'cpu','precision':settings['voice_precision'],'temperature':settings['voice_temperature'],'pause_ms':settings['voice_pause_ms'],'seed':settings['voice_seed'],'speed_factor':settings['voice_speed_factor']}
+    if choice.get('delivery') in DELIVERIES:cfg['temperature']=DELIVERIES[choice['delivery']]['temperature']
+    if choice.get('delivery')=='radio':cfg.update(seed=734,pause_ms=150,speed_factor=1.08)
     return cfg,choice,acting,{'id':reference_identity(ref['path'],choice['gender']),'reference':ref['path'],'transcript':ref['transcript']}
 
 def synthesize(app,folder,parts,settings,prompt,cancel,stage,log,meta):
@@ -161,17 +174,23 @@ def synthesize(app,folder,parts,settings,prompt,cancel,stage,log,meta):
     segments=[]
     for part in parts:
         phrases=[part['text']]
-        if part.get('sentence_cues'):
+        if part.get('sentence_cues') or (cfg['engine']=='higgs' and choice.get('delivery')=='radio'):
             ends=[m.end() for m in re.finditer(r'[.!?][”"\']?\s+(?=\S)',part['text'])]
             points=[0,*ends,len(part['text'])];phrases=[part['text'][a:b] for a,b in zip(points,points[1:])]
         for text in [chunk for phrase in phrases for chunk in split_text(phrase,cfg.get('chunk_chars',settings['voice_chunk_chars']))]:
-            if text.strip():segments.append({'text':text,'spoken':apply_direction(text,acting['prefix']) if cfg['engine']=='higgs' else text,'voice':voice,'scene_id':part.get('scene_id')})
+            if text.strip():
+                segment={'text':text,'spoken':apply_direction(text,acting['prefix']) if cfg['engine']=='higgs' else text,'voice':voice,'scene_id':part.get('scene_id')}
+                if cfg['engine']=='higgs' and choice.get('delivery')=='radio':
+                    index=len(segments);mood=('enthusiasm','affection','pride','determination')[index%4]
+                    segment.update(spoken=apply_direction(text,'<|emotion:'+mood+'|><|prosody:expressive_high|>'),speed_factor=(1.08,1.12)[index%2],seed=734,temperature=.7)
+                segments.append(segment)
     folder=Path(folder);folder.mkdir(parents=True,exist_ok=True)
     (folder/'testo-voce.txt').write_text('\n\n'.join(p['text'] for p in parts),encoding='utf-8')
     if settings.get('memory_policy')!='resident':stage('Voice · rilascio modelli prima della sintesi');app.engine.stop()
     result=app.engine.tool_call('voice-worker.py',{'config':cfg,'segments':segments,'output':str(folder)},cancel,stage,log,timeout=14400)
     meta.update(voice_engine=cfg['engine'],voice_model=Path(cfg['model_path']).name,voice_identity=voice['id'],voice_reference=Path(voice['reference']).name,voice_controls=choice,voice_tags=acting['tags'] if cfg['engine']=='higgs' else [],voice_duration=result['duration'],voice_device=cfg['device'],assistant_on=settings.get('_assistant',True))
-    if cfg['engine']!='higgs':meta['voice_parameters']={k:cfg[k] for k in voice_engines.PARAMS[cfg['engine']]}
+    meta['voice_parameters']={k:cfg[k] for k in (('temperature','seed','speed_factor','pause_ms') if cfg['engine']=='higgs' else voice_engines.PARAMS[cfg['engine']])}
+    if cfg['engine']=='higgs' and choice.get('delivery')=='radio':meta['voice_parameters']['segment_speed_factors']=[s['speed_factor'] for s in segments]
     if cfg['device']=='cpu':meta['device_warning']='La sintesi vocale sulla CPU può richiedere molto tempo e molta RAM.'
     return result,[{'id':uid(),'name':name,'mime':mime,'path':(folder/name).resolve().relative_to(app.data.resolve()).as_posix()} for name,mime in [('voce.wav','audio/wav'),('testo-voce.txt','text/plain'),('voce.srt','application/x-subrip')]]
 

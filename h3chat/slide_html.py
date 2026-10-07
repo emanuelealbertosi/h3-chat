@@ -34,11 +34,15 @@ iframe, eventi, link attivi, animation infinita o video. HTML statico completo.
 '''
 
 def source(raw):
+    if not isinstance(raw,str):raise ValueError('Il modello non ha restituito una pagina HTML valida.')
     raw=raw.strip()
+    fenced=re.search(r'```(?:html)?[ \t]*\r?\n([\s\S]*?)```',raw,re.I)
+    if fenced:return fenced[1].strip()
     if raw.startswith('```'):
         raw=re.sub(r'^```(?:html)?\s*\n?', '', raw, count=1)
         raw=re.sub(r'\n?```\s*$', '', raw, count=1)
-    return raw
+    start=re.search(r'<(?:!doctype\b|html\b|style\b|body\b|div\b|main\b|section\b|article\b|h[1-6]\b|p\b|svg\b)',raw,re.I)
+    return raw[start.start():] if start else raw
 
 def validate(raw):
     html=source(raw)

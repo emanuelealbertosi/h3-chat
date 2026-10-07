@@ -1,7 +1,11 @@
 H3-Chat includes open-source components with their own licenses.
 
 Document import includes pinned pypdf, python-docx, lxml, pypdfium2/PDFium,
-Pillow and typing-extensions wheels. Speech transcription optionally installs
+Pillow, NumPy and typing-extensions wheels. Infographic rendering uses the
+private PyAV (BSD-3-Clause), NumPy (BSD-3-Clause) and Pillow (MIT-CMU) packages;
+their original notices remain in the installed wheel folders. Microsoft Edge
+is provided by Windows and is not redistributed by H3-Chat.
+Speech transcription optionally installs
 Faster Whisper, CTranslate2, PyAV, ONNX Runtime and their pinned dependencies.
 Upstream provenance is in scripts/tools-sources.json; original licenses/notices
 remain in runtime/tools package folders. Private Microsoft CRT files retain

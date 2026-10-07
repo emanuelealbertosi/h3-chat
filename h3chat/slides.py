@@ -298,6 +298,9 @@ def validate_content(content, media):
     deck=json.loads(content[len(PREFIX):-4]); assets={m['id'] for m in media if m['mime'].startswith('image/')}
     if not isinstance(deck, dict) or deck.get('version')!=1 or deck.get('format') not in FORMATS or not isinstance(deck.get('pages'), list) or not 1<=len(deck['pages'])<=30:
         raise ValueError('Presentazione non valida.')
+    if deck.get('infographic'):
+        from .infographics import validate_motion
+        validate_motion(deck)
     if deck.get('engine','deterministic') not in ('llm','deterministic'):raise ValueError('Motore slide non valido.')
     if deck.get('theme','lagoon') not in THEMES or deck.get('typography','modern') not in TYPOGRAPHY:raise ValueError('Tema slide non valido.')
     if deck.get('design','professional') not in DESIGNS or deck.get('detail','concise') not in ('concise','full'):raise ValueError('Stile o dettaglio slide non valido.')

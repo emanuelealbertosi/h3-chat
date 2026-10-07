@@ -279,6 +279,7 @@ class Knowledge:
                 path.replace(target)
             source_id=existing['id'] if existing else uid()
             self.store.execute('INSERT OR IGNORE INTO project_sources(id,project_id,path,name) VALUES (?,?,?,?)',(source_id,ident,str(target),label))
+            self.store.gallery.register([{'id':source_id,'name':name,'path':target.relative_to(self.data).as_posix()}],'uploaded')
         if not defer:self.refresh(ident)
         return {'id':source_id,'name':name,'duplicate':duplicate}
     def add(self,ident,body):

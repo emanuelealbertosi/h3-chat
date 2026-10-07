@@ -28,7 +28,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  // Keep existing controls and their request semantics; only their presentation changes.
  const auto=button('✦ Automatico','prompt-auto'),images=button('▧ Immagini','prompt-images');modes.append(auto,images);
  for(const id of ['music-toggle','video-toggle','voice-toggle']){const item=$('#'+id);item.className='prompt-choice';modes.append(item);}
- const tools=new Map([['slides',button('▥ Slide','prompt-slides')],['manim',button('⌁ Manim','prompt-manim')],['calculate',button('∑ Calcolo','prompt-calculate')]]);
+ const tools=new Map([['slides',button('▥ Slide','prompt-slides')],['infographic',button('✧ Infografica','prompt-infographic')],['manim',button('⌁ Manim','prompt-manim')],['calculate',button('∑ Calcolo','prompt-calculate')]]);
  for(const item of tools.values())modes.append(item);
  const transcribe=$('#transcribe-toggle');transcribe.className='prompt-choice';modes.append(transcribe);
  const reset=()=>visualControls.set({...visualControls.read(),image_model:'',music:false,video:false,voice:false,transcribe:false});
@@ -75,7 +75,8 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
   auto.setAttribute('aria-pressed',String(mode==='auto'&&!value.image_model&&!value.music&&!value.video&&!value.voice&&!value.transcribe));images.setAttribute('aria-pressed',String(!!value.image_model));
   for(const [name,item] of tools)item.setAttribute('aria-pressed',String(mode===name));
   imagePanel.hidden=!value.image_model;slides.hidden=mode!=='slides';slideTechnical.hidden=mode!=='slides';generatedModels.hidden=!$('#slides-generate-images').checked;
-  voiceMode.hidden=!!value.voice&&mode==='manim';context.hidden=!(mode==='slides'||mode==='manim'||value.image_model||value.voice||value.music||value.video);
+  voiceMode.hidden=!!value.voice&&mode==='manim';context.hidden=!(mode==='slides'||mode==='manim'||mode==='infographic'||value.image_model||value.voice||value.music||value.video);
+  const infographic=document.querySelector('#infographic-options');if(infographic)infographic.hidden=mode!=='infographic';
   assistant.textContent='Assistant '+(value.assistant?'On':'Off');assistant.title='Prepara le istruzioni con il LLM della chat';
   for(const update of mirrors)update();
   const model=state.models.find(m=>m.id===state.settings.chat_model),vision=!state.settings.vision_enabled?'Vision Off':model?.vision?.enabled?'Vision '+(model.api?'API':state.settings.vision_device.toUpperCase()):'Non vision';

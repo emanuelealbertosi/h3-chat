@@ -27,7 +27,17 @@ def run(request):
         with wave.open(str(partial),'wb') as out:
             out.setnchannels(1);out.setsampwidth(2);out.setframerate(rate)
             for index,segment in enumerate(request['segments']):
+                if family=='higgs' and 'temperature' in segment:
+                    temperature=segment['temperature']
+                    if type(temperature) not in (int,float) or not .1<=temperature<=1.5:raise ValueError('Temperatura del segmento non valida.')
+                    engine.temperature=float(temperature)
+                if family=='higgs' and 'seed' in segment:
+                    seed=segment['seed']
+                    if type(seed) is not int or not -1<=seed<=2147483647:raise ValueError('Seed del segmento non valido.')
+                    engine.seed=seed
                 progress(message='sintesi vocale');wav=engine.generate(segment['spoken'],segment['voice'])
+                from h3_voice_tempo import adjust
+                wav=adjust(wav,rate,segment.get('speed_factor',request['config'].get('speed_factor',1)))
                 if not len(wav) or not np.isfinite(wav).all():raise ValueError('Il modello ha prodotto audio vuoto o non valido.')
                 peak=float(np.max(np.abs(wav)))
                 if peak>.98:wav*=.98/peak

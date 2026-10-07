@@ -14,7 +14,7 @@ _conversion_lock=threading.Lock()
 def export_audio(root,data,item,format):
     if format not in ('wav','mp3'):raise ValueError('Scegli WAV oppure MP3.')
     relative=str(item.get('path',''))
-    if not item.get('mime','').startswith('audio/') or not relative.startswith(('uploads/','outputs/')):
+    if not item.get('mime','').startswith('audio/') or not relative.startswith(('uploads/','outputs/','exports/')):
         raise ValueError('Seleziona una traccia audio della chat.')
     source=safe_join(data,relative)
     if source.suffix.lower() not in ('.wav','.mp3','.flac','.ogg') or not source.is_file():

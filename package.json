@@ -1,11 +1,11 @@
 {
   "name": "h3-chat",
-  "version": "0.16.31",
+  "version": "0.17.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "node scripts/build-ui.mjs",
-    "test": "node --test tests/rendering.test.mjs tests/chat-activity.test.mjs"
+    "test": "node --test tests/rendering.test.mjs tests/chat-activity.test.mjs tests/infographic-motion.test.mjs"
   },
   "dependencies": {
     "buffer": "6.0.3",

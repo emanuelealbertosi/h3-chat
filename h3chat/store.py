@@ -104,6 +104,8 @@ class Store:
             db.execute("UPDATE jobs SET status='interrupted',error='Applicazione riavviata. Puoi riprovare.' WHERE status IN ('queued','running')")
         from .canvas_history import CanvasHistory
         self.canvas_history = CanvasHistory(self)
+        from .gallery import Gallery
+        self.gallery = Gallery(self)
 
     @contextmanager
     def connect(self):
@@ -229,6 +231,8 @@ class Store:
         return job_id
 
     def update_answer(self, job, content, status="running", media=None, meta=None):
+        details=meta or {}
+        self.gallery.register((media or [])+details.get('artifact',{}).get('media',[])+details.get('slide_generated_images',[]))
         if status not in ('queued', 'running'):
             value = (meta or {}).get('artifact') or self.canvas_history.message_value(content, media or [], meta or {})
             if value:

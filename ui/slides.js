@@ -5,6 +5,7 @@ import {exportPdf,exportDocx,exportPng} from './exports.js';
 import {layoutSlide} from './slide-layout.js';
 import {validateDesign,applyOverride} from './slide-design.js';
 import {repairSlideContrast} from './slide-contrast.js';
+import {mountInfographic} from './infographics.js';
 
 export const slideFormats={'16:9':720,'9:16':1280*16/9,'4:3':960,'16:10':800,'1:1':1280};
 export function readDeck(content){
@@ -102,6 +103,7 @@ export async function renderSlides(target,value,options={}){
   if(page.image_warning)notices.push(page.image_warning);warning.hidden=!notices.length;warning.textContent=notices.join(' ');target.append(warning);
   const resize=()=>{const scale=Math.max(.1,(viewport.clientWidth||600)/1280);let top=0;for(const f of frames){f.style.position='absolute';f.style.top=top+'px';f.style.transform='scale('+scale+')';top+=f.offsetHeight*scale+16;}viewport.style.height=top+'px';};resize();const observer=new ResizeObserver(resize);observer.observe(viewport);observerByTarget.set(target,observer);
   if(selected.editing&&options.editable&&deck.engine==='llm')mountHtmlEditor(target,deck,selected.index,frame,options.onChange,options,value.media);
+  if(deck.infographic&&page.status==='ready'&&!selected.editing)mountInfographic(target,deck,selected.index,frame,options,value);
   if(selected.editing&&options.editable&&deck.engine!=='llm'){const {mountEditor}=await import('./slide-editor.js');mountEditor(target,deck,selected.index,frames,async (content,media)=>{await assertLayouts(deck,media||value.media,options);await options.onChange(content,media);},selected,options,value.media);}
   const notes=document.createElement('details');notes.className='slide-notes no-export';const summary=document.createElement('summary');summary.textContent='Note e fonti della slide';notes.append(summary);
   const text=document.createElement('p');text.textContent=page.notes||'Nessuna nota.';notes.append(text);

@@ -323,6 +323,7 @@ class Service:
         elif raw.startswith(b'ID3') or len(raw)>2 and raw[0]==255 and raw[1]&224==224:ext,mime='mp3','audio/mpeg'
         elif raw.startswith(b'OggS'):ext,mime='ogg','audio/ogg'
         elif raw.startswith(b'%PDF-'):ext,mime='pdf','application/pdf'
+        elif len(raw)>12 and raw[4:8]==b'ftyp':ext,mime='mp4','video/mp4'
         elif raw.startswith(b'PK\x03\x04') and str(body.get('name','')).lower().endswith('.pptx'):
             try:
                 from .manim_presentation import PPTX
@@ -341,9 +342,11 @@ class Service:
             except zipfile.BadZipFile:raise ValueError('Documento Word non valido.')
             ext,mime='docx','application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         else:
-            raise ValueError("Usa immagini PNG/JPEG, audio WAV/MP3/FLAC/OGG, PDF, Word .docx oppure PowerPoint .pptx.")
+            if body.get('_gallery_export') and Path(str(body.get('name',''))).suffix.lower() in ('.txt','.md','.py','.json','.tex','.srt','.html','.svg'):
+                raw.decode('utf-8');ext=Path(str(body['name'])).suffix.lower()[1:];mime='application/json' if ext=='json' else 'text/html' if ext=='html' else 'text/plain'
+            else:raise ValueError("Usa immagini PNG/JPEG, audio WAV/MP3/FLAC/OGG, video MP4, PDF, Word .docx oppure PowerPoint .pptx.")
         if mime.startswith('image/') and len(raw)>12*1024**2:raise ValueError('Ogni immagine può occupare al massimo 12 MB.')
-        if ext in ('pdf','docx','pptx') and len(raw)>25*1024**2:raise ValueError('Documenti: massimo 25 MB per file.')
+        if ext in ('pdf','docx','pptx') and len(raw)>(64 if body.get('_gallery_export') else 25)*1024**2:raise ValueError('Documenti: massimo 25 MB per file.')
         image_id = uid()
         relative = f"uploads/{image_id}.{ext}"
         target = safe_join(self.data, relative)
@@ -351,6 +354,7 @@ class Service:
         target.write_bytes(raw)
         result = {"id": image_id, "name": str(body.get("name", "Immagine"))[:150], "path": relative, "mime": mime}
         target.with_suffix(".json").write_text(json.dumps(result), encoding="utf-8")
+        self.store.gallery.register([result],'generated' if body.get('_gallery_export') else 'uploaded')
         return result
 
     def validate_media(self, media, *, canvas=False):
@@ -365,11 +369,14 @@ class Service:
             if meta_path.exists():
                 resolved.append(json.loads(meta_path.read_text(encoding="utf-8")))
             else:
+                registered=self.store.one('SELECT id FROM gallery WHERE id=?',(image_id,))
+                if registered:
+                    found=self.store.gallery.get(image_id)
+                    resolved.append({k:found[k] for k in ('id','name','path','mime')});continue
                 matches = self.store.all("SELECT media FROM messages WHERE role='assistant' AND status='done' UNION ALL SELECT media FROM canvases UNION ALL SELECT media FROM canvas_artifacts")
                 found = next((m for row in matches for m in json.loads(row["media"]) if m["id"] == image_id), None)
                 if not found:
                     raise ValueError("Immagine non trovata.")
-                if not canvas and not str(found.get("mime","")).startswith(('image/','audio/')):raise ValueError("Allega immagini o tracce audio come riferimenti video.")
                 resolved.append(found)
         if not canvas and (sum(x['mime'].startswith('image/') for x in resolved)>9 or sum(x['mime'].startswith('audio/') for x in resolved)>3):raise ValueError('Massimo nove immagini e tre audio.')
         if not canvas and sum(x['mime'].startswith('application/') for x in resolved)>3:raise ValueError('Massimo tre documenti per messaggio.')
@@ -411,7 +418,17 @@ class Service:
             if not isinstance(source_ids,list) or any(not isinstance(x,str) or x not in valid for x in source_ids):raise ValueError('Selezione fonti RAG non valida.')
         settings.update(_rag=rag,_rag_sources=source_ids)
         lab=body.get('lab','auto');source=body.get('lab_source','')
-        if lab not in ('auto','calculate','manim','slides') or not isinstance(source,str) or len(source)>(100000 if lab=='manim' else 20000):raise ValueError('Strumento o sorgente non valido.')
+        if lab not in ('auto','calculate','manim','slides','infographic') or not isinstance(source,str) or len(source)>(100000 if lab=='manim' else 20000):raise ValueError('Strumento o sorgente non valido.')
+        from .infographics import requested as infographic_requested,options as infographic_options
+        infographic_request=lab=='infographic' or (lab=='auto' and not any((selection,music,video,transcribe,voice)) and infographic_requested(prompt))
+        if infographic_request:
+            if source:raise ValueError('Modifica la grafica dell’infografica nel canvas.')
+            if any((selection,music,video,transcribe,voice)):raise ValueError('Usa le opzioni voce, musica e immagini nel pannello Infografica.')
+            lab='infographic';settings['_infographic']=infographic_options(prompt,body.get('infographic'))
+            self.engine.require_model(settings['chat_model'],'chat')
+            inf=settings['_infographic']
+            if inf['images']=='generate':self.engine.require_model(inf['image_model'] or settings['create_model'],'create')
+            if inf['music'] in ('generate','jingle'):self.engine.require_model(settings['music_model'],'music')
         if lab=='slides' and source:raise ValueError('Modifica il sorgente delle slide direttamente nel canvas.')
         current_canvas=self.store.canvas_history.get(chat_id) if body.get('canvas') or slides_requested(prompt) else {}
         editing_slides=slides_edit(prompt,current_canvas.get('content',''))
@@ -435,7 +452,7 @@ class Service:
         from .narrated_manim import requested as narrated_requested
         settings['_manim_voice']=narrated_requested(prompt,settings)
         if settings['_manim_voice'] and not source:self.engine.require_model(settings['chat_model'],'chat')
-        if lab not in ('manim','calculate','slides') and not (lab=='auto' and settings.get('lab_auto',True) and lab_route(prompt)=='manim') and video_route([{'content':prompt}],settings):
+        if lab not in ('manim','calculate','slides','infographic') and not (lab=='auto' and settings.get('lab_auto',True) and lab_route(prompt)=='manim') and video_route([{'content':prompt}],settings):
             from .video_options import prompt_duration
             prompt_duration(prompt,has_audio=any(x['mime'].startswith('audio/') for x in media))
         request_history=[{'content':prompt,'media':media}]
@@ -446,11 +463,11 @@ class Service:
         canvas = body.get("canvas", False)
         if type(canvas) is not bool:
             raise ValueError("Destinazione canvas non valida.")
-        if slide_request:canvas=True
+        if slide_request or infographic_request:canvas=True
         loras=self.loras.capture(body.get('loras',[]),settings['lora_dirs'],self.catalog)
         job_id = self.store.enqueue(chat_id, prompt.strip(), media, settings, canvas, loras)
         self.wake.set()
-        return {"job_id": job_id, "canvas": canvas, "intent": 'slides' if slide_request else None}
+        return {"job_id": job_id, "canvas": canvas, "intent": 'infographic' if infographic_request else 'slides' if slide_request else None}
 
     def regenerate(self, chat_id):
         with self.lock:
@@ -535,7 +552,7 @@ class Service:
             if snapshot:
                 history.insert(-1, {"role":"user", "content":"Canvas attuale da modificare se richiesto:\n" + snapshot["content"],
                                    "media":json.loads(snapshot["media"]), "status":"done", "seq":-1})
-            if settings.get('_lab')=='slides':
+            if settings.get('_lab') in ('slides','infographic'):
                 from .slide_context import compact_history
                 history=compact_history(history)
             log_path = self.data / "logs" / (job["id"] + ".log")
@@ -552,6 +569,12 @@ class Service:
                 text=f"Ho ricreato la slide {settings['_slide_revision']['page']+1} nel canvas."
                 self.store.update_answer(job,text,'done',meta=meta)
                 self.store.execute("UPDATE jobs SET status='done' WHERE id=?",(job['id'],));return
+            if settings.get('_infographic_render'):
+                from .infographics import render_saved
+                meta={'intent':'infographic','canvas':True,'execution_mode':'Standalone · CPU · composizione video'}
+                render_saved(self,job,settings,cancel,stage,log_path,meta)
+                self.store.update_answer(job,'Ho esportato l’infografica aggiornata in MP4.','done',[],meta)
+                self.store.execute("UPDATE jobs SET status='done',stage='Infografica pronta' WHERE id=?",(job['id'],));return
             if settings.get('_api_messages'):
                 model=self.engine.require_model(settings['chat_model'],'chat');self.engine.start_llama(model,settings,log_path,cancel,stage=stage)
                 stage('Server · risposta LLM')
@@ -565,7 +588,7 @@ class Service:
                 project=self.knowledge.project(project_id)
                 settings['system_prompt']+='\nIstruzioni del progetto:\n'+project['instructions']
                 if settings.get('_rag',settings['rag_enabled']):
-                    settings['_rag_overview']=settings.get('_lab')=='slides'
+                    settings['_rag_overview']=settings.get('_lab') in ('slides','infographic')
                     retrieved,rag_mode=self.knowledge.retrieve(project_id,rag_query,settings,cancel,stage,settings.get('_rag_sources'))
                     remaining=retrieval_budget(settings,history)
                     for row in retrieved:
@@ -592,7 +615,7 @@ class Service:
             tool_meta={};transcripts=[];sources=[];transcript_media=[]
             if not selected_route or selected_route['intent']!='video':
                 slide_documents=[]
-                if selected_route and selected_route['intent']=='slides':
+                if selected_route and selected_route['intent'] in ('slides','infographic'):
                     slide_documents=next(([x for x in m['media'] if x['mime'] in ('application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document')] for m in reversed(history) if any(x['mime'] in ('application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document') for x in m['media'])),[])
                 if settings.get('_manim_presentation'):
                     from .manim_presentation import supported as presentation_supported
@@ -601,16 +624,16 @@ class Service:
                     history=[m|{'media':[x for x in m['media'] if not presentation_supported(x)]} for m in history]
                     tool_payload=payload|{'media':[x for x in payload['media'] if not presentation_supported(x)]}
                     history,tool_meta,transcripts,sources=self.engine.prepare_tools(history,tool_payload,settings,cancel,stage,log_path,use_audio=False)
-                else:history,tool_meta,transcripts,sources=self.engine.prepare_tools(history,payload,settings,cancel,stage,log_path)
-                if selected_route and selected_route['intent']=='slides':
+                else:history,tool_meta,transcripts,sources=self.engine.prepare_tools(history,payload,settings,cancel,stage,log_path,use_audio=not (selected_route and selected_route['intent']=='infographic' and settings.get('_infographic',{}).get('music')=='uploaded'))
+                if selected_route and selected_route['intent'] in ('slides','infographic'):
                     from .slide_sources import extract_assets
                     tool_meta['_slide_assets']=extract_assets(self,job,slide_documents,rag_sources,project_id,cancel,stage,log_path)
                 visual_history=history
                 transcript_media=self.engine.transcript_files(transcripts,job['id'])
             from .rag_visual import attach as attach_rag_visuals
-            visual_options=settings if not selected_route or selected_route['intent'] in ('chat','slides','manim','calculate','voice') else settings|{'vision_enabled':False}
+            visual_options=settings if not selected_route or selected_route['intent'] in ('chat','slides','infographic','manim','calculate','voice') else settings|{'vision_enabled':False}
             tool_meta.update(attach_rag_visuals(self,job,history,rag_sources,visual_options))
-            if selected_route and selected_route['intent']=='slides':tool_meta['_slide_assets']=([s['image'] for s in rag_sources if s.get('image')]+tool_meta.get('_slide_assets',[]))[:32]
+            if selected_route and selected_route['intent'] in ('slides','infographic'):tool_meta['_slide_assets']=([s['image'] for s in rag_sources if s.get('image')]+tool_meta.get('_slide_assets',[]))[:32]
             if project_id and settings.get('_rag',settings['rag_enabled']):
                 block='\n\n'.join(f"[{s['citation']}] {s['name']} · {s['location']}\n{s['text']}" for s in rag_sources)
                 history[-1]['content']+='\n\n<fonti_progetto>\n'+(block or 'Nessun estratto pertinente trovato nelle fonti selezionate.')+'\n</fonti_progetto>'
@@ -637,8 +660,8 @@ class Service:
                 meta['model_identity'] = model['identity']
             if model.get('api'):meta['api']=True
             meta.update(tool_meta)
-            role='llm' if intent in ('chat','slides') else 'image' if intent in ('create','edit') else 'asr' if intent=='transcribe' else intent
-            meta['execution_mode']='Server esterno · LLM' if model.get('api') and intent in ('chat','slides') else 'Standalone · '+device_label(settings,role)
+            role='llm' if intent in ('chat','slides','infographic') else 'image' if intent in ('create','edit') else 'asr' if intent=='transcribe' else intent
+            meta['execution_mode']='Server esterno · LLM' if model.get('api') and intent in ('chat','slides','infographic') else 'Standalone · '+device_label(settings,role)
             if intent in ('calculate','manim'):meta['execution_mode']='Standalone · '+('CPU · Interprete numerico' if intent=='calculate' else ('GPU · OpenGL' if settings['manim_device']=='gpu' else 'CPU · Cairo')+' · Manim')
             if role in ('image','music') and device_label(settings,role)=='CPU':meta['device_warning']=CPU_WARNING
             selected_id=route.get('image_model') or settings.get('create_model' if intent=='create' else 'edit_model' if intent=='edit' else intent+'_model')
@@ -665,6 +688,11 @@ class Service:
                     self.save_artifact(job['chat_id'],artifact['title'],'',media);self.store.update_answer(job,'Ho creato la voce nel canvas.','done',[],meta)
                 else:self.store.update_answer(job,'Ecco la voce.','done',media,meta)
                 stage('Voce pronta')
+            elif intent=='infographic':
+                from .infographics import build as build_infographic
+                meta['artifact']=build_infographic(self,job,payload,history,settings,model,cancel,stage,log_path,meta)
+                self.store.update_answer(job,'Ho creato l’infografica nel canvas. Puoi modificarne grafica e animazioni.','done',[],meta)
+                stage('Infografica pronta')
             elif intent=='slides':
                 from .slides import build as build_slides
                 meta['artifact']=build_slides(self,job,payload,history,settings,model,cancel,stage,log_path,meta)

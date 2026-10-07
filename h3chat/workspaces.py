@@ -130,6 +130,8 @@ class Workspaces:
 
 
 def guest_allowed(path,method):
+    if method=='GET' and (path=='/api/gallery' or path.startswith('/gallery-file/')):return True
+    if method=='POST' and path in ('/api/gallery/select','/api/gallery/import'):return True
     if method=='GET':return path.startswith(('/api/chats/','/api/canvas/','/api/projects/','/media/','/exports/')) or path in ('/','/access','/login','/api/state','/api/health') or path.startswith('/static/')
     if path in ('/api/chats','/api/collections','/api/uploads','/api/export/pdf','/api/export/html','/api/export/audio','/api/loras','/api/projects','/api/settings','/api/knowledge/options'):return True
     if path.startswith(('/api/chats/','/api/canvas/','/api/collections/','/api/jobs/','/api/slides/images/')):return True

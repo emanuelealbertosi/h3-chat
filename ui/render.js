@@ -7,7 +7,7 @@ import Chart from 'chart.js/auto';
 import {validateChart} from './chart-schema.js';
 
 export const escape = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-export function saveBlob(blob,name){const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+export function saveBlob(blob,name){document.dispatchEvent(new CustomEvent('h3-export',{detail:{blob,name}}));const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
 const markdown = new Marked({gfm:true,breaks:false,renderer:{html(){return '';}}});
 markdown.use({extensions:[
   {name:'mathBlock',level:'block',start:src=>src.indexOf('$$'),tokenizer(src){const m=/^\$\$([\s\S]+?)\$\$(?:\n|$)/.exec(src);if(m)return {type:'mathBlock',raw:m[0],text:m[1]};},renderer(t){return `<div class="math-block">${katex.renderToString(t.text,{displayMode:true,throwOnError:false,trust:false,strict:'warn'})}</div>`;}},

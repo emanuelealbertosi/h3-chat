@@ -119,6 +119,7 @@ class Engine:
         self.refs = {}
         self.sample_rate = int(self.model.config.sample_rate)
         self.temperature = float(config['temperature'])
+        self.seed = config.get('seed',-1)
 
     def reference(self, voice):
         key = voice['reference']
@@ -135,7 +136,7 @@ class Engine:
         required = ['apply_delay_pattern', 'reverse_delay_pattern', '_SamplerState', '_sampler_step']
         if not all(hasattr(mod, item) for item in required):
             raise RuntimeError('Versione del modello non compatibile con questo adattatore. Consulta il README.')
-        torch.manual_seed(stable_seed(voice['id']))
+        torch.manual_seed(self.seed if self.seed>=0 else stable_seed(voice['id']))
         codes = self.reference(voice)
         cap = max_frames or min(4096, max(1000, len(text) * 7))
         with torch.inference_mode():

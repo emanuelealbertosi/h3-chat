@@ -5,6 +5,23 @@ from h3chat.voice import DEFAULTS,validate,validate_fields,route,controls,resolv
 from h3chat.voice_controls import split_text,apply_direction
 
 class VoiceTests(unittest.TestCase):
+    def test_radio_profile_preserves_words_and_varies_phrase_delivery(self):
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);app=Mock(root=root,data=root)
+            app.engine.tool_call.return_value={'duration':12}
+            config={'engine':'higgs','model_path':tmp,'device':'cuda','temperature':.7,'seed':734,'speed_factor':1.08,'pause_ms':150}
+            text='Dai vita alle tue idee! Immagini, parole e musica. Scegli il tuo stile. Comincia da te!'
+            meta={}
+            with patch('h3chat.voice.configuration',return_value=(config,{'delivery':'radio'}, {'prefix':'','tags':[]}, {'id':'fixture','reference':tmp})):
+                synthesize(app,root/'voice',[{'text':text}],DEFAULTS|{'memory_policy':'on_demand'},'',threading.Event(),lambda _:None,root/'log',meta)
+            request=app.engine.tool_call.call_args.args[1]
+            self.assertEqual(''.join(s['text'] for s in request['segments']),text)
+            self.assertEqual([s['speed_factor'] for s in request['segments']],[1.08,1.12,1.08,1.12])
+            self.assertTrue(all(s['seed']==734 for s in request['segments']))
+            self.assertIn('<|emotion:pride|>',request['segments'][2]['spoken'])
+            self.assertEqual(meta['voice_parameters']['segment_speed_factors'],[1.08,1.12,1.08,1.12])
+
     def test_enthusiasm_also_requests_expressive_delivery(self):
         for settings,prompt in ((DEFAULTS|{'_voice_fields':{'emotion':'enthusiasm'}},'Spiega il Sole'),
                                 (DEFAULTS,'Spiega il Sole con voce entusiasta')):

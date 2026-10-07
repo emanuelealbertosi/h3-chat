@@ -73,6 +73,20 @@ class AccessTests(unittest.TestCase):
 
 
 class AccessHttpTests(unittest.TestCase):
+    def test_gallery_requires_login_and_stays_in_own_workspace(self):
+        private=self.app.data/'outputs/owner.txt';private.parent.mkdir(exist_ok=True);private.write_text('Only synthetic test content')
+        self.app.store.gallery.register([{'id':'a'*32,'path':'outputs/owner.txt','name':'Owner.txt','mime':'text/plain'}])
+        csrf=self.setup_owner()
+        self.assertEqual(self.request('/api/gallery')[0],401)
+        self.assertEqual(self.request('/gallery-file/'+'a'*32)[0],401)
+        self.assertEqual(self.request('/api/gallery',client=self.owner)[1]['total'],1)
+        self.request('/api/auth/users',{'name':'amico','password':PASSWORD},client=self.owner,csrf=csrf)
+        self.request('/api/auth/login',{'name':'amico','password':PASSWORD},client=self.guest)
+        gcsrf=self.request('/api/auth/me',client=self.guest)[1]['csrf']
+        self.assertEqual(self.request('/api/gallery',client=self.guest)[1]['total'],0)
+        self.assertEqual(self.request('/gallery-file/'+'a'*32,client=self.guest)[0],400)
+        self.assertEqual(self.request('/api/gallery/select',{'ids':['a'*32]},client=self.guest,csrf=gcsrf)[0],400)
+
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.app=Service(ROOT,Path(self.temp.name),start_worker=False)
         self.server=ThreadingHTTPServer(('127.0.0.1',0),Handler);self.server.app=self.app

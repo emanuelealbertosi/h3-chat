@@ -209,6 +209,13 @@
         "size": 28158185,
         "sha256": "96e4c0981ec21cadfef4c0b840d04a5e3c3be821894aa6a7d7a8ee870ba6b727",
         "extract_to": "runtime/tools/documents"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/f3/ec/100f2b1794ede74a9b3d7ec6b9736927f56713414c1dfe19ab6c383494bf/numpy-2.5.3-cp313-cp313-win_amd64.whl",
+        "path": "runtime/downloads/tools/documents/numpy-2.5.3-cp313-cp313-win_amd64.whl",
+        "size": 12560965,
+        "sha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
+        "extract_to": "runtime/tools/documents"
       }
     ]
   },

@@ -11,7 +11,7 @@ def digest(path):
 
 def sources(root):
     paths = [*sorted((root/'ui').rglob('*.js')), root/'package.json', root/'package-lock.json',
-             root/'scripts/build-ui.mjs', root/'scripts/Launcher.cs', root/'native/sd-worker.cpp',
+             root/'scripts/build-ui.mjs', root/'scripts/Launcher.cs', root/'native/sd-worker.cpp', root/'static/infographic-motion.js',
              *sorted((root/'native/vendor').glob('*'))]
     return {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes().replace(b'\r\n', b'\n')).hexdigest()
             for p in paths if p.is_file()}

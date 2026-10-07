@@ -115,7 +115,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         if path.suffix.lower() in ('.html','.js','.css'):
             self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; frame-src 'self'; base-uri 'self'; form-action 'self'")
+        if path.suffix.lower() in ('.html','.svg') and not path.resolve().is_relative_to((ROOT/'static').resolve()):
+            self.send_header('Content-Security-Policy',"default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; form-action 'none'; base-uri 'none'")
+        else:self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; frame-src 'self'; base-uri 'self'; form-action 'self'")
         self.end_headers()
         self.wfile.write(body)
 
@@ -129,6 +131,12 @@ class Handler(BaseHTTPRequestHandler):
             if access and path.startswith('/api/auth/'):
                 return self.auth_request(path,method)
             if method == "GET":
+                if path=='/api/gallery':
+                    query=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                    return self.json(self.app.store.gallery.listing(query.get('q',[''])[0],query.get('kind',['all'])[0],query.get('origin',['all'])[0],int(query.get('offset',['0'])[0])))
+                if len(parts)==2 and parts[0]=='gallery-file':
+                    item=self.app.store.gallery.get(parts[1])
+                    return self.file(safe_join(self.app.data,item['path']))
                 if path=='/api/maintenance/state':
                     return self.json(self.server.workspaces.maintenance_state()|{'token':access.maintenance})
                 if len(parts)==3 and parts[:2]==['api','projects']:
@@ -165,8 +173,9 @@ class Handler(BaseHTTPRequestHandler):
                     return self.file(safe_join(self.app.data / "exports", relative))
                 if path.startswith("/media/"):
                     relative = path[len("/media/"):]
-                    if not relative.startswith(("uploads/", "outputs/")) or Path(relative).suffix not in (".png", ".jpg", ".wav", ".mp3", ".flac", ".ogg", ".mp4", ".pdf", ".docx", ".txt", ".srt", ".py", ".json", ".tex", ".log"):
+                    if not relative.startswith(("uploads/", "outputs/", "project-imports/", "exports/")) or Path(relative).suffix not in (".png", ".jpg", ".wav", ".mp3", ".flac", ".ogg", ".mp4", ".pdf", ".docx", ".pptx", ".txt", ".md", ".srt", ".py", ".json", ".tex", ".log", ".html", ".svg"):
                         raise PermissionError("File non disponibile.")
+                    if relative.startswith(('project-imports/','exports/')) and not self.app.store.one('SELECT 1 FROM gallery WHERE path=?',(relative,)):raise PermissionError('File non disponibile.')
                     return self.file(safe_join(self.app.data, relative))
                 return self.json({"error": "Risorsa non trovata."}, 404)
             # Binary project blocks have their own small bound; other requests
@@ -179,6 +188,20 @@ class Handler(BaseHTTPRequestHandler):
                 if len(raw)!=length:raise ValueError('Blocco documento incompleto.')
                 return self.json(self.app.knowledge.uploads.append(parts[2],parts[4],offset,raw))
             body = self.read_body()
+            if len(parts)==5 and parts[:2]==['api','canvas'] and parts[3:]==['infographic','render'] and method=='POST':
+                from h3chat.infographics import enqueue_render
+                return self.json(enqueue_render(self.app,parts[2],body),202)
+            if path=='/api/gallery/select' and method=='POST':
+                return self.json(self.app.validate_media([{'id':ident} for ident in body.get('ids',[])],canvas=True))
+            if path=='/api/gallery/import' and method=='POST':
+                import base64
+                try:digest=hashlib.sha256(base64.b64decode(body.get('data',''),validate=True)).hexdigest()
+                except (ValueError,TypeError):raise ValueError('File esportato non valido.')
+                existing=self.app.store.one('SELECT id FROM gallery_exports WHERE hash=?',(digest,))
+                if existing:
+                    try:return self.json(self.app.store.gallery.get(existing['id']))
+                    except ValueError:pass
+                item=self.app.upload(body|{'_gallery_export':True});self.app.store.execute('INSERT OR REPLACE INTO gallery_exports VALUES (?,?)',(digest,item['id']));return self.json(item,201)
             if len(parts)==5 and parts[:2]==['api','canvas'] and parts[3:]==['slides','regenerate'] and method=='POST':
                 from h3chat.slide_revision import enqueue
                 return self.json(enqueue(self.app,parts[2],body),202)
@@ -237,14 +260,14 @@ class Handler(BaseHTTPRequestHandler):
             if len(parts)==3 and parts[:2]==["api","external-models"] and method=="DELETE":
                 return self.json(self.app.remove_external_model(parts[2]))
             if path == "/api/export/pdf" and method == "POST":
-                return self.json(export_pdf(ROOT, self.app.data, body))
+                return self.json(self.app.store.gallery.exported(export_pdf(ROOT, self.app.data, body)))
             if path == "/api/export/audio" and method == "POST":
                 from h3chat.audio_export import export_audio
                 media=self.app.validate_media([{'id':body.get('id')}],canvas=True)[0]
-                return self.json(export_audio(ROOT,self.app.data,media,body.get('format')))
+                return self.json(self.app.store.gallery.exported(export_audio(ROOT,self.app.data,media,body.get('format'))))
             if path == "/api/export/html" and method == "POST":
                 from h3chat.pdf_export import export_html
-                return self.json(export_html(ROOT, self.app.data, body))
+                return self.json(self.app.store.gallery.exported(export_html(ROOT, self.app.data, body)))
             if path == "/api/memory/release" and method == "POST":
                 return self.json(self.app.release_memory())
             if path == "/api/assess" and method == "POST":

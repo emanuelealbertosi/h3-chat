@@ -21,9 +21,11 @@ import {initSlideImages} from './slide-ai.js';
 import {initComposerPanel} from './composer-panel.js';
 import {initManimPresentation} from './manim-presentation.js';
 import {initWorkspaceLayout} from './workspace-layout.js';
+import {initGallery} from './gallery.js';
+import {initInfographics} from './infographics.js';
 
 const $=s=>document.querySelector(s);
-let composerUI=null,manimPresentation=null;
+let composerUI=null,manimPresentation=null,infographicsUI=null;
 let state=null,current=null,chat=null,filter='all',collection=null,project=null,attachments=[],settingsTab='setup',settingsDraft=null;
 let canvasOpen=false,canvas={title:'Canvas',content:'',media:[]},canvasEditing=false,canvasSaveTimer,canvasDirty=false;
 let canvasHistory={items:[],active_id:null},canvasFollow=true,canvasSaving=null,canvasSelection=0,canvasHistoryRequest=0;
@@ -67,8 +69,8 @@ const localModels=initLocalModels({api,getState:()=>state,notify:toast,onChange:
 const loraUI=initLoras({api,getState:()=>state,getChatId:()=>current,pickDirectory:(path,callback)=>localModels.pickDirectory(path,callback),openPreferences:()=>openSettings('advanced'),notify:toast,onChange:()=>scheduleAssessment()});
 const projects=initProjects({api,getState:()=>state,getChat:()=>chat,refresh,notify:toast,act,select:act(async id=>{project=id;collection=null;filter='all';lastSidebar='';renderSidebar();if(id&&chat?.project_id!==id){const existing=state.chats.find(c=>c.project_id===id&&!c.archived);if(existing)await openChat(existing.id);else await newChat();}}),showCanvas:value=>value===null?($('#canvas-panel').hidden=!canvasOpen,$('#workspace').classList.toggle('has-canvas',canvasOpen)):toggleCanvas(value),pickDirectory:(path,callback)=>localModels.pickDirectory(path,callback)});
 chatModels=initChatModels({api,getState:()=>state,notify:toast,onChange:settings=>{if(settings)state.settings=settings;renderStatus();}});
-$('#rag-enabled').closest('label').insertAdjacentHTML('afterend','<label class="think-control">Strumenti <select id="lab-tool" aria-label="Strumenti della chat"><option value="auto">Automatico · dal prompt</option><option value="calculate">Interprete numerico</option><option value="manim">Animazione Manim</option><option value="slides">Slide · HTML in tempo reale</option></select></label><span id="slides-options" hidden><label>Slide <input id="slides-count" aria-label="Numero di slide" type="number" min="1" max="30" value="8" style="width:65px"></label> <label>Formato <select id="slides-format" aria-label="Formato slide"><option>16:9</option><option>9:16</option><option>4:3</option><option>16:10</option><option>1:1</option></select></label></span>');
-$('#lab-tool').onchange=()=>{manimPresentation?.render();$('#slides-options').hidden=$('#lab-tool').value!=='slides';visualControls.render();};
+$('#rag-enabled').closest('label').insertAdjacentHTML('afterend','<label class="think-control">Strumenti <select id="lab-tool" aria-label="Strumenti della chat"><option value="auto">Automatico · dal prompt</option><option value="calculate">Interprete numerico</option><option value="manim">Animazione Manim</option><option value="slides">Slide · HTML in tempo reale</option><option value="infographic">Infografica animata</option></select></label><span id="slides-options" hidden><label>Slide <input id="slides-count" aria-label="Numero di slide" type="number" min="1" max="30" value="8" style="width:65px"></label> <label>Formato <select id="slides-format" aria-label="Formato slide"><option>16:9</option><option>9:16</option><option>4:3</option><option>16:10</option><option>1:1</option></select></label></span>');
+$('#lab-tool').onchange=()=>{manimPresentation?.render();infographicsUI?.render();$('#slides-options').hidden=$('#lab-tool').value!=='slides';visualControls.render();};
 $('#slides-options').insertAdjacentHTML('beforeend',' <label>Motore <select id="slides-engine" aria-label="Motore slide"><option value="llm">LLM · HTML libero</option><option value="deterministic">Deterministico</option></select></label> <label>Stile <select id="slides-design"><option value="professional">Serio / professionale</option><option value="playful">Giocoso / colorato</option><option value="comic">Fumettoso</option></select></label> <label>Contenuto <select id="slides-detail"><option value="concise">Sintesi</option><option value="full">Testi completi</option></select></label>');
 $('#slides-options').insertAdjacentHTML('beforeend',' <label title="Rapida analizza fino a 8 figure nuove, dando precedenza alle fonti della richiesta. Le descrizioni già disponibili vengono riutilizzate; tutte le figure restano inseribili.">Figure Vision <select id="slides-vision" aria-label="Analisi figure slide"><option value="relevant">Rapida · max 8 nuove</option><option value="all">Completa · tutte</option></select></label>');
 const slideImages=initSlideImages();
@@ -150,7 +152,7 @@ function renderStatus(){
   $('#canvas-source').readOnly=!!canvasJob?.canvas;
   $('#canvas-title').readOnly=!!canvasJob?.canvas;
   $('#canvas-restore').disabled=!!canvasJob?.canvas||!canvas.id||canvas.id===canvasHistory.active_id;
-  composerUI?.render();manimPresentation?.render();
+  composerUI?.render();manimPresentation?.render();infographicsUI?.render();
 }
 async function newChat(){if(current)await persistCanvas();const fresh=await api('/chats',{collection_id:collection,project_id:project});await openChat(fresh.id);await refresh();$('#prompt').focus();}
 async function openChat(id){
@@ -179,7 +181,7 @@ async function renderChat(){
     if(message.role==='user')content.textContent=message.content;
     else if(message.content)await renderRich(content,message.content,{final:message.status==='done',sources:message.meta.rag_sources||[],onCitation:(source,sources)=>projects.citation(source,sources,message),onExecute:act(executeArtifact)});
     if(pending){
-      const title=({create:'Creazione immagine',edit:'Modifica immagine',video:'Generazione video',music:'Generazione musica',slides:'Creazione slide nel canvas',transcribe:'Trascrizione audio',manim:message.meta.narrated_manim?'Animazione Manim con voce':'Animazione Manim',calculate:'Calcolo in corso',chat:message.meta.canvas?'Scrittura nel canvas':'Risposta in corso'})[message.meta.intent]||(job?.status==='queued'?'In attesa':'Preparazione della risposta');
+      const title=({create:'Creazione immagine',edit:'Modifica immagine',video:'Generazione video',music:'Generazione musica',slides:'Creazione slide nel canvas',infographic:'Creazione infografica nel canvas',transcribe:'Trascrizione audio',manim:message.meta.narrated_manim?'Animazione Manim con voce':'Animazione Manim',calculate:'Calcolo in corso',chat:message.meta.canvas?'Scrittura nel canvas':'Risposta in corso'})[message.meta.intent]||(job?.status==='queued'?'In attesa':'Preparazione della risposta');
       const activity=document.createElement('div');activity.className='generation-activity';activity.setAttribute('role','status');
       const duration=elapsed<60?elapsed+' s':Math.floor(elapsed/60)+' min '+elapsed%60+' s';
       activity.innerHTML=`<div class="thinking" aria-hidden="true"><i></i><i></i><i></i></div><div><strong>${esc(title)}</strong><span class="activity-stage">${esc(job?.stage||'Preparazione del motore…')}</span><small class="activity-elapsed">Tempo trascorso: ${duration}</small></div>`;
@@ -218,19 +220,19 @@ async function renderChat(){
 }
 function renderAttachments(){
  let image=0,audio=0,document=0;
- $('#attachments').innerHTML=attachments.map((m,i)=>{const sound=m.mime?.startsWith('audio/'),doc=m.mime?.startsWith('application/'),label=doc?'Documento '+(++document):sound?'Audio '+(++audio):'Immagine '+(++image);return `<div class="attachment" title="${esc(m.name)}">${doc?'<span class="audio-attachment">▤</span>':sound?'<span class="audio-attachment">♫</span>':`<img src="/media/${esc(m.path)}" alt="${esc(m.name)}">`}<small>${label}</small><button data-remove-attachment="${i}" aria-label="Rimuovi ${label}">×</button></div>`;}).join('');
+ $('#attachments').innerHTML=attachments.map((m,i)=>{const sound=m.mime?.startsWith('audio/'),video=m.mime?.startsWith('video/'),doc=!sound&&!video&&!m.mime?.startsWith('image/'),label=video?'Video':doc?'Documento '+(++document):sound?'Audio '+(++audio):'Immagine '+(++image);return `<div class="attachment" title="${esc(m.name)}">${doc?'<span class="audio-attachment">▤</span>':sound?'<span class="audio-attachment">♫</span>':video?'<span class="audio-attachment">▷</span>':`<img src="/media/${esc(m.path)}" alt="${esc(m.name)}">`}<small>${label}</small><button data-remove-attachment="${i}" aria-label="Rimuovi ${label}">×</button></div>`;}).join('');
  manimPresentation?.render();
 }
 async function uploadFiles(files){
  if(attachments.length+files.length>12)throw Error('Massimo 12 allegati per messaggio.');
  for(const file of files){
-  const sound=file.type.startsWith('audio/')||/\.(wav|mp3|flac|ogg)$/i.test(file.name),doc=/\.(pdf|docx|pptx)$/i.test(file.name);
-  const category=doc?'application/':sound?'audio/':'image/';
+  const video=file.type.startsWith('video/')||/\.mp4$/i.test(file.name),sound=file.type.startsWith('audio/')||/\.(wav|mp3|flac|ogg)$/i.test(file.name),doc=/\.(pdf|docx|pptx)$/i.test(file.name);
+  const category=video?'video/':doc?'application/':sound?'audio/':'image/';
   if(attachments.filter(x=>x.mime.startsWith(category)).length>=(doc||sound?3:9))throw Error(doc?'Massimo tre documenti.':sound?'Massimo tre audio.':'Massimo nove immagini; il modello mantiene il proprio limite.');
-  if(!doc&&!sound&&!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Scegli immagini, audio WAV/MP3/FLAC/OGG, PDF, Word .docx o PowerPoint .pptx.');
-  if(file.size>(doc?25:sound?64:12)*1024*1024)throw Error(doc?'Documenti: massimo 25 MB.':sound?'Audio: massimo 64 MB.':'Immagini: massimo 12 MB.');
+  if(!video&&!doc&&!sound&&!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Scegli immagini, audio WAV/MP3/FLAC/OGG, PDF, Word .docx o PowerPoint .pptx.');
+  if(file.size>(doc?25:sound||video?64:12)*1024*1024)throw Error(doc?'Documenti: massimo 25 MB.':sound?'Audio: massimo 64 MB.':'Immagini: massimo 12 MB.');
   let source=file;
-  if(!sound&&!doc){const bitmap=await createImageBitmap(file);if(Math.max(bitmap.width,bitmap.height)>8192){bitmap.close();throw Error('Massimo 8192 pixel.');}
+  if(!video&&!sound&&!doc){const bitmap=await createImageBitmap(file);if(Math.max(bitmap.width,bitmap.height)>8192){bitmap.close();throw Error('Massimo 8192 pixel.');}
    if(file.type==='image/webp'){const c=document.createElement('canvas');c.width=bitmap.width;c.height=bitmap.height;c.getContext('2d').drawImage(bitmap,0,0);source=await new Promise(r=>c.toBlob(r,'image/png'));}bitmap.close();}
   const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=reject;reader.readAsDataURL(source);});
   attachments.push(await api('/uploads',{name:file.name,data}));renderAttachments();
@@ -239,8 +241,8 @@ async function uploadFiles(files){
 async function send(event){event.preventDefault();if(userJob())return;const prompt=$('#prompt').value.trim();if(!prompt)return;
   $('#send').disabled=true;
   try{await chatModels.wait();if(!current){const fresh=await api('/chats',{collection_id:collection,project_id:project});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);manimPresentation?.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
-    await persistCanvas();const presentation=await manimPresentation.prepare();const sent=await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,...presentation,...visualControls.read(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='slides'?{slides:{engine:$('#slides-engine').value,count:Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value,vision_scope:$('#slides-vision').value,...slideImages.read()}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()});
-    if(sent.intent==='slides'){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}
+    await persistCanvas();const presentation=await manimPresentation.prepare();const sent=await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,...presentation,...visualControls.read(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='infographic'?{infographic:infographicsUI.read()}:{}),...($('#lab-tool').value==='slides'?{slides:{engine:$('#slides-engine').value,count:Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value,vision_scope:$('#slides-vision').value,...slideImages.read()}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()});
+    if(['slides','infographic'].includes(sent.intent)){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}
     $('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);await refresh();
   }finally{$('#send').disabled=false;}
 }
@@ -466,6 +468,7 @@ document.addEventListener('click',e=>{if(!e.target.closest('#context-menu,[data-
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();act(newChat)();}if(e.key==='Escape'){$('#context-menu').hidden=true;$('#sidebar').classList.remove('visible');}});
 $('#mobile-nav').onclick=()=>$('#sidebar').classList.toggle('visible');
 $('#attach').onclick=()=>$('#file-input').click();$('#file-input').onchange=act(async e=>{await uploadFiles([...e.target.files]);e.target.value='';});
+initGallery({api,getAttachments:()=>attachments,setAttachments:items=>{attachments=items;renderAttachments();},notify:toast});
 $('#attachments').onclick=e=>{const b=e.target.closest('[data-remove-attachment]');if(b){attachments.splice(Number(b.dataset.removeAttachment),1);renderAttachments();}};
 $('#composer').ondragover=e=>{e.preventDefault();$('#composer').classList.add('dragging');};$('#composer').ondragleave=()=>$('#composer').classList.remove('dragging');
 $('#composer').ondrop=act(async e=>{e.preventDefault();$('#composer').classList.remove('dragging');await uploadFiles([...e.dataTransfer.files]);});
@@ -500,6 +503,7 @@ $('#canvas-title').oninput=canvasChanged;$('#canvas-source').oninput=canvasChang
 document.querySelector('[data-export="md"]').insertAdjacentHTML('afterend','<button class="btn small" data-export="html" hidden>HTML</button><button class="btn small" data-export="pptx" hidden>PowerPoint</button>');
 document.querySelectorAll('[data-export]').forEach(b=>b.onclick=act(async()=>{if(activeJob()?.canvas&&canvas.id===canvasHistory.active_id)throw Error('Attendi che il documento sia completo prima di esportare.');await persistCanvas();if(!canvas.content&&!canvas.media.length)throw Error('Il canvas è vuoto.');canvasEditing=false;await renderCanvas();const root=$('#canvas-preview');$('#canvas-panel').classList.add('exporting');try{if(b.dataset.export==='md')saveBlob(new Blob([canvas.content],{type:'text/markdown;charset=utf-8'}),canvas.title+'.md');else if(readDeck(canvas.content))await exportSlides(canvas,b.dataset.export,state.token);else{if(b.dataset.export==='pdf')await exportPdf(root,canvas.title,state.token);if(b.dataset.export==='docx')await exportDocx(root,canvas.title);if(b.dataset.export==='png')await exportPng(root,canvas.title);}toast('Esportazione pronta.');}finally{$('#canvas-panel').classList.remove('exporting');}}));
 composerUI=initComposerPanel({getState:()=>state,visualControls,getAttachments:()=>attachments,notify:toast});
+infographicsUI=initInfographics({getState:()=>state});
 manimPresentation=initManimPresentation({getAttachments:()=>attachments,getCanvas:()=>canvas,getState:()=>state,getChatId:()=>current,api,notify:toast});
 document.querySelector('#composer').addEventListener('change',()=>manimPresentation.render());
 initWorkspaceLayout();

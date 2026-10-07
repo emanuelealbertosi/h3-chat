@@ -2,22 +2,13 @@ import DOMPurify from 'dompurify';
 import renderMath from 'katex/contrib/auto-render';
 import {editHtmlSlide} from './slide-html-editing.js';
 import {contentOverflows,fitMediaBounds} from './slide-html-bounds.js';
-import {parseColor,composite,contrastRatio,readableColor,colorHex} from './color-contrast.js';
+import {readableText} from './slide-html-contrast.js';
+import '../static/infographic-motion.js';
 
 const heights={'16:9':720,'9:16':1280*16/9,'4:3':960,'16:10':800,'1:1':1280};
 const safePath=path=>/^(uploads|outputs)\/[\w./-]+\.(png|jpg|jpeg|webp)$/i.test(path);
 const encode=deck=>'```h3-slides\n'+JSON.stringify(deck)+'\n```';
 const sessions=new WeakMap();
-function readableText(doc){
-  for(const element of doc.body.querySelectorAll('*')){
-    if(element.closest('svg,style,math,.katex-mathml')||![...element.childNodes].some(n=>n.nodeType===3&&n.textContent.trim()))continue;
-    const layers=[];let opacity=1,complex=false;
-    for(let parent=element;parent;parent=parent.parentElement){const css=doc.defaultView.getComputedStyle(parent);if(css.backgroundImage!=='none'){complex=true;break;}layers.push(parseColor(css.backgroundColor)||[0,0,0,0]);opacity*=Number(css.opacity);}
-    if(complex)continue;
-    const background=layers.reverse().reduce((bg,layer)=>composite(layer,bg),[255,255,255,1]),foreground=parseColor(doc.defaultView.getComputedStyle(element).color);
-    if(foreground&&contrastRatio(foreground,background,opacity)<4.5){element.style.setProperty('color',colorHex(readableColor(foreground,background,opacity)),'important');element.dataset.contrastAdjusted='true';}
-  }
-}
 const fontCache=new Map();
 async function localFont(path){
   if(!fontCache.has(path))fontCache.set(path,fetch(path).then(r=>{if(!r.ok)throw Error('Font locale non disponibile.');return r.blob();}).then(blob=>new Promise(resolve=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.readAsDataURL(blob);})));return fontCache.get(path);
@@ -52,9 +43,10 @@ export async function htmlPage(deck,page,index,media,mount){
   const loaded=new Promise((resolve,reject)=>{iframe.onload=resolve;iframe.onerror=()=>reject(Error('Anteprima HTML non disponibile.'));});
   const fontNames=['Manrope','Cormorant'].filter(name=>content.includes(name));
   const fonts=(await Promise.all(fontNames.map(async name=>`@font-face{font-family:${name};src:url("${await localFont('/static/'+name+'.ttf')}")}`))).join('');
-  iframe.srcdoc=`<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; script-src 'none'; connect-src 'none';"><style data-h3-trusted>html,body{margin:0;width:1280px;min-height:${height}px;box-sizing:border-box}*,*:before,*:after{box-sizing:border-box}${fonts}</style></head><body>${content}</body></html>`;
+  iframe.srcdoc=`<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; script-src 'none'; connect-src 'none';"><style data-h3-trusted>html,body{margin:0;width:1280px;min-height:${height}px;box-sizing:border-box}*,*:before,*:after{box-sizing:border-box}${fonts}${deck.infographic?'*,*:before,*:after{animation:none!important;transition:none!important}':''}</style></head><body>${content}</body></html>`;
   frame.append(iframe);mount.append(frame);await loaded;
   const doc=iframe.contentDocument;
+  if(deck.infographic)H3Motion.freeze(doc);
   await doc.fonts.ready;await Promise.all([...doc.images].map(img=>img.decode().catch(()=>{})));
   renderMath(doc.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false});
   // Local bundled math CSS is trusted and does not enable generated scripts.
