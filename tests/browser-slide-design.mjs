@@ -13,7 +13,7 @@ const post=path=>page.evaluate(async path=>{const {token}=await(await fetch('/ap
 const savedDeck=()=>page.evaluate(async chat=>{const canvas=await(await fetch('/api/canvas/'+chat)).json();return JSON.parse(canvas.content.slice(13,-4));},fixture.chat);
 const waitIdle=()=>page.waitForFunction(()=>!document.querySelector('#canvas-preview').inert);
 try{
-  await mkdir('work/slide-design-qa',{recursive:true});await page.goto(fixture.url);await page.click(`[data-chat="${fixture.chat}"]`);await page.selectOption('#lab-tool','slides');await page.selectOption('#slides-design','comic');await page.selectOption('#slides-detail','full');assert.equal(await page.inputValue('#slides-detail'),'full');await page.selectOption('#lab-tool','auto');await post('/fixture/slides/design');await page.click('#canvas-toggle');await page.waitForSelector('.slide-theme-indigo');
+  await mkdir('work/slide-design-qa',{recursive:true});await page.goto(fixture.url);await page.click(`[data-chat="${fixture.chat}"]`);await page.click('#prompt-slides');await page.getByRole('button',{name:'Fumettoso',exact:true}).click();await page.getByRole('button',{name:'Testi completi',exact:true}).click();assert.equal(await page.inputValue('#slides-detail'),'full');await page.click('#prompt-auto');await post('/fixture/slides/design');await page.click('#canvas-toggle');await page.waitForSelector('.slide-theme-indigo');
   assert.match(await page.locator('.slide-heading').first().evaluate(el=>getComputedStyle(el).fontFamily),/Manrope/);
   await page.locator('.h3-slide-page').first().screenshot({path:'work/slide-design-qa/cover.png'});
   await page.selectOption('.slides-navigation select','1');await page.waitForSelector('.slide-auto-grid');

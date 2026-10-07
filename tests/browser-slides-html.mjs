@@ -14,7 +14,7 @@ const post=path=>page.evaluate(async path=>{const {token}=await(await fetch('/ap
 const saved=()=>page.evaluate(async chat=>await(await fetch('/api/canvas/'+chat)).json(),fixture.chat);
 const iframe=()=>page.frameLocator('.h3-html-page iframe');
 try{
-  await mkdir('work/slides-html-qa',{recursive:true});await page.goto(fixture.url);await page.click(`[data-chat="${fixture.chat}"]`);await page.selectOption('#lab-tool','slides');assert.equal(await page.inputValue('#slides-engine'),'llm');assert.equal(await page.inputValue('#slides-vision'),'relevant');
+  await mkdir('work/slides-html-qa',{recursive:true});await page.goto(fixture.url);await page.click(`[data-chat="${fixture.chat}"]`);await page.click('#prompt-slides');assert.equal(await page.inputValue('#slides-engine'),'llm');assert.equal(await page.inputValue('#slides-vision'),'relevant');
   await post('/fixture/slides/html-stream');await page.click('#canvas-toggle');await iframe().locator('h1').waitFor();assert.match(await iframe().locator('h1').textContent(),/modello/);assert.equal(await page.locator('#slide-edit').isDisabled(),true);
   await post('/fixture/slides/html');await page.waitForFunction(()=>!document.querySelector('#slide-edit')?.disabled);await iframe().locator('svg').waitFor();
   await iframe().locator('.katex').waitFor();
@@ -44,8 +44,8 @@ try{
   await page.getByRole('button',{name:'Ricrea solo questa slide',exact:true}).click();
   const revisionBody=(await revision).postDataJSON();assert.equal(revisionBody.page,0);assert.equal(revisionBody.prompt,'Rendi questa pagina più vivace');assert.ok(revisionBody.artifact_id);
   const composer=await browser.newPage();await composer.goto(fixture.url);await composer.click(`[data-chat="${fixture.chat}"]`);
-  await composer.selectOption('#lab-tool','slides');await composer.selectOption('#slides-vision','all');
-  assert.equal(await composer.isChecked('#slides-generate-images'),false);await composer.check('#slides-generate-images');assert.equal(await composer.locator('#slides-image-model-label').isVisible(),true);
+  await composer.click('#prompt-slides');await composer.click('#prompt-options-open');await composer.getByRole('button',{name:'Completa · tutte',exact:true}).click();await composer.getByRole('button',{name:'Fatto',exact:true}).click();
+  assert.equal(await composer.isChecked('#slides-generate-images'),false);await composer.getByRole('button',{name:'Illustrazioni AI · tutte insieme',exact:true}).click();assert.equal(await composer.locator('#slides-image-model-label').isVisible(),true);
   await composer.route('**/api/chats/*/messages',route=>route.fulfill({json:{job_id:'synthetic-only',intent:'slides',canvas:true}}));
   const request=composer.waitForRequest(r=>r.method()==='POST'&&r.url().endsWith('/messages'));
   await composer.fill('#prompt','Crea 4 slide');await composer.locator('#composer').evaluate(e=>e.requestSubmit());const body=(await request).postDataJSON();assert.equal(body.slides.vision_scope,'all');assert.equal(body.slides.generate_images,true);await composer.close();

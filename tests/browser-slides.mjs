@@ -11,7 +11,7 @@ const first=await Promise.race([once(lines,'line'),once(child,'exit').then(()=>{
 const browser=await chromium.launch({channel:'msedge',headless:true});const page=await browser.newPage({viewport:{width:1640,height:1100}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
 const post=path=>page.evaluate(async path=>{const {token}=await (await fetch('/api/state')).json();const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-H3-Token':token},body:'{}'});if(!r.ok)throw Error(await r.text());},path);
 try{
-  await page.goto(fixture.url);await page.click(`[data-chat="${fixture.chat}"]`);await page.selectOption('#lab-tool','slides');assert.equal(await page.locator('#slides-options').isVisible(),true);
+  await page.goto(fixture.url);await page.click(`[data-chat="${fixture.chat}"]`);await page.click('#prompt-slides');assert.equal(await page.locator('#slides-options').isVisible(),true);
   await post('/fixture/slides/start');await page.click('#canvas-toggle');await page.waitForSelector('.h3-slide-page');
   assert.match(await page.locator('.h3-slide-page').innerText(),/Prima parte/);assert.equal(await page.locator('.h3-slide-page img').count(),1);
   await post('/fixture/slides/early');await page.waitForFunction(()=>document.querySelector('.h3-slide-page')?.textContent.includes('Contenuto già visibile'));

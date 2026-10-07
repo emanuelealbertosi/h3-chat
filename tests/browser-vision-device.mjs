@@ -14,12 +14,12 @@ try{
  await page.goto(fixture.url);const device=page.locator('#chat-vision-device');
  await page.waitForFunction(()=>!document.querySelector('#chat-vision-device').disabled);
  assert.equal(await device.inputValue(),'cpu');
- await device.selectOption('gpu');await page.waitForFunction(()=>document.querySelector('#vision-badge').textContent==='Vision · GPU'&&!document.querySelector('#chat-vision-device').disabled);
+ await page.click('#prompt-options-open');await page.getByRole('button',{name:'GPU',exact:true}).click();await page.getByRole('button',{name:'Fatto',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#vision-badge').textContent==='Vision · GPU'&&!document.querySelector('#chat-vision-device').disabled);
  assert.equal((await(await fetch(fixture.url+'/api/state')).json()).settings.vision_device,'gpu');
  await page.reload();await page.waitForFunction(()=>document.querySelector('#chat-vision-device').value==='gpu'&&!document.querySelector('#chat-vision-device').disabled);
- await device.selectOption('cpu');await page.waitForFunction(()=>document.querySelector('#vision-badge').textContent==='Vision · CPU');
- await page.uncheck('#vision-enabled');await page.waitForFunction(()=>document.querySelector('#chat-vision-device').disabled&&document.querySelector('#vision-badge').textContent==='Vision disattivata');
- await page.check('#vision-enabled');await page.waitForFunction(()=>!document.querySelector('#chat-vision-device').disabled);
+ await page.click('#prompt-options-open');await page.getByRole('button',{name:'CPU',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#vision-badge').textContent==='Vision · CPU');
+ await page.getByRole('button',{name:'Vision attiva',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#chat-vision-device').disabled&&document.querySelector('#vision-badge').textContent==='Vision disattivata');
+ await page.getByRole('button',{name:'Vision attiva',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('#chat-vision-device').disabled);
  await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
- assert.deepEqual(errors,[]);console.log('Vision CPU/GPU: settings API, selection, reload persistence, Vision Off and mobile verified.');
-}finally{await browser.close();child.kill();}
+ await page.getByRole('button',{name:'Fatto',exact:true}).click();assert.deepEqual(errors,[]);console.log('Vision CPU/GPU: settings API, selection, reload persistence, Vision Off and mobile verified.');
+}catch(e){await page.screenshot({path:'work/composer-qa/vision-error.png',fullPage:true});throw e;}finally{await browser.close();child.kill();}

@@ -11,7 +11,7 @@ export function initVisualControls({getState,getChatId}){
  function render(){
   const state=getState();if(!state)return;
   voice.render();
-  const value=read(),items=state.models.filter(m=>m.capabilities.includes('create'));
+  const value=read(),items=state.models.filter(m=>m.capabilities.some(c=>['create','edit'].includes(c)));
   const signature=JSON.stringify(items.map(m=>[m.id,m.name,m.ready]));
   if(model.dataset.signature!==signature){model.innerHTML='<option value="">Automatico · dal prompt</option>'+items.map(m=>`<option value="${esc(m.id)}" ${m.ready?'':'disabled'}>${esc(m.name)}${m.ready?'':' · non disponibile'}</option>`).join('');model.dataset.signature=signature;}
   if(value.image_model&&!items.some(m=>m.id===value.image_model&&m.ready)){
