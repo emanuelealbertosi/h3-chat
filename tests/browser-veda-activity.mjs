@@ -1,0 +1,34 @@
+import {spawn} from 'node:child_process';
+import {createRequire} from 'node:module';
+import {once} from 'node:events';
+import {createInterface} from 'node:readline';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
+const child=spawn('runtime/python/python.exe',['-X','utf8','tests/serve_canvas_fixture.py'],{stdio:['ignore','pipe','pipe']});let diagnostic='';child.stderr.on('data',x=>diagnostic+=x);
+const lines=createInterface({input:child.stdout});const first=await Promise.race([once(lines,'line'),once(child,'exit').then(()=>{throw Error(diagnostic);})]);const fixture=JSON.parse(first[0]);lines.close();
+const browser=await chromium.launch({channel:'msedge',headless:true}),page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+let activity='',download;
+try{
+ await page.route('**/api/state',async route=>{const response=await route.fetch(),state=await response.json();
+  state.vision_runtime.accelerated=true;state.veda_runtime={ready:false,predictor_ready:false};
+  if(activity)state.jobs.push({id:'synthetic',chat_id:fixture.chat,status:activity});
+  await route.fulfill({response,json:state});
+ });
+ await page.route('**/api/downloads',async route=>{download=route.request().postDataJSON();await route.fulfill({json:{id:'veda'}});});
+ await page.goto(fixture.url);await page.waitForFunction(()=>document.querySelector('#new-chat')&&!document.querySelector('#new-chat').disabled);
+ await page.click('#settings-open');await page.click('[data-tab="advanced"]');
+ const select='[data-video-setting="attention"]';assert.equal(await page.inputValue(select),'auto');
+ await page.click('[data-veda-install]');await page.waitForFunction(()=>!!document.querySelector('[data-veda-install]'));assert.deepEqual(download,{id:'veda',kind:'runtime'});
+ await page.check('[data-video-advanced]');await page.selectOption(select,'veda');await page.waitForFunction(()=>!document.querySelector('[data-veda-options]').hidden);
+ await page.fill('[data-video-setting="veda_reference_sparsity"]','0');
+ const saved=page.waitForResponse(r=>r.url().endsWith('/settings')&&r.request().method()==='POST');await page.click('#settings-save');assert.equal((await saved).status(),200);
+ const state=await (await page.request.get(fixture.url+'/api/state')).json();const preset=state.settings.video_overrides[state.settings.video_model];assert.equal(preset.attention,'veda');assert.equal(preset.veda_reference_sparsity,0);
+ activity='running';await page.waitForSelector(`[data-chat="${fixture.chat}"] .chat-activity.running`);assert.equal(await page.getAttribute(`[data-chat="${fixture.chat}"]`,'aria-busy'),'true');
+ assert.equal(await page.locator(`[data-chat="${fixture.other}"] .chat-activity`).count(),0);
+ await page.click(`[data-chat="${fixture.other}"]`);assert.equal(await page.locator(`[data-chat="${fixture.chat}"] .chat-activity.running`).count(),1);
+ const animation=await page.locator(`[data-chat="${fixture.chat}"] .chat-activity.running`).evaluate(el=>getComputedStyle(el).animationName);assert.equal(animation,'chat-working');
+ activity='queued';await page.waitForSelector(`[data-chat="${fixture.chat}"] .chat-activity.queued`);assert.equal(await page.getAttribute(`[data-chat="${fixture.chat}"]`,'aria-busy'),'false');
+ activity='';await page.waitForFunction(id=>!document.querySelector(`[data-chat="${id}"] .chat-activity`),fixture.chat);
+ await page.setViewportSize({width:390,height:844});assert.ok(await page.locator(`[data-chat="${fixture.chat}"]`).count());assert.deepEqual(errors,[]);
+ console.log('VEDA optional install, per-model save, reference sparsity, running spinner, queued state, inactive chat and completion cleanup passed.');
+}catch(error){console.error(diagnostic);throw error;}finally{await browser.close();child.kill();}

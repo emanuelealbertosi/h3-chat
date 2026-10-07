@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class VideoMemoryOrderTests(unittest.TestCase):
-    def exercise(self, offload):
+    def exercise(self, offload, veda=False):
         tree = ast.parse((ROOT/'native/video-worker.py').read_text(encoding='utf-8'))
         definition = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'Worker')
         events = []
@@ -42,7 +42,10 @@ class VideoMemoryOrderTests(unittest.TestCase):
             worker.model = object();lifetime.append('diffuser')
 
         def load_conditioners():
-            if offload:self.assertIsNone(worker.model)
+            if offload:
+                self.assertIsNone(worker.model)
+                self.assertIsNone(getattr(worker,'veda_patch',None))
+                self.assertIsNone(getattr(worker,'veda_base_model',None))
             worker.clip, worker.vae, worker.audio_vae = object(), object(), object()
             lifetime.append('conditioners')
 
@@ -65,16 +68,28 @@ class VideoMemoryOrderTests(unittest.TestCase):
             def __getitem__(self, key):
                 return self if isinstance(key,tuple) else super().__getitem__(key)
         def decode(samples):
-            if offload:self.assertIsNone(worker.model)
+            if offload:
+                self.assertIsNone(worker.model)
+                self.assertIsNone(getattr(worker,'veda_patch',None))
+                self.assertIsNone(getattr(worker,'veda_base_model',None))
             return Frames(decoded)
         comfy.sd.VAE.return_value.decode.side_effect = decode
         comfy.sample.sample = sample
         worker.load_diffuser, worker.load_conditioners, worker.condition = load_diffuser, load_conditioners, condition
         worker.images = Mock(return_value=[])
         worker.configure_attention = Mock(return_value='pytorch');worker.attention_chunks=1
+        if veda:
+            from collections import Counter
+            def configure(*args):
+                worker.veda_base_model=worker.model
+                worker.veda_patch=SimpleNamespace(h3_result={'sparse_calls':1,'dense_calls':0,'fallback_reason':'','summary':'test'},
+                    run=SimpleNamespace(calls=Counter(),failed=None),_engines={'gpu':object()},_timers={},bundle=object(),installed=set())
+                return 'veda'
+            worker.configure_attention.side_effect=configure
         opts = {'frames':24, 'shift_video':12, 'shift_audio':3, 'seed':1, 'aspect':'16:9','megapixels':.2,
             'steps':2, 'cfg':1, 'sampler':'res_multistep', 'scheduler':'simple'}
         request = {'options':opts, 'plan':{'audios':[]}, 'output':'unused.mp4','images':[]}
+        if veda:opts['attention']='veda'
         with patch.dict('sys.modules', modules):
             worker.load({'files':{'vae':'unused.safetensors'}, 'offload':offload})
             if offload:self.assertIsNone(worker.model)
@@ -94,6 +109,9 @@ class VideoMemoryOrderTests(unittest.TestCase):
                 self.assertTrue(all(seconds>=0 for seconds in durations))
                 self.assertGreaterEqual(values['parameters']['sampling_seconds'],sum(durations))
                 timings=values['parameters']['timings']
+                if veda:
+                    self.assertEqual(values['parameters']['attention_backend'],'veda')
+                    self.assertTrue(values['parameters']['veda']['active'])
                 self.assertEqual(timings['sampling'],values['parameters']['sampling_seconds'])
                 self.assertTrue(all(value>=0 for value in timings.values()))
                 self.assertGreaterEqual(timings['generation'],timings['conditioning']+timings['sampling'])
@@ -112,6 +130,9 @@ class VideoMemoryOrderTests(unittest.TestCase):
 
     def test_resident_keeps_components_and_does_not_reload_decoder(self):
         self.exercise(False)
+
+    def test_veda_predictor_released_before_decode_and_next_scene(self):
+        self.exercise(True,veda=True)
 
 
 if __name__ == '__main__':unittest.main()

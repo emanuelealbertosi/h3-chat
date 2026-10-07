@@ -234,8 +234,13 @@ class Worker:
         self.audio_vae=comfy.sd.VAE(sd=comfy.utils.load_torch_file(files['audio_vae'],safe_load=True))
         if self.vae.latent_channels!=24 or self.audio_vae.latent_channels!=32:raise ValueError('VAE non compatibili con MiniMax H3: video 24 canali, audio 32 canali.')
 
-    def configure_attention(self, preference, chunks=0):
+    def configure_attention(self, preference, chunks=0, veda_options=None):
         from comfy.ldm.modules import attention
+        if getattr(self,'veda_base_model',None) is not None:
+            self.model=self.veda_base_model
+            from h3chat.veda import release
+            release(getattr(self,'veda_patch',None))
+        self.veda_base_model=None;self.veda_patch=None
         available=attention.SAGE_ATTENTION_IS_AVAILABLE
         if preference=='sage' and not available:
             raise ValueError('SageAttention non installato. Installa l’acceleratore dal Setup video, oppure scegli Auto / PyTorch.')
@@ -243,11 +248,19 @@ class Worker:
         if not chunks:
             gb=self.torch.cuda.get_device_properties(0).total_memory/1024**3
             chunks=8 if gb<=20 else 4 if gb<=32 else 1
-        self.attention_chunks=chunks if backend=='sage' else 1
-        function=chunked_attention(self.torch,attention,chunks) if backend=='sage' else attention.attention_pytorch
+        self.attention_chunks=chunks if backend=='sage' or preference=='veda' else 1
+        # VEDA owns head grouping for sparse AND declined dense calls. Passing
+        # already grouped Sage would split those calls twice and slow fallback.
+        function=(attention.attention_sage if preference=='veda' else chunked_attention(self.torch,attention,chunks)) if backend=='sage' else attention.attention_pytorch
         self.model.set_model_optimized_attention(function)
+        if preference=='veda':
+            from h3chat.veda import attach
+            emit('stage',message='Video · VEDA · caricamento predictor e verifica kernel')
+            self.veda_base_model=self.model
+            self.model,self.veda_patch=attach(ROOT,self.model,veda_options or {},chunks,emit)
+            backend='veda'
         logging.info('Video attention backend: %s (requested: %s, head chunks: %d)',backend,preference,self.attention_chunks)
-        emit('stage',message='Video · attenzione '+('SageAttention' if backend=='sage' else 'PyTorch'))
+        emit('stage',message='Video · attenzione '+{'sage':'SageAttention','pytorch':'PyTorch','veda':'VEDA · sparsità opzionale'}[backend])
         return backend
 
     def discard(self, *names):
@@ -360,7 +373,9 @@ class Worker:
                 emit('stage',message='Video · rilascio encoder e VAE dopo il condizionamento')
                 self.discard('clip','vae','audio_vae')
             if self.model is None:self.load_diffuser()
-            attention_backend=self.configure_attention(opts.get('attention','auto'),opts.get('attention_chunks',0))
+            if opts.get('attention')=='veda':
+                attention_backend=self.configure_attention('veda',opts.get('attention_chunks',0),opts)
+            else:attention_backend=self.configure_attention(opts.get('attention','auto'),opts.get('attention_chunks',0))
             timings['diffuser_load']=time.monotonic()-diffuser_started
             negative=[[torch.zeros_like(value),info.copy()] for value,info in positive]
             model=self.h3.MiniMaxH3SigmaShift.execute(self.model,opts['shift_video'],opts['shift_audio'])[0]
@@ -377,10 +392,22 @@ class Worker:
             samples=comfy.sample.sample(model,noise,opts['steps'],opts['cfg'],opts['sampler'],opts['scheduler'],positive,negative,latent['samples'],noise_mask=latent.get('noise_mask'),disable_pbar=True,seed=opts['seed'],
                 callback=progress)
             sampling_seconds=time.monotonic()-sampling_started
+            veda_result={}
+            if getattr(self,'veda_patch',None) is not None:
+                from h3chat.veda import report
+                veda_result=report(self.veda_patch)
+                if not veda_result['active']:
+                    from comfy.ldm.modules import attention
+                    attention_backend='sage' if attention.SAGE_ATTENTION_IS_AVAILABLE else 'pytorch'
+                    emit('stage',message='Video · VEDA non utilizzata · '+veda_result['fallback_reason'])
             decoder_started=time.monotonic()
             if self.offload:
                 emit('stage',message='Video · rilascio diffusore prima della decodifica')
                 model=None
+                if getattr(self,'veda_patch',None) is not None:
+                    from h3chat.veda import release
+                    release(self.veda_patch)
+                self.veda_base_model=None;self.veda_patch=None
                 self.discard('model')
                 self.vae=comfy.sd.VAE(sd=comfy.utils.load_torch_file(self.files['vae'],safe_load=True))
             timings['decoder_load']=time.monotonic()-decoder_started
@@ -409,7 +436,7 @@ class Worker:
             write_video(request['output'],pixels,master,opts['frames'])
             timings['saving']=time.monotonic()-saving_started
         timings['sampling']=sampling_seconds;timings['generation']=time.monotonic()-generation_started
-        emit('done',parameters={'fps':24,'duration':opts['frames']/24,'model_frames':grid_frames,'output_frames':opts['frames'],'width':opts['output_width'],'height':opts['output_height'],'canvas_width':opts['width'],'canvas_height':opts['height'],'aspect':opts['aspect'],'aspect_source':opts['aspect_source'],'format_image':opts['format_image'],'engine':'minimax-h3','attention_backend':attention_backend,'attention_chunks':self.attention_chunks,'sampling_seconds':sampling_seconds,'step_seconds':step_seconds,'timings':timings,'audio_sample_rate':master['sample_rate'],'audio_preserved':any(x['role'] in ('lipsync','reuse') for x in request['plan']['audios'])})
+        emit('done',parameters={'fps':24,'duration':opts['frames']/24,'model_frames':grid_frames,'output_frames':opts['frames'],'width':opts['output_width'],'height':opts['output_height'],'canvas_width':opts['width'],'canvas_height':opts['height'],'aspect':opts['aspect'],'aspect_source':opts['aspect_source'],'format_image':opts['format_image'],'engine':'minimax-h3','attention_backend':attention_backend,'attention_requested':opts.get('attention','auto'),'veda':veda_result,'attention_chunks':self.attention_chunks,'sampling_seconds':sampling_seconds,'step_seconds':step_seconds,'timings':timings,'audio_sample_rate':master['sample_rate'],'audio_preserved':any(x['role'] in ('lipsync','reuse') for x in request['plan']['audios'])})
 
 def main():
     emit('hello');worker=Worker()

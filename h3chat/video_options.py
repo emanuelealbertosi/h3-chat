@@ -6,7 +6,8 @@ from fractions import Fraction
 
 DEFAULTS = {'duration':15, 'megapixels':.7, 'aspect':'16:9', 'steps':12, 'cfg':1,
             'sampler':'res_multistep', 'scheduler':'simple', 'seed':-1,
-            'shift_video':12, 'shift_audio':3, 'offload':True, 'attention':'auto','attention_chunks':0}
+            'shift_video':12, 'shift_audio':3, 'offload':True, 'attention':'auto','attention_chunks':0,
+            'veda_predictor':'', 'veda_sparsity':90, 'veda_reference_sparsity':90}
 ASPECTS = ('16:9','9:16','1:1','4:3','3:4')
 
 def validate(value):
@@ -19,7 +20,14 @@ def validate(value):
     if result['aspect'] not in ASPECTS:raise ValueError('Formato video non valido.')
     if result['sampler'] not in ('res_multistep','euler','dpmpp_2m') or result['scheduler'] not in ('simple','normal','beta'):raise ValueError('Sampler/scheduler video non supportato.')
     if type(result['offload']) is not bool:raise ValueError('Offload video: scegli attivo o disattivo.')
-    if result['attention'] not in ('auto','sage','pytorch'):raise ValueError('Accelerazione video non supportata.')
+    if result['attention'] not in ('auto','sage','pytorch','veda'):raise ValueError('Accelerazione video non supportata.')
+    for key in ('veda_sparsity','veda_reference_sparsity'):
+        v=result[key]
+        if type(v) not in (int,float) or not math.isfinite(v) or not 0<=v<=99:raise ValueError('Sparsità VEDA: scegli una percentuale da 0 a 99.')
+    if not isinstance(result['veda_predictor'],str) or len(result['veda_predictor'])>4096:raise ValueError('Percorso predictor VEDA non valido.')
+    if result['veda_predictor']:
+        from .external_models import absolute_path
+        if absolute_path(result['veda_predictor']).suffix.lower()!='.safetensors':raise ValueError('VEDA richiede un predictor safetensors.')
     if type(result['attention_chunks']) is not int or not 0<=result['attention_chunks']<=56:raise ValueError('Suddivisioni attenzione: da 0 (automatico) a 56.')
     if type(result['seed']) is not int or not -1<=result['seed']<=2147483647:raise ValueError('Seed video non valido.')
     return result

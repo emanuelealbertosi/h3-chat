@@ -1,0 +1,12 @@
+Optional VEDA integration
+Source: https://github.com/veda-sparse/Veda-on-ComfyUI
+Revision: 60bfae688897dc41bc8685ca9f3130d7ed8f3b0c
+Code license: MIT. Original LICENSE and NOTICE.md are installed with the code
+under runtime/veda/<revision> and remain unmodified.
+
+The sparse INT8 kernel derives arithmetic from SageAttention 1.0.6
+(BSD-3-Clause, Thu-ML). Its original copyright/license notice is retained in
+veda_comfy/kernels/sage/sparse_int8.py. VEDA core rules derive from Miowtion (MIT).
+
+Predictor weights: MiniMax H3 Community License. Downloaded separately into
+models/veda; not included in the application archive or Git repository.

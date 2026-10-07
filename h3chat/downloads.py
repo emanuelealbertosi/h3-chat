@@ -175,6 +175,9 @@ class Downloads:
             if task['kind']=='runtime' and task['id']=='voice':
                 from .voice import mark_ready
                 mark_ready(self.root)
+            if task['kind']=='runtime' and task['id']=='veda':
+                from .veda import mark_ready
+                mark_ready(self.root)
             if task['kind']=='runtime' and task['id'].startswith('tools_'):
                 from .tools_runtime import mark_ready
                 mark_ready(self.root,task['id'].removeprefix('tools_'))

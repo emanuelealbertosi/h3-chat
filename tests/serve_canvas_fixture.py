@@ -32,6 +32,13 @@ def main():
         model=fixture_model('Qwen-OrcaRouter-IQ3_XXS.gguf','Staged_Tmpl','Staged_Tmpl')
         second=fixture_model('RVN-IQ3_M-mtp.gguf','Qwen fixture','Internal Ara')
         app.store.save_settings({'chat_model':model['id']})
+        video_files={}
+        for role in ('diffusion','llm','vae','audio_vae'):
+            path=Path(folder)/'video'/f'{role}.safetensors';path.parent.mkdir(exist_ok=True)
+            header=json.dumps({'weight':{'dtype':'F16','shape':[1],'data_offsets':[0,2]}}).encode()
+            path.write_bytes(struct.pack('<Q',len(header))+header+b'\0\0');video_files[role]=str(path)
+        video=app.external_model({'profile':'minimax-h3','name':'Hybrid sintetico','files':video_files})
+        app.store.save_settings({'video_model':video['id']})
         gemma=Path(folder)/'EmbeddingGemma-2';gemma.mkdir()
         for name in ('model.safetensors','tokenizer.json','tokenizer_config.json','processor_config.json','preprocessor_config.json'):(gemma/name).write_text('{}')
         (gemma/'config.json').write_text(json.dumps({'model_type':'embedding_gemma2','text_config':{'embedding_dim':768}}))

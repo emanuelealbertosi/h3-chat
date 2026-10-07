@@ -48,6 +48,8 @@ class VideoEngine:
     def generate_video(self,model,settings,plan,refs,job_id,cancel,stage,*,prompt=None,scene=None):
         if model.get('remote_media'):return self.remote_generate(model,settings,prompt if prompt is not None else plan['prompt'],refs,job_id,cancel,stage,plan=plan)
         opts=options(model,settings)
+        from .veda import preflight
+        preflight(self.root,opts)
         if scene:opts.update(duration=scene['duration'],frames=scene['frames'])
         plan=validate_plan(plan,refs,opts['duration'])
         if any(a['role']=='lipsync' for a in plan['audios']) and opts['steps']<8:

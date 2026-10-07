@@ -801,5 +801,48 @@
         "extract_to": "runtime/embeddinggemma2/packages"
       }
     ]
+  },
+  "veda": {
+    "files": [
+      {
+        "path": "runtime/downloads/veda-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c.zip",
+        "url": "https://codeload.github.com/veda-sparse/Veda-on-ComfyUI/zip/60bfae688897dc41bc8685ca9f3130d7ed8f3b0c",
+        "size": 189038,
+        "sha256": "c4dd5f442748d3b4cbbef2842ec8f1ebacf7e22ea2fd782509dd57a649c8d60d",
+        "extract_to": "runtime/veda/60bfae688897dc41bc8685ca9f3130d7ed8f3b0c",
+        "extract_members": {
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/LICENSE": "LICENSE",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/NOTICE.md": "NOTICE.md",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/__init__.py": "veda_comfy/__init__.py",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/backends/__init__.py": "veda_comfy/backends/__init__.py",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/backends/base.py": "veda_comfy/backends/base.py",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/backends/mlx_gather.py": "veda_comfy/backends/mlx_gather.py",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/backends/triton_int8.py": "veda_comfy/backends/triton_int8.py",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/comfy_patch.py": "veda_comfy/comfy_patch.py",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/core/bundle.py": "veda_comfy/core/bundle.py",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/core/engine.py": "veda_comfy/core/engine.py",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/core/h3_layout.py": "veda_comfy/core/h3_layout.py",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/core/plans.py": "veda_comfy/core/plans.py",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/core/predictor.py": "veda_comfy/core/predictor.py",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/core/reference.py": "veda_comfy/core/reference.py",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/core/selection.py": "veda_comfy/core/selection.py",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/core/tiling.py": "veda_comfy/core/tiling.py",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/hardware.py": "veda_comfy/hardware.py",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/kernels/sage/__init__.py": "veda_comfy/kernels/sage/__init__.py",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/kernels/sage/sparse_int8.py": "veda_comfy/kernels/sage/sparse_int8.py",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/nodes.py": "veda_comfy/nodes.py",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/predictors.py": "veda_comfy/predictors.py",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/settings.py": "veda_comfy/settings.py",
+          "Veda-on-ComfyUI-60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/status.py": "veda_comfy/status.py"
+        },
+        "version": "60bfae688897dc41bc8685ca9f3130d7ed8f3b0c"
+      },
+      {
+        "path": "models/veda/minimax_h3_t2va_veda_8nfe_600step_preview_fp8.safetensors",
+        "url": "https://huggingface.co/Veda-Sparse/Minimax-H3-T2VA-Veda-8NFE-600Step-Preview/resolve/76f202874608115408d73280be9531c4ab888242/minimax_h3_t2va_veda_8nfe_600step_preview_fp8.safetensors",
+        "size": 275415648,
+        "sha256": "2a8d8845c5342756a2781e8e69563940e4bb573c9a40ebb534915ff8fd76573a"
+      }
+    ]
   }
 }

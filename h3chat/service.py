@@ -35,6 +35,7 @@ from .rag import Knowledge, validate as validate_rag, grounded, quote_warnings
 from .devices import validate as validate_devices, label as device_label, CPU_WARNING
 from .context_tools import retrieval_query, retrieval_budget
 from .embeddinggemma2 import runtime_ready as gemma2_runtime_ready, memory_assessment as assess_gemma2
+from .veda import status as veda_status
 from .lab import route as lab_route, SCHEMA as LAB_SCHEMA, BRIEF as LAB_BRIEF, validate_chart, files as lab_files
 from .calculator import Calculator
 from .slides import requested as slides_requested, options as slides_options, edit_request as slides_edit, edit_options as slides_edit_options
@@ -101,10 +102,10 @@ class Service:
                 "media_server":self.media_server.status(),
                 "llm_options":{"keys":LLM_KEYS,"defaults":{profile:llm_defaults(profile) for profile in PROFILES},"max_context":MAX_CONTEXT,"max_output_tokens":MAX_OUTPUT_TOKENS},
                 "music_runtime":music_status(self.root), "music_options":{"defaults":MUSIC_DEFAULTS,"numbers":MUSIC_NUMBERS,"integers":sorted(MUSIC_INTEGER)},
-                "video_options":{"defaults":VIDEO_DEFAULTS,"aspects":VIDEO_ASPECTS},
+                "video_options":{"defaults":VIDEO_DEFAULTS,"aspects":VIDEO_ASPECTS}, "veda_runtime":veda_status(self.root),
                 "tools_runtime":tools_status(self.root),"transcription_models":[m|{'ready':all(safe_join(self.root,f['path']).is_file() for f in m['files'])} for m in self.downloads.tool_models.values() if m['id'].startswith('whisper-')],
                 "embeddinggemma2_runtime":{"ready":gemma2_runtime_ready(self.root)}, "vision_runtime":vision_status(self.root), "models": models,"image_options":{"samplers":NATIVE_SAMPLERS,"schedulers":NATIVE_SCHEDULERS,"vision_samplers":VISION_SAMPLERS,"vision_schedulers":VISION_SCHEDULERS,"defaults":{k:DEFAULTS[k] for k in IMAGE_DEFAULT_KEYS}},"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
-                "runtimes": {key: {"ready": tools_status(self.root).get(key.removeprefix('tools_'),{}).get('ready',False) if key.startswith('tools_') else gemma2_runtime_ready(self.root) if key=="embeddinggemma2" else voice_ready(self.root) if key=="voice" else vision_status(self.root)["ready"] if key=="vision" else music_status(self.root).get(key.removeprefix("music_"),{}).get("ready",False) if key.startswith("music_") else all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
+                "runtimes": {key: {"ready": tools_status(self.root).get(key.removeprefix('tools_'),{}).get('ready',False) if key.startswith('tools_') else veda_status(self.root)["ready"] if key=="veda" else gemma2_runtime_ready(self.root) if key=="embeddinggemma2" else voice_ready(self.root) if key=="voice" else vision_status(self.root)["ready"] if key=="vision" else music_status(self.root).get(key.removeprefix("music_"),{}).get("ready",False) if key.startswith("music_") else all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
                                     "size": sum(f["size"] for f in r["files"])} for key, r in self.runtimes.items()},
                 "chats": self.store.all("SELECT * FROM chats ORDER BY pinned DESC,updated DESC"),
                 "collections": self.store.all("SELECT * FROM collections ORDER BY name"),

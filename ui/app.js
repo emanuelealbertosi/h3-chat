@@ -2,6 +2,7 @@ import {renderToolsSettings,appendToolsDetails} from './tools-settings.js';
 import {renderProviders} from './api-providers.js';
 import {renderLlmPreferences,selectLlmPreferencesModel,syncLlmDraft,llmOptions} from './llm-settings.js';
 import {renderVideoSettings,appendVideoDetails,selectVideoPreferencesModel} from './video-settings.js';
+import {chatActivities,chatActivityIcon} from './chat-activity.js';
 import {renderMusicSettings,appendMusicDetails,selectMusicPreferencesModel} from './music-settings.js';
 import {renderRich,appendMedia,escape as esc,saveBlob} from './render.js';
 import {exportPdf,exportDocx,exportPng} from './exports.js';
@@ -94,14 +95,15 @@ async function refresh(){
 }
 function renderSidebar(){
   const search=$('#search').value.toLocaleLowerCase();
-  const signature=JSON.stringify([state.chats,state.collections,state.projects,filter,collection,project,current,search]);if(signature===lastSidebar)return;lastSidebar=signature;
+  const activities=chatActivities(state.jobs);
+  const signature=JSON.stringify([state.chats,state.collections,state.projects,[...activities],filter,collection,project,current,search]);if(signature===lastSidebar)return;lastSidebar=signature;
   projects.sidebar(project);
   $('#chat-count').textContent=state.chats.filter(c=>!c.archived).length;
   document.querySelectorAll('[data-filter]').forEach(b=>b.classList.toggle('active',b.dataset.filter===filter&&!collection&&!project));
   $('#collections').innerHTML=state.collections.map(c=>`<div class="collection-row"><button data-collection="${c.id}" class="${collection===c.id?'active':''}">▱ ${esc(c.name)}</button><button data-collection-menu="${c.id}" aria-label="Opzioni ${esc(c.name)}">⋯</button></div>`).join('');
   const chats=state.chats.filter(c=>(filter==='archived'?c.archived:!c.archived)&&(filter!=='pinned'||c.pinned)&&(!collection||c.collection_id===collection)&&(!project||c.project_id===project)&&c.title.toLocaleLowerCase().includes(search));
   $('#list-label').textContent=project?state.projects.find(p=>p.id===project)?.name:collection?state.collections.find(c=>c.id===collection)?.name:'CONVERSAZIONI';
-  $('#chat-list').innerHTML=chats.map(c=>`<div class="chat-row ${current===c.id?'active':''}"><button class="chat-link" data-chat="${c.id}">${c.pinned?'<span class="pin-mark">⌖</span>':''}${esc(c.title)}</button><button class="chat-options" data-chat-menu="${c.id}" aria-label="Opzioni ${esc(c.title)}">⋯</button></div>`).join('')||'<div class="side-empty">Le tue conversazioni appariranno qui.</div>';
+  $('#chat-list').innerHTML=chats.map(c=>`<div class="chat-row ${current===c.id?'active':''}"><button class="chat-link" data-chat="${c.id}" aria-busy="${activities.get(c.id)==='running'}">${c.pinned?'<span class="pin-mark">⌖</span>':''}<span class="chat-title">${esc(c.title)}</span>${chatActivityIcon(activities.get(c.id))}</button><button class="chat-options" data-chat-menu="${c.id}" aria-label="Opzioni ${esc(c.title)}">⋯</button></div>`).join('')||'<div class="side-empty">Le tue conversazioni appariranno qui.</div>';
 }
 function renderStatus(){
   if(!state)return;
@@ -414,7 +416,7 @@ function renderSettings(){
     const tools=document.createElement('section');tools.className='card tools-settings';body.append(tools);renderToolsSettings(tools,{state,draft:settingsDraft,pickDirectory:localModels.pickDirectory,changed:scheduleAssessment,install:act(async kind=>{await api('/downloads',{id:'tools_'+kind,kind:'runtime'});await refresh();}),download:act(async id=>{await api('/downloads',{id,kind:'tool_model'});await refresh();})});
     const video=document.createElement('section');video.className='card video-settings';body.append(video);
     const voice=document.createElement('section');voice.className='card voice-settings';body.append(voice);renderVoiceSettings(voice,{state,draft:settingsDraft,pickDirectory:localModels.pickDirectory,pickFile:localModels.pickFile,changed:scheduleAssessment,install:act(async id=>{await api('/downloads',{id,kind:'runtime'});await refresh();})});
-    renderVideoSettings(video,{state,draft:settingsDraft,link:()=>localModels.open(null,'minimax-h3'),edit:localModels.open,changed:scheduleAssessment,install:act(async()=>{await api('/downloads',{id:'vision',kind:'runtime'});await refresh();})});
+    renderVideoSettings(video,{state,draft:settingsDraft,link:()=>localModels.open(null,'minimax-h3'),edit:localModels.open,pickFile:localModels.pickFile,changed:scheduleAssessment,install:act(async(id='vision')=>{await api('/downloads',{id,kind:'runtime'});await refresh();})});
     const music=document.createElement('section');music.className='card music-settings';body.append(music);
     renderMusicSettings(music,{state,draft:settingsDraft,link:()=>localModels.open(null,'yue2'),edit:localModels.open,changed:()=>{updateDownloads();scheduleAssessment();},
       install:act(async()=>{collectSettings();const backend=settingsDraft.music_backend==='auto'?(settingsDraft.profile!=='cpu'&&settingsDraft.backend==='cuda'?'cuda':'cpu'):settingsDraft.music_backend;if(!['cpu','cuda'].includes(backend))throw Error('YuE2 richiede CPU oppure CUDA.');await api('/downloads',{id:'music_'+backend,kind:'runtime'});await refresh();}),
