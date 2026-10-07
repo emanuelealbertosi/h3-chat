@@ -10,6 +10,7 @@ sys.path[:0]=[str(ROOT),str(ROOT/'scripts')]
 INCLUDE=('native','h3chat','static','licenses','docs','scripts/Launcher.cs','scripts/install.ps1','scripts/bootstrap-python.ps1','scripts/install.py','scripts/bootstrap_bundle.py','scripts/check_native.py','scripts/build-ui.mjs','distribution','ui','package.json','package-lock.json','install.bat','start.bat','stop.bat','app.py','launcher.py','catalog.json','runtimes.json',
          'H3-Chat.exe','Installa-H3-Chat.bat','Avvia-H3-Chat.bat','Ferma-H3-Chat.bat','README.md','LICENSE','NOTICE','runtime/python','runtime/music/cpu','runtime/tools/documents','tools-models.json','scripts/tools-sources.json','scripts/lab-sources.json','scripts/lab-requirements.txt','scripts/latex-sources.json')
 
+INCLUDE=(*INCLUDE,'scripts/reset_admin_password.py')
 
 def main():
     for required in ('runtime/python/python.exe','H3-Chat.exe','static/app.js','native/h3-sd-worker.exe','runtime/music/cpu/h3-music-worker.exe','runtime/cpu/llama/llama-server.exe','runtime/cpu/sd/stable-diffusion.dll','README.md'):

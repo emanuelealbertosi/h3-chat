@@ -1,0 +1,37 @@
+import {spawn} from 'node:child_process';
+import {createRequire} from 'node:module';
+import {once} from 'node:events';
+import {createInterface} from 'node:readline';
+import {mkdir} from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
+const child=spawn('runtime/python/python.exe',['-X','utf8','tests/serve_access_fixture.py'],{stdio:['ignore','pipe','pipe']});let diagnostics='';child.stderr.on('data',x=>diagnostics+=x);
+const lines=createInterface({input:child.stdout}),timer=setTimeout(()=>child.kill(),30000);const first=await Promise.race([once(lines,'line'),once(child,'exit').then(()=>{throw Error(diagnostics);})]);clearTimeout(timer);const fixture=JSON.parse(first[0]);lines.close();
+const browser=await chromium.launch({channel:'msedge',headless:true}),owner=await browser.newContext(),guest=await browser.newContext(),page=await owner.newPage(),friend=await guest.newPage(),errors=[];
+page.on('pageerror',e=>errors.push(e.message));friend.on('pageerror',e=>errors.push(e.message));
+const password='Una password di prova 2026!';
+try{
+ await mkdir('work/access-qa',{recursive:true});await page.goto(fixture.url+'/access');await page.locator('#owner-setup').waitFor({state:'visible'});
+ await page.fill('#setup-form [name=name]','owner');await page.fill('#setup-form [name=password]',password);await page.fill('#setup-form [name=confirm]',password);await page.click('#setup-form button');await page.locator('#guest-form').waitFor();
+ assert.equal(await page.evaluate(()=>document.cookie),'');
+ await page.fill('#guest-form [name=name]','amico');await page.fill('#guest-form [name=password]',password);await page.click('#guest-form button');await page.locator('#user-list').getByText('amico',{exact:true}).waitFor();
+ await page.screenshot({path:'work/access-qa/admin.png',fullPage:true});
+ await friend.goto(fixture.url);await friend.locator('#login-form').waitFor();await friend.screenshot({path:'work/access-qa/login.png',fullPage:true});
+ await friend.fill('#login-form [name=name]','amico');await friend.fill('#login-form [name=password]',password);await friend.click('#login-form button');await friend.locator('#account-access').waitFor();
+ assert.equal(await friend.locator(`[data-chat="${fixture.private_chat}"]`).count(),0);assert.equal(await friend.locator('#settings-open').isVisible(),false);
+ await friend.waitForFunction(()=>!document.querySelector('#new-chat').disabled);await friend.click('#new-chat');await friend.locator('.chat-row.active').waitFor();
+ await friend.click('#new-project');await friend.fill('#project-name','Libro ospite');await friend.click('#project-save');await friend.getByText('Libro ospite',{exact:true}).first().waitFor();
+ assert.equal(await friend.locator('#project-paths').isVisible(),false);
+ await friend.locator('#project-dialog [type=file]').first().setInputFiles({name:'appunti.txt',mimeType:'text/plain',buffer:Buffer.from('Documento di prova dello spazio ospite.\n'.repeat(20))});
+ await friend.getByText('appunti.txt',{exact:true}).first().waitFor({timeout:30000});
+ await friend.click('#project-close');await friend.click('#account-access');await friend.locator('#create-key-form').waitFor();
+ await friend.click('#create-key-form button');await friend.locator('#new-key').waitFor({state:'visible'});
+ const key=await friend.inputValue('#key-value');assert.ok(key.startsWith('h3_'));
+ await friend.click('#key-list button');await friend.waitForFunction(()=>!document.querySelector('#key-list button'));
+ await friend.click('#logout');await friend.locator('#login-form').waitFor();
+ await friend.click('#key-login summary');await friend.fill('#key-form [name=key]',key);await friend.click('#key-form button');await friend.locator('#access-error').waitFor({state:'visible'});assert.match(await friend.locator('#access-error').textContent(),/non validi/);
+ await page.goto(fixture.url);await page.locator(`[data-chat="${fixture.private_chat}"]`).waitFor();
+ const state=await page.evaluate(()=>fetch('/api/state').then(r=>r.json()));assert.equal(state.projects.length,0);assert.equal(state.chats.length,1);
+ await friend.setViewportSize({width:390,height:844});await friend.screenshot({path:'work/access-qa/mobile.png',fullPage:true});assert.ok(await friend.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ assert.deepEqual(errors,[]);console.log('Login, local setup, guest creation, private chats/RAG, browser document upload, key creation/revocation, logout and mobile passed.');
+}catch(e){console.error(diagnostics);await friend.screenshot({path:'work/access-qa/error.png',fullPage:true});throw e;}finally{await browser.close();child.kill();}

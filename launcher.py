@@ -21,7 +21,13 @@ INSTANCE=hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]
 
 
 def get(port,path):
-    with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/{path}',timeout=2) as r:return json.load(r)
+    try:
+        with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/{path}',timeout=2) as r:return json.load(r)
+    except urllib.error.HTTPError as exc:
+        if exc.code!=401 or path!='state':raise
+        token=(DATA/'maintenance-token.txt').read_text(encoding='ascii').strip()
+        request=urllib.request.Request(f'http://127.0.0.1:{port}/api/maintenance/state',headers={'X-H3-Token':token})
+        with urllib.request.urlopen(request,timeout=2) as r:return json.load(r)
 
 
 def running_servers(preferred):

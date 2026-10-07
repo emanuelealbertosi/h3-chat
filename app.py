@@ -21,6 +21,8 @@ from h3chat.pdf_export import export_pdf
 from h3chat.store import uid
 from h3chat.tailscale_access import TailscaleAccess
 from h3chat.document_limits import IMPORT_CHUNK_BYTES
+from h3chat.access import Access,LoginRequired,LoginLimited,local_request,password_matches
+from h3chat.workspaces import Workspaces,guest_allowed,guest_state
 
 ROOT = Path(__file__).resolve().parent
 LOG = logging.getLogger("h3chat.http")
@@ -31,12 +33,14 @@ class Handler(BaseHTTPRequestHandler):
 
     @property
     def app(self):
-        return self.server.app
+        identity=getattr(self,'identity',None)
+        spaces=getattr(self.server,'workspaces',None)
+        return spaces.get(identity) if spaces and identity else self.server.app
 
     def log_message(self, format, *args):
         pass
 
-    def json(self, value, status=200):
+    def json(self, value, status=200, headers=None):
         path = urllib.parse.urlsplit(self.path).path
         if status >= 400:
             LOG.warning("%s %s — %s: %s", self.command, path, status, value.get("error", "Errore"))
@@ -48,6 +52,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        for name,value in (headers or {}).items():self.send_header(name,value)
         self.end_headers()
         self.wfile.write(body)
 
@@ -65,6 +70,21 @@ class Handler(BaseHTTPRequestHandler):
             raise PermissionError("Origine non consentita.")
         if self.headers.get("Sec-Fetch-Site") == "cross-site":
             raise PermissionError("Richiesta da un altro sito non consentita.")
+        access=getattr(self.server,'access',None)
+        path=urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)
+        if access:
+            maintenance=(path in ('/api/maintenance/state','/api/shutdown','/api/network/refresh') and local_request(self)
+                and secrets.compare_digest(self.headers.get('X-H3-Token',''),access.maintenance))
+            self.identity={'id':'maintenance','role':'owner','name':'Avvio locale','csrf':access.maintenance} if maintenance else access.identity(self)
+            public=(self.command=='GET' and (path in ('/','/login','/api/health','/api/auth/me') or path.startswith('/static/'))) or path=='/api/auth/login'
+            if public:return
+            if not self.identity:raise LoginRequired('Accedi con il tuo account o una chiave.')
+            if path=='/api/maintenance/state' and not maintenance:raise PermissionError('Operazione riservata all’avvio locale.')
+            if self.identity['role']=='guest' and not path.startswith('/api/auth/') and not guest_allowed(path,self.command):
+                raise PermissionError('Operazione riservata all’amministratore.')
+            if self.command in ('POST','PATCH','DELETE','PUT') and not self.identity.get('bearer'):
+                if not secrets.compare_digest(self.headers.get('X-H3-Token',''),self.identity['csrf']):raise PermissionError('Sessione scaduta. Ricarica la pagina.')
+            return
         if self.command in ("POST", "PATCH", "DELETE", "PUT"):
             if not secrets.compare_digest(self.headers.get("X-H3-Token", ""), self.app.token):
                 raise PermissionError("Sessione scaduta. Ricarica la pagina.")
@@ -73,7 +93,8 @@ class Handler(BaseHTTPRequestHandler):
         if "application/json" not in self.headers.get("Content-Type", ""):
             raise ValueError("È richiesto un corpo JSON.")
         length = int(self.headers.get("Content-Length", "0"))
-        if length < 0 or length > 90 * 1024 * 1024:
+        limit=4096 if urllib.parse.urlsplit(self.path).path.startswith('/api/auth/') else 90*1024*1024
+        if length < 0 or length > limit:
             raise ValueError("Richiesta troppo grande.")
         body = json.loads(self.rfile.read(length) or b"{}")
         if not isinstance(body, dict):
@@ -104,13 +125,22 @@ class Handler(BaseHTTPRequestHandler):
             path = urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)
             parts = [p for p in path.split("/") if p]
             method = self.command
+            access=getattr(self.server,'access',None)
+            if access and path.startswith('/api/auth/'):
+                return self.auth_request(path,method)
             if method == "GET":
+                if path=='/api/maintenance/state':
+                    return self.json(self.server.workspaces.maintenance_state()|{'token':access.maintenance})
                 if len(parts)==3 and parts[:2]==['api','projects']:
                     return self.json(self.app.knowledge.project(parts[2]))
                 if path == "/api/health":
                     return self.json({"app": "h3-chat", "version": __version__, "worker_alive": self.app.worker.is_alive(), "instance": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16], 'network': getattr(self.server, 'network', None).status if getattr(self.server, 'network', None) else {}})
                 if path == "/api/state":
-                    return self.json(self.app.state() | {'network': getattr(self.server, 'network', None).status if getattr(self.server, 'network', None) else {}})
+                    value=self.app.state() | {'network': getattr(self.server, 'network', None).status if getattr(self.server, 'network', None) else {}}
+                    if access:
+                        value['token']=self.identity['csrf'];value['access']={k:self.identity[k] for k in ('id','name','role')}
+                        if self.identity['role']=='guest':value=guest_state(value)
+                    return self.json(value)
                 if path == "/api/hardware":
                     return self.json(self.app.hardware())
                 if len(parts) == 3 and parts[:2] == ["api", "chats"]:
@@ -122,7 +152,10 @@ class Handler(BaseHTTPRequestHandler):
                 if len(parts) == 5 and parts[:2] == ['api', 'canvas'] and parts[3] == 'history':
                     return self.json(self.app.store.canvas_history.get(parts[2], parts[4]))
                 if path == "/":
+                    if access and not self.identity:return self.file(ROOT/'static/login.html')
                     return self.file(ROOT / "static/index.html")
+                if path=='/login':return self.file(ROOT/'static/login.html')
+                if path=='/access':return self.file(ROOT/'static/access.html')
                 if path.startswith("/static/"):
                     return self.file(safe_join(ROOT / "static", path[len("/static/"):]))
                 if path.startswith("/exports/"):
@@ -146,6 +179,9 @@ class Handler(BaseHTTPRequestHandler):
                 if len(raw)!=length:raise ValueError('Blocco documento incompleto.')
                 return self.json(self.app.knowledge.uploads.append(parts[2],parts[4],offset,raw))
             body = self.read_body()
+            if access and self.identity['role']=='guest':
+                if path=='/api/settings':return self.json(self.server.workspaces.preferences(self.identity,body))
+                if path=='/api/knowledge/options':return self.json(self.server.workspaces.preferences(self.identity,body,rag=True))
             if path == '/api/network/refresh' and method == 'POST':
                 return self.json(self.server.network.refresh())
             if path=='/api/server/start' and method=='POST':return self.json(self.app.media_server.start(body))
@@ -287,6 +323,10 @@ class Handler(BaseHTTPRequestHandler):
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
                 return
             self.json({"error": "Operazione non trovata."}, 404)
+        except LoginRequired as exc:
+            self.json({'error':str(exc),'login':True},401)
+        except LoginLimited as exc:
+            self.json({'error':str(exc)},429,{'Retry-After':'600'})
         except PermissionError as exc:
             self.json({"error": str(exc)}, 403)
         except (ValueError, KeyError, TypeError, sqlite3.IntegrityError) as exc:
@@ -299,6 +339,52 @@ class Handler(BaseHTTPRequestHandler):
 
     do_GET = do_POST = do_PATCH = do_DELETE = do_PUT = handle_request
 
+    def auth_request(self,path,method):
+        access=self.server.access;identity=getattr(self,'identity',None)
+        secure=not local_request(self)
+        if path=='/api/auth/me' and method=='GET':
+            return self.json({'configured':access.configured(),'local':local_request(self),'user':{k:identity[k] for k in ('id','name','role')} if identity else None,'csrf':identity.get('csrf','') if identity else ''})
+        if path=='/api/auth/login' and method=='POST':
+            body=self.read_body();peer=self.headers.get('Tailscale-User-Login') or self.client_address[0]
+            raw,csrf=access.login(body,peer)
+            return self.json({'ok':True},headers={'Set-Cookie':access.cookie(raw,secure)})
+        if path=='/api/auth/setup' and method=='POST':
+            if not local_request(self) or not identity.get('bootstrap'):raise PermissionError('Configura l’amministratore dal PC che ospita H3-Chat.')
+            user=access.create(self.read_body(),owner=True);raw,_=access.session(user)
+            return self.json({'ok':True},201,{'Set-Cookie':access.cookie(raw,secure)})
+        if not identity:raise LoginRequired('Accedi prima di continuare.')
+        if identity.get('bootstrap'):raise ValueError('Configura prima l’amministratore.')
+        if path=='/api/auth/logout' and method=='POST':
+            self.read_body();access.logout(identity)
+            return self.json({'ok':True},headers={'Set-Cookie':access.cookie('',secure)})
+        if path=='/api/auth/users':
+            if identity['role']!='owner':raise PermissionError('Gestione account riservata all’amministratore.')
+            if method=='GET':return self.json({'users':access.users()})
+            if method=='POST':return self.json(access.create(self.read_body()),201)
+        parts=path.strip('/').split('/')
+        if len(parts)==4 and parts[:3]==['api','auth','users'] and method=='PATCH':
+            if identity['role']!='owner':raise PermissionError('Gestione account riservata all’amministratore.')
+            body=self.read_body()
+            if not body or set(body)-{'enabled','password'}:raise ValueError('Modifica account non valida.')
+            if 'password' in body:access.change_password(parts[3],body['password'])
+            if 'enabled' in body:
+                access.enabled(parts[3],body['enabled'])
+                if not body['enabled']:self.server.workspaces.deactivate(parts[3])
+            return self.json({'ok':True})
+        if path=='/api/auth/password' and method=='POST':
+            body=self.read_body()
+            with access.connect() as db:row=db.execute('SELECT password FROM users WHERE id=?',(identity['id'],)).fetchone()
+            old=body.get('old_password','')
+            if not isinstance(old,str) or len(old)>256 or not row or not password_matches(old,row['password']):raise PermissionError('Password attuale non valida.')
+            access.change_password(identity['id'],body.get('password'))
+            return self.json({'ok':True},headers={'Set-Cookie':access.cookie('',secure)})
+        if path=='/api/auth/keys':
+            if method=='GET':return self.json({'keys':access.keys(identity)})
+            if method=='POST':return self.json(access.create_key(identity,self.read_body()),201)
+        if len(parts)==4 and parts[:3]==['api','auth','keys'] and method=='DELETE':
+            self.read_body();access.revoke_key(identity,parts[3]);return self.json({'ok':True})
+        return self.json({'error':'Operazione non trovata.'},404)
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -310,6 +396,8 @@ def main():
     app = Service(ROOT, args.data)
     try:
         server.app = app
+        server.access=Access(app.data)
+        server.workspaces=Workspaces(app)
         server.network = TailscaleAccess(server.server_port)
         network = server.network.refresh()
         LOG.info('Tailscale: %s', network.get('url') or network['message'])
@@ -320,6 +408,7 @@ def main():
         pass
     finally:
         LOG.info("Arresto di H3-Chat e dei motori…")
+        if getattr(server,'workspaces',None):server.workspaces.close()
         app.close()
         server.server_close()
         LOG.info("H3-Chat arrestato.")

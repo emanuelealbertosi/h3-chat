@@ -3,6 +3,7 @@ import io
 import json
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,6 +11,26 @@ import launcher
 
 
 class LauncherTests(unittest.TestCase):
+    def test_authenticated_server_maintenance_fallback_uses_local_secret(self):
+        with tempfile.TemporaryDirectory() as temp:
+            data=Path(temp);(data/'maintenance-token.txt').write_text('local-maintenance-secret',encoding='ascii')
+            denied=urllib.error.HTTPError('http://127.0.0.1:8788/api/state',401,'Login required',{},None)
+            with patch.object(launcher,'DATA',data),patch.object(launcher.urllib.request,'urlopen') as request:
+                response=request.return_value
+                response.__enter__.return_value.read.return_value=b'{"jobs":[],"downloads":[],"token":"local-maintenance-secret"}'
+                request.side_effect=[denied,response]
+                state=launcher.get(8788,'state')
+                self.assertEqual(state['jobs'],[])
+                fallback=request.call_args.args[0]
+                self.assertEqual(fallback.full_url,'http://127.0.0.1:8788/api/maintenance/state')
+                self.assertEqual(fallback.get_header('X-h3-token'),'local-maintenance-secret')
+
+    def test_maintenance_fallback_does_not_bypass_other_api_denials(self):
+        denied=urllib.error.HTTPError('http://127.0.0.1:8788/api/chats',401,'Login required',{},None)
+        with patch.object(launcher.urllib.request,'urlopen',side_effect=denied) as request:
+            with self.assertRaises(urllib.error.HTTPError):launcher.get(8788,'chats')
+            self.assertEqual(request.call_count,1)
+
     def test_console_follows_appended_unicode_logs_until_server_stops(self):
         with tempfile.TemporaryDirectory() as temp:
             data=Path(temp);log=data/'server.log';log.write_bytes(b'Server pronto\n')
