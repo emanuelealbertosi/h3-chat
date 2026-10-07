@@ -22,8 +22,15 @@ def create(app,job,outline,history,settings,model,cancel,stage,log_path,meta):
         'Il campo prompt deve contenere '+style+'. description è una breve descrizione italiana dell’illustrazione.\n'+
         'Genera illustrazioni, scene o metafore pertinenti. Nessun testo piccolo, grafico numerico, formula o citazione dentro immagini: questi saranno HTML/SVG precisi. Non attribuire valore documentale alle illustrazioni generate.'}]
     planning=settings|{'think_level':'off','temperature':.3,'max_tokens':min(settings['context']//2,settings['prompt_max_tokens'],max(1024,len(outline['slides'])*240))}
-    stage('Slide · piano unico delle illustrazioni · '+image_model['name'])
-    raw,finish=app.engine.completion(request,planning,cancel,schema=schema)
+    label='Slide · piano unico delle illustrazioni · '+image_model['name'];last=0
+    stage(label)
+    def progress(text):
+        nonlocal last
+        if text and time.monotonic()-last>.8:
+            stage(label+f' · {len(text)} caratteri ricevuti');last=time.monotonic()
+    # Completion returns (text, finish_reason) only when a stream callback is supplied.
+    # Streaming also preserves the planned token budget instead of the router's 768-token cap.
+    raw,finish=app.engine.completion(request,planning,cancel,on_text=progress,schema=schema)
     if finish=='length':raise ValueError('Piano immagini incompleto: aumenta i token Assistant immagini o il contesto LLM.')
     plan=json.loads(raw).get('images');seen=set()
     if not isinstance(plan,list) or not 1<=len(plan)<=len(outline['slides']):raise ValueError('Piano immagini non valido.')
