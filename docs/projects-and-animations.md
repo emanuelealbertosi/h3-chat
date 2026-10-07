@@ -58,6 +58,32 @@ Indicizzazione fallita o file cancellati
 non restituiscono vecchi contenuti. Percorsi mancanti/errori sono visibili nella
 gestione del progetto.
 
+### EmbeddingGemma 2 · alternativa opzionale
+
+In **Impostazioni → Preferenze → Progetti e ricerca nei documenti** puoi scaricare
+**EmbeddingGemma 2 · 740M** e i suoi componenti, oppure scegliere dal filesystem
+la cartella originale con configurazione, tokenizer, processor e pesi safetensors.
+Il download occupa circa **1,53 GB**; 740M indica il numero di parametri, non MB.
+Premi **Usa EmbeddingGemma 2 scaricato**, poi **Salva impostazioni**, solo quando
+vuoi selezionarlo. Aggiunta e download non cambiano il modello RAG già scelto.
+
+Il RAG supporta testo e immagini, comprese pagine PDF illustrate/scansionate,
+figure Word e PNG/JPEG/WebP. CPU e GPU NVIDIA si selezionano nelle Preferenze
+oppure in Progetto → Documenti. I pesi completi includono anche l'encoder audio,
+che il RAG attuale lascia scaricato; importare audio/video nei progetti non è
+parte di questa integrazione. Per il testo vengono caricati circa 270M parametri,
+con Vision circa 440M. Il worker usa BF16 sulle GPU compatibili e FP32 altrove,
+mai FP16, con pooling medio e normalizzazione dei vettori a 768 dimensioni.
+
+Ogni embedding mantiene un'identità distinta: cambiare tra Ovis, Gemma 2 e GGUF
+ricostruisce automaticamente l'indice, senza mescolare i loro vettori. Il processo
+viene chiuso dopo indicizzazione/ricerca come per Ovis. Transformers e tokenizer
+di Gemma 2 sono installati in una cartella privata, senza aggiornare quelli di Ovis
+e delle immagini; l'inferenza è offline e non esegue codice del repository modello.
+
+Modello ufficiale e licenza Apache 2.0:
+[Google EmbeddingGemma 2](https://huggingface.co/google/embeddinggemma-2).
+
 ### Ovis-Omni-Embedding-3B
 
 In **Impostazioni → Preferenze → Progetti e ricerca nei documenti** puoi scegliere

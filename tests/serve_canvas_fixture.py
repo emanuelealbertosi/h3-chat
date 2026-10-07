@@ -32,6 +32,9 @@ def main():
         model=fixture_model('Qwen-OrcaRouter-IQ3_XXS.gguf','Staged_Tmpl','Staged_Tmpl')
         second=fixture_model('RVN-IQ3_M-mtp.gguf','Qwen fixture','Internal Ara')
         app.store.save_settings({'chat_model':model['id']})
+        gemma=Path(folder)/'EmbeddingGemma-2';gemma.mkdir()
+        for name in ('model.safetensors','tokenizer.json','tokenizer_config.json','processor_config.json','preprocessor_config.json'):(gemma/name).write_text('{}')
+        (gemma/'config.json').write_text(json.dumps({'model_type':'embedding_gemma2','text_config':{'embedding_dim':768}}))
         outputs = Path(folder) / 'outputs'; outputs.mkdir(exist_ok=True)
         sys.path.insert(0,str(ROOT/'runtime/tools/documents'))
         from PIL import Image,ImageDraw
@@ -153,7 +156,7 @@ def main():
             do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = handle_request
 
         server = ThreadingHTTPServer(('127.0.0.1', 0), FixtureHandler); server.app = app
-        print(json.dumps({'url':f'http://127.0.0.1:{server.server_port}', 'chat':chat, 'other':other, 'model':model['id'], 'second_model':second['id']}), flush=True)
+        print(json.dumps({'url':f'http://127.0.0.1:{server.server_port}', 'chat':chat, 'other':other, 'model':model['id'], 'second_model':second['id'],'embeddinggemma2':str(gemma)}), flush=True)
         try:
             server.serve_forever()
         finally:

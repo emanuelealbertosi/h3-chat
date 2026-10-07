@@ -1,9 +1,21 @@
 import json
 import unittest
-from h3chat.slide_context import compact_history
+from h3chat.slide_context import compact_history,animation_history
 
 
 class SlideContextTests(unittest.TestCase):
+    def test_manim_history_uses_visible_slide_facts_and_omits_old_layouts(self):
+        from h3chat.manim_code import generation_history
+        html='<style>'+('OLD_CSS '*20000)+'</style><h2>Un oggetto, molti comportamenti</h2><p>Il metodo parla restituisce voci diverse [R2].</p>'
+        content='```h3-slides\n'+json.dumps({'title':'Polimorfismo','pages':[{'title':'Esempio','html':html}]})+'\n```'
+        history=[{'seq':n,'role':'assistant','content':'Fatto\nArtefatto nel canvas:\n'+content,'media':[],'meta':{'artifact':{'content':content}}} for n in range(6)]
+        current={'seq':7,'role':'user','content':'Crea Manim con voce\n<fonti_progetto>[R1] Testo integro</fonti_progetto>','media':[]};history.append(current)
+        result=generation_history(history,'Crea Manim con voce')
+        self.assertNotIn('OLD_CSS',json.dumps([m['content'] for m in result]))
+        self.assertIn('molti comportamenti',result[-2]['content']);self.assertIn('[R2]',result[-2]['content'])
+        self.assertEqual(result[-1],current);self.assertLess(sum(len(m['content']) for m in result),18000)
+        self.assertEqual(animation_history(result),result);self.assertIn('OLD_CSS',history[0]['content'])
+
     def test_complete_vision_is_explicit_and_invalid_modes_are_rejected(self):
         from h3chat.slides import options
         self.assertEqual(options('Crea 4 slide',{'vision_scope':'all'})['vision_scope'],'all')

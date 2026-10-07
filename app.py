@@ -194,6 +194,10 @@ class Handler(BaseHTTPRequestHandler):
             if path=='/api/media-providers/test' and method=='POST':return self.json(self.app.media_provider_request(body,'test'))
             if len(parts)==3 and parts[:2]==['api','media-providers'] and method=='DELETE':return self.json(self.app.media_provider_request({'id':parts[2]},'delete'))
             if path=='/api/knowledge/embedding-default' and method=='POST':
+                if body.get('id')=='embeddinggemma2':
+                    from h3chat.embeddinggemma2 import checkpoint
+                    target,_=checkpoint(ROOT/'models/EmbeddingGemma-2')
+                    return self.json({'path':str(target)})
                 if body.get('id')=='ovis-omni-3b':
                     from h3chat.ovis import checkpoint
                     target,_=checkpoint(ROOT/'models/Ovis-Omni-Embedding-3B')

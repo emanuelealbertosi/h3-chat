@@ -54,13 +54,16 @@ def validate(settings):
     if type(settings['rag_enabled']) is not bool:raise ValueError('RAG: scegli On oppure Off.')
     if type(settings.get('rag_visual',True)) is not bool:raise ValueError('RAG immagini: scegli attivo o disattivo.')
     if type(settings['rag_top_k']) is not int or not 1<=settings['rag_top_k']<=12:raise ValueError('RAG: scegli da 1 a 12 estratti.')
-    if settings['rag_embedding_profile'] not in ('embeddinggemma','plain','e5','nomic','ovis'):raise ValueError('Profilo embedding non valido.')
+    if settings['rag_embedding_profile'] not in ('embeddinggemma','embeddinggemma2','plain','e5','nomic','ovis'):raise ValueError('Profilo embedding non valido.')
     model=settings['rag_embedding_model']
     if not isinstance(model,str) or len(model)>2000:raise ValueError('Percorso embedding non valido.')
     if model:
         p=Path(model)
         if settings['rag_embedding_profile']=='ovis':
             from .ovis import checkpoint
+            checkpoint(p)
+        elif settings['rag_embedding_profile']=='embeddinggemma2':
+            from .embeddinggemma2 import checkpoint
             checkpoint(p)
         elif not p.is_absolute() or p.suffix.lower()!='.gguf' or not p.is_file():raise ValueError('Scegli un file embedding GGUF esistente.')
 
@@ -73,6 +76,10 @@ def normalize(vector):
 class Embeddings:
     def __init__(self,root,data):self.root,self.data=Path(root),Path(data);self.lock=threading.RLock();self.session=None
     def key(self,settings):
+        if settings['rag_embedding_profile']=='embeddinggemma2':
+            from .embeddinggemma2 import checkpoint,FORMAT_VERSION
+            folder,files=checkpoint(settings['rag_embedding_model'])
+            return hashlib.sha256(json.dumps([str(folder),[(p.name,p.stat().st_size,p.stat().st_mtime_ns) for p in files],FORMAT_VERSION,settings.get('rag_visual',True),settings.get('rag_device','cpu')]).encode()).hexdigest()
         if settings['rag_embedding_profile']=='ovis':
             from .ovis import checkpoint,FORMAT_VERSION
             folder,files=checkpoint(settings['rag_embedding_model'])
@@ -83,6 +90,7 @@ class Embeddings:
         with self.lock:
             if self.session:self.session.stop();self.session=None
     def encode(self,texts,settings,cancel,stage,query=False):
+        if settings['rag_embedding_profile']=='embeddinggemma2':return self.encode_gemma2(texts,settings,cancel,stage,query)
         if settings['rag_embedding_profile']=='ovis':return self.encode_ovis(texts,settings,cancel,stage,query)
         from .engine import runtime_executable
         with self.lock:
@@ -121,9 +129,36 @@ class Embeddings:
             return result
     def encode_items(self,items,settings,cancel,stage):
         if not any(b.get('image_path') for b in items):return self.encode([b['text'] for b in items],settings,cancel,stage)
-        if settings['rag_embedding_profile']!='ovis':raise ValueError('Le immagini RAG richiedono Ovis.')
+        if settings['rag_embedding_profile'] not in ('ovis','embeddinggemma2'):raise ValueError('Le immagini RAG richiedono Ovis oppure EmbeddingGemma 2.')
         payload=[{'text':b['text'],**({'image':str(safe_join(self.data,b['image_path']))} if b.get('image_path') else {})} for b in items]
+        if settings['rag_embedding_profile']=='embeddinggemma2':return self.encode_gemma2([],settings,cancel,stage,False,items=payload)
         return self.encode_ovis([],settings,cancel,stage,False,items=payload)
+    def encode_gemma2(self,texts,settings,cancel,stage,query,items=None):
+        from .embeddinggemma2 import runtime_ready,DIMENSIONS
+        from .rag_profiles import visual_enabled
+        entries=items if items is not None else texts
+        with self.lock:
+            if not runtime_ready(self.root):raise ValueError('Installa i componenti EmbeddingGemma 2 nelle Preferenze per usare questo embedding.')
+            key=self.key(settings);device='cuda' if settings.get('rag_device')=='gpu' else 'cpu'
+            try:
+                if not self.session or self.session.key!=key or not self.session.alive():
+                    self.close();s=Session(key,'embedding-gemma2',{}, {},settings,self.data/'logs/embeddings.log');self.session=s
+                    stage('RAG · avvio EmbeddingGemma 2 · '+device.upper())
+                    s.start([self.root/'runtime/python/python.exe','-X','utf8',self.root/'native/embeddinggemma-worker.py'],ipc=True,cwd=self.root)
+                    s.wait('hello',cancel,90,stage)
+                    s.send({'op':'load','path':settings['rag_embedding_model'],'device':device,'threads':settings['threads'],'visual':visual_enabled(settings)})
+                    s.wait('loaded',cancel,300,stage)
+                result=[]
+                for start in range(0,len(entries),8):
+                    if cancel.is_set():raise Cancelled()
+                    stage(f'RAG · EmbeddingGemma 2 · {device.upper()} · elementi {start+1}–{min(start+8,len(entries))}/{len(entries)}')
+                    self.session.send({'op':'encode','items' if items is not None else 'texts':entries[start:start+8],'query':query})
+                    vectors=self.session.wait('result',cancel,300,stage).get('vectors',[])
+                    if len(vectors)!=len(entries[start:start+8]) or any(not isinstance(v,list) or len(v)!=DIMENSIONS for v in vectors):raise ValueError('Risposta EmbeddingGemma 2 incompleta.')
+                    result.extend(normalize(v) for v in vectors)
+                return result
+            except BaseException:
+                self.close();raise
     def encode_ovis(self,texts,settings,cancel,stage,query,items=None):
         from .ovis import runtime_ready,visual_enabled
         entries=items if items is not None else texts
@@ -334,7 +369,7 @@ class Knowledge:
                 if cancel.is_set():raise Cancelled()
                 stage(f"RAG · documento {n}/{len(sources)} · {source['name']}")
                 try:
-                    from .ovis import visual_enabled
+                    from .rag_profiles import visual_enabled
                     path=Path(source['path']);st=path.stat();fingerprint=f'{st.st_mtime_ns}:{st.st_size}'+(':visual-v2' if visual_enabled(settings) else '')
                     missing_visual=visual_enabled(settings) and any(not safe_join(self.data,row['image_path']).is_file() for row in self.store.all("SELECT image_path FROM rag_chunks WHERE source_id=? AND image_path!=''",(source['id'],)))
                     if source['fingerprint']!=fingerprint or source['status']!='ready' or missing_visual:

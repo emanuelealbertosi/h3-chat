@@ -4,6 +4,8 @@ import re
 
 def generation_history(history,prompt):
     """Fresh scenes retain facts and user turns without inheriting old programs."""
+    from .slide_context import animation_history
+    history=animation_history(history)
     fresh=bool(re.search(r'\b(da zero|from scratch|completamente (?:divers\w*|nuov\w*)|riparti|redesign)\b',prompt,re.I))
     edit=not fresh and bool(re.search(r'\b(modific\w*|corregg\w*|sostituisc\w*|aggiung\w*|rimuov\w*|allung\w*|accorci\w*|cambi\w*|spost\w*|ingrandisc\w*|riduci|mantieni|conserva|edit|modify|fix|replace|keep|add|remove|move|change|extend|shorten|resize)\b',prompt,re.I))
     if edit:return history

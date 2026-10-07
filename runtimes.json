@@ -734,5 +734,72 @@
         "extract_to": "runtime/voice/packages"
       }
     ]
+  },
+  "embeddinggemma2": {
+    "files": [
+      {
+        "path": "runtime/downloads/H3-Chat-vision-crt-0.7.0-windows-x64.zip",
+        "extract_to": "runtime/vision/dlls",
+        "url": "https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.7.0/H3-Chat-vision-crt-0.7.0-windows-x64.zip",
+        "size": 708131,
+        "sha256": "6c6a9bf24ecbf394ca54f7b5def83f7f01391e567a9c18e6ab1e390bc41b88fa"
+      },
+      {
+        "path": "runtime/downloads/H3-Chat-vision-engine-0.7.0-windows-x64.zip",
+        "extract_to": "runtime/vision",
+        "url": "https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.7.0/H3-Chat-vision-engine-0.7.0-windows-x64.zip",
+        "size": 2102575536,
+        "sha256": "b02020528937bd8d47bfb95516aca101803858a8d882717ad3b4a91cbbcf8fe7"
+      },
+      {
+        "path": "runtime/downloads/sageattention-2.2.0+cu130torch2.10.0andhigher.post6-cp310-abi3-win_amd64.whl",
+        "url": "https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post6/sageattention-2.2.0%2Bcu130torch2.10.0andhigher.post6-cp310-abi3-win_amd64.whl",
+        "size": 16656067,
+        "sha256": "1635283f5c01ec3cda58a784d0d7eabbcaffaf9511d1b263db4750e1ed7958bb",
+        "extract_to": "runtime/vision/packages"
+      },
+      {
+        "path": "runtime/downloads/triton_windows-3.7.1.post27-cp313-cp313-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/ec/28/f0b2801c2cfd79be5878bf429e82b5da00fb78f046a9c21ba946681cc467/triton_windows-3.7.1.post27-cp313-cp313-win_amd64.whl",
+        "size": 49684257,
+        "sha256": "e8ed215c02afc85a81f0097196f8bebdf6f68085f1bc0fe8771b9a74783f15ab",
+        "extract_to": "runtime/vision/packages"
+      },
+      {
+        "path": "runtime/downloads/python_3.13.2_include_libs.zip",
+        "url": "https://github.com/woct0rdho/triton-windows/releases/download/v3.0.0-windows.post1/python_3.13.2_include_libs.zip",
+        "size": 555256,
+        "sha256": "e3e8c3abb17ea8de1cd2cd264ad15aae3de5eb7dc61ab37cb1a3d07f9c86238d",
+        "extract_to": "runtime/python"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/b9/59/1e7f1212c215c73690ae6cab4678efe1555ff985953e145d88cc212859b0/transformers-5.19.0-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/transformers-5.19.0-py3-none-any.whl",
+        "size": 12599123,
+        "sha256": "afcd2dd5f603ed28c1e1fcb00a338ccbb4ef5f878ed289635df8b58187afb518",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/db/f7/0a69ac6b82dbccf3f71add938a161c497952749294b8dd6dfe03a819dc40/tokenizers-0.23.2-cp310-abi3-win_amd64.whl",
+        "path": "runtime/downloads/embeddinggemma2/tokenizers-0.23.2-cp310-abi3-win_amd64.whl",
+        "size": 2863236,
+        "sha256": "2e96f5699d5249c9c64aa8412e044f727aae3a4098cf830f9901ec1afc361cde",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/fc/16/963096d224b80909432dc16561a615fd33d2d13beef3ce4c63fa25e40867/huggingface_hub-1.33.0-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/huggingface_hub-1.33.0-py3-none-any.whl",
+        "size": 846435,
+        "sha256": "04e434b06e100eddbce9a6e817d72693a7884b10a79bd67ab48080d5c07eb899",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/98/b7/8c59a66d15205024662f1d66968136f13893f96df1ddc5087e2e281fc95f/hf_xet-1.6.0-cp38-abi3-win_amd64.whl",
+        "path": "runtime/downloads/embeddinggemma2/hf_xet-1.6.0-cp38-abi3-win_amd64.whl",
+        "size": 4033128,
+        "sha256": "fb4fadde1b2b70bf4c0c14a6dccbe7194b1c28947fefd5bbe3fed9d940676c3b",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      }
+    ]
   }
 }

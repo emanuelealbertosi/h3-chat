@@ -1,6 +1,7 @@
 """Offline Ovis checkpoint selection and reproducible retrieval formatting."""
 import json,math,struct
 from pathlib import Path
+from .rag_profiles import visual_enabled
 
 QUERY_INSTRUCTION='Represent this query for retrieving relevant content.'
 DOCUMENT_INSTRUCTION='Represent this passage for retrieval.'
@@ -27,8 +28,6 @@ def checkpoint(path):
     except (OSError,ValueError,KeyError,TypeError) as error:
         raise ValueError('Cartella Ovis incompleta o incompatibile: servono configurazione, tokenizer, template e tutti i pesi safetensors.') from error
     return folder.resolve(),files
-
-def visual_enabled(settings):return settings.get('rag_embedding_profile')=='ovis' and bool(settings.get('rag_embedding_model')) and settings.get('rag_visual',True)
 
 def messages(text,query,image=None):
     content=([{'type':'image','image':image}] if image else [])+[{'type':'text','text':text}]
