@@ -4,6 +4,7 @@ export const designs={professional:'Serio / professionale',playful:'Giocoso / co
 export function validateDesign(deck){
   for(const [key,values,fallback] of [['theme',themes,'lagoon'],['typography',typography,'modern'],['design',designs,'professional']]){const value=deck[key]??fallback;if(typeof value!=='string'||!Object.hasOwn(values,value))throw Error('Tema o stile slide non valido.');}
   if(!['concise','full'].includes(deck.detail??'concise'))throw Error('Dettaglio slide non valido.');
+  const height=deck.format==='9:16'?1280*16/9:1280;
   for(const page of deck.pages){
     const overrides=Object.hasOwn(page,'overrides')?page.overrides:{},ids=new Set(page.nodes.map(n=>n.id));
     if(!overrides||typeof overrides!=='object'||Array.isArray(overrides)||Object.keys(overrides).length>40)throw Error('Modifiche grafiche non valide.');
@@ -13,7 +14,7 @@ export function validateDesign(deck){
         if(['color','background'].includes(key)){if(typeof value!=='string'||!/^#[\da-f]{6}$/i.test(value))throw Error('Colore slide non valido.');}
         else if(key==='align'){if(!['left','center','right'].includes(value))throw Error('Allineamento non valido.');}
         else if(key==='font'){if(!['Manrope','Cormorant','Consolas','Comic Sans MS'].includes(value))throw Error('Carattere non valido.');}
-        else {const limits={x:[-1280,1280],y:[-1280,1280],width:[40,1164],height:[20,1164],font_size:[16,88]}[key];if(!limits||typeof value!=='number'||!Number.isFinite(value)||value<limits[0]||value>limits[1])throw Error('Dimensione o posizione slide non valida.');}
+        else {const limits={x:[-1280,1280],y:[-height,height],width:[40,1164],height:[20,Math.max(1164,height-116)],font_size:[16,88]}[key];if(!limits||typeof value!=='number'||!Number.isFinite(value)||value<limits[0]||value>limits[1])throw Error('Dimensione o posizione slide non valida.');}
       }
     }
   }

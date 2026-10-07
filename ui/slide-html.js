@@ -4,7 +4,7 @@ import {editHtmlSlide} from './slide-html-editing.js';
 import {contentOverflows,fitMediaBounds} from './slide-html-bounds.js';
 import {parseColor,composite,contrastRatio,readableColor,colorHex} from './color-contrast.js';
 
-const heights={'16:9':720,'4:3':960,'16:10':800,'1:1':1280};
+const heights={'16:9':720,'9:16':1280*16/9,'4:3':960,'16:10':800,'1:1':1280};
 const safePath=path=>/^(uploads|outputs)\/[\w./-]+\.(png|jpg|jpeg|webp)$/i.test(path);
 const encode=deck=>'```h3-slides\n'+JSON.stringify(deck)+'\n```';
 const sessions=new WeakMap();

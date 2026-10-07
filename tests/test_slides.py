@@ -27,6 +27,8 @@ class SchemaTests(unittest.TestCase):
             # takes precedence at the service boundary.
             if 'immagine' not in prompt:self.assertFalse(requested(prompt))
         self.assertEqual(options('Crea 12 slide in 4:3'),{'count':12,'format':'4:3','engine':'llm'})
+        self.assertEqual(options('Crea 5 slide in 9 : 16',{'format':'16:9'}),{'count':5,'format':'9:16','engine':'llm'})
+        self.assertEqual(options('',{'format':'9:16'})['format'],'9:16')
         for count in (0,31,True,'8'):
             with self.assertRaises(ValueError):options('',{'count':count})
 

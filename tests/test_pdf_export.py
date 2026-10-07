@@ -7,6 +7,14 @@ from h3chat.pdf_export import export_document
 
 
 class ExportSizeTests(unittest.TestCase):
+    def test_vertical_slides_keep_portrait_page_dimensions(self):
+        from h3chat.slides import FORMATS
+        width,height=FORMATS['9:16']
+        self.assertAlmostEqual(width/height,9/16)
+        with tempfile.TemporaryDirectory() as directory,patch('h3chat.pdf_export.embedded_css',return_value=''):
+            _,file,_=export_document(Path(directory),Path(directory),{'title':'Verticale','html':'<article class="h3-slide-page">Verticale</article>','slide_format':'9:16'})
+            self.assertIn(f'@page{{size:{width}px {height}px;margin:0}}',file.read_text(encoding='utf-8'))
+
     def test_valid_slides_above_old_limit_keep_vector_markup_and_images(self):
         source='<article class="h3-slide-page"><p>'+('x'*(16*1024*1024))+'</p><svg><text>Dato vettoriale</text></svg><img src="data:image/png;base64,YQ=="></article>'
         with tempfile.TemporaryDirectory() as directory,patch('h3chat.pdf_export.embedded_css',return_value=''):

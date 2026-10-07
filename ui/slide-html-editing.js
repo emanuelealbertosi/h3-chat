@@ -64,6 +64,7 @@ export function editHtmlSlide(target,deck,index,frame,onChange,options,media,{do
     <details id="slide-html-properties"><summary>Testo e dimensioni</summary><div class="slide-html-properties"><label class="slide-editor-text">Testo<textarea id="slide-html-text" rows="3"></textarea></label><label>Carattere<select id="slide-html-font"><option>Segoe UI</option><option>Arial</option><option>Georgia</option><option>Manrope</option><option>Cormorant</option><option>Consolas</option><option>Comic Sans MS</option></select></label><label>Dimensione carattere<input id="slide-html-size" type="number" min="8" max="160"></label><label>Colore testo<input id="slide-html-color" type="color"></label><label>Sfondo<input id="slide-html-bg" type="color"></label><label>Larghezza<input id="slide-html-width" type="number" min="10" max="1280"></label><label>Altezza<input id="slide-html-height" type="number" min="10" max="1280"></label></div></details><p id="slide-html-status" role="status" aria-live="polite"></p>`;
   target.querySelector('.slides-navigation').after(toolbar);
   const q=s=>toolbar.querySelector(s),status=q('#slide-html-status');
+  q('#slide-html-height').max=String(Math.ceil(frame.offsetHeight));
   const overlay=doc.createElement('div');overlay.dataset.h3Editor='';
   overlay.style.cssText='all:initial;position:fixed;z-index:2147483647;pointer-events:none;border:2px dashed #138a92;box-sizing:border-box;display:none;';
   for(const [action,symbol,label] of [['move','↕','Sposta elemento'],['resize','↘','Ridimensiona elemento']]){

@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 from .external_models import absolute_path
 from .voice_controls import direction,split_text,apply_direction
+from . import voice_engines
 from uuid import uuid4
 def uid():return uuid4().hex
 
@@ -16,6 +17,8 @@ DEFAULTS={'voice_model_path':'','voice_codec_path':'','voice_device':'gpu','voic
 FIELDS={'gender':('female','male'),'pitch':('normal','low','high'),'speed':('normal','slow','fast'),
  'emotion':('neutral','affection','enthusiasm','contemplation','determination','sadness'),
  'expressiveness':('natural','low','high'),'mode':('read','compose')}
+DEFAULTS.update(voice_engines.DEFAULTS)
+FIELDS['engine']=tuple(voice_engines.ENGINES)
 
 def reference_identity(path,gender):
     """Match H3-Audio's base speakers; custom references remain path-portable."""
@@ -35,7 +38,8 @@ def resolve_model(folder,kind='tts'):
         return str(candidate)
     raise ValueError('Voice: scegli la cartella Higgs Audio v3 Transformers con adattatore Python.' if kind=='tts' else 'Voice: scegli la cartella del codec Higgs Audio v2.')
 
-def runtime_ready(root):
+def runtime_ready(root,engine='higgs'):
+    if engine!='higgs':return voice_engines.runtime_ready(root,engine)
     root=Path(root)
     try:
         import hashlib
@@ -52,6 +56,17 @@ def mark_ready(root):
     part=folder/'ready.writing';part.write_text(json.dumps({'manifest':hashlib.sha256(json.dumps(manifest,sort_keys=True).encode()).hexdigest()}),encoding='utf-8');part.replace(folder/'ready.json')
 
 def memory_assessment(settings,hardware):
+    family=voice_engines.selected(settings)
+    if family!='higgs':
+        if not settings.get('voice_'+family+'_model_path'):return None
+        gpu=settings.get('voice_'+family+'_device','gpu')=='gpu'
+        required=({'4bit':4,'8bit':5.5,'bf16':7.5}[settings.get('voice_qwen_precision','bf16')] if family=='qwen' else 5.5) if gpu else 10
+        free=hardware.get('ram',{}).get('free_mb');devices=[g for g in hardware.get('gpu',[]) if g.get('vendor')=='NVIDIA']
+        available=devices[0].get('free_mb') if gpu and devices else None if gpu else free
+        state='unknown' if available is None else 'oom' if available/1024<required else 'ok'
+        return {'status':state,'title':('OK stimato' if state=='ok' else 'Rischio memoria' if state=='oom' else 'Memoria non misurabile')+' · '+voice_engines.ENGINES[family],
+                'vram_gb':required if gpu else 0,'ram_gb':8 if gpu else 10,
+                'advice':'Stima del motore e codec selezionati. La CPU è più lenta; il processo libera la memoria dopo la sintesi.'}
     if not settings.get('voice_model_path'):return None
     gpu=settings.get('voice_device')=='gpu';vram={'4bit':5.5,'8bit':7,'bf16':12}[settings['voice_precision']] if gpu else 0
     ram=8 if gpu else 20
@@ -67,12 +82,14 @@ def memory_assessment(settings,hardware):
     return result
 
 def validate_fields(value):
-    if not isinstance(value,dict) or set(value)-set(FIELDS):raise ValueError('Controlli Voice non validi.')
+    if not isinstance(value,dict) or set(value)-set(FIELDS)-{'params'}:raise ValueError('Controlli Voice non validi.')
     for k,v in value.items():
+        if k=='params':voice_engines.validate_overrides(v);continue
         if v not in FIELDS[k]:raise ValueError('Controllo Voice non valido: '+k)
     return dict(value)
 
 def validate(settings):
+    voice_engines.validate(settings)
     for k,choices in FIELDS.items():
         if k!='mode' and settings['voice_'+k] not in choices:raise ValueError('Preferenza Voice non valida: '+k)
     if type(settings['voice_auto']) is not bool or settings['voice_device'] not in ('cpu','gpu') or settings['voice_precision'] not in ('4bit','8bit','bf16'):raise ValueError('Modalità Voice non valida.')
@@ -100,7 +117,7 @@ def route(history,settings):
     return {'intent':'voice','prompt':text,'selection':'auto'} if re.search(pattern,text,re.I) else None
 
 def controls(settings,prompt):
-    value={k:settings['voice_'+k] for k in FIELDS if k!='mode'}|settings.get('_voice_fields',{})
+    value={k:settings['voice_'+k] for k in FIELDS if k!='mode'}|{k:v for k,v in settings.get('_voice_fields',{}).items() if k!='params'}
     # In verbatim reading, the supplied speech is data, not acting instructions.
     prompt=re.split(r'\b(?:testo|text)\s*:',prompt,maxsplit=1,flags=re.I)[0]
     if 'gender' not in settings.get('_voice_fields',{}):
@@ -125,11 +142,18 @@ def controls(settings,prompt):
 
 def configuration(root,settings,prompt):
     """Resolve the same portable voice engine for speech and narrated animation."""
+    choice,acting=controls(settings,prompt)
+    if voice_engines.selected(settings)!='higgs':
+        cfg,voice=voice_engines.configure(root,settings,choice)
+        if cfg['engine']=='chatterbox':
+            choice={k:v for k,v in choice.items() if k not in ('pitch','speed','emotion','expressiveness')}
+            acting={'tags':[],'prefix':''}
+        return cfg,choice,acting,voice
     if not runtime_ready(root):raise ValueError('Installa il motore Voice dal Setup (base Vision e componenti voce).')
     model_path=resolve_model(settings['voice_model_path']);codec=resolve_model(settings['voice_codec_path'],'codec')
     choice,acting=controls(settings,prompt);ref=settings['voice_references'][choice['gender']]
     if not ref['path'] or not Path(ref['path']).is_file():raise ValueError('Configura un campione per questa voce nel Setup → Voice.')
-    cfg={'model_path':model_path,'codec_path':codec,'device':'cuda' if settings['voice_device']=='gpu' else 'cpu','precision':settings['voice_precision'],'temperature':settings['voice_temperature'],'pause_ms':settings['voice_pause_ms']}
+    cfg={'engine':'higgs','model_path':model_path,'codec_path':codec,'device':'cuda' if settings['voice_device']=='gpu' else 'cpu','precision':settings['voice_precision'],'temperature':settings['voice_temperature'],'pause_ms':settings['voice_pause_ms']}
     return cfg,choice,acting,{'id':reference_identity(ref['path'],choice['gender']),'reference':ref['path'],'transcript':ref['transcript']}
 
 def synthesize(app,folder,parts,settings,prompt,cancel,stage,log,meta):
@@ -140,14 +164,15 @@ def synthesize(app,folder,parts,settings,prompt,cancel,stage,log,meta):
         if part.get('sentence_cues'):
             ends=[m.end() for m in re.finditer(r'[.!?][”"\']?\s+(?=\S)',part['text'])]
             points=[0,*ends,len(part['text'])];phrases=[part['text'][a:b] for a,b in zip(points,points[1:])]
-        for text in [chunk for phrase in phrases for chunk in split_text(phrase,settings['voice_chunk_chars'])]:
-            if text.strip():segments.append({'text':text,'spoken':apply_direction(text,acting['prefix']),'voice':voice,'scene_id':part.get('scene_id')})
+        for text in [chunk for phrase in phrases for chunk in split_text(phrase,cfg.get('chunk_chars',settings['voice_chunk_chars']))]:
+            if text.strip():segments.append({'text':text,'spoken':apply_direction(text,acting['prefix']) if cfg['engine']=='higgs' else text,'voice':voice,'scene_id':part.get('scene_id')})
     folder=Path(folder);folder.mkdir(parents=True,exist_ok=True)
     (folder/'testo-voce.txt').write_text('\n\n'.join(p['text'] for p in parts),encoding='utf-8')
     if settings.get('memory_policy')!='resident':stage('Voice · rilascio modelli prima della sintesi');app.engine.stop()
     result=app.engine.tool_call('voice-worker.py',{'config':cfg,'segments':segments,'output':str(folder)},cancel,stage,log,timeout=14400)
-    meta.update(voice_model=Path(cfg['model_path']).name,voice_identity=voice['id'],voice_reference=Path(voice['reference']).name,voice_controls=choice,voice_tags=acting['tags'],voice_duration=result['duration'],assistant_on=settings.get('_assistant',True))
-    if settings['voice_device']=='cpu':meta['device_warning']='La sintesi vocale sulla CPU può richiedere molto tempo e molta RAM.'
+    meta.update(voice_engine=cfg['engine'],voice_model=Path(cfg['model_path']).name,voice_identity=voice['id'],voice_reference=Path(voice['reference']).name,voice_controls=choice,voice_tags=acting['tags'] if cfg['engine']=='higgs' else [],voice_duration=result['duration'],voice_device=cfg['device'],assistant_on=settings.get('_assistant',True))
+    if cfg['engine']!='higgs':meta['voice_parameters']={k:cfg[k] for k in voice_engines.PARAMS[cfg['engine']]}
+    if cfg['device']=='cpu':meta['device_warning']='La sintesi vocale sulla CPU può richiedere molto tempo e molta RAM.'
     return result,[{'id':uid(),'name':name,'mime':mime,'path':(folder/name).resolve().relative_to(app.data.resolve()).as_posix()} for name,mime in [('voce.wav','audio/wav'),('testo-voce.txt','text/plain'),('voce.srt','application/x-subrip')]]
 
 def build(app,job,payload,history,settings,model,cancel,stage,log,meta):
@@ -172,5 +197,5 @@ def build(app,job,payload,history,settings,model,cancel,stage,log,meta):
     if not text.strip():raise ValueError('Scrivi il testo da pronunciare.')
     folder=app.data/'outputs'/job['id'];folder.mkdir(parents=True,exist_ok=True)
     _,media=synthesize(app,folder,[{'text':text}],settings,payload['prompt'],cancel,stage,log,meta)
-    meta.update(model=meta['voice_model'],execution_mode='Standalone · '+('GPU · CUDA' if settings['voice_device']=='gpu' else 'CPU')+' · Voice')
+    meta.update(model=meta['voice_model'],execution_mode='Standalone · '+('GPU · CUDA' if meta['voice_device']=='cuda' else 'CPU')+' · '+voice_engines.ENGINES[meta['voice_engine']])
     return media

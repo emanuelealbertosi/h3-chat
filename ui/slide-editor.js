@@ -10,7 +10,7 @@ export function mountEditor(target,deck,index,frames,onChange,session={},options
   const q=id=>panel.querySelector('#'+id),error=e=>{q('slide-editor-error').hidden=!e;q('slide-editor-error').textContent=e?.message||'';};
   const designLabel=document.createElement('label');designLabel.textContent='Stile ';const designSelect=document.createElement('select');designSelect.id='slide-design';designLabel.append(designSelect);panel.querySelector('.slide-editor-top').prepend(designLabel);
   panel.querySelector('.slide-editor-help').append(' Il contrasto viene corretto automaticamente quando il colore scelto è poco leggibile.');
-  const maxHeight=Math.min(1164,parseFloat(frames[0].style.getPropertyValue('--slide-height'))-220);q('slide-height').max=String(maxHeight);
+  const maxHeight=parseFloat(frames[0].style.getPropertyValue('--slide-height'))-220;q('slide-height').max=String(maxHeight);
   const comicFont=document.createElement('option');comicFont.textContent='Comic Sans MS';q('slide-font').append(comicFont);
   for(const [id,items,selected] of [['slide-theme',themes,deck.theme||'lagoon'],['slide-typography',typography,deck.typography||'modern'],['slide-design',designs,deck.design||'professional']]){
     for(const [value,label] of Object.entries(items)){const option=document.createElement('option');option.value=value;option.textContent=label;q(id).append(option);}q(id).value=selected;

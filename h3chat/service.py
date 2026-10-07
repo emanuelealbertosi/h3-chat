@@ -23,6 +23,7 @@ from .visual_routing import visual_route
 from .music_routing import route as music_route
 from .video_routing import route as video_route
 from .voice import route as voice_route, validate as validate_voice, validate_fields as validate_voice_fields, runtime_ready as voice_ready
+from . import voice_engines
 from .video_options import validate as validate_video_options, DEFAULTS as VIDEO_DEFAULTS, ASPECTS as VIDEO_ASPECTS
 from .tools_runtime import status as tools_status,validate as validate_tools,pure_transcription
 from .web_search import requested as web_requested,sources_markdown
@@ -98,6 +99,7 @@ class Service:
         models = self.refresh_models()
         return {"token": self.token, "version": __version__, "settings": self.store.settings(), "profiles": PROFILES,"project_limits":RAG_LIMITS,
                 "api_providers":self.providers.list(),"api_presets":API_PRESETS,"voice_runtime":{"ready":voice_ready(self.root)},
+                "voice_engines":{k:{"name":v,"ready":voice_ready(self.root,k),"download_path":str(self.root/"models"/("Qwen3-TTS-1.7B-CustomVoice" if k=="qwen" else "Chatterbox-Multilingual-V3"))} for k,v in voice_engines.ENGINES.items()},
                 "media_providers":self.media_providers.list(),
                 "media_server":self.media_server.status(),
                 "llm_options":{"keys":LLM_KEYS,"defaults":{profile:llm_defaults(profile) for profile in PROFILES},"max_context":MAX_CONTEXT,"max_output_tokens":MAX_OUTPUT_TOKENS},
@@ -105,7 +107,7 @@ class Service:
                 "video_options":{"defaults":VIDEO_DEFAULTS,"aspects":VIDEO_ASPECTS}, "veda_runtime":veda_status(self.root),
                 "tools_runtime":tools_status(self.root),"transcription_models":[m|{'ready':all(safe_join(self.root,f['path']).is_file() for f in m['files'])} for m in self.downloads.tool_models.values() if m['id'].startswith('whisper-')],
                 "embeddinggemma2_runtime":{"ready":gemma2_runtime_ready(self.root)}, "vision_runtime":vision_status(self.root), "models": models,"image_options":{"samplers":NATIVE_SAMPLERS,"schedulers":NATIVE_SCHEDULERS,"vision_samplers":VISION_SAMPLERS,"vision_schedulers":VISION_SCHEDULERS,"defaults":{k:DEFAULTS[k] for k in IMAGE_DEFAULT_KEYS}},"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
-                "runtimes": {key: {"ready": tools_status(self.root).get(key.removeprefix('tools_'),{}).get('ready',False) if key.startswith('tools_') else veda_status(self.root)["ready"] if key=="veda" else gemma2_runtime_ready(self.root) if key=="embeddinggemma2" else voice_ready(self.root) if key=="voice" else vision_status(self.root)["ready"] if key=="vision" else music_status(self.root).get(key.removeprefix("music_"),{}).get("ready",False) if key.startswith("music_") else all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
+                "runtimes": {key: {"ready": tools_status(self.root).get(key.removeprefix('tools_'),{}).get('ready',False) if key.startswith('tools_') else veda_status(self.root)["ready"] if key=="veda" else gemma2_runtime_ready(self.root) if key=="embeddinggemma2" else voice_ready(self.root,key.removeprefix("voice_")) if key.startswith("voice_") else voice_ready(self.root) if key=="voice" else vision_status(self.root)["ready"] if key=="vision" else music_status(self.root).get(key.removeprefix("music_"),{}).get("ready",False) if key.startswith("music_") else all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
                                     "size": sum(f["size"] for f in r["files"])} for key, r in self.runtimes.items()},
                 "chats": self.store.all("SELECT * FROM chats ORDER BY pinned DESC,updated DESC"),
                 "collections": self.store.all("SELECT * FROM collections ORDER BY name"),

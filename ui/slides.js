@@ -6,7 +6,7 @@ import {layoutSlide} from './slide-layout.js';
 import {validateDesign,applyOverride} from './slide-design.js';
 import {repairSlideContrast} from './slide-contrast.js';
 
-export const slideFormats={'16:9':720,'4:3':960,'16:10':800,'1:1':1280};
+export const slideFormats={'16:9':720,'9:16':1280*16/9,'4:3':960,'16:10':800,'1:1':1280};
 export function readDeck(content){
   if(!content.startsWith('```h3-slides\n'))return null;
   if(content.length>2600000||!content.endsWith('\n```'))throw Error('Sorgente slide incompleto o troppo grande.');

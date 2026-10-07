@@ -9,7 +9,7 @@ import time
 from .downloads import Cancelled
 
 PREFIX = '```h3-slides\n'
-FORMATS = {'16:9': (1280, 720), '4:3': (1280, 960), '16:10': (1280, 800), '1:1': (1280, 1280)}
+FORMATS = {'16:9': (1280, 720), '9:16': (1280, 1280*16/9), '4:3': (1280, 960), '16:10': (1280, 800), '1:1': (1280, 1280)}
 KINDS = ('group', 'heading', 'text', 'code', 'image', 'mermaid', 'chart')
 THEMES=('lagoon','indigo','sunset')
 TYPOGRAPHY=('modern','editorial')
@@ -103,10 +103,10 @@ def options(prompt, body=None):
     aspect = body.get('format', '16:9')
     match = re.search(r'\b(\d+)\s*(?:slides?|diapositive)\b', prompt, re.I)
     if match: count = int(match[1])
-    match = re.search(r'\b(16\s*:\s*9|4\s*:\s*3|16\s*:\s*10|1\s*:\s*1)\b', prompt)
+    match = re.search(r'\b(16\s*:\s*9|9\s*:\s*16|4\s*:\s*3|16\s*:\s*10|1\s*:\s*1)\b', prompt)
     if match: aspect = re.sub(r'\s', '', match[1])
     if type(count) is not int or not 1 <= count <= 30 or not isinstance(aspect,str) or aspect not in FORMATS:
-        raise ValueError('Slide: scegli da 1 a 30 pagine e un formato 16:9, 4:3, 16:10 oppure 1:1.')
+        raise ValueError('Slide: scegli da 1 a 30 pagine e un formato 16:9, 9:16, 4:3, 16:10 oppure 1:1.')
     result={'count': count, 'format': aspect}
     if 'generate_images' in body:
         if type(body['generate_images']) is not bool:raise ValueError('Immagini AI: scegli attivo o disattivo.')
@@ -133,7 +133,7 @@ def options(prompt, body=None):
     return result
 
 
-def validate_overrides(page):
+def validate_overrides(page, height=1280):
     overrides=page.get('overrides',{})
     ids={node['id'] for node in page['nodes']}
     if not isinstance(overrides,dict) or len(overrides)>40:raise ValueError('Modifiche grafiche slide non valide.')
@@ -148,7 +148,7 @@ def validate_overrides(page):
             elif key=='font':
                 if number not in ('Manrope','Cormorant','Consolas','Comic Sans MS'):raise ValueError('Carattere slide non valido.')
             else:
-                limits={'x':(-1280,1280),'y':(-1280,1280),'width':(40,1164),'height':(20,1164),'font_size':(16,88)}[key]
+                limits={'x':(-1280,1280),'y':(-height,height),'width':(40,1164),'height':(20,max(1164,height-116)),'font_size':(16,88)}[key]
                 if type(number) not in (int,float) or not limits[0]<=number<=limits[1]:raise ValueError('Dimensione o posizione slide non valida.')
 
 
@@ -316,7 +316,7 @@ def validate_content(content, media):
             continue
         if not isinstance(page.get('nodes'),list):raise ValueError('Elementi slide non validi.')
         if page.get('nodes'): validate_page({k:page[k] for k in ('nodes','notes','sources') if k in page},assets,{r['id'] for r in refs},draft=page.get('status')!='ready')
-        validate_overrides(page)
+        validate_overrides(page, max(1280,FORMATS[deck['format']][1]))
 
 
 def build(app, job, payload, history, settings, model, cancel, stage, log_path, meta):
