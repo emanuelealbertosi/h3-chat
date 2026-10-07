@@ -1,7 +1,7 @@
 import base64,io,json,subprocess,tempfile,threading,unittest,zipfile
 from pathlib import Path
 from unittest.mock import Mock,patch
-from h3chat.manim_presentation import options,build,PPTX
+from h3chat.manim_presentation import options,build,PPTX,aligned_source
 from h3chat.store import DEFAULTS
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -87,13 +87,25 @@ class PresentationTests(unittest.TestCase):
             renders=[r for n,r in requests if n=='manim-worker.py'];self.assertEqual(len(renders),2)
             self.assertEqual([r['assets'][0]['name'] for r in renders],['slide-001.png','slide-002.png'])
             self.assertEqual(renders[0]['options']['width']/renders[0]['options']['height'],4/3)
-            self.assertEqual(bool(renders[0]['presentation']),mode=='preserve')
+            self.assertEqual(renders[0]['presentation']['show_background'],mode=='preserve')
+            self.assertEqual(renders[0]['presentation']['geometry'],1 if mode=='preserve' else 2)
+            if mode=='reconstruct':self.assertTrue(any('slide.place' in str(p) for p in prompts))
             mux=next(r for n,r in requests if n=='media-compose-worker.py')
             self.assertEqual(mux['durations'],[2,4] if narrated else [5,5]);self.assertEqual(bool(mux['audio']),narrated)
             self.assertEqual(media[0]['mime'],'video/mp4');self.assertEqual(meta['manim_slide_count'],2)
             self.assertTrue(all(not m.get('media') for p in prompts for m in p))
     def test_preserve_render_order_aspect_and_silent_mux(self):self.flow('preserve')
     def test_reconstruct_and_voice_timing(self):self.flow('reconstruct',True)
+
+    def test_pixel_geometry_is_repaired_before_render_but_free_reconstruction_is_allowed(self):
+        from h3chat.manim_code import SCHEMA
+        bad={'title':'Pixel','scene_name':'Demo','code':'from manim import *\nclass Demo(Scene):\n def construct(self): self.add(Rectangle(width=864,height=486))'}
+        good=bad|{'code':'from manim import *\nclass Demo(Scene):\n def construct(self): self.add(slide.box("text-001"))'}
+        engine=Mock();engine.completion.side_effect=[(json.dumps(bad),'stop'),(json.dumps(good),'stop')]
+        self.assertEqual(aligned_source(engine,[],DEFAULTS,threading.Event(),lambda _:None,'Codice',True),good)
+        self.assertEqual(engine.completion.call_count,2)
+        engine.completion.side_effect=[(json.dumps(bad),'stop')]
+        self.assertEqual(aligned_source(engine,[],DEFAULTS,threading.Event(),lambda _:None,'Codice',False),bad)
 
     @unittest.skipUnless((ROOT/'runtime/tools/documents/pypdfium2/__init__.py').exists(),'Document runtime not installed')
     def test_real_pptx_import_keeps_relationship_order_and_aspect(self):
@@ -111,12 +123,33 @@ class PresentationTests(unittest.TestCase):
             self.assertEqual(len(pages),2);self.assertIn('PRIMA',pages[0]['text']);self.assertIn('SECONDA',pages[1]['text'])
             self.assertAlmostEqual(pages[0]['aspect'],4/3,places=2)
             self.assertTrue(pages[0]['regions']);self.assertTrue(Path(pages[0]['assets'][0]['path']).is_file())
+            self.assertTrue(any(a['kind']=='text' and 'PRIMA' in a['text'] for a in pages[0]['anchors']))
             region=next(r for r in pages[0]['regions'] if r['kind']=='image')
             self.assertAlmostEqual(region['left'],5000000/9144000,places=2)
             asset=next(a for a in pages[0]['assets'] if 'assets/'+a['name']==region['asset'])
             with Image.open(asset['path']) as cropped:
                 pixel=cropped.getpixel((cropped.width//2,cropped.height//2))
                 self.assertGreater(pixel[0],180);self.assertLess(pixel[2],80)
+
+    @unittest.skipUnless((ROOT/'runtime/tools/lab/manim/__init__.py').exists(),'Manim runtime not installed')
+    def test_actual_reconstruction_has_measured_helper_and_rejects_overflow(self):
+        import sys
+        sys.path.insert(0,str(ROOT/'runtime/tools/documents'))
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as tmp:
+            folder=Path(tmp);picture=folder/'slide.png';Image.new('RGB',(160,120),'#ffffff').save(picture)
+            good='from manim import *\nclass Demo(Scene):\n def construct(self):\n  label=slide.place(Text("Titolo"),"title")\n  self.add(label)\n  self.wait(.2)'
+            bad='from manim import *\nclass Demo(Scene):\n def construct(self):\n  self.add(Text("Fuori").move_to([10,0,0]))\n  self.wait(.2)'
+            base={'assets':[{'name':'slide.png','path':str(picture),'original':'Synthetic slide'}],
+                'presentation':{'background':'slide.png','geometry':2,'show_background':False,'anchors':[{'id':'title','left':.1,'top':.1,'width':.8,'height':.2}]},
+                'options':{'width':320,'height':180,'fps':10,'device':'cpu','timeout':90,'memory_gb':4,'frame_width':128/9,'frame_height':8}}
+            requests=[base|{'source':{'title':'Layout','scene_name':'Demo','code':code},'output':str(folder/str(i))} for i,code in enumerate((good,bad))]
+            result=subprocess.run([str(ROOT/'runtime/python/python.exe'),'-X','utf8',str(ROOT/'native/manim-worker.py')],
+                input=''.join(json.dumps(r)+'\n' for r in requests),capture_output=True,text=True,encoding='utf-8',timeout=240)
+            events=[json.loads(line) for line in result.stdout.splitlines() if line.startswith('{')]
+            self.assertEqual(len([e for e in events if e['event']=='result']),1,result.stdout+result.stderr)
+            errors=[e for e in events if e['event']=='error'];self.assertEqual(len(errors),1,result.stdout)
+            self.assertIn('fuori inquadratura',errors[0]['message'])
 
     @unittest.skipUnless((ROOT/'runtime/tools/lab/manim/__init__.py').exists(),'Manim runtime not installed')
     def test_actual_isolated_render_keeps_original_pixels_after_scene_clear(self):
@@ -126,9 +159,10 @@ class PresentationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             folder=Path(tmp);picture=folder/'slide.png';image=Image.new('RGB',(160,120),'#e02020')
             ImageDraw.Draw(image).rectangle((80,0,159,119),fill='#2020e0');image.save(picture)
-            request={'source':{'title':'Pixel fidelity','scene_name':'Demo','code':'from manim import *\nclass Demo(Scene):\n def construct(self):\n  self.clear()\n  self.wait(.4)'},
-                'assets':[{'name':'slide.png','path':str(picture),'original':'Synthetic slide'}],'presentation':{'background':'slide.png'},
-                'output':str(folder/'render'),'options':{'width':320,'height':240,'fps':10,'device':'cpu','timeout':90,'memory_gb':4,'frame_width':32/3,'frame_height':8}}
+            request={'source':{'title':'Pixel fidelity','scene_name':'Demo','code':'from manim import *\nclass Demo(Scene):\n def construct(self):\n  self.clear()\n  self.add(slide.box("right",padding=0,color="#00ff00",stroke_width=12))\n  self.wait(.4)'},
+                'assets':[{'name':'slide.png','path':str(picture),'original':'Synthetic slide'}],
+                'presentation':{'background':'slide.png','geometry':1,'anchors':[{'id':'right','left':.5,'top':0,'width':.5,'height':1}]},
+                'output':str(folder/'render'),'options':{'width':320,'height':180,'fps':10,'device':'cpu','timeout':90,'memory_gb':4,'frame_width':128/9,'frame_height':8}}
             result=subprocess.run([str(ROOT/'runtime/python/python.exe'),'-X','utf8',str(ROOT/'native/manim-worker.py')],input=json.dumps(request)+'\n',capture_output=True,text=True,encoding='utf-8',timeout=150)
             events=[json.loads(line) for line in result.stdout.splitlines() if line.startswith('{')]
             self.assertFalse([e for e in events if e['event']=='error'],result.stdout+result.stderr)
@@ -143,10 +177,12 @@ with av.open(sys.argv[2]) as video:
  frames=list(video.decode(video=0));assert frames
  for frame in frames:
   pixels=frame.to_ndarray(format='rgb24')
-  left=pixels[120,80];right=pixels[120,240]
+  left=pixels[90,100];right=pixels[90,220];border=pixels[90,158:163];peak=border[border[:,1].argmax()]
   assert left[0]>180 and left[2]<80,(left,right)
   assert right[2]>180 and right[0]<80,(left,right)
-print('Original slide pixels preserved in all frames')
+  assert int(peak[1])>180 and int(peak[1])-int(peak[0])>90 and int(peak[1])-int(peak[2])>90,border
+  assert pixels[90,150,1]<100 and pixels[90,170,1]<100
+print('Original pixels and measured annotation aligned with letterboxing in all frames')
 '''
             verified=subprocess.run([str(ROOT/'runtime/python/python.exe'),'-X','utf8','-c',check,str(ROOT),rendered['path']],capture_output=True,text=True,encoding='utf-8',timeout=30)
             self.assertEqual(verified.returncode,0,verified.stderr)

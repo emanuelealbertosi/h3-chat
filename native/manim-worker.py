@@ -30,6 +30,10 @@ def render(request):
     (folder/'scene.py').write_text(source['code'],encoding='utf-8')
     presentation=request.get('presentation')
     if presentation and (not isinstance(presentation,dict) or presentation.get('background') not in [a['name'] for a in request.get('assets',[])]):raise ValueError('Sfondo della slide non disponibile.')
+    if presentation and presentation.get('geometry') in (1,2):
+        from native.slide_geometry import SlideSpace,validate_annotations
+        SlideSpace(opts['frame_width'],opts['frame_height'],1,presentation.get('anchors',[]))
+        if presentation['geometry']==1:validate_annotations(source['code'])
     (folder/'request.json').write_text(json.dumps({'scene_name':source['scene_name'],'options':opts,'presentation':presentation}),encoding='utf-8')
     system=os.environ.get('SystemRoot',r'C:\Windows')
     latex=ROOT/'runtime/tools/latex/TinyTeX/bin/windows'

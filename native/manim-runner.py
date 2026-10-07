@@ -7,7 +7,7 @@ import sys
 import traceback
 
 ROOT=Path(__file__).resolve().parents[1]
-sys.path[:0]=[str(ROOT/'runtime/tools/lab'),str(ROOT/'native/vendor')]
+sys.path[:0]=[str(ROOT/'runtime/tools/lab'),str(ROOT/'native/vendor'),str(ROOT/'native')]
 if os.name=='nt':
     dll=os.add_dll_directory(str(ROOT/'runtime/tools/lab'))
     # AppContainer denies DOS volume-name lookup through MountPointManager.
@@ -59,10 +59,7 @@ def main():
     with tempconfig({'media_dir':str(folder/'media'),'output_file':'animation','pixel_width':opts['width'],
             'pixel_height':opts['height'],'frame_rate':opts['fps'],'renderer':'opengl' if opts['device']=='gpu' else 'cairo',
             'background_color':'#12352f','disable_caching':True,'write_to_movie':True,'verbosity':'WARNING',**frame_options}):
-        namespace=runpy.run_path(str(folder/'scene.py'),run_name='__h3_manim__')
-        cls=namespace.get(request['scene_name'])
-        if not isinstance(cls,type) or not issubclass(cls,Scene):raise ValueError('La classe selezionata deve derivare da Scene o ThreeDScene.')
-        scene=cls()
+        globals_={};image=None
         if request.get('presentation'):
             from manim import ImageMobject,config
             if opts['device']=='gpu':
@@ -70,15 +67,36 @@ def main():
             image=ImageMobject(str(folder/'assets'/request['presentation']['background']))
             image.scale(min(config.frame_width/image.width,config.frame_height/image.height)).move_to([0,0,0])
             if opts['device']=='gpu':image.deactivate_depth_test();image.fix_in_frame()
-            else:
-                image.set_z_index(-10000)
-                if hasattr(scene.camera,'add_fixed_in_frame_mobjects'):scene.camera.add_fixed_in_frame_mobjects(image)
+            else:image.set_z_index(-10000)
+            from slide_geometry import SlideSpace
+            regions=request['presentation'].get('anchors',[])
+            globals_['slide']=SlideSpace(float(config.frame_width),float(config.frame_height),float(image.width/image.height),regions)
+        namespace=runpy.run_path(str(folder/'scene.py'),run_name='__h3_manim__',init_globals=globals_)
+        cls=namespace.get(request['scene_name'])
+        if not isinstance(cls,type) or not issubclass(cls,Scene):raise ValueError('La classe selezionata deve derivare da Scene o ThreeDScene.')
+        scene=cls()
+        if image is not None and request['presentation'].get('show_background',True):
+            if opts['device']!='gpu' and hasattr(scene.camera,'add_fixed_in_frame_mobjects'):scene.camera.add_fixed_in_frame_mobjects(image)
             original=scene.construct
+            original_clear=scene.clear
+            def clear():
+                original_clear();scene.add(image);scene.bring_to_back(image)
+                return scene
+            scene.clear=clear
             def keep_background(dt):
                 if image not in scene.mobjects:scene.add(image);scene.bring_to_back(image)
             def construct():
                 scene.add(image);scene.bring_to_back(image);scene.add_updater(keep_background);original()
             scene.construct=construct
+        if (request.get('presentation') or {}).get('geometry')==2:
+            from slide_geometry import check_layout
+            original_wait=scene.wait;original_construct=scene.construct
+            def check():check_layout(scene,float(config.frame_width),float(config.frame_height))
+            def wait(*args,**kwargs):
+                result=original_wait(*args,**kwargs);check();return result
+            def checked_construct():
+                original_construct();check()
+            scene.wait=wait;scene.construct=checked_construct
         scene.render()
         path=Path(scene.renderer.file_writer.movie_file_path).resolve()
         if not path.is_relative_to(folder):raise ValueError('Il video deve restare nella cartella del rendering.')

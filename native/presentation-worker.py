@@ -137,6 +137,38 @@ def pptx_pdf(path,folder):
     pdf=folder/'exports'/result['url'].split('/')[2]/'document.pdf'
     return pdf,sorted(warnings)
 
+def text_regions(tp,width,height):
+    """Combine PDF kerning fragments on the same baseline, retaining all lines."""
+    rows=[]
+    for index in range(min(tp.count_rects(),2048)):
+        x1,y1,x2,y2=tp.get_rect(index)
+        if x2<=x1 or y2<=y1:continue
+        rows.append((x1,y1,x2,y2))
+    lines=[]
+    for box in sorted(rows,key=lambda b:(-(b[1]+b[3])/2,b[0])):
+        x1,y1,x2,y2=box;center=(y1+y2)/2;h=y2-y1
+        matches=[line for line in lines if abs(line['center']-center)<=.4*max(h,line['height']) or min(y2,line['top'])-max(y1,line['bottom'])>.25*min(h,line['height'])]
+        if matches:
+            line=min(matches,key=lambda l:abs(l['center']-center));line['boxes'].append(box)
+            line['bottom']=min(line['bottom'],y1);line['top']=max(line['top'],y2)
+            line['height']=line['top']-line['bottom'];line['center']=(line['top']+line['bottom'])/2
+        else:lines.append({'center':center,'height':h,'bottom':y1,'top':y2,'boxes':[box]})
+    groups=[]
+    for line in lines:
+        group=None
+        for box in sorted(line['boxes']):
+            if group is None or box[0]-group[2]>max(2*line['height'],width*.012):
+                if group is not None:groups.append(group)
+                group=list(box)
+            else:group=[min(group[0],box[0]),min(group[1],box[1]),max(group[2],box[2]),max(group[3],box[3])]
+        if group is not None:groups.append(group)
+    result=[]
+    for x1,y1,x2,y2 in sorted(groups,key=lambda b:(-b[3],b[0]))[:128]:
+        text=tp.get_text_bounded(x1-.2,y1-.2,x2+.2,y2+.2).strip()
+        if text:result.append({'kind':'text','text':text,'box':[x1/width,1-y2/height,x2/width,1-y1/height]})
+    return result
+
+
 def extract(request):
     import pypdfium2 as pdfium
     from PIL import Image
@@ -145,17 +177,22 @@ def extract(request):
     def add(image,text,regions,original):
         if len(pages)>=30:raise ValueError('Presentazione Manim: massimo 30 slide; dividi il file. Nessuna pagina è stata scartata.')
         number=len(pages)+1;name=f'slide-{number:03}.png';path=folder/name;image.save(path)
-        assets=[{'name':name,'path':str(path),'original':original}];selected=[]
+        assets=[{'name':name,'path':str(path),'original':original}];selected=[];measured=[];counts={}
         w,h=image.size
-        for region in regions[:8]:
+        for region in regions[:160]:
             box=region['box'];left,top,right,bottom=[max(0,min(1,float(n))) for n in box]
-            if right-left<.01 or bottom-top<.01:continue
+            if right-left<=0 or bottom-top<=0:continue
+            kind=region['kind'];counts[kind]=counts.get(kind,0)+1
+            anchor={'id':f'{kind}-{counts[kind]:03}','kind':kind,'text':region.get('text','')[:1500],
+                    'left':left,'top':top,'width':right-left,'height':bottom-top}
+            measured.append(anchor)
+            # Coordinates are independent of the bounded number of crop assets.
+            if len(selected)>=8 or (right-left)*w<2 or (bottom-top)*h<2:continue
             part=f'slide-{number:03}-part-{len(selected)+1:02}.png';target=folder/part
             image.crop((round(left*w),round(top*h),round(right*w),round(bottom*h))).save(target)
-            selected.append({'asset':'assets/'+part,'kind':region['kind'],'text':region.get('text','')[:1500],
-                             'left':left,'top':top,'width':right-left,'height':bottom-top})
+            anchor['asset']='assets/'+part;selected.append(dict(anchor))
             assets.append({'name':part,'path':str(target),'original':original+' · dettaglio'})
-        pages.append({'number':number,'original':original,'text':text[:14000],'aspect':w/h,'regions':selected,'assets':assets})
+        pages.append({'number':number,'original':original,'text':text[:14000],'aspect':w/h,'regions':selected,'anchors':measured,'assets':assets})
     for item in request['inputs']:
         path=Path(item['path']);emit('stage',message='Manim · lettura presentazione '+item['name'])
         if not path.is_file() or path.stat().st_size>64*1024**2:raise ValueError('Presentazione non disponibile o oltre 64 MB.')
@@ -169,14 +206,12 @@ def extract(request):
                         tp=page.get_textpage()
                         try:
                             text=tp.get_text_range()
-                            for r in range(min(tp.count_rects(),32)):
-                                x1,y1,x2,y2=tp.get_rect(r)
-                                regions.append({'kind':'text','text':tp.get_text_bounded(x1,y1,x2,y2),'box':[x1/w,1-y2/h,x2/w,1-y1/h]})
+                            regions=text_regions(tp,w,h)
                         finally:tp.close()
                         pictures=[]
                         for obj in page.get_objects(filter=[3]):
                             x1,y1,x2,y2=obj.get_bounds();pictures.append({'kind':'image','box':[x1/w,1-y2/h,x2/w,1-y1/h]})
-                        regions=pictures[:4]+regions[:max(0,8-len(pictures[:4]))]
+                        regions=pictures[:32]+regions
                         bitmap=page.render(scale=min(2,1600/max(w,h)))
                         try:add(bitmap.to_pil().convert('RGB'),text,regions,item['name']+' · pagina '+str(index+1))
                         finally:bitmap.close()
