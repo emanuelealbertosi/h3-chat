@@ -73,6 +73,8 @@ class SlideImageCompletionTests(unittest.TestCase):
         def generate(image_model, settings, prompt, refs, ident, cancel, stage):
             self.assertEqual(settings['memory_policy'], 'on_demand')
             self.assertEqual(refs, [])
+            self.assertEqual(stop.call_count,0 if image_model.get('remote_media') else 1)
+            reload.assert_not_called()
             media = {'id': ident, 'mime': 'image/png', 'path': 'outputs/' + ident + '/image.png'}
             generated.append(media)
             return media
@@ -94,8 +96,9 @@ class SlideImageCompletionTests(unittest.TestCase):
                 self.assertEqual(len(assets), 2)
                 self.assertEqual(set(captions), {media['id'] for media in assets})
                 self.assertEqual(images.call_count, 2)
-                stop.assert_called_once()
+                self.assertEqual(stop.call_count,2)
                 reload.assert_called_once()
+                self.assertEqual(reload.call_args.args[1],self.settings)
                 self.assertTrue(self.server.calls[-1]['stream'])
                 self.assertEqual(self.server.calls[-1]['max_tokens'], 1920)
                 self.assertTrue(any('caratteri ricevuti' in call.args[0] for call in stage.call_args_list))
@@ -110,6 +113,12 @@ class SlideImageCompletionTests(unittest.TestCase):
                 images.assert_not_called()
                 stop.assert_not_called()
                 reload.assert_not_called()
+
+    def test_remote_images_keep_the_chat_model_and_avoid_an_unnecessary_reload(self):
+        self.image['remote_media']=True
+        _,images,stop,reload,_=self.run_plan()
+        self.assertEqual(images.call_count,2)
+        stop.assert_not_called();reload.assert_not_called()
 
     def test_style_reaches_planner_and_actual_image_prompts_for_tags_and_prose(self):
         for remote in (False,True):

@@ -116,7 +116,7 @@ class Session:
                     stage(f'Preparazione del primo passo · {steps} passi previsti')
                 else:
                     timing=event.get('step_seconds')
-                    detail=f' · ultimo passo {timing:.1f} s' if self.kind=='video' and type(timing) in (int,float) and timing>=0 else ''
+                    detail=f' · ultimo passo {timing:.1f} s' if self.kind in ('video','image') and type(timing) in (int,float) and timing>=0 else ''
                     stage(f"{'Generazione video' if self.kind=='video' else 'Generazione musica' if self.kind=='music' else 'Generazione immagine'} · {step}/{steps} passi"+detail)
         raise RuntimeError('Tempo massimo del motore superato.')
 

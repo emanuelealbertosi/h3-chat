@@ -47,7 +47,12 @@ def create(app,job,outline,history,settings,model,cancel,stage,log_path,meta):
     meta['slide_image_plan']=plan
     tuning=settings|{'memory_policy':'on_demand','ram_cache_gb':0,'_image_model':image_model['id'],
                       '_loras':[] if image_model.get('remote_media') else loras_for_model(json.loads(job['payload']).get('loras',[]),image_model)}
-    # Switching once here releases the LLM even when the normal chat policy is resident.
+    # Make the local batch exclusive before allocating any image weights,
+    # even with a resident policy or other previously warmed model processes.
+    if cancel.is_set():raise Cancelled()
+    if not image_model.get('remote_media'):
+        stage('Slide · rilascio completo dei motori locali prima del batch immagini')
+        app.engine.stop()
     started=time.monotonic();assets=[]
     for index,item in enumerate(plan):
         if cancel.is_set():raise Cancelled()
@@ -61,7 +66,10 @@ def create(app,job,outline,history,settings,model,cancel,stage,log_path,meta):
         meta['slide_generated_images']=assets
         app.store.update_answer(job,'Sto preparando le immagini della presentazione.',meta=meta)
     # The final composition receives text descriptions, without recaptioning generated images.
-    app.engine.stop();app.engine.start_llama(model,settings,log_path,cancel,stage=stage)
+    if cancel.is_set():raise Cancelled()
+    if not image_model.get('remote_media'):
+        stage('Slide · rilascio motore immagini e ripristino LLM per la composizione')
+        app.engine.stop();app.engine.start_llama(model,settings,log_path,cancel,stage=stage)
     meta.setdefault('slide_timing',{})['images_seconds']=round(time.monotonic()-started,2)
     meta['slide_image_model']=image_model['name']
     return assets,{item['asset_id']:f"Illustrazione generata per la slide {item['slide']}: "+item['description'] for item in plan}

@@ -43,6 +43,16 @@ formato. Il modello immagini genera le illustrazioni consecutivamente, mantenend
 il motore caricato. Poi viene rilasciato e il LLM compone l’HTML utilizzando il
 catalogo appena creato, senza alternare modelli per ogni pagina. Questo passaggio
 usa la memoria a richiesta anche se la chat normale tiene modelli residenti.
+Prima di un batch locale vengono chiusi i motori precedenti, compreso il LLM.
+Ming e Qwen Image conservano i pesi in RAM tra le immagini, ma rilasciano dalla
+GPU i componenti dopo ciascuna fase (encoder, diffusore, VAE): il calcolo resta
+su CUDA quando è selezionata la GPU. Questo evita di lasciare pesi inattivi a
+competere con le attivazioni o di forzare memoria condivisa di Windows.
+Finito il batch, il processo immagini viene chiuso e il LLM viene ripristinato
+con contesto, layer GPU, MTP e accelerazione originali, senza ridurne i parametri.
+Le immagini su server esterno non richiedono di scaricare il LLM locale.
+Durante la generazione Ming / Qwen Image viene mostrato anche il tempo
+dell'ultimo passo, per distinguere il caricamento dal calcolo effettivo.
 
 Non è un batch di immagini simultanee sulla GPU: ciascuna viene generata da sola
 per contenere la memoria. Il piano può omettere illustrazioni non utili, con al

@@ -9,6 +9,7 @@ import logging
 import os
 from pathlib import Path
 import sys
+import time
 import traceback
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,9 +42,15 @@ class Worker:
         args.cpu = backend == 'cpu'
         if backend not in ('cpu', 'cuda'):
             raise ValueError('Ming e Qwen Image 2.1 richiedono il motore CPU oppure NVIDIA CUDA.')
-        # Model lifetime is managed by H3-Chat; CUDA components stay on GPU.
-        args.highvram = not args.cpu
-        args.disable_dynamic_vram = args.cpu or args.highvram
+        # HIGH_VRAM also makes the diffusor's *offload* device CUDA. Unloading
+        # it then cannot reliably reclaim dedicated VRAM on Windows. Use the
+        # standard patcher with CPU storage and CUDA computation, with room
+        # reserved for activations instead of spilling into shared GPU memory.
+        args.highvram = False
+        args.gpu_only = False
+        args.lowvram = False
+        args.novram = False
+        args.disable_dynamic_vram = True
         args.reserve_vram = 1.0
         if not args.disable_dynamic_vram:
             import comfy_aimdo.control
@@ -73,6 +80,13 @@ class Worker:
             emit('stage', message=self.phase)
             return result
         comfy.model_management.load_models_gpu = load_gpu
+
+    def release_gpu(self, patcher):
+        # Keep the loaded weights in host RAM for the next image; only release
+        # the completed phase's GPU allocations. No inference runs on CPU here.
+        if self.backend == 'cuda':
+            self.comfy.model_management.unload_model_and_clones(patcher)
+            self.comfy.model_management.soft_empty_cache(force=True)
 
     def unload(self):
         # Keep imported libraries; release all model objects and GPU allocations.
@@ -208,26 +222,49 @@ class Worker:
         images = self.images(request.get('references', []))
         if len(images) > 4:
             raise ValueError('Sono supportati fino a quattro riferimenti.')
+        reference_count = len(images)
         with torch.inference_mode():
             self.phase = 'Lettura delle istruzioni e dei riferimenti'
             emit('stage', message='Lettura delle istruzioni e dei riferimenti')
-            positive, negative, latent = self.encode(clip, request, images)
+            try:
+                positive, negative, latent = self.encode(clip, request, images)
+            finally:
+                self.release_gpu(clip.patcher)
+                # Editing can also use the VAE while encoding references.
+                self.release_gpu(self.vae.patcher)
             noise = comfy.sample.prepare_noise(latent, request['seed'])
             self.phase = 'Generazione immagine'
             emit('stage', message='Generazione immagine')
-            samples = comfy.sample.sample(model, noise, request['steps'], request['cfg'], sampler, scheduler,
-                positive, negative, latent, denoise=1.0, disable_pbar=True, seed=request['seed'],
-                callback=lambda step, x0, x, total: emit('progress', step=step+1, steps=total))
+            last_step=time.monotonic()
+            def progress(step,x0,x,total):
+                nonlocal last_step
+                now=time.monotonic()
+                emit('progress',step=step+1,steps=total,step_seconds=now-last_step)
+                last_step=now
+            try:
+                samples = comfy.sample.sample(model, noise, request['steps'], request['cfg'], sampler, scheduler,
+                    positive, negative, latent, denoise=1.0, disable_pbar=True, seed=request['seed'],
+                    callback=progress)
+            finally:
+                self.release_gpu(model)
+            del positive, negative, noise, latent, images
             self.phase = 'Decodifica immagine'
             emit('stage', message=self.phase)
-            pixels = self.vae.decode(samples)
-            if pixels.ndim == 5:
-                pixels = pixels.reshape(-1, *pixels.shape[-3:])
-            array = (pixels[0].clamp(0, 1).cpu().numpy() * 255).round().astype(np.uint8)
-            Image.fromarray(array).save(request['output'], format='PNG')
+            try:
+                pixels = self.vae.decode(samples)
+                if pixels.ndim == 5:
+                    pixels = pixels.reshape(-1, *pixels.shape[-3:])
+                array = (pixels[0].clamp(0, 1).cpu().numpy() * 255).round().astype(np.uint8)
+                Image.fromarray(array).save(request['output'], format='PNG')
+            finally:
+                self.release_gpu(self.vae.patcher)
+        # Drop inference tensors before accepting the next image. Allocator
+        # blocks must not accumulate through a long slide illustration batch.
+        del pixels, samples
+        if self.backend == 'cuda':comfy.model_management.soft_empty_cache(force=True)
         emit('done', parameters={'width':int(array.shape[1]), 'height':int(array.shape[0]),
              'steps':request['steps'], 'cfg':request['cfg'], 'sampler':sampler, 'scheduler':scheduler,
-             'seed':request['seed'], 'strength':1.0, 'engine':'vision', 'reference_count':len(images)})
+             'seed':request['seed'], 'strength':1.0, 'engine':'vision', 'reference_count':reference_count})
 
 
 def main():
