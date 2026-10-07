@@ -40,18 +40,21 @@ def valid_tags(text):
         raise ValueError('Tag incompleto o non valido nel testo.')
 
 
-def direction(prompt='', traits=None, base=None):
+def direction(prompt='', traits=None, base=None, expressive_emotions=False):
     """Transparent deterministic compiler; never puts free instructions in speech."""
     selected = list(base or [])
     matched = []
+    excluded = set()
     text = normalize(prompt)
     hits = sorted((m.start(), m, values) for pattern, values in RULES for m in re.finditer(pattern, text))
     for _, match, values in hits:
         prefix = text[max(0, match.start() - 50):match.start()]
         if re.search(r'(?:\bnon|\bsenza|\bno|\bnot)\s+(?:(?:troppo|essere|molto|parlare|con|tono|una?|voce)\s+)*$', prefix):
             selected = [tag for tag in selected if tag not in values]
+            excluded.update(values)
             continue
         selected.extend(values)
+        excluded.difference_update(values)
         matched.append(match[0])
     for trait, intensity in (traits or {}).items():
         if float(intensity) >= 35:
@@ -68,6 +71,13 @@ def direction(prompt='', traits=None, base=None):
             continue
         key = f'prosody:{val.split("_")[0]}' if cat == 'prosody' else cat
         grouped[key] = tag
+    # "Natural" follows the requested delivery. A neutral reference alone does
+    # not provide the lively prosody needed for an enthusiastic interpretation.
+    # Keep explicit sober/expressive choices and negations authoritative.
+    if (expressive_emotions and grouped.get('emotion') == 'emotion:enthusiasm'
+            and 'prosody:expressive' not in grouped
+            and 'prosody:expressive_high' not in excluded):
+        grouped['prosody:expressive'] = 'prosody:expressive_high'
     applied = list(grouped.values())
     return {'tags': applied, 'prefix': ''.join(f'<|{tag}|>' for tag in applied),
             'matched': sorted(set(matched)), 'mode': 'local',

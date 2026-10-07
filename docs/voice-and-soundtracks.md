@@ -30,6 +30,14 @@ Premi **Voice** in chat, apri **Voce e interpretazione** e scegli:
   interpretazione. Sono indicazioni di recitazione supportate da Higgs,
   non trasformazioni garantite dell’identità vocale.
 
+**Espressività → Auto · segue l’interpretazione** conserva la recitazione del
+campione con interpretazione neutra; con **Entusiasta** invia anche il controllo
+Higgs di espressività alta, a ogni frase e segmento, anche in Voice + Manim.
+Puoi scegliere **Sobria** oppure **Espressiva** esplicitamente. Il risultato
+dipende anche dalla recitazione del campione: un riferimento italiano vivace
+può aiutare. Le parole dopo `Testo:` sono contenuto da leggere, non istruzioni
+che cambiano l’interpretazione. La temperatura non viene alzata automaticamente.
+
 Anche «Leggi ad alta voce: ...», «Crea una lezione audio sul ...» e
 «Genera un riassunto vocale del PDF» attivano la voce automaticamente,
 se il riconoscimento è abilitato. Discussioni sulla voce restano testo.

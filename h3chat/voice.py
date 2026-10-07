@@ -101,6 +101,8 @@ def route(history,settings):
 
 def controls(settings,prompt):
     value={k:settings['voice_'+k] for k in FIELDS if k!='mode'}|settings.get('_voice_fields',{})
+    # In verbatim reading, the supplied speech is data, not acting instructions.
+    prompt=re.split(r'\b(?:testo|text)\s*:',prompt,maxsplit=1,flags=re.I)[0]
     if 'gender' not in settings.get('_voice_fields',{}):
         if re.search(r'\b(?:maschile|uomo|male voice)\b',prompt,re.I):value['gender']='male'
         elif re.search(r'\b(?:femminile|donna|female voice)\b',prompt,re.I):value['gender']='female'
@@ -109,7 +111,17 @@ def controls(settings,prompt):
     if value['speed']!='normal':base.append('prosody:speed_'+value['speed'])
     if value['expressiveness']!='natural':base.append('prosody:expressive_'+value['expressiveness'])
     if value['emotion']!='neutral':base.append('emotion:'+value['emotion'])
-    return value,direction(prompt,base=base)
+    acting=direction(prompt,base=base,expressive_emotions=value['expressiveness']=='natural')
+    # Report the controls actually sent to Higgs, including prompt overrides.
+    value.update(pitch='normal',speed='normal',expressiveness='natural',emotion='neutral')
+    for tag in acting['tags']:
+        kind,name=tag.split(':',1)
+        if kind=='emotion':value['emotion']=name
+        elif kind=='prosody':
+            field,level=name.split('_',1)
+            if field in ('pitch','speed'):value[field]=level
+            elif field=='expressive':value['expressiveness']=level
+    return value,acting
 
 def configuration(root,settings,prompt):
     """Resolve the same portable voice engine for speech and narrated animation."""
