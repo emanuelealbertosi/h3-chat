@@ -321,6 +321,15 @@ class Service:
         elif raw.startswith(b'ID3') or len(raw)>2 and raw[0]==255 and raw[1]&224==224:ext,mime='mp3','audio/mpeg'
         elif raw.startswith(b'OggS'):ext,mime='ogg','audio/ogg'
         elif raw.startswith(b'%PDF-'):ext,mime='pdf','application/pdf'
+        elif raw.startswith(b'PK\x03\x04') and str(body.get('name','')).lower().endswith('.pptx'):
+            try:
+                from .manim_presentation import PPTX
+                with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                    names=z.namelist()
+                    if '[Content_Types].xml' not in names or 'ppt/presentation.xml' not in names or any('vbaproject' in x.lower() for x in names):raise ValueError('Usa un PPTX senza macro.')
+                    if len(names)>10000 or sum(x.file_size for x in z.infolist())>100*1024**2:raise ValueError('Presentazione decompressa troppo grande.')
+            except zipfile.BadZipFile:raise ValueError('PPTX non valido.')
+            ext,mime='pptx',PPTX
         elif raw.startswith(b'PK\x03\x04') and str(body.get('name','')).lower().endswith('.docx'):
             try:
                 with zipfile.ZipFile(io.BytesIO(raw)) as z:
@@ -330,9 +339,9 @@ class Service:
             except zipfile.BadZipFile:raise ValueError('Documento Word non valido.')
             ext,mime='docx','application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         else:
-            raise ValueError("Usa immagini PNG/JPEG, audio WAV/MP3/FLAC/OGG, PDF oppure Word .docx.")
+            raise ValueError("Usa immagini PNG/JPEG, audio WAV/MP3/FLAC/OGG, PDF, Word .docx oppure PowerPoint .pptx.")
         if mime.startswith('image/') and len(raw)>12*1024**2:raise ValueError('Ogni immagine può occupare al massimo 12 MB.')
-        if ext in ('pdf','docx') and len(raw)>25*1024**2:raise ValueError('Documenti: massimo 25 MB per file.')
+        if ext in ('pdf','docx','pptx') and len(raw)>25*1024**2:raise ValueError('Documenti: massimo 25 MB per file.')
         image_id = uid()
         relative = f"uploads/{image_id}.{ext}"
         target = safe_join(self.data, relative)
@@ -414,6 +423,13 @@ class Service:
                 self.engine.require_model(settings['_slides'].get('image_model') or settings['create_model'],'create')
         if source and lab=='auto':raise ValueError('Specifica lo strumento per eseguire il sorgente.')
         settings.update(_lab=lab,_lab_source=source)
+        from .manim_presentation import options as presentation_options
+        settings['_manim_presentation']=presentation_options(body.get('manim_presentation'),media)
+        if settings['_manim_presentation']:
+            if lab not in ('auto','manim') or source or any((selection,music,video,transcribe)):
+                raise ValueError('Anima presentazione è disponibile con Manim, senza sorgente Python manuale o altri motori selezionati.')
+            lab='manim';settings['_lab']='manim'
+            self.engine.require_model(settings['chat_model'],'chat')
         from .narrated_manim import requested as narrated_requested
         settings['_manim_voice']=narrated_requested(prompt,settings)
         if settings['_manim_voice'] and not source:self.engine.require_model(settings['chat_model'],'chat')
@@ -576,7 +592,14 @@ class Service:
                 slide_documents=[]
                 if selected_route and selected_route['intent']=='slides':
                     slide_documents=next(([x for x in m['media'] if x['mime'] in ('application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document')] for m in reversed(history) if any(x['mime'] in ('application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document') for x in m['media'])),[])
-                history,tool_meta,transcripts,sources=self.engine.prepare_tools(history,payload,settings,cancel,stage,log_path)
+                if settings.get('_manim_presentation'):
+                    from .manim_presentation import supported as presentation_supported
+                    # Slide import supplies text/layout and one preview per scene.
+                    # Do not caption or send the whole deck through vision here.
+                    history=[m|{'media':[x for x in m['media'] if not presentation_supported(x)]} for m in history]
+                    tool_payload=payload|{'media':[x for x in payload['media'] if not presentation_supported(x)]}
+                    history,tool_meta,transcripts,sources=self.engine.prepare_tools(history,tool_payload,settings,cancel,stage,log_path,use_audio=False)
+                else:history,tool_meta,transcripts,sources=self.engine.prepare_tools(history,payload,settings,cancel,stage,log_path)
                 if selected_route and selected_route['intent']=='slides':
                     from .slide_sources import extract_assets
                     tool_meta['_slide_assets']=extract_assets(self,job,slide_documents,rag_sources,project_id,cancel,stage,log_path)
@@ -645,7 +668,9 @@ class Service:
                 meta['artifact']=build_slides(self,job,payload,history,settings,model,cancel,stage,log_path,meta)
                 self.store.update_answer(job,f"Ho creato {meta['slides_count']} slide nel canvas. Puoi sfogliarle ed esportarle."+(' '+meta['slide_warning'] if meta.get('slide_warning') else ''),'done',[],meta)
             elif intent=='manim':
-                if settings.get('_manim_voice'):
+                if settings.get('_manim_presentation'):
+                    from .manim_presentation import build as build_manim
+                elif settings.get('_manim_voice'):
                     from .narrated_manim import build as build_manim
                 else:
                     from .manim_artifact import build as build_manim

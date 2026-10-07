@@ -28,7 +28,7 @@ def probe(path):
 
 def compose(videos,audio,output,retime=False,durations=None):
     import av
-    info=probe(audio);target=info['duration'];clips=[]
+    info=probe(audio) if audio else None;clips=[]
     for path in videos:
         with av.open(path,options={'protocol_whitelist':'file'}) as source:
             if not source.streams.video:raise ValueError('Il file non contiene video.')
@@ -36,10 +36,13 @@ def compose(videos,audio,output,retime=False,durations=None):
             if not math.isfinite(duration) or duration<=0:raise ValueError('Durata video non valida.')
             clips.append((path,duration,s.width,s.height,float(s.average_rate or 24)))
     if not clips:raise ValueError('Nessuna scena da montare.')
-    total=sum(c[1] for c in clips);scale=target/total if retime else 1
+    if durations is not None and (not isinstance(durations,list) or len(durations)!=len(clips) or any(type(t) not in (int,float) or not math.isfinite(t) or t<=0 for t in durations)):raise ValueError('Tempi delle scene non validi.')
+    total=sum(c[1] for c in clips)
+    target=info['duration'] if info else sum(durations) if durations is not None else total
+    scale=target/total if retime else 1
     if durations is not None:
         if not isinstance(durations,list) or len(durations)!=len(clips) or any(type(t) not in (int,float) or not math.isfinite(t) or t<=0 for t in durations):raise ValueError('Tempi delle scene non validi.')
-        if abs(sum(durations)-target)>max(2/info['sample_rate'],1e-6):raise ValueError('I tempi delle scene non coprono esattamente la narrazione.')
+        if abs(sum(durations)-target)>max(2/info['sample_rate'] if info else 1e-6,1e-6):raise ValueError('I tempi delle scene non coprono esattamente la narrazione.')
     if durations is None and not retime and total+1/24<target:raise ValueError('Le scene non coprono tutta la traccia audio.')
     width,height=clips[0][2:4];fps=min(60,max(5,round(clips[0][4])))
     if any(c[2:4]!=(width,height) for c in clips):raise ValueError('Le scene hanno formati diversi.')
@@ -48,7 +51,8 @@ def compose(videos,audio,output,retime=False,durations=None):
     try:
         with av.open(str(partial),'w',format='mp4',options={'movflags':'+faststart'}) as out:
             video=out.add_stream('libx264',rate=fps);video.width=width;video.height=height;video.pix_fmt='yuv420p';video.options={'crf':'18','preset':'fast'}
-            sound=out.add_stream('aac',rate=48000);sound.layout='stereo';sound.bit_rate=192000
+            sound=out.add_stream('aac',rate=48000) if audio else None
+            if sound:sound.layout='stereo';sound.bit_rate=192000
             for index,(path,length,*_) in enumerate(clips):
                 emit('stage',message=f'Montaggio · scena {index+1}/{len(clips)}')
                 clip_scale=durations[index]/length if durations is not None else scale
@@ -74,21 +78,22 @@ def compose(videos,audio,output,retime=False,durations=None):
                         written+=1
                 offset+=durations[index] if durations is not None else length
             for packet in video.encode(None):out.mux(packet)
-            emit('stage',message='Montaggio · codifica della traccia originale')
-            with av.open(audio,options={'protocol_whitelist':'file'}) as source:
-                resampler=av.AudioResampler(format='fltp',layout='stereo',rate=48000)
-                cursor=0
-                def write(parts):
-                    nonlocal cursor
-                    for part in parts:
-                        part.pts=cursor;part.time_base=Fraction(1,48000);cursor+=part.samples
-                        for packet in sound.encode(part):out.mux(packet)
-                for frame in source.decode(source.streams.audio[0]):
-                    frame.pts=None;write(resampler.resample(frame))
-                write(resampler.resample(None))
+            if audio:
+                emit('stage',message='Montaggio · codifica della traccia originale')
+                with av.open(audio,options={'protocol_whitelist':'file'}) as source:
+                    resampler=av.AudioResampler(format='fltp',layout='stereo',rate=48000)
+                    cursor=0
+                    def write(parts):
+                        nonlocal cursor
+                        for part in parts:
+                            part.pts=cursor;part.time_base=Fraction(1,48000);cursor+=part.samples
+                            for packet in sound.encode(part):out.mux(packet)
+                    for frame in source.decode(source.streams.audio[0]):
+                        frame.pts=None;write(resampler.resample(frame))
+                    write(resampler.resample(None))
                 for packet in sound.encode(None):out.mux(packet)
         partial.replace(destination)
-        return {'path':str(destination),'duration':target,'frames':written,'fps':fps,'audio_preserved':True,'retimed':retime or durations is not None,'speed_factor':1/scale,'scene_durations':durations,'synchronization':'per-scene' if durations is not None else 'global'}
+        return {'path':str(destination),'duration':target,'frames':written,'fps':fps,'audio_preserved':bool(audio),'retimed':retime or durations is not None,'speed_factor':1/scale,'scene_durations':durations,'synchronization':'per-scene' if durations is not None else 'global'}
     finally:partial.unlink(missing_ok=True)
 
 if __name__=='__main__':

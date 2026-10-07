@@ -133,6 +133,7 @@ export async function exportSlides(value,kind,token){
     for(const frame of [...root.children]){if(deck.engine==='llm')flattenHtml(frame);else layoutSlide(frame,deck.pages[Number(frame.dataset.page)-1].title);}
     if(kind==='pptx')return await (await import('./slide-pptx.js')).exportPowerPoint(root,deck,value.title);
     if(kind==='pdf')return await exportPdf(root,value.title,token,{slide_format:deck.format});
+    if(kind==='source-pdf'){const url=await exportPdf(root,value.title,token,{slide_format:deck.format,download:false});const response=await fetch(url);if(!response.ok)throw Error('PDF della presentazione non disponibile.');return await response.blob();}
     if(kind==='docx')return await exportDocx(root,value.title);
     if(kind==='png')return await exportPng(root,value.title);
     if(kind==='html'){

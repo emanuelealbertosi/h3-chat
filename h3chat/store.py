@@ -159,7 +159,7 @@ class Store:
     def enqueue(self, chat_id, prompt, media, settings, canvas=False, loras=None, canvas_snapshot=None):
         job_id, user_id, answer_id, now = uid(), uid(), uid(), time.time()
         loras=loras or []
-        lora_meta={"voice":settings.get("_voice",False),"voice_fields":settings.get("_voice_fields",{}),"web":settings.get("_web",False),"transcribe":settings.get("_transcribe",False),"video":settings.get("_video",False),"music":settings.get("_music",False),"music_fields":settings.get("_music_fields",{}),"image_model":settings.get("_image_model",""),"assistant":settings.get("_assistant",True),"loras":[{k:l[k] for k in ("id","name","weight","model_id","model_name")} for l in loras]}
+        lora_meta={"manim_presentation":settings.get("_manim_presentation"),"voice":settings.get("_voice",False),"voice_fields":settings.get("_voice_fields",{}),"web":settings.get("_web",False),"transcribe":settings.get("_transcribe",False),"video":settings.get("_video",False),"music":settings.get("_music",False),"music_fields":settings.get("_music_fields",{}),"image_model":settings.get("_image_model",""),"assistant":settings.get("_assistant",True),"loras":[{k:l[k] for k in ("id","name","weight","model_id","model_name")} for l in loras]}
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             chat = db.execute("SELECT * FROM chats WHERE id=?", (chat_id,)).fetchone()

@@ -5,6 +5,7 @@ Text and SVG stay vector-based in the PDF; chart canvases arrive as PNG data URI
 """
 import base64
 import html
+import math
 import os
 import re
 import subprocess
@@ -69,6 +70,9 @@ def export_document(root,data,body):
     if not isinstance(title,str) or len(title)>150:raise ValueError('Il titolo del documento deve essere un testo di massimo 150 caratteri.')
     parser=Sanitizer();parser.feed(source)
     slide_format=body.get('slide_format')
+    page_dimensions=body.get('page_dimensions')
+    if page_dimensions is not None and (not isinstance(page_dimensions,list) or len(page_dimensions)!=2 or any(type(v) not in (int,float) or not math.isfinite(v) or not 100<=v<=8192 for v in page_dimensions)):
+        raise ValueError('Dimensioni della pagina non valide.')
     if slide_format is not None:
         from .slides import FORMATS
         if slide_format not in FORMATS:raise ValueError('Formato slide non valido.')
@@ -84,12 +88,12 @@ def export_document(root,data,body):
       figure,.math-block{break-inside:avoid;max-width:100%} .chart-box{height:auto} img{max-width:100%;height:auto;max-height:220mm}
       .no-export{display:none!important} .rich .math-block{overflow:visible}.visual-label{font-size:9pt}
     '''
-    if slide_format:
+    if slide_format or page_dimensions:
         css=base_css
-        width,height=FORMATS[slide_format]
+        width,height=page_dimensions or FORMATS[slide_format]
         css+='\n'+f'@page{{size:{width}px {height}px;margin:0}}'
         css+='body{margin:0;background:#e8ece7}.slides-document{width:1280px;margin:auto}.h3-slide-page{break-after:page;margin:0 0 24px;box-shadow:0 4px 24px #0002}.h3-slide-page:last-child{break-after:auto}@media print{body{background:white}.h3-slide-page{margin:0;box-shadow:none}}'
-    wrapper='slides-document' if slide_format else 'rich'
+    wrapper='slides-document' if slide_format or page_dimensions else 'rich'
     document='<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:; font-src data:; script-src \'none\'"><title>'+html.escape(title)+'</title><style>'+css+'</style></head><body><article class="'+wrapper+'">'+''.join(parser.output)+'</article></body></html>'
     source_file=folder/'document.html';source_file.write_text(document,encoding='utf-8')
     return folder,source_file,title

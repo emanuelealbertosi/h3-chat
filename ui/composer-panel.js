@@ -75,7 +75,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
   auto.setAttribute('aria-pressed',String(mode==='auto'&&!value.image_model&&!value.music&&!value.video&&!value.voice&&!value.transcribe));images.setAttribute('aria-pressed',String(!!value.image_model));
   for(const [name,item] of tools)item.setAttribute('aria-pressed',String(mode===name));
   imagePanel.hidden=!value.image_model;slides.hidden=mode!=='slides';slideTechnical.hidden=mode!=='slides';generatedModels.hidden=!$('#slides-generate-images').checked;
-  voiceMode.hidden=!!value.voice&&mode==='manim';context.hidden=!(mode==='slides'||value.image_model||value.voice||value.music||value.video);
+  voiceMode.hidden=!!value.voice&&mode==='manim';context.hidden=!(mode==='slides'||mode==='manim'||value.image_model||value.voice||value.music||value.video);
   assistant.textContent='Assistant '+(value.assistant?'On':'Off');assistant.title='Prepara le istruzioni con il LLM della chat';
   for(const update of mirrors)update();
   const model=state.models.find(m=>m.id===state.settings.chat_model),vision=!state.settings.vision_enabled?'Vision Off':model?.vision?.enabled?'Vision '+(model.api?'API':state.settings.vision_device.toUpperCase()):'Non vision';

@@ -55,13 +55,31 @@ def main():
     def tex_command(*args,**kwargs):
         command=original(*args,**kwargs);command.insert(1,'-no-shell-escape');return command
     tex_file_writing.make_tex_compilation_command=tex_command
+    frame_options={k:opts[k] for k in ('frame_width','frame_height') if k in opts}
     with tempconfig({'media_dir':str(folder/'media'),'output_file':'animation','pixel_width':opts['width'],
             'pixel_height':opts['height'],'frame_rate':opts['fps'],'renderer':'opengl' if opts['device']=='gpu' else 'cairo',
-            'background_color':'#12352f','disable_caching':True,'write_to_movie':True,'verbosity':'WARNING'}):
+            'background_color':'#12352f','disable_caching':True,'write_to_movie':True,'verbosity':'WARNING',**frame_options}):
         namespace=runpy.run_path(str(folder/'scene.py'),run_name='__h3_manim__')
         cls=namespace.get(request['scene_name'])
         if not isinstance(cls,type) or not issubclass(cls,Scene):raise ValueError('La classe selezionata deve derivare da Scene o ThreeDScene.')
-        scene=cls();scene.render()
+        scene=cls()
+        if request.get('presentation'):
+            from manim import ImageMobject,config
+            if opts['device']=='gpu':
+                from manim.mobject.opengl.opengl_image_mobject import OpenGLImageMobject as ImageMobject
+            image=ImageMobject(str(folder/'assets'/request['presentation']['background']))
+            image.scale(min(config.frame_width/image.width,config.frame_height/image.height)).move_to([0,0,0])
+            if opts['device']=='gpu':image.deactivate_depth_test();image.fix_in_frame()
+            else:
+                image.set_z_index(-10000)
+                if hasattr(scene.camera,'add_fixed_in_frame_mobjects'):scene.camera.add_fixed_in_frame_mobjects(image)
+            original=scene.construct
+            def keep_background(dt):
+                if image not in scene.mobjects:scene.add(image);scene.bring_to_back(image)
+            def construct():
+                scene.add(image);scene.bring_to_back(image);scene.add_updater(keep_background);original()
+            scene.construct=construct
+        scene.render()
         path=Path(scene.renderer.file_writer.movie_file_path).resolve()
         if not path.is_relative_to(folder):raise ValueError('Il video deve restare nella cartella del rendering.')
         (folder/'result.json').write_text(json.dumps({'path':str(path)}),encoding='utf-8')

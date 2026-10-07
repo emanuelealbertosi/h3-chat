@@ -27,7 +27,7 @@ export async function exportPdf(root,title,token,options={}) {
   const html=await printableHtml(root);
   const response=await fetch('/api/export/pdf',{method:'POST',headers:{'Content-Type':'application/json','X-H3-Token':token},body:JSON.stringify({title,html,...options})});
   const result=await response.json();if(!response.ok)throw Error(result.error);
-  const a=document.createElement('a');a.href=result.url;a.download=nameOf(title)+'.pdf';a.click();return result.url;
+  if(options.download!==false){const a=document.createElement('a');a.href=result.url;a.download=nameOf(title)+'.pdf';a.click();}return result.url;
 }
 
 function inlineRuns(node,inherited={}){

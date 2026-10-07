@@ -28,7 +28,9 @@ def render(request):
         shutil.copyfile(path,assets/name)
     opts=request['options']
     (folder/'scene.py').write_text(source['code'],encoding='utf-8')
-    (folder/'request.json').write_text(json.dumps({'scene_name':source['scene_name'],'options':opts}),encoding='utf-8')
+    presentation=request.get('presentation')
+    if presentation and (not isinstance(presentation,dict) or presentation.get('background') not in [a['name'] for a in request.get('assets',[])]):raise ValueError('Sfondo della slide non disponibile.')
+    (folder/'request.json').write_text(json.dumps({'scene_name':source['scene_name'],'options':opts,'presentation':presentation}),encoding='utf-8')
     system=os.environ.get('SystemRoot',r'C:\Windows')
     latex=ROOT/'runtime/tools/latex/TinyTeX/bin/windows'
     environment={'SystemRoot':system,'WINDIR':system,'PATH':str(latex)+os.pathsep+str(Path(system)/'System32'),

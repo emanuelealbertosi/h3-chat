@@ -30,6 +30,14 @@ exec(compile(ast.Module(body=nodes,type_ignores=[]),'media-compose-worker.py','e
 clips=[str(folder/(name+'.mp4')) for name in ('red','blue')]
 result=scope['compose'](clips,str(folder/'voice.wav'),str(folder/'result.mp4'),durations=[1,3])
 assert result['frames']==80 and result['synchronization']=='per-scene'
+silent=scope['compose'](clips,None,str(folder/'silent.mp4'),durations=[1,3])
+assert silent['frames']==80 and not silent['audio_preserved']
+with av.open(str(folder/'silent.mp4')) as source:
+    assert not source.streams.audio
+    silent_frames=list(source.decode(video=0))
+    assert len(silent_frames)==80
+    assert bytes(silent_frames[19].reformat(format='rgb24').planes[0])[0]>200
+    assert bytes(silent_frames[20].reformat(format='rgb24').planes[0])[2]>200
 with av.open(str(folder/'result.mp4')) as source:
     frames=list(source.decode(video=0));assert len(frames)==80
     red_count=0

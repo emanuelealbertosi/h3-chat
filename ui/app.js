@@ -19,10 +19,11 @@ import {renderVoiceSettings} from './voice.js';
 import {readDeck,renderSlides,exportSlides,transferSlideView} from './slides.js';
 import {initSlideImages} from './slide-ai.js';
 import {initComposerPanel} from './composer-panel.js';
+import {initManimPresentation} from './manim-presentation.js';
 import {initWorkspaceLayout} from './workspace-layout.js';
 
 const $=s=>document.querySelector(s);
-let composerUI=null;
+let composerUI=null,manimPresentation=null;
 let state=null,current=null,chat=null,filter='all',collection=null,project=null,attachments=[],settingsTab='setup',settingsDraft=null;
 let canvasOpen=false,canvas={title:'Canvas',content:'',media:[]},canvasEditing=false,canvasSaveTimer,canvasDirty=false;
 let canvasHistory={items:[],active_id:null},canvasFollow=true,canvasSaving=null,canvasSelection=0,canvasHistoryRequest=0;
@@ -67,7 +68,7 @@ const loraUI=initLoras({api,getState:()=>state,getChatId:()=>current,pickDirecto
 const projects=initProjects({api,getState:()=>state,getChat:()=>chat,refresh,notify:toast,act,select:act(async id=>{project=id;collection=null;filter='all';lastSidebar='';renderSidebar();if(id&&chat?.project_id!==id){const existing=state.chats.find(c=>c.project_id===id&&!c.archived);if(existing)await openChat(existing.id);else await newChat();}}),showCanvas:value=>value===null?($('#canvas-panel').hidden=!canvasOpen,$('#workspace').classList.toggle('has-canvas',canvasOpen)):toggleCanvas(value),pickDirectory:(path,callback)=>localModels.pickDirectory(path,callback)});
 chatModels=initChatModels({api,getState:()=>state,notify:toast,onChange:settings=>{if(settings)state.settings=settings;renderStatus();}});
 $('#rag-enabled').closest('label').insertAdjacentHTML('afterend','<label class="think-control">Strumenti <select id="lab-tool" aria-label="Strumenti della chat"><option value="auto">Automatico · dal prompt</option><option value="calculate">Interprete numerico</option><option value="manim">Animazione Manim</option><option value="slides">Slide · HTML in tempo reale</option></select></label><span id="slides-options" hidden><label>Slide <input id="slides-count" aria-label="Numero di slide" type="number" min="1" max="30" value="8" style="width:65px"></label> <label>Formato <select id="slides-format" aria-label="Formato slide"><option>16:9</option><option>4:3</option><option>16:10</option><option>1:1</option></select></label></span>');
-$('#lab-tool').onchange=()=>{$('#slides-options').hidden=$('#lab-tool').value!=='slides';visualControls.render();};
+$('#lab-tool').onchange=()=>{manimPresentation?.render();$('#slides-options').hidden=$('#lab-tool').value!=='slides';visualControls.render();};
 $('#slides-options').insertAdjacentHTML('beforeend',' <label>Motore <select id="slides-engine" aria-label="Motore slide"><option value="llm">LLM · HTML libero</option><option value="deterministic">Deterministico</option></select></label> <label>Stile <select id="slides-design"><option value="professional">Serio / professionale</option><option value="playful">Giocoso / colorato</option><option value="comic">Fumettoso</option></select></label> <label>Contenuto <select id="slides-detail"><option value="concise">Sintesi</option><option value="full">Testi completi</option></select></label>');
 $('#slides-options').insertAdjacentHTML('beforeend',' <label title="Rapida analizza fino a 8 figure nuove, dando precedenza alle fonti della richiesta. Le descrizioni già disponibili vengono riutilizzate; tutte le figure restano inseribili.">Figure Vision <select id="slides-vision" aria-label="Analisi figure slide"><option value="relevant">Rapida · max 8 nuove</option><option value="all">Completa · tutte</option></select></label>');
 const slideImages=initSlideImages();
@@ -149,7 +150,7 @@ function renderStatus(){
   $('#canvas-source').readOnly=!!canvasJob?.canvas;
   $('#canvas-title').readOnly=!!canvasJob?.canvas;
   $('#canvas-restore').disabled=!!canvasJob?.canvas||!canvas.id||canvas.id===canvasHistory.active_id;
-  composerUI?.render();
+  composerUI?.render();manimPresentation?.render();
 }
 async function newChat(){if(current)await persistCanvas();const fresh=await api('/chats',{collection_id:collection,project_id:project});await openChat(fresh.id);await refresh();$('#prompt').focus();}
 async function openChat(id){
@@ -211,21 +212,22 @@ async function renderChat(){
       });actions.append(toCanvas);
       if(message.meta.finish_reason==='length'){const note=document.createElement('span');note.textContent='Limite di risposta raggiunto';actions.append(note);}
     }
-    if(message.role==='user'){const repeat=document.createElement('button');repeat.className='text-button';repeat.textContent='Riutilizza';repeat.onclick=()=>{$('#prompt').value=message.content;attachments=[...message.media];loraUI.setSelections(message.meta.loras||[]);visualControls.set({voice:message.meta.voice||false,voice_fields:message.meta.voice_fields||{},image_model:message.meta.image_model||'',assistant:message.meta.assistant??true,video:message.meta.video||false,web:message.meta.web||false,transcribe:message.meta.transcribe||false,music:message.meta.music||false,music_fields:message.meta.music_fields||{}});renderAttachments();$('#prompt').focus();};actions.append(repeat);}
+    if(message.role==='user'){const repeat=document.createElement('button');repeat.className='text-button';repeat.textContent='Riutilizza';repeat.onclick=()=>{$('#prompt').value=message.content;attachments=[...message.media];if(message.meta.manim_presentation){$('#lab-tool').value='manim';composerUI?.render();}manimPresentation?.set(message.meta.manim_presentation?{enabled:true,...message.meta.manim_presentation}:null);loraUI.setSelections(message.meta.loras||[]);visualControls.set({voice:message.meta.voice||false,voice_fields:message.meta.voice_fields||{},image_model:message.meta.image_model||'',assistant:message.meta.assistant??true,video:message.meta.video||false,web:message.meta.web||false,transcribe:message.meta.transcribe||false,music:message.meta.music||false,music_fields:message.meta.music_fields||{}});renderAttachments();$('#prompt').focus();};actions.append(repeat);}
   }
   if(atBottom)scroll.scrollTop=scroll.scrollHeight;
 }
 function renderAttachments(){
  let image=0,audio=0,document=0;
  $('#attachments').innerHTML=attachments.map((m,i)=>{const sound=m.mime?.startsWith('audio/'),doc=m.mime?.startsWith('application/'),label=doc?'Documento '+(++document):sound?'Audio '+(++audio):'Immagine '+(++image);return `<div class="attachment" title="${esc(m.name)}">${doc?'<span class="audio-attachment">▤</span>':sound?'<span class="audio-attachment">♫</span>':`<img src="/media/${esc(m.path)}" alt="${esc(m.name)}">`}<small>${label}</small><button data-remove-attachment="${i}" aria-label="Rimuovi ${label}">×</button></div>`;}).join('');
+ manimPresentation?.render();
 }
 async function uploadFiles(files){
  if(attachments.length+files.length>12)throw Error('Massimo 12 allegati per messaggio.');
  for(const file of files){
-  const sound=file.type.startsWith('audio/')||/\.(wav|mp3|flac|ogg)$/i.test(file.name),doc=/\.(pdf|docx)$/i.test(file.name);
+  const sound=file.type.startsWith('audio/')||/\.(wav|mp3|flac|ogg)$/i.test(file.name),doc=/\.(pdf|docx|pptx)$/i.test(file.name);
   const category=doc?'application/':sound?'audio/':'image/';
   if(attachments.filter(x=>x.mime.startsWith(category)).length>=(doc||sound?3:9))throw Error(doc?'Massimo tre documenti.':sound?'Massimo tre audio.':'Massimo nove immagini; il modello mantiene il proprio limite.');
-  if(!doc&&!sound&&!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Scegli immagini, audio WAV/MP3/FLAC/OGG, PDF o Word .docx.');
+  if(!doc&&!sound&&!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Scegli immagini, audio WAV/MP3/FLAC/OGG, PDF, Word .docx o PowerPoint .pptx.');
   if(file.size>(doc?25:sound?64:12)*1024*1024)throw Error(doc?'Documenti: massimo 25 MB.':sound?'Audio: massimo 64 MB.':'Immagini: massimo 12 MB.');
   let source=file;
   if(!sound&&!doc){const bitmap=await createImageBitmap(file);if(Math.max(bitmap.width,bitmap.height)>8192){bitmap.close();throw Error('Massimo 8192 pixel.');}
@@ -236,8 +238,8 @@ async function uploadFiles(files){
 }
 async function send(event){event.preventDefault();if(userJob())return;const prompt=$('#prompt').value.trim();if(!prompt)return;
   $('#send').disabled=true;
-  try{await chatModels.wait();if(!current){const fresh=await api('/chats',{collection_id:collection,project_id:project});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
-    await persistCanvas();const sent=await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,...visualControls.read(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='slides'?{slides:{engine:$('#slides-engine').value,count:Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value,vision_scope:$('#slides-vision').value,...slideImages.read()}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()});
+  try{await chatModels.wait();if(!current){const fresh=await api('/chats',{collection_id:collection,project_id:project});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);manimPresentation?.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
+    await persistCanvas();const presentation=await manimPresentation.prepare();const sent=await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,...presentation,...visualControls.read(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='slides'?{slides:{engine:$('#slides-engine').value,count:Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value,vision_scope:$('#slides-vision').value,...slideImages.read()}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()});
     if(sent.intent==='slides'){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}
     $('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);await refresh();
   }finally{$('#send').disabled=false;}
@@ -322,7 +324,7 @@ async function renderCanvas(){
 }
 async function persistCanvas(){clearTimeout(canvasSaveTimer);if(canvasSaving){await canvasSaving;if(canvasDirty)return persistCanvas();return;}if(!canvasDirty)return;
   canvasSaving=(async()=>{
-    if(!current){const fresh=await api('/chats',{project_id:project});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
+    if(!current){const fresh=await api('/chats',{project_id:project});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);manimPresentation?.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
     const id=current,value=structuredClone(canvas),saved=await api('/canvas/'+id,value,'PUT');
     if(current===id){const unchanged=JSON.stringify(canvas)===JSON.stringify(value);transferSlideView(canvas.id,saved.id);canvas.id=saved.id;if(unchanged)canvasDirty=false;await loadCanvasHistory(id);$('#canvas-save-status').textContent=canvasDirty?'Modifiche da salvare':'Salvato sul computer';}
   })();try{await canvasSaving;}finally{canvasSaving=null;}
@@ -498,6 +500,8 @@ $('#canvas-title').oninput=canvasChanged;$('#canvas-source').oninput=canvasChang
 document.querySelector('[data-export="md"]').insertAdjacentHTML('afterend','<button class="btn small" data-export="html" hidden>HTML</button><button class="btn small" data-export="pptx" hidden>PowerPoint</button>');
 document.querySelectorAll('[data-export]').forEach(b=>b.onclick=act(async()=>{if(activeJob()?.canvas&&canvas.id===canvasHistory.active_id)throw Error('Attendi che il documento sia completo prima di esportare.');await persistCanvas();if(!canvas.content&&!canvas.media.length)throw Error('Il canvas è vuoto.');canvasEditing=false;await renderCanvas();const root=$('#canvas-preview');$('#canvas-panel').classList.add('exporting');try{if(b.dataset.export==='md')saveBlob(new Blob([canvas.content],{type:'text/markdown;charset=utf-8'}),canvas.title+'.md');else if(readDeck(canvas.content))await exportSlides(canvas,b.dataset.export,state.token);else{if(b.dataset.export==='pdf')await exportPdf(root,canvas.title,state.token);if(b.dataset.export==='docx')await exportDocx(root,canvas.title);if(b.dataset.export==='png')await exportPng(root,canvas.title);}toast('Esportazione pronta.');}finally{$('#canvas-panel').classList.remove('exporting');}}));
 composerUI=initComposerPanel({getState:()=>state,visualControls,getAttachments:()=>attachments,notify:toast});
+manimPresentation=initManimPresentation({getAttachments:()=>attachments,getCanvas:()=>canvas,getState:()=>state,getChatId:()=>current,api,notify:toast});
+document.querySelector('#composer').addEventListener('change',()=>manimPresentation.render());
 initWorkspaceLayout();
 await refresh();
 window.addEventListener('beforeunload',e=>{if(canvasDirty){e.preventDefault();e.returnValue='';}});
