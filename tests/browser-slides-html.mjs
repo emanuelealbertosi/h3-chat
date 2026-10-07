@@ -37,10 +37,17 @@ try{
   await page.reload();await page.click(`[data-chat="${fixture.chat}"]`);await page.click('#canvas-toggle');await iframe().locator('h1').waitFor();assert.match(await iframe().locator('h1').textContent(),/Titolo modificato/);
   await page.setViewportSize({width:390,height:844});await page.waitForTimeout(300);assert.ok(await page.locator('.slides-viewport').evaluate(e=>e.getBoundingClientRect().width>100));assert.deepEqual(errors,[]);
   assert.ok(!remote.some(url=>url.includes('example.com')),'Generated HTML must not access the network');
+  await page.setViewportSize({width:1640,height:1100});
+  await page.route('**/api/canvas/*/slides/regenerate',route=>route.fulfill({json:{job_id:'revision-only',intent:'slides',canvas:true}}));
+  await page.locator('.slide-ai-revision summary').click();await page.getByRole('textbox',{name:'Istruzioni AI per questa slide'}).fill('Rendi questa pagina più vivace');
+  const revision=page.waitForRequest(r=>r.method()==='POST'&&r.url().endsWith('/slides/regenerate'));
+  await page.getByRole('button',{name:'Ricrea solo questa slide',exact:true}).click();
+  const revisionBody=(await revision).postDataJSON();assert.equal(revisionBody.page,0);assert.equal(revisionBody.prompt,'Rendi questa pagina più vivace');assert.ok(revisionBody.artifact_id);
   const composer=await browser.newPage();await composer.goto(fixture.url);await composer.click(`[data-chat="${fixture.chat}"]`);
   await composer.selectOption('#lab-tool','slides');await composer.selectOption('#slides-vision','all');
+  assert.equal(await composer.isChecked('#slides-generate-images'),false);await composer.check('#slides-generate-images');assert.equal(await composer.locator('#slides-image-model-label').isVisible(),true);
   await composer.route('**/api/chats/*/messages',route=>route.fulfill({json:{job_id:'synthetic-only',intent:'slides',canvas:true}}));
   const request=composer.waitForRequest(r=>r.method()==='POST'&&r.url().endsWith('/messages'));
-  await composer.fill('#prompt','Crea 4 slide');await composer.locator('#composer').evaluate(e=>e.requestSubmit());assert.equal((await request).postDataJSON().slides.vision_scope,'all');await composer.close();
+  await composer.fill('#prompt','Crea 4 slide');await composer.locator('#composer').evaluate(e=>e.requestSubmit());const body=(await request).postDataJSON();assert.equal(body.slides.vision_scope,'all');assert.equal(body.slides.generate_images,true);await composer.close();
   console.log('Free HTML: streaming, original CSS/SVG, isolation, graphical edits, RAG/PC image replacement, persistent media, editable PPTX, PDF, HTML and mobile passed.');
 }catch(e){console.error(diagnostics);await page.screenshot({path:'work/slides-html-qa/error.png',fullPage:true});throw e;}finally{await browser.close();child.kill();}

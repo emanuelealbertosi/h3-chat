@@ -85,6 +85,9 @@ export async function renderSlides(target,value,options={}){
   controls.append(prev,picker,next,follow);target.append(controls);
   const edit=document.createElement('button');edit.id='slide-edit';edit.textContent=selected.editing?'Termina modifica':'Modifica grafica';edit.disabled=!options.editable||!options.onChange||pageNotReady(deck.pages[selected.index]);
   edit.onclick=()=>{selected.editing=!selected.editing;renderSlides(target,value,options);};controls.append(edit);
+  if(deck.engine==='llm'){
+    const {mountSlideRevision}=await import('./slide-ai.js');mountSlideRevision(target,selected,deck.pages[selected.index],options);
+  }
   const viewport=document.createElement('div');viewport.className='slides-viewport';target.append(viewport);
   const page=deck.pages[selected.index];const frame=await pageElement(deck,page,selected.index,value.media,options,viewport);
   await document.fonts.ready;await Promise.all([...frame.querySelectorAll('img')].map(img=>img.decode().catch(()=>{})));

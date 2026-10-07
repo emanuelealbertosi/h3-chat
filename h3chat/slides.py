@@ -108,6 +108,12 @@ def options(prompt, body=None):
     if type(count) is not int or not 1 <= count <= 30 or not isinstance(aspect,str) or aspect not in FORMATS:
         raise ValueError('Slide: scegli da 1 a 30 pagine e un formato 16:9, 4:3, 16:10 oppure 1:1.')
     result={'count': count, 'format': aspect}
+    if 'generate_images' in body:
+        if type(body['generate_images']) is not bool:raise ValueError('Immagini AI: scegli attivo o disattivo.')
+        result['generate_images']=body['generate_images']
+    if 'image_model' in body:
+        if not isinstance(body['image_model'],str) or len(body['image_model'])>150:raise ValueError('Modello immagini slide non valido.')
+        result['image_model']=body['image_model']
     if body.get('engine','llm') not in ('llm','deterministic'):raise ValueError('Motore slide non valido.')
     result['engine']=body.get('engine','llm')
     if body.get('vision_scope','relevant') not in ('relevant','all'):raise ValueError('Analisi figure slide non valida.')
@@ -383,9 +389,17 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     if finish=='length': raise ValueError('Scaletta incompleta: aumenta Max token del modello LLM.')
     outline=json.loads(raw)
     if not isinstance(outline,dict) or not isinstance(outline.get('title'),str) or not isinstance(outline.get('slides'),list) or len(outline['slides'])!=opts['count']: raise ValueError('Scaletta slide non valida.')
-    pages=[]
     for row in outline['slides']:
         if not isinstance(row,dict) or any(not isinstance(row.get(k),str) or len(row[k])>1500 for k in ('title','purpose')): raise ValueError('Scaletta slide non valida.')
+    if opts.get('generate_images',False):
+        from .slide_generation_images import create
+        generated,captions=create(app,job,outline,base,settings|{'_slides':opts},model,cancel,stage,log_path,meta)
+        assets.extend(generated);allowed.update(m['id'] for m in generated)
+        base.append({'role':'user','content':'IMMAGINI GENERATE DISPONIBILI (illustrazioni, non fonti documentali):\n'+json.dumps([
+            {'asset_id':m['id'],'description':captions[m['id']]} for m in generated],ensure_ascii=False)+
+            '\nUsale nelle pagine indicate se pertinenti, preservandone le proporzioni. Non inventare asset_id.'})
+    pages=[]
+    for row in outline['slides']:
         pages.append({'title':row['title'][:150], 'purpose':row['purpose'], 'status':'pending','nodes':[], 'notes':'','sources':[]})
     deck={'version':1,'engine':opts['engine'],'format':opts['format'],'theme':opts.get('theme','lagoon'),'typography':opts.get('typography','modern'),
           'design':opts.get('design','professional'),'detail':opts.get('detail','concise'),'vision_scope':opts.get('vision_scope','relevant'),
@@ -393,6 +407,7 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     direction=outline.get('visual_direction','')
     if not isinstance(direction,str):raise ValueError('Direzione artistica delle slide non valida.')
     if opts['engine']=='llm':deck['visual_direction']=direction[:2500]
+    if opts.get('generate_images'):deck['image_generation']={'model':meta['slide_image_model'],'count':len(generated)}
     def publish():
         content=encode(deck)
         meta['artifact']={'title':deck['title'],'content':content,'media':assets}

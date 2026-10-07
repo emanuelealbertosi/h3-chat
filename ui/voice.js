@@ -1,6 +1,6 @@
 import {escape as esc} from './render.js';
-const choices={gender:[['female','Femminile'],['male','Maschile']],pitch:[['normal','Naturale'],['low','Grave'],['high','Acuto']],speed:[['normal','Normale'],['slow','Lenta'],['fast','Veloce']],emotion:[['neutral','Sobria'],['affection','Calda'],['enthusiasm','Entusiasta'],['contemplation','Riflessiva'],['determination','Autorevole'],['sadness','Triste']],mode:[['read','Leggi il testo'],['compose','Prepara lezione / riassunto']]};
-const labels={gender:'Voce',pitch:'Registro',speed:'Velocità',emotion:'Interpretazione',mode:'Testo'};
+const choices={gender:[['female','Femminile'],['male','Maschile']],pitch:[['normal','Naturale'],['low','Grave'],['high','Acuto']],speed:[['normal','Normale'],['slow','Lenta'],['fast','Veloce']],emotion:[['neutral','Neutra'],['affection','Calda'],['enthusiasm','Entusiasta'],['contemplation','Riflessiva'],['determination','Autorevole'],['sadness','Triste']],expressiveness:[['natural','Naturale · come il campione'],['low','Sobria'],['high','Espressiva']],mode:[['read','Leggi il testo'],['compose','Prepara lezione / riassunto']]};
+const labels={gender:'Voce',pitch:'Registro',speed:'Velocità',emotion:'Interpretazione',expressiveness:'Espressività',mode:'Testo'};
 const options=(key,value)=>choices[key].map(([id,name])=>`<option value="${id}" ${id===value?'selected':''}>${name}</option>`).join('');
 
 export function initVoiceControls({read,save,getState}){

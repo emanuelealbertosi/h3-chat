@@ -16,6 +16,7 @@ import {modelLabel,modelIdentityHtml,initModelIdentity} from './model-identity.j
 import {initChatModels} from './chat-models.js';
 import {renderVoiceSettings} from './voice.js';
 import {readDeck,renderSlides,exportSlides,transferSlideView} from './slides.js';
+import {initSlideImages} from './slide-ai.js';
 
 const $=s=>document.querySelector(s);
 let state=null,current=null,chat=null,filter='all',collection=null,project=null,attachments=[],settingsTab='setup',settingsDraft=null;
@@ -65,12 +66,14 @@ $('#rag-enabled').closest('label').insertAdjacentHTML('afterend','<label class="
 $('#lab-tool').onchange=()=>{$('#slides-options').hidden=$('#lab-tool').value!=='slides';visualControls.render();};
 $('#slides-options').insertAdjacentHTML('beforeend',' <label>Motore <select id="slides-engine" aria-label="Motore slide"><option value="llm">LLM · HTML libero</option><option value="deterministic">Deterministico</option></select></label> <label>Stile <select id="slides-design"><option value="professional">Serio / professionale</option><option value="playful">Giocoso / colorato</option><option value="comic">Fumettoso</option></select></label> <label>Contenuto <select id="slides-detail"><option value="concise">Sintesi</option><option value="full">Testi completi</option></select></label>');
 $('#slides-options').insertAdjacentHTML('beforeend',' <label title="Rapida analizza fino a 8 figure nuove, dando precedenza alle fonti della richiesta. Le descrizioni già disponibili vengono riutilizzate; tutte le figure restano inseribili.">Figure Vision <select id="slides-vision" aria-label="Analisi figure slide"><option value="relevant">Rapida · max 8 nuove</option><option value="all">Completa · tutte</option></select></label>');
+const slideImages=initSlideImages();
 async function executeArtifact(lang,source){if(activeJob())throw Error('Attendi o interrompi il lavoro corrente.');if(!current)await newChat();await api('/chats/'+current+'/messages',{prompt:lang.startsWith('manim')?'Renderizza questa scena Manim':'Esegui questo calcolo con l’interprete',lab:lang.startsWith('manim')?'manim':'calculate',lab_source:source,canvas:canvasOpen,...projects.read()});await refresh();}
 function localCard(model){
   const m=model;
   return `<article class="model-card" data-external-card="${m.id}"><div class="model-top"><h3>${esc(modelLabel(m))}</h3><div class="model-link-actions"><button type="button" class="btn small" data-model-parameters="${m.id}">Parametri del modello</button><button type="button" class="btn small" data-edit-external="${m.id}">Modifica collegamento</button><button type="button" class="text-button" data-remove-external="${m.id}">Scollega</button></div></div><p>${esc(m.description)}</p>${modelIdentityHtml(m)}<div class="model-meta"><span class="badge">PERCORSO ESTERNO</span><span class="badge ${m.ready?'ready':'warning'}">${m.ready?'Disponibile':'Non disponibile'}</span>${m.vision?`<span class="badge ${m.vision.enabled?'ready':'warning'}">${m.vision.enabled?'Vision attiva':'Non vision'}</span>`:''}${m.thinking?.supported?'<span class="badge">THINK</span>':''}${m.mtp?.supported?'<span class="badge">MTP</span>':''}${m.capabilities.map(c=>`<span class="badge">${({chat:'CHAT',create:'CREA',edit:'MODIFICA',music:'MUSICA',video:'VIDEO'})[c]||esc(c)}</span>`).join('')}</div>${m.external_problems?.length?`<p class="local-error">${esc(m.external_problems.join(' '))}</p>`:''}${m.vision?.warning?`<p class="small-note">${esc(m.vision.warning)}</p>`:''}<details><summary>Percorsi collegati e componenti</summary>${m.files.map(f=>`<div class="external-path"><strong>${esc(state.model_role_labels[f.role]||f.role)}</strong><span>${esc(f.path)}</span><small>${gb(f.size)}</small></div>`).join('')}${m.vision?.projector&&!m.files.some(f=>f.role==='mmproj')?`<div class="external-path"><strong>mmproj automatico</strong><span>${esc(m.vision.projector)}</span></div>`:''}<p class="small-note">${esc(m.license)}</p></details></article>`;
 }
 function activeJob(){return state?.jobs.find(j=>j.chat_id===current&&['queued','running'].includes(j.status));}
+function userJob(){return state?.jobs.find(j=>['queued','running'].includes(j.status));}
 function modelName(id){return modelLabel(state?.models.find(m=>m.id===id));}
 
 async function refresh(){
@@ -103,7 +106,8 @@ function renderStatus(){
   let mode=document.getElementById('execution-hint');if(!mode){mode=document.createElement('p');mode.id='execution-hint';mode.className='mode-hint';$('#composer').after(mode);}const activeModels=[['LLM','chat_model','llm_device'],['Immagini','create_model','image_device'],['Musica','music_model','music_backend'],['Video','video_model','video_device']];let slow=false;mode.textContent=activeModels.map(([label,key,deviceKey])=>{const m=state.models.find(m=>m.id===state.settings[key]);if(!m)return null;if(m.api||m.remote_media){const p=state.media_providers?.find(p=>p.id===m.id);if(p?.device==='cpu'&&p.adapter==='h3'&&label!=='LLM')slow=true;return label+': server esterno';}const choice=state.settings[deviceKey];const cpu=label==='Video'?false:choice==='cpu'||(choice==='inherit'||choice==='auto')&&(state.settings.profile==='cpu'||state.settings.backend==='cpu'||label==='Musica'&&state.settings.backend!=='cuda');if(cpu&&['Immagini','Musica'].includes(label))slow=true;return label+': '+(cpu?'CPU':'GPU');}).filter(Boolean).join(' · ')+(slow?' · Su CPU immagini e musica possono richiedere molto tempo.':'');
   loraUI.render();visualControls.render();
   $('#chat-advanced').checked=!!state.settings.chat_advanced;
-  const job=activeJob(),any=state.jobs.some(j=>j.status==='running');
+  const job=userJob(),canvasJob=activeJob(),any=state.jobs.some(j=>j.status==='running');
+  slideImages.render(state);
   $('#engine-badge').classList.toggle('busy',any);
   const loaded=state.memory?.models||[];
   $('#memory-status').textContent=(state.settings.memory_policy==='resident'?'Residenti':'A richiesta')+' · '+loaded.length+' caricati'+(state.memory?.warm_image_engine?' · motore immagini pronto':'');
@@ -131,14 +135,14 @@ function renderStatus(){
   const draft=mtp?.supported&&state.settings.mtp_enabled?Math.min(state.settings.mtp_draft_tokens,mtp.max_draft_tokens||8):0;
   $('#generation-settings').textContent=(draft?'MTP On · '+draft:mtp?.supported?'MTP Off':'MTP N/D')+' · Contesto '+Number(state.settings.context).toLocaleString('it-IT')+' · Max '+state.settings.max_tokens+' token';
   $('#generation-settings').title=(mtp?.note||'Seleziona un modello per verificare MTP.')+' Apri le Preferenze per contesto LLM, MTP e max token di risposta. Le modifiche valgono dal prossimo messaggio.';
-  $('#job-status').textContent=job?job.stage:chat?.archived?'Conversazione archiviata. Ripristinala per continuare.':canvasOpen?'Destinazione: canvas · nella chat solo il messaggio di accompagnamento.':'';
+  $('#job-status').textContent=job?(job.chat_id!==current?'Richiesta in un’altra chat · ':'')+job.stage:chat?.archived?'Conversazione archiviata. Ripristinala per continuare.':canvasOpen?'Destinazione: canvas · nella chat solo il messaggio di accompagnamento.':'';
   $('#send').hidden=!!job;$('#stop').hidden=!job;$('#prompt').disabled=!!chat?.archived;
   $('#regenerate').disabled=!!job||!!chat?.archived||!chat?.messages.some(m=>m.role==='user');
   $('#setup-nudge').hidden=state.settings.setup_done&&!!state.models.find(m=>m.id===state.settings.chat_model)?.ready;
   $('#chat-title').textContent=chat?.title||'Una nuova conversazione';
-  $('#canvas-source').readOnly=!!job?.canvas;
-  $('#canvas-title').readOnly=!!job?.canvas;
-  $('#canvas-restore').disabled=!!job?.canvas||!canvas.id||canvas.id===canvasHistory.active_id;
+  $('#canvas-source').readOnly=!!canvasJob?.canvas;
+  $('#canvas-title').readOnly=!!canvasJob?.canvas;
+  $('#canvas-restore').disabled=!!canvasJob?.canvas||!canvas.id||canvas.id===canvasHistory.active_id;
 }
 async function newChat(){if(current)await persistCanvas();const fresh=await api('/chats',{collection_id:collection,project_id:project});await openChat(fresh.id);await refresh();$('#prompt').focus();}
 async function openChat(id){
@@ -223,17 +227,17 @@ async function uploadFiles(files){
   attachments.push(await api('/uploads',{name:file.name,data}));renderAttachments();
  }
 }
-async function send(event){event.preventDefault();if(activeJob())return;const prompt=$('#prompt').value.trim();if(!prompt)return;
+async function send(event){event.preventDefault();if(userJob())return;const prompt=$('#prompt').value.trim();if(!prompt)return;
   $('#send').disabled=true;
   try{await chatModels.wait();if(!current){const fresh=await api('/chats',{collection_id:collection,project_id:project});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
-    await persistCanvas();const sent=await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,...visualControls.read(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='slides'?{slides:{engine:$('#slides-engine').value,count:Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value,vision_scope:$('#slides-vision').value}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()});
+    await persistCanvas();const sent=await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,...visualControls.read(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='slides'?{slides:{engine:$('#slides-engine').value,count:Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value,vision_scope:$('#slides-vision').value,...slideImages.read()}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()});
     if(sent.intent==='slides'){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}
     $('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);await refresh();
   }finally{$('#send').disabled=false;}
 }
 
 async function regenerate(){
-  if(!current||activeJob())return;
+  if(!current||userJob())return;
   $('#regenerate').disabled=true;
   try{await chatModels.wait();await api('/chats/'+current+'/regenerate',{});const previous=chat?.messages.findLast(m=>m.role==='assistant');if(previous?.meta?.canvas||previous?.meta?.intent==='slides'){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}await refresh();}
   finally{renderStatus();}
@@ -296,7 +300,12 @@ async function renderCanvas(){
   const isDeck=canvas.content.startsWith('```h3-slides\n');$('#canvas-source-tab').textContent=isDeck?'Sorgente slide':'Modifica';$('#canvas-source').ariaLabel=isDeck?'Sorgente della presentazione':'Sorgente canvas';
   for(const kind of ['html','pptx']){const button=document.querySelector('[data-export="'+kind+'"]');if(button)button.hidden=!isDeck;}
   if(!canvasEditing){const value={...canvas,media:[...canvas.media]},entry=canvasHistory.items.find(x=>x.id===value.id),message=(chat?.messages||[]).find(m=>m.id===entry?.message_id)||[...(chat?.messages||[])].reverse().find(m=>m.meta?.artifact?.content===value.content||m.content===value.content);renderQueue=renderQueue.catch(()=>{}).then(async()=>{const options={final:!activeJob()?.canvas||value.id!==canvasHistory.active_id,sources:message?.meta?.rag_sources||[],onCitation:(s,all)=>projects.citation(s,all,message),onExecute:act(executeArtifact)};
-    if(isDeck){try{await renderSlides($('#canvas-preview'),value,{...options,api,chatId:current,editable:!activeJob()?.canvas,onChange:async (content,media)=>{
+    if(isDeck){try{await renderSlides($('#canvas-preview'),value,{...options,api,chatId:current,editable:!userJob(),onRegenerate:async(page,prompt)=>{
+      if(userJob())throw Error('Attendi o interrompi la tua richiesta in corso.');
+      await chatModels.wait();await persistCanvas();
+      await api('/canvas/'+current+'/slides/regenerate',{artifact_id:canvas.id,page,prompt,think_level:$('#think-level').value});
+      canvasFollow=true;canvasEditing=false;await toggleCanvas(true);await refresh();
+    },onChange:async (content,media)=>{
       if(activeJob()?.canvas)throw Error('Attendi la fine della generazione prima di modificare.');
       canvasFollow=false;canvasSelection++;canvas.content=content;if(media)canvas.media=media;canvasDirty=true;$('#canvas-source').value=content;
       await persistCanvas();await renderCanvas();
@@ -435,7 +444,7 @@ $('#think-level').onchange=act(async()=>{const level=$('#think-level').value;thi
 $('#composer').onsubmit=act(send);
 $('#prompt').onkeydown=act(async e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();await send(e);}});
 $('#prompt').oninput=()=>{$('#prompt').style.height='auto';$('#prompt').style.height=Math.min(180,$('#prompt').scrollHeight)+'px';};
-$('#stop').onclick=act(async()=>{const j=activeJob();if(j){await api('/jobs/'+j.id+'/cancel',{});await refresh();}});
+$('#stop').onclick=act(async()=>{const j=userJob();if(j){await api('/jobs/'+j.id+'/cancel',{});await refresh();}});
 $('#regenerate').onclick=act(regenerate);
 $('#new-chat').onclick=act(newChat);$('#home').onclick=act(async e=>{e.preventDefault();await newChat();});
 $('#search').oninput=renderSidebar;

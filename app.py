@@ -179,6 +179,9 @@ class Handler(BaseHTTPRequestHandler):
                 if len(raw)!=length:raise ValueError('Blocco documento incompleto.')
                 return self.json(self.app.knowledge.uploads.append(parts[2],parts[4],offset,raw))
             body = self.read_body()
+            if len(parts)==5 and parts[:2]==['api','canvas'] and parts[3:]==['slides','regenerate'] and method=='POST':
+                from h3chat.slide_revision import enqueue
+                return self.json(enqueue(self.app,parts[2],body),202)
             if access and self.identity['role']=='guest':
                 if path=='/api/settings':return self.json(self.server.workspaces.preferences(self.identity,body))
                 if path=='/api/knowledge/options':return self.json(self.server.workspaces.preferences(self.identity,body,rag=True))

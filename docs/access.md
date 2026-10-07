@@ -17,8 +17,11 @@ La scelta LLM e Vision in chat e la scelta CPU/GPU del RAG sono personali.
 
 I collegamenti ai modelli e ai provider configurati dall’amministratore vengono
 riutilizzati nelle aree ospite. Le credenziali dei provider restano sul server.
+Ogni account può avere una sola richiesta attiva o in coda, anche passando ad
+un’altra chat. Può interromperla per inviarne una nuova. Le richieste degli altri
+account vengono eseguite nell’ordine di invio e mostrano la posizione in coda.
 Le generazioni e l’indicizzazione GPU usano lo stesso blocco di calcolo: quando
-un altro utente sta usando il motore, il lavoro mostra **Attesa motore**. I pesi
+un altro utente sta usando il motore, il lavoro mostra **In coda · attesa motore**. I pesi
 dell’altra area vengono rilasciati prima del caricamento successivo.
 
 Per l’accesso remoto resta necessario Tailscale: condividi il dispositivo con

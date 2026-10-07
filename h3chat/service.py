@@ -408,6 +408,8 @@ class Service:
             lab='slides'
             settings['_slides']=slide_defaults if editing_slides and slide_defaults and body.get('lab','auto')=='auto' else slides_options(prompt,slide_defaults)
             self.engine.require_model(settings['chat_model'],'chat')
+            if settings['_slides'].get('generate_images'):
+                self.engine.require_model(settings['_slides'].get('image_model') or settings['create_model'],'create')
         if source and lab=='auto':raise ValueError('Specifica lo strumento per eseguire il sorgente.')
         settings.update(_lab=lab,_lab_source=source)
         from .narrated_manim import requested as narrated_requested
@@ -521,6 +523,15 @@ class Service:
             def stage(label):
                 LOG.info("Lavoro %s · %s", job["id"][:8], label)
                 self.store.execute("UPDATE jobs SET stage=? WHERE id=?", (label, job["id"]))
+            if settings.get('_slide_revision'):
+                from .slide_revision import build as revise_slide
+                model=self.engine.require_model(settings['chat_model'],'chat')
+                meta={'intent':'slides','canvas':True,'model':model['name'],'settings':settings,
+                      'execution_mode':'Server esterno · LLM' if model.get('api') else 'Standalone · '+device_label(settings,'llm')}
+                revise_slide(self,job,payload,settings,model,cancel,stage,log_path,meta)
+                text=f"Ho ricreato la slide {settings['_slide_revision']['page']+1} nel canvas."
+                self.store.update_answer(job,text,'done',meta=meta)
+                self.store.execute("UPDATE jobs SET status='done' WHERE id=?",(job['id'],));return
             if settings.get('_api_messages'):
                 model=self.engine.require_model(settings['chat_model'],'chat');self.engine.start_llama(model,settings,log_path,cancel,stage=stage)
                 stage('Server · risposta LLM')

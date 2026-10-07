@@ -11,9 +11,11 @@ def uid():return uuid4().hex
 DEFAULTS={'voice_model_path':'','voice_codec_path':'','voice_device':'gpu','voice_precision':'8bit',
  'voice_temperature':.8,'voice_chunk_chars':280,'voice_pause_ms':220,'voice_auto':True,
  'voice_gender':'female','voice_pitch':'normal','voice_speed':'normal','voice_emotion':'neutral',
+ 'voice_expressiveness':'natural',
  'voice_references':{'female':{'path':'','transcript':''},'male':{'path':'','transcript':''}}}
 FIELDS={'gender':('female','male'),'pitch':('normal','low','high'),'speed':('normal','slow','fast'),
- 'emotion':('neutral','affection','enthusiasm','contemplation','determination','sadness'),'mode':('read','compose')}
+ 'emotion':('neutral','affection','enthusiasm','contemplation','determination','sadness'),
+ 'expressiveness':('natural','low','high'),'mode':('read','compose')}
 
 def reference_identity(path,gender):
     """Match H3-Audio's base speakers; custom references remain path-portable."""
@@ -105,7 +107,8 @@ def controls(settings,prompt):
     base=[]
     if value['pitch']!='normal':base.append('prosody:pitch_'+value['pitch'])
     if value['speed']!='normal':base.append('prosody:speed_'+value['speed'])
-    base.append('prosody:expressive_low' if value['emotion']=='neutral' else 'emotion:'+value['emotion'])
+    if value['expressiveness']!='natural':base.append('prosody:expressive_'+value['expressiveness'])
+    if value['emotion']!='neutral':base.append('emotion:'+value['emotion'])
     return value,direction(prompt,base=base)
 
 def configuration(root,settings,prompt):

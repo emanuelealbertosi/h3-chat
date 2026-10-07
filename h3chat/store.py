@@ -155,7 +155,7 @@ class Store:
         self.execute("INSERT INTO chats(id,title,collection_id,pinned,archived,created,updated,project_id) VALUES (?,?,?,0,0,?,?,?)", (chat_id, title, collection_id, now, now, project_id))
         return self.chat(chat_id)
 
-    def enqueue(self, chat_id, prompt, media, settings, canvas=False, loras=None):
+    def enqueue(self, chat_id, prompt, media, settings, canvas=False, loras=None, canvas_snapshot=None):
         job_id, user_id, answer_id, now = uid(), uid(), uid(), time.time()
         loras=loras or []
         lora_meta={"voice":settings.get("_voice",False),"voice_fields":settings.get("_voice_fields",{}),"web":settings.get("_web",False),"transcribe":settings.get("_transcribe",False),"video":settings.get("_video",False),"music":settings.get("_music",False),"music_fields":settings.get("_music_fields",{}),"image_model":settings.get("_image_model",""),"assistant":settings.get("_assistant",True),"loras":[{k:l[k] for k in ("id","name","weight","model_id","model_name")} for l in loras]}
@@ -166,14 +166,14 @@ class Store:
                 raise ValueError("Conversazione non trovata.")
             if chat["archived"]:
                 raise ValueError("Ripristina la chat dall’archivio per continuare.")
-            if db.execute("SELECT 1 FROM jobs WHERE chat_id=? AND status IN ('queued','running')", (chat_id,)).fetchone():
-                raise ValueError("Attendi la risposta oppure interrompila.")
+            if db.execute("SELECT 1 FROM jobs WHERE status IN ('queued','running')").fetchone():
+                raise ValueError("Attendi o interrompi la tua richiesta attiva o in coda prima di inviarne un’altra.")
             cur = db.execute("INSERT INTO messages(id,chat_id,role,content,media,created,meta) VALUES (?,?,'user',?,?,?,?)",
                              (user_id, chat_id, prompt, json.dumps(media), now, json.dumps(lora_meta)))
             snapshot = db.execute("SELECT * FROM canvases WHERE chat_id=?", (chat_id,)).fetchone()
             payload = {"prompt": prompt, "media": media, "settings": settings, "loras": loras, "until": cur.lastrowid, "canvas": canvas,
                        "project_id": chat['project_id'],
-                       "canvas_snapshot": dict(snapshot) if canvas and snapshot else None}
+                       "canvas_snapshot": canvas_snapshot if canvas_snapshot is not None else dict(snapshot) if canvas and snapshot else None}
             db.execute("INSERT INTO messages(id,chat_id,role,status,created) VALUES (?,?,'assistant','queued',?)", (answer_id, chat_id, now))
             db.execute("INSERT INTO jobs VALUES (?,?,?,?, 'queued','In attesa','',?)", (job_id, chat_id, answer_id, json.dumps(payload), now))
             title = prompt[:65].strip() or "Conversazione con immagine"
@@ -190,8 +190,8 @@ class Store:
                 raise ValueError("Conversazione non trovata.")
             if chat['archived']:
                 raise ValueError("Ripristina la chat dall’archivio per continuare.")
-            if db.execute("SELECT 1 FROM jobs WHERE chat_id=? AND status IN ('queued','running')", (chat_id,)).fetchone():
-                raise ValueError("Attendi la risposta oppure interrompila.")
+            if db.execute("SELECT 1 FROM jobs WHERE status IN ('queued','running')").fetchone():
+                raise ValueError("Attendi o interrompi la tua richiesta attiva o in coda prima di inviarne un’altra.")
             user = db.execute("SELECT seq FROM messages WHERE chat_id=? AND role='user' ORDER BY seq DESC LIMIT 1", (chat_id,)).fetchone()
             original = db.execute("SELECT * FROM jobs WHERE chat_id=? AND json_extract(payload,'$.until')=? ORDER BY created DESC LIMIT 1", (chat_id, user['seq'] if user else -1)).fetchone()
             if not original:

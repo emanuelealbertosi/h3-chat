@@ -12,21 +12,51 @@ class Workspaces:
     def __init__(self,owner,start_workers=True):
         self.owner=owner;self.start_workers=start_workers;self.items={};self.lock=threading.RLock();self.synced={}
         self.compute=owner.compute_lock
+        self.queue=threading.Condition();self.pending=[]
         self.wrap(owner)
 
     def wrap(self,app):
         original=app.execute_job
         app.compute_lock=self.compute;app.knowledge.compute_lock=self.compute
+        for name in ('enqueue','regenerate'):
+            submit=getattr(app.store,name,None)
+            if callable(submit):
+                def queued(*args,_submit=submit,**kwargs):
+                    with self.queue:
+                        ident=_submit(*args,**kwargs)
+                        self.pending.append((app,ident));self.queue.notify_all()
+                    return ident
+                setattr(app.store,name,queued)
+        stop=getattr(app,'cancel',None)
+        if callable(stop):
+            def cancel_job(ident):
+                result=stop(ident)
+                if app.current_id!=ident:
+                    with self.queue:
+                        self.pending=[t for t in self.pending if t!=(app,ident)];self.queue.notify_all()
+                return result
+            app.cancel=cancel_job
         def execute(job,cancel):
-            while not self.compute.acquire(timeout=.2):
-                if cancel.is_set():
-                    # Let the regular job handler persist the cancelled result.
-                    return original(job,cancel)
-                app.store.execute("UPDATE jobs SET stage='Attesa motore · lavoro di un altro utente' WHERE id=?",(job['id'],))
+            ticket=(app,job['id']);acquired=False
+            with self.queue:
+                if ticket not in self.pending:self.pending.append(ticket)
+                while not cancel.is_set():
+                    if self.pending[0]==ticket and self.compute.acquire(blocking=False):
+                        self.pending.remove(ticket);acquired=True;break
+                    position=self.pending.index(ticket)+1
+                    app.store.execute("UPDATE jobs SET status='queued',stage=? WHERE id=?",(f'In coda · posizione {position} · attesa motore',job['id']))
+                    self.queue.wait(.2)
+                if not acquired:
+                    if ticket in self.pending:self.pending.remove(ticket)
+                    self.queue.notify_all()
+            if not acquired:return original(job,cancel)
+            app.store.execute("UPDATE jobs SET status='running' WHERE id=?",(job['id'],))
             try:
                 self.release_others(app)
                 return original(job,cancel)
-            finally:self.compute.release()
+            finally:
+                self.compute.release()
+                with self.queue:self.queue.notify_all()
         app.execute_job=execute
         def release():
             self.release_others(app);app.engine.stop()
@@ -86,6 +116,8 @@ class Workspaces:
     def deactivate(self,ident):
         with self.lock:app=self.items.pop(ident,None);self.synced.pop(ident,None)
         if app:app.close()
+        with self.queue:
+            self.pending=[ticket for ticket in self.pending if ticket[0] is not app or ticket[1]==app.current_id];self.queue.notify_all()
 
     def maintenance_state(self):
         with self.lock:apps=[self.owner,*self.items.values()]

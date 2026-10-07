@@ -73,7 +73,9 @@ class RegenerateTests(unittest.TestCase):
         second = s.enqueue(self.chat,'Second',[],DEFAULTS)
         s.execute("UPDATE jobs SET status='interrupted' WHERE id=?",(second,))
         other = s.create_chat()['id']
-        s.enqueue(other,'Unrelated',[],DEFAULTS)
+        unrelated=s.enqueue(other,'Unrelated',[],DEFAULTS)
+        with self.assertRaisesRegex(ValueError,'Attendi'):s.regenerate(self.chat)
+        s.execute("UPDATE jobs SET status='cancelled' WHERE id=?",(unrelated,))
         again = s.regenerate(self.chat)
         payload = json.loads(s.one('SELECT payload FROM jobs WHERE id=?',(again,))['payload'])
         self.assertEqual(payload['prompt'],'Second')
