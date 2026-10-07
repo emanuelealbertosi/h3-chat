@@ -10,6 +10,19 @@ from h3chat.downloads import Cancelled
 
 
 class SlideVisionTests(unittest.TestCase):
+    def test_configured_reference_budget_controls_caption_batching(self):
+        for limit,expected in ((6,[6,1]),(2,[2,2,2,1])):
+            app=Mock();app.engine.chat_messages.side_effect=lambda history,model,settings,**kw:history
+            batches=[]
+            def complete(messages,settings,cancel,**kw):
+                images=messages[0]['media'];batches.append(len(images))
+                self.assertEqual(settings['vision_max_refs'],limit)
+                return json.dumps({'descriptions':['Figura '+m['id'] for m in images]}),'stop'
+            app.engine.completion.side_effect=complete
+            assets=[{'id':str(n),'path':f'{n}.png'} for n in range(7)]
+            result=describe(app,assets,{'max_refs':4},DEFAULTS|{'vision_max_refs':limit},threading.Event(),lambda _:None,{})
+            self.assertEqual(batches,expected);self.assertEqual(len(result),7)
+
     def test_caption_budget_and_progress_are_separate_from_final_answer(self):
         app=Mock();app.engine.chat_messages.side_effect=lambda history,model,settings,**kw:history
         assets=[{'id':str(n),'path':f'image{n}.png'} for n in range(5)];stages=[];meta={}

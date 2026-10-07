@@ -239,6 +239,7 @@ class GenerationTests(unittest.TestCase):
     def test_multiple_vision_batches_reuse_current_llm(self):
         from PIL import Image
         self.model['vision']={'enabled':True};self.model['max_refs']=2
+        self.app.save_settings({'vision_max_refs':2})
         media=[]
         for i in range(3):
             stream=io.BytesIO();Image.new('RGB',(100,100),(i*80,10,20)).save(stream,'PNG')

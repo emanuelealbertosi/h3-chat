@@ -12,6 +12,7 @@ page.on('pageerror',e=>errors.push(e.message));
 const pressed=async id=>assert.equal(await page.getAttribute(id,'aria-pressed'),'true');
 try{
  await page.route('**/api/state',async route=>{const response=await route.fetch(),state=await response.json();state.models.push({id:'fixture-image-model',name:'Immagini di prova',ready:true,capabilities:['create','edit']});state.settings.create_model='fixture-image-model';state.settings.edit_model='fixture-image-model';await route.fulfill({response,json:state});});
+ await page.route('**/api/settings',async route=>{const body=route.request().postDataJSON();for(const key of ['create_model','edit_model'])if(body[key]==='fixture-image-model')body[key]='';await route.continue({postData:JSON.stringify(body)});});
  await mkdir('work/composer-qa',{recursive:true});await page.goto(fixture.url);await page.click(`[data-chat="${fixture.chat}"]`);
  await pressed('#prompt-auto');assert.equal(await page.locator('#prompt-context').isVisible(),false);
  await page.click('#prompt-images');await pressed('#prompt-images');assert.equal(await page.inputValue('#image-model'),'fixture-image-model');assert.equal(await page.locator('#prompt-image-panel').isVisible(),true);await page.getByRole('button',{name:'Automatico · dal prompt',exact:true}).click();await pressed('#prompt-auto');
@@ -30,6 +31,14 @@ try{
  await page.click('#music-toggle');await pressed('#music-toggle');assert.equal(await page.inputValue('#lab-tool'),'auto');assert.equal(await page.locator('#voice-inputs').isVisible(),false);assert.equal(await page.locator('#music-inputs').isVisible(),true);
  await page.click('#prompt-auto');await pressed('#prompt-auto');assert.equal(await page.locator('#prompt-context').isVisible(),false);
  await page.click('#prompt-llm-open');await page.locator('.prompt-llm-picker .prompt-choices button').last().click();await page.waitForFunction(()=>document.querySelector('#chat-model').value!==document.querySelector('#chat-model').options[0].value);await page.getByRole('button',{name:'Fatto',exact:true}).click();
+ await page.click('#prompt-options-open');assert.equal(await page.inputValue('#chat-vision-max-refs'),'4');
+ const savedRefs=page.waitForResponse(r=>r.url().endsWith('/settings')&&r.request().method()==='POST'&&r.ok());
+ await page.fill('#chat-vision-max-refs','6');await page.locator('#chat-vision-max-refs').dispatchEvent('change');await savedRefs;
+ await page.getByRole('button',{name:'Fatto',exact:true}).click();await page.reload();
+ await page.click('#prompt-options-open');await page.waitForFunction(()=>document.querySelector('#chat-vision-max-refs').value==='6');assert.equal(await page.inputValue('#chat-vision-max-refs'),'6');await page.getByRole('button',{name:'Fatto',exact:true}).click();
+ await page.click('#settings-open');await page.click('[data-tab="advanced"]');assert.equal(await page.inputValue('[data-llm-setting="vision_max_refs"]'),'6');
+ await page.fill('[data-llm-setting="vision_max_refs"]','8');const savedPreset=page.waitForResponse(r=>r.url().endsWith('/settings')&&r.request().method()==='POST'&&r.ok());await page.click('#settings-save');await savedPreset;await page.waitForFunction(()=>!document.querySelector('#settings').open);
+ await page.click('#prompt-options-open');await page.waitForFunction(()=>document.querySelector('#chat-vision-max-refs').value==='8');assert.equal(await page.inputValue('#chat-vision-max-refs'),'8');await page.getByRole('button',{name:'Fatto',exact:true}).click();
  assert.match(await page.locator('#prompt-technical-summary').textContent(),/contesto.*max token/);
  await page.click('#sidebar-close');await page.waitForFunction(()=>document.querySelector('main').getBoundingClientRect().left===0);assert.equal(await page.locator('#sidebar').evaluate(e=>e.inert),true);
  await page.reload();await page.waitForFunction(()=>document.body.classList.contains('sidebar-collapsed'));await page.click('#mobile-nav');assert.equal(await page.locator('#sidebar').evaluate(e=>e.inert),false);

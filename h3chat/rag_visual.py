@@ -4,6 +4,7 @@ from pathlib import Path
 from .downloads import safe_join,Cancelled
 from .residency import Session
 from .store import uid
+from .vision_options import reference_limit
 
 def extract(knowledge,source,blocks,cancel,stage):
     path=Path(source['path']);st=path.stat()
@@ -40,7 +41,8 @@ def attach(app,job,history,sources,settings):
     selected=[s for s in sources if s.get('image_path')]
     if not selected:return {}
     model=app.catalog.get(settings['chat_model'],{})
-    available=max(0,min(4,model.get('vision',{}).get('max_refs',model.get('max_refs',4)))-len(history[-1]['media']))
+    image_count=sum(m.get('mime','').startswith('image/') for m in history[-1]['media'])
+    available=max(0,reference_limit(model,settings)-image_count)
     usable=settings.get('vision_enabled',True) and model.get('vision',{}).get('enabled') and available
     added=[]
     for source in selected:
@@ -51,7 +53,7 @@ def attach(app,job,history,sources,settings):
         media={'id':ident,'name':source['name']+' · '+source['location'],'path':relative,'mime':'image/png'}
         source['image']=media
         if usable and len(added)<available:
-            history[-1]['media'].append(media);added.append((source['citation'],len(history[-1]['media'])))
+            history[-1]['media'].append(media);added.append((source['citation'],image_count+len(added)+1))
     if added:history[-1]['content']+='\nImmagini delle fonti RAG fornite a Vision: '+', '.join(f'Immagine {number} = [{citation}]' for citation,number in added)+'. Usa le immagini insieme ai riferimenti di pagina.'
     missing=len(selected)-len(added)
     result={'rag_visual_count':len(added)}

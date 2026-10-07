@@ -5,7 +5,7 @@ import time
 from .service import Service
 from .llm_options import merge as merge_llm_settings
 
-GUEST_PREFERENCES={'chat_model','think_level','vision_enabled','vision_device','chat_advanced','rag_device','rag_visual'}
+GUEST_PREFERENCES={'chat_model','think_level','vision_enabled','vision_device','vision_max_refs','chat_advanced','rag_device','rag_visual'}
 
 
 class Workspaces:

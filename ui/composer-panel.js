@@ -58,6 +58,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  const voiceOriginal=$('#voice-inputs [data-voice-field="mode"]');const label=document.createElement('label');label.hidden=true;voiceOriginal.before(label);label.append(voiceOriginal);
  for(const [input,title] of [[$('#vision-enabled'),'Vision attiva'],[$('#chat-advanced'),'Mostra dettagli delle risposte']])toggle(input,title,technicalBody);
  for(const [select,title] of [[$('#think-level'),'Thinking'],[$('#chat-vision-device'),'Dispositivo Vision']]){technicalBody.append(select.closest('label'));pills(select,title);}
+ technicalBody.append($('#chat-vision-max-refs').closest('label'),$('#chat-vision-refs-note'));
  technicalBody.append($('#vision-badge'),$('#think-note'),$('#chat-vision-device-note'),$('#generation-settings'));
  $('#generation-settings').addEventListener('click',()=>dialog.close(),{capture:true});
  const assistant=toggle($('#image-assistant'),'Assistant',sources);sources.append($('#project-chat-label'));toggle($('#rag-enabled'),'RAG',sources);const web=$('#web-toggle');web.className='prompt-choice';sources.append(web);
@@ -78,7 +79,8 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
   assistant.textContent='Assistant '+(value.assistant?'On':'Off');assistant.title='Prepara le istruzioni con il LLM della chat';
   for(const update of mirrors)update();
   const model=state.models.find(m=>m.id===state.settings.chat_model),vision=!state.settings.vision_enabled?'Vision Off':model?.vision?.enabled?'Vision '+(model.api?'API':state.settings.vision_device.toUpperCase()):'Non vision';
-  summary.textContent=[vision,'Think '+(model?.thinking?.supported?state.settings.think_level:'Off'),Number(state.settings.context).toLocaleString('it-IT')+' contesto',state.settings.max_tokens+' max token',model?.mtp?.supported?(state.settings.mtp_enabled?'MTP On':'MTP Off'):'MTP N/D'].join(' · ');
+  const refs=model?.api?Math.min(state.settings.vision_max_refs??4,model.max_refs??model.vision?.max_refs??4):state.settings.vision_max_refs??4;
+  summary.textContent=[vision+(model?.vision?.enabled&&state.settings.vision_enabled?' · max '+refs+' immagini':''),'Think '+(model?.thinking?.supported?state.settings.think_level:'Off'),Number(state.settings.context).toLocaleString('it-IT')+' contesto',state.settings.max_tokens+' max token',model?.mtp?.supported?(state.settings.mtp_enabled?'MTP On':'MTP Off'):'MTP N/D'].join(' · ');
   technical.title=summary.textContent;
   modelButton.textContent='LLM · '+($('#chat-model').selectedOptions[0]?.textContent||'Scegli un modello');modelButton.title=$('#chat-model').title;modelButton.disabled=$('#chat-model').disabled;
   $('.side-bottom>small').textContent='H3 CHAT · '+state.version;

@@ -5,6 +5,7 @@ import hashlib
 from pathlib import Path
 from .downloads import safe_join,Cancelled
 from .models import model_path
+from .vision_options import reference_limit
 
 
 def cache_key(app,asset,model,cancel):
@@ -62,7 +63,7 @@ def describe(app,assets,model,settings,cancel,stage,meta,limit=None):
     if skipped:
         meta['slide_warning']=f'Vision rapida: {skipped} figure conservate ma non analizzate. Per analizzarle tutte scegli Figure Vision → Completa.'
     assets=[asset for asset,key in chosen];keys={asset['id']:key for asset,key in chosen}
-    batch_size=max(1,min(4,model.get('max_refs',4)))
+    batch_size=reference_limit(model,settings)
     device='API' if model.get('api') else settings.get('vision_device','cpu').upper()
     for offset in range(0,len(assets),batch_size):
         batch=assets[offset:offset+batch_size]

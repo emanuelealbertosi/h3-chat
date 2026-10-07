@@ -77,7 +77,7 @@ class VisualRagTests(unittest.TestCase):
         self.app.catalog['vision-fixture']={'max_refs':1,'vision':{'enabled':True}}
         sources=[{'citation':'R'+str(i),'name':'Book','location':f'pagina {i}','image_path':'project-cache/circle.png'} for i in (1,2)]
         history=[{'content':'Explain','media':[]}]
-        result=attach(self.app,{'id':'fixture'},history,sources,DEFAULTS|{'chat_model':'vision-fixture'})
+        result=attach(self.app,{'id':'fixture'},history,sources,DEFAULTS|{'chat_model':'vision-fixture','vision_max_refs':1})
         self.assertEqual(len(history[-1]['media']),1);self.assertEqual(result['rag_visual_count'],1);self.assertIn('1 immagine',result['rag_visual_warning'])
         self.assertIn('[R1]',history[-1]['content']);self.assertTrue(all((self.app.data/s['image']['path']).is_file() for s in sources))
         original.unlink();self.assertTrue((self.app.data/sources[0]['image']['path']).is_file())
@@ -87,6 +87,17 @@ class VisualRagTests(unittest.TestCase):
         sources=[{'citation':'R1','name':'Book','location':'pagina 1','image_path':'project-cache/circle.png'}];history=[{'content':'Explain','media':[]}]
         result=attach(self.app,{'id':'fixture'},history,sources,DEFAULTS|{'vision_enabled':False})
         self.assertEqual(result['rag_visual_count'],0);self.assertEqual(history[-1]['media'],[]);self.assertIn('Non inventare',history[-1]['content'])
+
+    def test_configured_handoff_budget_counts_images_without_counting_documents(self):
+        original=self.app.data/'project-cache/circle.png';original.parent.mkdir();original.write_bytes(self.picture())
+        self.app.catalog['vision-fixture']={'max_refs':4,'vision':{'enabled':True}}
+        sources=[{'citation':'R'+str(i),'name':'Book','location':f'pagina {i}','image_path':'project-cache/circle.png'} for i in range(7)]
+        history=[{'content':'Explain','media':[{'mime':'application/pdf'},{'mime':'image/png'}]}]
+        result=attach(self.app,{'id':'fixture'},history,sources,DEFAULTS|{'chat_model':'vision-fixture','vision_max_refs':6})
+        self.assertEqual(result['rag_visual_count'],5)
+        self.assertEqual(sum(m['mime'].startswith('image/') for m in history[-1]['media']),6)
+        self.assertIn('Immagine 2 = [R0]',history[-1]['content'])
+        self.assertIn('2 immagini',result['rag_visual_warning'])
 
     def test_quick_device_options_persist_and_refuse_active_jobs(self):
         self.app.save_rag_options({'rag_device':'gpu','rag_visual':False})

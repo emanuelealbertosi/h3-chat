@@ -67,3 +67,21 @@ class LlmPresetsTests(unittest.TestCase):
   value=json.loads(self.app.store.one('SELECT payload FROM jobs WHERE id=?',(replay,))['payload'])
   self.assertEqual(value['settings']['vision_device'],'gpu');self.assertEqual(value['prompt'],'Descrivi la figura')
   self.assertEqual(len(self.app.store.chat(chat['id'])['messages']),2)
+
+ def test_vision_reference_limit_defaults_presets_validation_and_retry_snapshot(self):
+  self.assertEqual(self.app.store.settings()['vision_max_refs'],4)
+  first=self.app.save_settings({'chat_model':'qwen3-06','vision_max_refs':8})
+  chat=self.app.store.create_chat();original=self.app.store.enqueue(chat['id'],'Synthetic',[],first)
+  self.app.cancel(original)
+  self.assertEqual(self.app.save_settings({'chat_model':'qwen3-4'})['vision_max_refs'],4)
+  self.app.save_settings({'vision_max_refs':2})
+  restored=self.app.save_settings({'chat_model':'qwen3-06'})
+  self.assertEqual(restored['vision_max_refs'],8)
+  self.assertEqual(restored['llm_overrides']['qwen3-4']['vision_max_refs'],2)
+  self.app.save_settings({'vision_max_refs':6})
+  replay=self.app.regenerate(chat['id'])['job_id']
+  value=json.loads(self.app.store.one('SELECT payload FROM jobs WHERE id=?',(replay,))['payload'])
+  self.assertEqual(value['settings']['vision_max_refs'],6)
+  for value in (0,13,True,2.5,'4'):
+   with self.assertRaises(ValueError):self.app.validate_settings({'vision_max_refs':value})
+   with self.assertRaises(ValueError):self.app.validate_settings({'llm_overrides':{'qwen3-06':{'vision_max_refs':value}}})

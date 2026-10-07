@@ -45,6 +45,22 @@ immagini riceve comunque i riferimenti necessari all'editing. Un LLM senza visio
 non riceve le immagini e non deve inventarne il contenuto. I token immagine
 continuano a occupare contesto LLM; CPU vision può essere più lenta.
 
+Il numero di riferimenti Vision per richiesta è un limite del profilo configurato
+in H3-Chat (normalmente quattro), non una dichiarazione del massimo teorico del LLM.
+Si modifica per ciascun LLM in Preferenze → Parametri dei modelli chat oppure
+in chat → Opzioni tecniche → Immagini Vision per richiesta, da 1 a 12, con 4
+come valore iniziale. Lo stesso valore governa gli allegati Vision, le figure RAG
+e i gruppi di immagini da descrivere per le slide; PDF e audio non consumano
+questo budget. I servizi API rispettano anche il massimo dichiarato nella loro
+configurazione. Aumentare il limite richiede più contesto, memoria e tempo.
+Si contano solo immagini: PDF, audio e altri file non diventano parti image_url.
+Un catalogo di immagini di un artefatto precedente che supera questo limite non
+viene reinviato automaticamente a Vision: testo, fonti e nomi delle figure restano
+nel contesto, senza dichiarare di aver analizzato i pixel. Questo permette, per
+esempio, Voice + Manim dopo una presentazione con molte figure. Le immagini della
+richiesta corrente e quelle RAG disponibili hanno priorità. Per analizzare una
+figura della presentazione precedente, selezionala o allegala alla nuova richiesta.
+
 Con A richiesta il processo LLM termina prima di caricare il modello immagini;
 creazione e modifica con gli stessi pesi riutilizzano il processo. Con CUDA,
 encoder, diffusore e VAE usano la GPU anche a richiesta. Residenti mantiene più

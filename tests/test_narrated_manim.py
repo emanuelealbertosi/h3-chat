@@ -145,6 +145,24 @@ class FlowTests(unittest.TestCase):
         self.assertIn('Approximate desired speaking time',self.completions[0][-1]['content'][-1]['text'])
         self.assertIn('Previous visual scene',self.completions[-1][-1]['content'][-1]['text'])
 
+    def test_previous_large_slide_gallery_does_not_block_plan_voice_or_scene_generation(self):
+        self.model['vision']={'enabled':True,'max_refs':4}
+        self.app.catalog['fixture']=self.model
+        job=self.create();original_messages=self.app.store.messages
+        images=[{'id':str(i),'name':f'Figura {i}','mime':'image/png','path':f'unselected-{i}.png'} for i in range(12)]
+        previous={'role':'assistant','seq':0,'status':'done','content':'La batteria ha 12 volt. [R1]',
+                  'media':images,'meta':{'artifact':{'content':'Presentazione con dodici immagini','media':images}}}
+        def history(chat_id,until=None):
+            values=original_messages(chat_id,until)
+            return [copy.deepcopy(previous),*values] if until is not None else values
+        with patch.object(self.app.store,'messages',side_effect=history):answer=self.execute(job)
+        self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
+        self.assertEqual(len(self.completions),3);self.assertEqual(len(self.renders),2)
+        for messages in self.completions:
+            self.assertTrue(any('12 volt' in m['content'] for m in messages if isinstance(m['content'],str)))
+            self.assertFalse(any(p.get('type')=='image_url' for m in messages if isinstance(m['content'],list) for p in m['content']))
+        self.assertTrue(any(m['mime']=='audio/wav' for m in answer['meta']['artifact']['media']))
+
     def test_verbatim_assistant_off_does_not_rewrite_narration(self):
         from h3chat.narrated_manim import _plan
         exact='La batteria alimenta il circuito.'
