@@ -1,7 +1,7 @@
 // Repair intrinsic sizing and clipped SVG coordinates without selecting a new layout.
 export function contentOverflows(doc,height){
  return [...doc.body.querySelectorAll('*')].some(element=>{
-  if(element.closest('style,[data-h3-editor]')||element.closest('svg')&&element.tagName.toLowerCase()!=='svg')return false;
+  if(element.closest('style,[data-h3-editor],[data-h3-trusted]')||element.closest('svg')&&element.tagName.toLowerCase()!=='svg')return false;
   const box=element.getBoundingClientRect();return box.right>1282||box.bottom>height+2||box.left< -2||box.top< -2;
  });
 }
@@ -9,6 +9,9 @@ export function contentOverflows(doc,height){
 export function fitMediaBounds(doc,height){
  let changed=false;
  const css=element=>doc.defaultView.getComputedStyle(element);
+ // The root body's first child margin can shift an absolute background. Give
+ // block bodies their own formatting context; preserve authored flex/grid.
+ if(doc.querySelector('[data-h3-video]')&&css(doc.body).display==='block')doc.body.style.setProperty('display','flow-root','important');
  function relax(){
   for(const parent of doc.body.querySelectorAll('*')){
    if(!['grid','inline-grid','flex','inline-flex'].includes(css(parent).display))continue;

@@ -19,7 +19,7 @@ async function localMathCSS(){
 }
 
 async function markup(page,media){
-  const clean=DOMPurify.sanitize(page.html||'',{WHOLE_DOCUMENT:true,ADD_TAGS:['style'],FORBID_TAGS:['script','iframe','object','embed','link','meta','base','form','input','button','video','audio'],FORBID_ATTR:['srcset','action','formaction','autofocus','data-h3-editor','data-h3-trusted']});
+  const clean=DOMPurify.sanitize(page.html||'',{WHOLE_DOCUMENT:true,ADD_TAGS:['style'],FORBID_TAGS:['script','iframe','object','embed','link','meta','base','form','input','button','video','audio'],FORBID_ATTR:['srcset','action','formaction','autofocus','data-h3-editor','data-h3-trusted','data-h3-video']});
   const doc=new DOMParser().parseFromString(clean,'text/html');
   doc.querySelectorAll('a').forEach(a=>{a.removeAttribute('href');a.removeAttribute('target');});
   for(const image of doc.querySelectorAll('img')){
@@ -43,9 +43,18 @@ export async function htmlPage(deck,page,index,media,mount){
   const loaded=new Promise((resolve,reject)=>{iframe.onload=resolve;iframe.onerror=()=>reject(Error('Anteprima HTML non disponibile.'));});
   const fontNames=['Manrope','Cormorant'].filter(name=>content.includes(name));
   const fonts=(await Promise.all(fontNames.map(async name=>`@font-face{font-family:${name};src:url("${await localFont('/static/'+name+'.ttf')}")}`))).join('');
-  iframe.srcdoc=`<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; script-src 'none'; connect-src 'none';"><style data-h3-trusted>html,body{margin:0;width:1280px;min-height:${height}px;box-sizing:border-box}*,*:before,*:after{box-sizing:border-box}${fonts}${deck.infographic?'*,*:before,*:after{animation:none!important;transition:none!important}':''}</style></head><body>${content}</body></html>`;
+  const background=deck.infographic?.video,clip=background&&media.find(m=>m.id===background.asset_id&&m.mime==='video/mp4'&&/^(uploads|outputs)\/[\w./-]+\.mp4$/i.test(m.path)&&!m.path.split('/').includes('..'));
+  if(background&&!clip)throw Error('Video di sfondo non disponibile negli allegati.');
+  iframe.srcdoc=`<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; script-src 'none'; connect-src 'none'; ${clip?"media-src 'self';":''}"><style data-h3-trusted>html,body{margin:0;width:1280px;min-height:${height}px;box-sizing:border-box}*,*:before,*:after{box-sizing:border-box}${fonts}${deck.infographic?'*,*:before,*:after{animation:none!important;transition:none!important}':''}</style></head><body>${content}</body></html>`;
   frame.append(iframe);mount.append(frame);await loaded;
   const doc=iframe.contentDocument;
+  if(clip){
+    const video=doc.createElement('video');video.dataset.h3Video='';video.dataset.h3Trusted='';video.muted=true;video.playsInline=true;video.preload='auto';video.loop=background.end==='loop';video.src='/media/'+clip.path;
+    const poster=media.find(m=>m.id===background.poster_id&&m.mime==='image/jpeg'&&safePath(m.path));
+    if(poster){const preview=new DOMParser().parseFromString(await markup({html:'<img data-asset-id="'+poster.id+'">'},[poster]),'text/html');video.poster=preview.querySelector('img')?.src||'';}
+    const style=doc.createElement('style');style.dataset.h3Trusted='';style.textContent=`html{background:#101820}body{position:relative!important;isolation:isolate;background:transparent!important;overflow:hidden!important;height:${height}px}video[data-h3-video]{position:absolute!important;inset:0!important;z-index:-1!important;width:100%!important;height:100%!important;object-fit:${background.fit==='cover'?'cover':'contain'}!important;pointer-events:none!important}`;
+    doc.head.append(style);doc.body.append(video);
+  }
   if(deck.infographic)H3Motion.freeze(doc);
   await doc.fonts.ready;await Promise.all([...doc.images].map(img=>img.decode().catch(()=>{})));
   renderMath(doc.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false});
@@ -78,6 +87,7 @@ export function flattenHtml(frame){
       if(pseudo==='::before')targets[i].prepend(span);else targets[i].append(span);
     }
   }
+  clone.querySelectorAll('[data-h3-video]').forEach(n=>{if(n.poster){const image=document.createElement('img');image.src=n.poster;image.style.cssText=n.style.cssText;n.replaceWith(image);}else n.remove();});
   clone.querySelectorAll('style,script').forEach(n=>n.remove());
   const content=document.createElement('div');content.style.cssText=clone.style.cssText;content.innerHTML=clone.innerHTML;
   frame.replaceChildren(content);sessions.delete(frame);

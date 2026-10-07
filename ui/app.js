@@ -221,7 +221,7 @@ async function renderChat(){
 function renderAttachments(){
  let image=0,audio=0,document=0;
  $('#attachments').innerHTML=attachments.map((m,i)=>{const sound=m.mime?.startsWith('audio/'),video=m.mime?.startsWith('video/'),doc=!sound&&!video&&!m.mime?.startsWith('image/'),label=video?'Video':doc?'Documento '+(++document):sound?'Audio '+(++audio):'Immagine '+(++image);return `<div class="attachment" title="${esc(m.name)}">${doc?'<span class="audio-attachment">▤</span>':sound?'<span class="audio-attachment">♫</span>':video?'<span class="audio-attachment">▷</span>':`<img src="/media/${esc(m.path)}" alt="${esc(m.name)}">`}<small>${label}</small><button data-remove-attachment="${i}" aria-label="Rimuovi ${label}">×</button></div>`;}).join('');
- manimPresentation?.render();
+ manimPresentation?.render();infographicsUI?.render();
 }
 async function uploadFiles(files){
  if(attachments.length+files.length>12)throw Error('Massimo 12 allegati per messaggio.');
@@ -229,8 +229,8 @@ async function uploadFiles(files){
   const video=file.type.startsWith('video/')||/\.mp4$/i.test(file.name),sound=file.type.startsWith('audio/')||/\.(wav|mp3|flac|ogg)$/i.test(file.name),doc=/\.(pdf|docx|pptx)$/i.test(file.name);
   const category=video?'video/':doc?'application/':sound?'audio/':'image/';
   if(attachments.filter(x=>x.mime.startsWith(category)).length>=(doc||sound?3:9))throw Error(doc?'Massimo tre documenti.':sound?'Massimo tre audio.':'Massimo nove immagini; il modello mantiene il proprio limite.');
-  if(!video&&!doc&&!sound&&!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Scegli immagini, audio WAV/MP3/FLAC/OGG, PDF, Word .docx o PowerPoint .pptx.');
-  if(file.size>(doc?25:sound||video?64:12)*1024*1024)throw Error(doc?'Documenti: massimo 25 MB.':sound?'Audio: massimo 64 MB.':'Immagini: massimo 12 MB.');
+  if(!video&&!doc&&!sound&&!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Scegli immagini, audio WAV/MP3/FLAC/OGG, PDF, Word .docx PowerPoint .pptx o video MP4.');
+  if(file.size>(doc?25:sound||video?64:12)*1024*1024)throw Error(doc?'Documenti: massimo 25 MB.':video?'Video: massimo 64 MB.':sound?'Audio: massimo 64 MB.':'Immagini: massimo 12 MB.');
   let source=file;
   if(!video&&!sound&&!doc){const bitmap=await createImageBitmap(file);if(Math.max(bitmap.width,bitmap.height)>8192){bitmap.close();throw Error('Massimo 8192 pixel.');}
    if(file.type==='image/webp'){const c=document.createElement('canvas');c.width=bitmap.width;c.height=bitmap.height;c.getContext('2d').drawImage(bitmap,0,0);source=await new Promise(r=>c.toBlob(r,'image/png'));}bitmap.close();}
@@ -503,7 +503,7 @@ $('#canvas-title').oninput=canvasChanged;$('#canvas-source').oninput=canvasChang
 document.querySelector('[data-export="md"]').insertAdjacentHTML('afterend','<button class="btn small" data-export="html" hidden>HTML</button><button class="btn small" data-export="pptx" hidden>PowerPoint</button>');
 document.querySelectorAll('[data-export]').forEach(b=>b.onclick=act(async()=>{if(activeJob()?.canvas&&canvas.id===canvasHistory.active_id)throw Error('Attendi che il documento sia completo prima di esportare.');await persistCanvas();if(!canvas.content&&!canvas.media.length)throw Error('Il canvas è vuoto.');canvasEditing=false;await renderCanvas();const root=$('#canvas-preview');$('#canvas-panel').classList.add('exporting');try{if(b.dataset.export==='md')saveBlob(new Blob([canvas.content],{type:'text/markdown;charset=utf-8'}),canvas.title+'.md');else if(readDeck(canvas.content))await exportSlides(canvas,b.dataset.export,state.token);else{if(b.dataset.export==='pdf')await exportPdf(root,canvas.title,state.token);if(b.dataset.export==='docx')await exportDocx(root,canvas.title);if(b.dataset.export==='png')await exportPng(root,canvas.title);}toast('Esportazione pronta.');}finally{$('#canvas-panel').classList.remove('exporting');}}));
 composerUI=initComposerPanel({getState:()=>state,visualControls,getAttachments:()=>attachments,notify:toast});
-infographicsUI=initInfographics({getState:()=>state});
+infographicsUI=initInfographics({getState:()=>state,getAttachments:()=>attachments,uploadVideo:uploadFiles,notify:toast});
 manimPresentation=initManimPresentation({getAttachments:()=>attachments,getCanvas:()=>canvas,getState:()=>state,getChatId:()=>current,api,notify:toast});
 document.querySelector('#composer').addEventListener('change',()=>manimPresentation.render());
 initWorkspaceLayout();

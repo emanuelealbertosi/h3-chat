@@ -72,7 +72,7 @@ export function editHtmlSlide(target,deck,index,frame,onChange,options,media,{do
     handle.style.cssText=`all:initial;position:absolute;${action==='move'?'left:0;top:0':'right:0;bottom:0'};background:#153d40;color:#fff;border:1px solid #fff;border-radius:6px;text-align:center;pointer-events:auto;cursor:${action==='move'?'move':'nwse-resize'};touch-action:none;user-select:none;`;overlay.append(handle);
   }
   doc.body.append(overlay);
-  const cleanBody=()=>{const body=doc.body.cloneNode(true);body.querySelectorAll('[data-h3-editor]').forEach(e=>e.remove());return body;};
+  const cleanBody=()=>{const body=doc.body.cloneNode(true);body.querySelectorAll('[data-h3-editor],[data-h3-trusted]').forEach(e=>e.remove());return body;};
   const imageSources=new Map([...doc.images].map(img=>[img.dataset.assetId,img.src]));
   const snapshot=()=>{const body=cleanBody();body.querySelectorAll('img').forEach(img=>img.removeAttribute('src'));return body.innerHTML;},past=[],future=[];
   const updateHistory=()=>{q('#slide-html-undo').disabled=!past.length;q('#slide-html-redo').disabled=!future.length;};
@@ -109,11 +109,11 @@ export function editHtmlSlide(target,deck,index,frame,onChange,options,media,{do
     catch(e){restore(before);status.textContent=e.message;return false;}
   };
   const readjust=()=>{if(selected)refreshLayout(selected);updateOverlay();};
-  const restore=html=>{doc.body.innerHTML=html;for(const img of doc.images)if(imageSources.has(img.dataset.assetId))img.src=imageSources.get(img.dataset.assetId);doc.body.append(overlay);select(null);};
+  const restore=html=>{const trusted=[...doc.body.querySelectorAll('[data-h3-trusted]')];doc.body.innerHTML=html;for(const img of doc.images)if(imageSources.has(img.dataset.assetId))img.src=imageSources.get(img.dataset.assetId);doc.body.append(...trusted,overlay);select(null);};
   q('#slide-html-undo').onclick=()=>{if(!past.length)return;future.push(snapshot());restore(past.pop());updateHistory();status.textContent='Modifica annullata · premi Applica e salva';};
   q('#slide-html-redo').onclick=()=>{if(!future.length)return;past.push(snapshot());restore(future.pop());updateHistory();status.textContent='Modifica ripristinata · premi Applica e salva';};updateHistory();
   doc.addEventListener('click',e=>{
-    e.preventDefault();if(e.target.closest('[data-h3-editor]'))return;
+    e.preventDefault();if(e.target.closest('[data-h3-editor],[data-h3-trusted]'))return;
     const element=e.target.closest('svg')||e.target.closest('.katex')?.closest('p,h1,h2,h3,li,div')||e.target.closest('h1,h2,h3,h4,p,pre,li,img,span,div,section,article,main');
     if(element&&element!==doc.body)select(element);
   });

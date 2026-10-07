@@ -70,12 +70,13 @@ class CDP:
         if result.get('exceptionDetails'):raise RuntimeError('Errore nella timeline del renderer.')
         return result.get('result',{}).get('value')
 
-def audio(path,duration,rate):
+def audio(path,duration,rate,loop=None):
     import av,numpy as np
     result=np.zeros((2,math.ceil(duration*rate)),dtype=np.float32)
     if not path:return result
     cursor=0
     with av.open(str(path),options={'protocol_whitelist':'file'}) as inp:
+        if not inp.streams.audio:return result
         resample=av.AudioResampler(format='fltp',layout='stereo',rate=rate)
         for frame in inp.decode(audio=0):
             for part in resample.resample(frame):
@@ -86,6 +87,10 @@ def audio(path,duration,rate):
             for part in resample.resample(None):
                 data=part.to_ndarray();n=min(data.shape[1],result.shape[1]-cursor)
                 if n>0:result[:,cursor:cursor+n]=data[:,:n];cursor+=n
+    if loop and cursor and cursor<result.shape[1]:
+        cursor=max(1,min(cursor,round(loop*rate)))
+        for start in range(cursor,result.shape[1],cursor):
+            n=min(cursor,result.shape[1]-start);result[:,start:start+n]=result[:,:n]
     return result
 
 def mix(request,cdp):
@@ -100,6 +105,13 @@ def mix(request,cdp):
     if request.get('music'):
         fade=min(rate, background.shape[1]//3);background[:,:fade]*=np.linspace(0,1,fade);background[:,-fade:]*=np.linspace(1,0,fade)
     sound=voice+background
+    video=motion.get('video')
+    if video and video['sound']!='mute' and video['audio']:
+        from h3chat.infographic_video import asset
+        original=audio(asset(request['data'],request['media'],video['asset_id'],'video/mp4'),duration,rate,video['duration'] if video['end']=='loop' else None)
+        # Speech remains foreground when ducking is selected. Freeze has silence
+        # after the source clip ends; it never stretches the source audio.
+        sound+=original*((1-.8*envelope)[None,:] if video['sound']=='duck' else 1)
     if motion['sfx']!='none':
         cues=cdp.evaluate("[...document.querySelectorAll('[data-h3-scene]')].map(f=>[...f.contentDocument.querySelectorAll('[data-motion]')].slice(0,8).map(e=>({start:Number(e.dataset.start)||0,effect:e.dataset.motion})))")
         rng=np.random.default_rng(2718);offset=0
@@ -134,7 +146,7 @@ def run(request):
     edge=next((p for p in [Path(os.environ.get('PROGRAMFILES(X86)','C:/Program Files (x86)'))/'Microsoft/Edge/Application/msedge.exe',Path(os.environ.get('PROGRAMFILES','C:/Program Files'))/'Microsoft/Edge/Application/msedge.exe'] if p.is_file()),None)
     if not edge:raise ValueError('Per il rendering infografica serve Microsoft Edge.')
     browser=subprocess.Popen([str(edge),'--headless','--disable-gpu','--no-first-run','--no-default-browser-check','--remote-debugging-address=127.0.0.1','--remote-debugging-port=0','--user-data-dir='+str(profile),'--disable-background-networking','--disable-component-update','about:blank'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=CREATE_NO_WINDOW)
-    cdp=None;partial=folder/'infografica.partial.mp4'
+    cdp=None;decoder=None;partial=folder/'infografica.partial.mp4'
     try:
         deadline=time.monotonic()+40
         portfile=profile/'DevToolsActivePort'
@@ -155,12 +167,20 @@ def run(request):
         cdp.evaluate("Promise.all([...document.querySelectorAll('iframe')].map(f=>f.contentDocument.fonts.ready))",True)
         cdp.evaluate('globalThis.motion='+json.dumps(deck['infographic']))
         samples,rate=mix(request,cdp)
+        source_video=deck['infographic'].get('video')
+        if source_video:
+            from h3chat.infographic_video import Frames,asset
+            decoder=Frames(asset(request['data'],request['media'],source_video['asset_id'],'video/mp4'),source_video)
         count=math.ceil(duration*fps)
         with av.open(str(partial),'w',format='mp4',options={'movflags':'+faststart'}) as out:
             video=out.add_stream('libx264',rate=fps);video.width,video.height=size;video.pix_fmt='yuv420p';video.options={'crf':'20','preset':'fast'}
             audio_stream=out.add_stream('aac',rate=rate);audio_stream.layout='stereo';audio_stream.bit_rate=192000;audio_cursor=0
             for index in range(count):
                 cdp.evaluate(f'H3Motion.render(document,motion,{index/fps})')
+                if decoder:
+                    buffer=io.BytesIO();decoder.image(index/fps).save(buffer,'JPEG',quality=90)
+                    uri='data:image/jpeg;base64,'+base64.b64encode(buffer.getvalue()).decode()
+                    cdp.evaluate('Promise.all([...document.querySelectorAll("iframe")].map(async f=>{const i=f.contentDocument.querySelector("[data-h3-video]");i.src='+json.dumps(uri)+';await i.decode();}))',True)
                 shot=cdp.call('Page.captureScreenshot',{'format':'png','captureBeyondViewport':False,'fromSurface':True})['data']
                 with Image.open(io.BytesIO(base64.b64decode(shot))) as image:frame=av.VideoFrame.from_image(image.convert('RGB').resize(size,Image.Resampling.LANCZOS))
                 frame.pts=index;frame.time_base=Fraction(1,fps)
@@ -177,6 +197,7 @@ def run(request):
             for packet in audio_stream.encode(None):out.mux(packet)
         partial.replace(request['output']);return {'duration':count/fps,'width':size[0],'height':size[1]}
     finally:
+        if decoder:decoder.close()
         if cdp:
             try:cdp.call('Browser.close')
             except (OSError,RuntimeError):pass

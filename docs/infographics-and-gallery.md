@@ -23,6 +23,35 @@ e un modello immagini è configurato. **Allegati / galleria** usa quelle disponi
 **Genera con AI** prepara un unico piano e un batch con il modello selezionato.
 Il batch locale rilascia gli altri motori, poi ripristina l’LLM per comporre l’HTML.
 
+## Usare un video già pronto
+
+In **Infografica → Video di sfondo**, premi **Allega video** oppure scegli un
+MP4 dalla **Galleria** e aggiungilo al messaggio. Il limite è 64 MB. Se alleghi
+più filmati, seleziona quello da usare: non viene scelto un file arbitrario.
+Il video diventa lo sfondo continuo delle scene, con testi e grafiche HTML sopra.
+Non richiede MiniMax o un nuovo modello video. Vision può descrivere il primo
+fotogramma; questa modalità non analizza il contenuto di tutto il filmato.
+
+- **Mostra intero** conserva le proporzioni e aggiunge spazio ai lati se necessario.
+- **Riempi · ritaglia** riempie il formato scelto senza deformare il filmato.
+- Se il filmato è corto, puoi fermare l’ultimo fotogramma o **Ripeti**.
+- L’audio originale è escluso di default. Puoi mantenerlo oppure abbassarlo
+  durante la nuova voce. Con Ripeti, anche l’audio originale si ripete.
+
+La durata continua fra le scene: il video non ricomincia a ogni pagina. Il canvas
+mostra un’anteprima muta del filmato con le sovraimpressioni; il MP4 esportato
+include il montaggio audio scelto. Le esportazioni statiche usano il primo
+fotogramma. Quando riesporti dopo una modifica, il video di ingresso resta
+collegato e non viene scambiato con il precedente risultato.
+
+Esempio: «Usa il video allegato per un’infografica pubblicitaria 9:16 di 30 secondi.
+Lascia il filmato visibile e aggiungi titoli su piccoli pannelli semitrasparenti.
+Prima scena: il problema. Seconda: i vantaggi. Terza: invito all’azione.»
+
+La pianificazione ha un budget breve distinto dall’output finale. Se l’LLM
+si ripete o restituisce una regia incompleta, l’app interrompe quel tentativo
+e ne esegue un secondo senza vincolo JSON. I limiti LLM salvati restano invariati.
+
 ## Animazione e audio
 
 **Video animato** combina movimenti degli elementi e transizioni fra scene.

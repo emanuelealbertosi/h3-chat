@@ -301,6 +301,10 @@ def validate_content(content, media):
     if deck.get('infographic'):
         from .infographics import validate_motion
         validate_motion(deck)
+        video=deck['infographic'].get('video')
+        if video:
+            for key,mime in (('asset_id','video/mp4'),('poster_id','image/jpeg')):
+                if not any(m['id']==video[key] and m['mime']==mime for m in media):raise ValueError('Manca il video di sfondo o la sua anteprima negli allegati.')
     if deck.get('engine','deterministic') not in ('llm','deterministic'):raise ValueError('Motore slide non valido.')
     if deck.get('theme','lagoon') not in THEMES or deck.get('typography','modern') not in TYPOGRAPHY:raise ValueError('Tema slide non valido.')
     if deck.get('design','professional') not in DESIGNS or deck.get('detail','concise') not in ('concise','full'):raise ValueError('Stile o dettaglio slide non valido.')

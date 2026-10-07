@@ -5,6 +5,9 @@ RAG, con formato verticale 9:16 iniziale. Può generare le illustrazioni in un
 solo batch, comporre voce e musica e produrre un MP4 con effetti, transizioni
 e angoli dritti o arrotondati. Nel canvas puoi modificare grafica, immagini e
 tempi, quindi riesportare il video conservando gli audio.
+Puoi anche allegare un **video MP4** dal PC o dalla galleria: viene usato come
+sfondo continuo, con adattamento senza deformazione, ripetizione opzionale e
+controlli per l’audio originale. Non serve un nuovo modello video.
 **Galleria** raccoglie file caricati, documenti importati nel RAG, risultati
 generati ed esportazioni, riutilizzabili in tutte le modalità e separati per account.
 [Guida a infografiche e galleria](docs/infographics-and-gallery.md).
