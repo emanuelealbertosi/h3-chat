@@ -119,6 +119,12 @@ Puoi esportarla come le slide: HTML, PDF, PowerPoint e immagini.
 ## Canvas ed esportazione
 
 Le scene compaiono progressivamente nel canvas durante la scrittura dell’HTML.
+Se il modello restituisce soltanto CSS, una pagina troppo grande o una risposta
+troncata, l’app chiede una volta di riscrivere la sola pagina completa. La correzione
+conserva musica, voce, allegati e scene già pronte; Max token resta invariato.
+Il controllo riconosce elementi HTML reali, non testo che assomiglia a un tag dentro
+il CSS. Se anche il secondo tentativo fallisce, la scena viene indicata come
+interrotta e la bozza resta nel canvas con un messaggio specifico.
 Usa **Modifica grafica** per spostare e ridimensionare blocchi, modificare testi,
 inserire immagini e impaginare. Fuori dalla modifica grafica, **Anteprima** e il
 cursore mostrano l’animazione della scena selezionata. Il MP4 include anche

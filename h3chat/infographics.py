@@ -112,7 +112,7 @@ def build(app,job,payload,history,settings,model,cancel,stage,log,meta):
     opts=options(value=settings.get('_infographic'));settings=settings|{'_infographic':opts}
     folder=app.data/'outputs'/job['id'];folder.mkdir(parents=True,exist_ok=True)
     from .slide_context import compact_history
-    from .slide_html import validate as validate_html
+    from .slide_html import generate as generate_html
     from .infographic_animation import HTML_BRIEF,ensure as ensure_animation
     from .infographic_layout import brief as layout_brief,ensure as ensure_layout
     from .voice import synthesize
@@ -219,15 +219,17 @@ def build(app,job,payload,history,settings,model,cancel,stage,log,meta):
             if time.monotonic()-last[0]>.8:page['html']=value[-80000:];publish();last[0]=time.monotonic()
         request[-1]['content']+=layout_brief(opts['format'])
         stage(f'Infografica · composizione HTML {index+1}/{len(deck["pages"])}')
-        html,finish=app.engine.completion(request,settings|{'think_level':'off'},cancel,on_text=writing)
-        if finish=='length':raise ValueError('HTML incompleto: aumenta Max token o chiedi una composizione più semplice.')
-        html,warning=ensure_layout(app,job,deck,index,media,request,settings|{'think_level':'off'},cancel,validate_html(html),writing,stage,log)
-        if warning:page['layout_warning']=warning
-        html=screen.ensure_panels(app.engine,request,settings|{'think_level':'off'},cancel,html,opts,writing)
-        if opts['output']=='video':
-            html=ensure_animation(app.engine,request,settings|{'think_level':'off'},cancel,html,duration,writing)
-            if not screen.valid_panels(html,opts):raise ValueError('La correzione dell’animazione ha perso i riquadri: rigenera la scena.')
-        page['html']=html;page['sources']=list(dict.fromkeys(k for k in re.findall(r'\[([RDWI]\d+)\]',html) if k in {r['id'] for r in references}));page['status']='ready';publish()
+        try:
+            html=generate_html(app.engine,request,settings|{'think_level':'off'},cancel,writing,stage,f'Infografica · scena {index+1}')
+            html,warning=ensure_layout(app,job,deck,index,media,request,settings|{'think_level':'off'},cancel,html,writing,stage,log)
+            if warning:page['layout_warning']=warning
+            html=screen.ensure_panels(app.engine,request,settings|{'think_level':'off'},cancel,html,opts,writing)
+            if opts['output']=='video':
+                html=ensure_animation(app.engine,request,settings|{'think_level':'off'},cancel,html,duration,writing)
+                if not screen.valid_panels(html,opts):raise ValueError('La correzione dell’animazione ha perso i riquadri: rigenera la scena.')
+            page['html']=html;page['sources']=list(dict.fromkeys(k for k in re.findall(r'\[([RDWI]\d+)\]',html) if k in {r['id'] for r in references}));page['status']='ready';publish()
+        except Exception:
+            page['status']='interrupted';publish();raise
     validate_motion(deck);validate_content(encode(deck),media)
     (folder/'infografica.json').write_text(json.dumps(deck,ensure_ascii=False,indent=2),encoding='utf-8')
     media.append({'id':uuid4().hex,'name':'infografica.json','mime':'application/json','path':(folder/'infografica.json').relative_to(app.data).as_posix()})

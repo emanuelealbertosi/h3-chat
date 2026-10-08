@@ -54,6 +54,27 @@ class GalleryTests(unittest.TestCase):
             finally:app.close()
 
 class InfographicTests(unittest.TestCase):
+    def test_html_only_css_retry_reuses_music_and_other_scenes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app=Service(ROOT,tmp,start_worker=False)
+            try:
+                chat=app.store.create_chat();opts=options(value={'format':'16:9','music':'generate','voice':False,'images':'provided','scenes':2,'duration':10})
+                settings=DEFAULTS|{'_infographic':opts,'_lab':'infographic','max_tokens':40000};ident=app.store.enqueue(chat['id'],'Neon SKY e FLY con musica rock',[],settings,True,[])
+                job=app.store.one('SELECT * FROM jobs WHERE id=?',(ident,));payload=json.loads(job['payload']);history=app.store.messages(chat['id'],payload['until'])
+                plan={'title':'Neon','visual_direction':'Neon ciano e magenta','delivery':'warm','music_style':'energetic rock','jingle_lyrics':'','scenes':[{'title':'SKY','purpose':'Apri','narration':'SKY'},{'title':'FLY','purpose':'Chiudi','narration':'FLY'}]}
+                attempts=[]
+                def complete(messages,tuning,cancel,on_text=None,schema=None):
+                    if schema:return json.dumps(plan),'stop'
+                    attempts.append(messages)
+                    self.assertEqual(tuning['max_tokens'],40000)
+                    html='<style>.spark.s239' if len(attempts)==1 else '<h1 data-motion="fade">'+('SKY' if len(attempts)==2 else 'FLY')+'</h1>'
+                    on_text(html);return html,'stop'
+                music={'id':'music','mime':'audio/wav','name':'Rock.wav','path':'outputs/rock.wav'}
+                with patch.object(app.engine,'start_llama'),patch.object(app.engine,'stop'),patch.object(app.engine,'chat_messages',return_value=[]),patch.object(app.engine,'require_model',return_value={'name':'Music'}),patch.object(app.engine,'generate_music',return_value=music) as create_music,patch.object(app.engine,'completion',side_effect=complete),patch.object(app.engine,'tool_call',return_value={}):
+                    artifact=build(app,job,payload,history,settings,{},threading.Event(),lambda _:None,Path(tmp)/'log',{})
+                create_music.assert_called_once();deck=json.loads(artifact['content'][13:-4]);self.assertEqual([p['status'] for p in deck['pages']],['ready','ready'])
+                self.assertIn('SKY',deck['pages'][0]['html']);self.assertIn('FLY',deck['pages'][1]['html']);self.assertEqual(deck['infographic']['music_id'],'music');self.assertEqual(len(attempts),3)
+            finally:app.close()
     def test_prompt_options_and_bounds(self):
         self.assertTrue(requested('crea una infografica animata'))
         self.assertFalse(requested('cosa è una infografica?'))

@@ -5,8 +5,8 @@ from html.parser import HTMLParser
 
 BRIEF = r'''Sei un art director e autore di presentazioni. Per ogni pagina scrivi
 direttamente HTML e CSS ORIGINALI, non JSON, non un albero di nodi, non Markdown.
-Restituisci <style>...</style> seguito dal contenuto HTML della pagina, senza
-backtick. Sei TU a scegliere layout, colori, tipografia, gerarchia e grafica:
+Restituisci il contenuto HTML della pagina e uno <style>...</style> completo,
+senza backtick. Sei TU a scegliere layout, colori, tipografia, gerarchia e grafica:
 usa CSS grid/flex/posizionamento, SVG per diagrammi e grafici precisi. Varia
 la composizione tra le pagine conservando una direzione artistica coerente.
 Evita una sequenza di card identiche e una palette monocromatica. Usa font di
@@ -31,6 +31,9 @@ figure e un viewBox che contenga anche tutte le etichette e i testi del diagramm
 Correggi dimensioni di contenitori e figure prima di ridurre i caratteri.
 Il motore visualizza in un documento isolato senza JavaScript: niente script,
 iframe, eventi, link attivi, animation infinita o video. HTML statico completo.
+Scrivi anzitutto la struttura HTML e i contenuti, poi uno <style> compatto.
+Riusa classi, gradienti, pseudo-elementi e SVG per le decorazioni: evita centinaia
+di regole quasi identiche numerate. Completa contenuto e CSS nella stessa risposta.
 '''
 
 def source(raw):
@@ -41,14 +44,52 @@ def source(raw):
     if raw.startswith('```'):
         raw=re.sub(r'^```(?:html)?\s*\n?', '', raw, count=1)
         raw=re.sub(r'\n?```\s*$', '', raw, count=1)
-    start=re.search(r'<(?:!doctype\b|html\b|style\b|body\b|div\b|main\b|section\b|article\b|h[1-6]\b|p\b|svg\b)',raw,re.I)
+    start=re.search(r'<(?:!doctype\b|html\b|style\b|script\b|body\b|div\b|main\b|section\b|article\b|h[1-6]\b|p\b|svg\b|header\b|footer\b|aside\b|ul\b|ol\b|table\b|figure\b|img\b)',raw,re.I)
     return raw[start.start():] if start else raw
+
+class InvalidPage(ValueError):pass
 
 def validate(raw):
     html=source(raw)
-    if not isinstance(html,str) or len(html)>80000 or not re.search(r'<(?:div|main|section|article|h[1-6]|p|svg)\b',html,re.I):
-        raise ValueError('Il modello non ha restituito una pagina HTML valida.')
+    if len(html)>80000:raise InvalidPage('La pagina HTML supera 80.000 caratteri.')
+    class Content(HTMLParser):
+        found=False;blocked=None
+        def handle_starttag(self,tag,attrs):
+            if tag in ('style','script'):self.blocked=tag
+            elif not self.blocked and tag in ('div','main','section','article','h1','h2','h3','h4','h5','h6','p','svg','header','footer','aside','ul','ol','table','figure','img'):self.found=True
+        def handle_endtag(self,tag):
+            if tag==self.blocked:self.blocked=None
+    parser=Content();parser.feed(html);parser.close()
+    if parser.blocked or not parser.found:
+        raise InvalidPage('La risposta contiene solo CSS o una struttura HTML incompleta, senza una pagina visualizzabile.')
     return html
+
+
+def generate(engine,request,settings,cancel,on_text,stage,label='Pagina'):
+    """Retry only this authored page; keep the user's token budget and all media."""
+    from .downloads import Cancelled
+    tuning=settings
+    def stream(raw):
+        if cancel.is_set():raise Cancelled()
+        if len(raw)>80000:raise InvalidPage('La pagina HTML supera 80.000 caratteri.')
+        on_text(raw)
+    for attempt in range(2):
+        if cancel.is_set():raise Cancelled()
+        try:
+            raw,finish=engine.completion(request,tuning,cancel,on_text=stream)
+            if cancel.is_set():raise Cancelled()
+            if finish=='length':raise InvalidPage('La risposta HTML è stata interrotta dal limite Max token.')
+            return validate(raw)
+        except InvalidPage as exc:
+            if attempt:raise ValueError(f'{label}: il modello non ha completato una pagina HTML utilizzabile dopo due tentativi. {exc} La bozza resta nel canvas; rigenera la scena o cambia modello.') from exc
+            stage(f'{label} · correzione della pagina HTML incompleta')
+            request=request+[{'role':'user','content':
+                'La risposta precedente non era una pagina HTML utilizzabile: '+str(exc)+
+                '\nRiscrivi SOLO questa pagina completa, rispettando contenuti, fonti, stile, formato, immagini e video autorizzati della richiesta. '+
+                'Inizia con gli elementi HTML visibili, poi aggiungi uno <style> breve e completo. Non restituire soltanto CSS, JSON o una spiegazione. '+
+                'Evita enumerazioni ripetitive di regole decorative: usa classi condivise, gradienti e SVG. Conserva data-panel e data-motion se richiesti. '+
+                'Non cambiare narrazione o musica. Nessun JavaScript; nessun template obbligatorio.'}]
+            tuning=settings|{'think_level':'off','temperature':min(settings.get('temperature',.7),.3)}
 
 
 def used_images(html):

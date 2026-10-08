@@ -4,7 +4,7 @@ import json
 import time
 from .downloads import Cancelled
 from .slides import PREFIX,FORMATS,encode,validate_content
-from .slide_html import BRIEF,source,validate
+from .slide_html import BRIEF,source,generate as generate_html
 from .slide_style import brief as style_brief
 
 
@@ -77,10 +77,7 @@ def build(app,job,payload,settings,model,cancel,stage,log_path,meta):
         if time.monotonic()-last<.25:return
         page['html']=source(raw);publish();last=time.monotonic()
     try:
-        raw,finish=app.engine.completion(request,settings,cancel,on_text=stream)
-        if finish=='length':raise ValueError('Slide incompleta: aumenta Max token. La versione precedente resta nella cronologia.')
-        if cancel.is_set():raise Cancelled()
-        html=validate(raw)
+        html=generate_html(app.engine,request,settings,cancel,stream,stage,f'Slide {index+1}')
         if motion:
             html,warning=layout.ensure(app,job,deck,index,media,request,settings,cancel,html,stream,stage,log_path)
             page.pop('layout_warning',None)
