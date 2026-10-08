@@ -99,7 +99,7 @@ class Service:
         models = self.refresh_models()
         return {"token": self.token, "version": __version__, "settings": self.store.settings(), "profiles": PROFILES,"project_limits":RAG_LIMITS,
                 "api_providers":self.providers.list(),"api_presets":API_PRESETS,"voice_runtime":{"ready":voice_ready(self.root)},
-                "voice_engines":{k:{"name":v,"ready":voice_ready(self.root,k),"download_path":str(self.root/"models"/("Qwen3-TTS-1.7B-CustomVoice" if k=="qwen" else "Chatterbox-Multilingual-V3"))} for k,v in voice_engines.ENGINES.items()},
+                "voice_engines":{"higgs":{"name":"Higgs Audio v3","ready":voice_ready(self.root)}},
                 "media_providers":self.media_providers.list(),
                 "media_server":self.media_server.status(),
                 "llm_options":{"keys":LLM_KEYS,"defaults":{profile:llm_defaults(profile) for profile in PROFILES},"max_context":MAX_CONTEXT,"max_output_tokens":MAX_OUTPUT_TOKENS},
@@ -185,6 +185,7 @@ class Service:
 
     def validate_settings(self, patch):
         self.refresh_models()
+        if isinstance(patch,dict):patch=voice_engines.normalize(patch)
         if not isinstance(patch, dict) or set(patch) - set(DEFAULTS):
             raise ValueError("Impostazione sconosciuta.")
         current=self.store.settings()
@@ -538,7 +539,7 @@ class Service:
             locked=True
             if cancel.is_set():raise Cancelled()
             payload = json.loads(job["payload"])
-            settings = DEFAULTS | payload["settings"]
+            settings = voice_engines.normalize(DEFAULTS | payload["settings"])
             history = self.store.messages(job["chat_id"], payload["until"])
             rag_query = retrieval_query(payload['prompt'],history)
             for previous in history:

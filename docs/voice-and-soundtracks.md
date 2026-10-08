@@ -1,43 +1,14 @@
 # Voice e video con traccia audio
 
-## Scegliere Higgs, Qwen o Chatterbox
+## Higgs Audio v3
 
-Quando attivi **Voice**, scegli il motore con i pulsanti **Higgs Audio v3**,
-**Qwen3-TTS 1.7B** e **Chatterbox V3**. La scelta vale anche per Voice + Manim
-ed è salvata con la richiesta, comprese rigenerazione e riutilizzo.
-In **Impostazioni → Voice** puoi scegliere il motore predefinito; Higgs rimane
-il default iniziale e il download degli altri modelli non lo cambia.
+Voice usa Higgs Audio v3 in chat, Voice + Manim e infografiche. Voce,
+personalità e interpretazione si scelgono in chat; modello, codec, campioni e
+parametri avanzati si impostano nelle preferenze Voice. Il profilo Radio
+applica il ritmo variabile +8–12%, seed 734 e una recitazione espressiva.
 
-Installa prima la **base motore**, poi i componenti del TTS che desideri.
-Qwen e Chatterbox hanno librerie isolate da Higgs e dagli altri motori.
-I pulsanti scaricano i pesi ufficiali con verifica SHA-256: Qwen CustomVoice
-richiede circa 4,52 GB, Chatterbox Multilingual V3 circa 3,21 GB, oltre al runtime.
-**Usa modello scaricato** collega la cartella nell’installazione corrente.
-Puoi invece scegliere una cartella già presente con **Sfoglia**, senza copiare
-pesi. Se il percorso non è impostato, vengono usate le cartelle standard scaricate
-sotto `models`. Nessun servizio esterno è necessario e l’inferenza resta offline.
-
-Ogni motore conserva dispositivo e parametri propri. **Parametri del motore…**
-in chat apre le modifiche per quella chat; i valori globali restano invariati.
-
-- **Qwen**: italiano, GPU BF16, temperatura 0,8, Top P 0,95, Top K 50,
-  penalità ripetizione 1,05, massimo 2048 token audio, segmenti da 400 caratteri,
-  pause da 180 ms. Il limite riguarda token audio, non parole della chat.
-  CustomVoice usa Vivian/Ryan come voci iniziali, modificabili, con istruzioni
-  di recitazione naturale e partecipe. VoiceDesign usa la descrizione della voce;
-  Base clona i campioni configurati e non applica le istruzioni CustomVoice.
-  Sono disponibili anche 8 e 4 bit su GPU; su CPU il motore usa FP32.
-- **Chatterbox**: V3 multilingue, italiano, GPU, temperatura 0,8,
-  intensità 0,65, CFG 0,35, Min P 0,05, Top P 1, penalità ripetizione 1,2,
-  segmenti da 300 caratteri e pause da 180 ms. Usa il campione vocale;
-  preferisci un riferimento italiano. Controlla l’intensità espressiva, non
-  emozioni nominali o registro/velocità: questi controlli vengono nascosti in chat.
-
-La CPU è disponibile per entrambi ma richiede più tempo. Si carica un solo TTS
-per richiesta; con caricamento su richiesta l’LLM viene rilasciato prima della
-sintesi. Il processo TTS termina e libera la memoria al completamento o allo stop.
-WAV, MP3 scaricabile, testo e SRT seguono lo stesso flusso di Higgs e Manim.
-I default sono punti di partenza: naturalezza e accento vanno valutati all’ascolto.
+Le richieste salvate con i precedenti motori opzionali usano automaticamente
+Higgs quando premi Rigenera, mantenendo le scelte di interpretazione.
 
 ## Voice: lettura e testi preparati dall’Assistant
 

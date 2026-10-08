@@ -15,10 +15,10 @@ def stamp(t):
 
 def run(request):
     family=request['config'].get('engine','higgs')
-    if family!='higgs':sys.path[:0]=[str(ROOT/('runtime/voice-'+family+'/packages')),str(ROOT/'runtime/voice-extras/packages')]
+    if family!='higgs':raise ValueError('Voice usa Higgs Audio v3. Rigenera la richiesta con la versione aggiornata.')
     os.environ.update(HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1')
     import numpy as np
-    spec=importlib.util.spec_from_file_location('h3_voice_backend',ROOT/('native/voice-backend.py' if family=='higgs' else 'native/voice-extras-backend.py'));module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    spec=importlib.util.spec_from_file_location('h3_voice_backend',ROOT/'native/voice-backend.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     count=len(request['segments']);index=0
     def progress(**kw):emit('stage',message=f"Voice · segmento {index+1}/{count} · "+kw.get('message',f"sintesi · {kw.get('frames',0)} fotogrammi audio"))
     engine=module.Engine(request['config'],progress);rate=engine.sample_rate

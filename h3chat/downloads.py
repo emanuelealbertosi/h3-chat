@@ -175,9 +175,6 @@ class Downloads:
             if task['kind']=='runtime' and task['id']=='voice':
                 from .voice import mark_ready
                 mark_ready(self.root)
-            if task['kind']=='runtime' and task['id'] in ('voice_qwen','voice_chatterbox'):
-                from .voice_engines import mark_ready
-                mark_ready(self.root,task['id'].removeprefix('voice_'))
             if task['kind']=='runtime' and task['id']=='veda':
                 from .veda import mark_ready
                 mark_ready(self.root)

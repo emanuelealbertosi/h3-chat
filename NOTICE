@@ -80,11 +80,3 @@ Voice: speech adapter and controls adapted from H3-Audio (MIT, licenses/H3-Audio
 Higgs Audio v2 codec adapted from Transformers 5.14.1 (Apache-2.0); copyright Boson AI and HuggingFace.
 Pure PyTorch resampling from TorchAudio 2.7.1 (BSD-2-Clause, licenses/TorchAudio-LICENSE.txt).
 Model weights and voice reference recordings are not redistributed.
-
-Optional local speech engines:
-Qwen3-TTS (QwenLM/Qwen3-TTS), SDK and official CustomVoice weights: Apache-2.0.
-Chatterbox (resemble-ai/chatterbox), SDK and official Multilingual V3 weights: MIT.
-The portable installer fetches pinned official artifacts with SHA-256 checks.
-Runtime dependencies retain their wheel license metadata; ANTLR and pysox source
-archives retain their license files. No personal references or model weights are
-included in this repository.

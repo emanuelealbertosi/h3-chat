@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from .llm_options import KEYS as LLM_KEYS, merge as merge_llm_settings
 from .voice import DEFAULTS as VOICE_DEFAULTS
+from .voice_engines import normalize as normalize_voice
 
 PROFILES = {
     "cpu": {"context": 4096, "gpu_layers": 0, "width": 512, "height": 512},
@@ -131,10 +132,10 @@ class Store:
             return db.execute(sql, args).rowcount
 
     def settings(self):
-        return DEFAULTS | {r["key"]: json.loads(r["value"]) for r in self.all("SELECT * FROM settings")}
+        return normalize_voice(DEFAULTS | {r["key"]: json.loads(r["value"]) for r in self.all("SELECT * FROM settings")})
 
     def save_settings(self, patch):
-        patch=merge_llm_settings(self.settings(),patch)
+        patch=normalize_voice(merge_llm_settings(self.settings(),normalize_voice(patch)))
         with self.connect() as db:
             for key, value in patch.items():
                 db.execute("INSERT OR REPLACE INTO settings VALUES (?,?)", (key, json.dumps(value)))
@@ -222,6 +223,7 @@ class Store:
                 from .llm_options import KEYS
                 value['settings'].update({key:llm_settings[key] for key in ('chat_model','llm_device','vision_enabled',*KEYS)})
                 value['settings']['vision_device']=llm_settings.get('vision_device','cpu')
+            value["settings"]=normalize_voice(value["settings"])
             payload=json.dumps(value)
             answer_id = original['message_id']
             self.canvas_history.backfill(db, chat_id)
