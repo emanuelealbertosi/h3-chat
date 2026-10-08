@@ -3,7 +3,7 @@ import json
 import time
 from .downloads import Cancelled, safe_join
 from .video_options import options, validate_plan
-from .video_routing import BRIEF, PLAN_SCHEMA, direct_plan, attachment_instructions
+from .video_routing import BRIEF, SCENE_DIRECTION, PLAN_SCHEMA, direct_plan, attachment_instructions
 from .vision_runtime import status
 from .remote_llm import EmptyCompletion, StructuredCompletionError
 
@@ -82,7 +82,7 @@ class VideoEngine:
         budget=min(settings['context']//2,settings['video_prompt_max_tokens'])
         tuning=settings|{'max_tokens':budget,'think_level':'off'}
         size=max(1,min(3,budget//768));scripts=[]
-        brief=BRIEF.replace('Return JSON prompt, images, audios.','Return only JSON {"scenes":[English prompt per requested clip]}.')+'\nDescribe one continuous film, preserving Picture/Audio labels, identities, style and the language of any supplied dialogue. Do not invent unheard lyrics. Return only the requested clips, in order. Use supplied previous prompts and opening as visual continuity, not as repeated action. No opening restart or finale before the last clip. Translate global keyframe times into LOCAL clip times. Each prompt must be concise while retaining the required MiniMax section labels; never return images/audios arrays.'+attachment_instructions(plan['images'],plan['audios'])
+        brief=BRIEF.replace('Return JSON prompt, images, audios.','Return only JSON {"scenes":[English prompt per requested clip]}.')+'\nDescribe one continuous film, preserving Picture/Audio labels, identities, style and the language of any supplied dialogue. Do not invent unheard lyrics. Return only the requested clips, in order. Use supplied previous prompts and opening as visual continuity, not as repeated action. No opening restart or finale before the last clip. Translate global keyframe times into LOCAL clip times. Each prompt must be concise while retaining the required MiniMax section labels; never return images/audios arrays.\n'+SCENE_DIRECTION+attachment_instructions(plan['images'],plan['audios'])
         refs=[{'mime':'image/png'} for _ in plan['images']]+[{'mime':'audio/wav'} for _ in plan['audios']]
         def produce(group):
             schema={'type':'object','properties':{'scenes':{'type':'array','minItems':len(group),'maxItems':len(group),'items':{'type':'string'}}},'required':['scenes'],'additionalProperties':False}

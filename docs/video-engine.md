@@ -73,6 +73,15 @@ If the scene writer invents a reference, Assistant rewrites that batch once;
 a repeated invalid result stops planning without starting video generation.
 Remaining scenes from an older checkpoint are also checked before resuming.
 
+Assistant develops broad requests into concrete actions and a sequence with progression,
+including visible comic beats when parody is requested. Returning to a location retains
+its cast/style but advances the action instead of copying an earlier scene. An explicit
+user storyboard, pacing or intentional repetition takes precedence. Original soundtrack
+sections preserve the selected audio without guessing its genre, lyrics or beat timings;
+canonical costumes are not assigned unsupported colors. These are direction instructions
+for the LLM, not fixed scene templates or an extra planning pass. The existing output
+budget, batching, attachment validation, audio offsets and visual-memory mechanism remain.
+
 Attach up to **9 images and 3 audio files** (WAV, MP3, FLAC, OGG). Image limit:
 12 MB / 8192 px; audio limit: 64 MB. Numbering is separate by media type and follows
 attachment order. For example:

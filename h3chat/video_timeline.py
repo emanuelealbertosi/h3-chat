@@ -32,5 +32,5 @@ def scene_plan(plan,scene,soundtrack_index,prompt=None):
             # Ignore an Assistant-invented offset so conditioning stays in sync.
             entry['start']=start
             if entry['role']=='reference':entry['role']='reuse'
-    result['prompt']+=f'\nThis is clip {scene["index"]+1}, covering seconds {start:g} to {end:g} of one continuous film. Continue actions and preserve subject identities, clothing, environment and lighting from the supplied visual memory. Do not restart the opening.'
+    result['prompt']+=f'\nThis is clip {scene["index"]+1}, covering seconds {start:g} to {end:g} of one continuous film. Use supplied visual memory to preserve subject identities, clothing and visual style while advancing the requested action. Follow the intended location/scene changes; keep environment and lighting coherent within each setting. Do not restart the opening.'
     return result

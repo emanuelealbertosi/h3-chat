@@ -11,9 +11,23 @@ end frame uses the clip duration. Images without timing are identity/style refer
 a single image to animate is a keyframe at 0. Audio reference transfers sound/voice style;
 lipsync preserves original audio AND conditions visible mouth motion; reuse preserves audio.
 Choose lipsync for singing/talking along the supplied soundtrack. Do not transcribe unheard audio.
+For lipsync/reuse, sound sections must preserve the supplied Audio track exactly;
+never infer its genre, tempo, instruments, lyrics or beat timestamps from its filename.
+Describe requested visible instruments separately from the unheard soundtrack.
 Prompt is English narrative, but preserve exact user dialogue/lyrics and their language.
 Keep speaker IDs (S1), (S2) stable and wrap dialogue in <d>[language] words</d>.
 Do not invent image details. Preserve visible identity, composition, wardrobe and lighting.
+The original user request is authoritative: preserve explicit actions, sequence, timing,
+cast, costumes, instruments, visual style and framing. Fill only unspecified creative gaps.
+Keep requested canonical appearances/costumes; do not guess unsupported costume colors
+or redesign characters. Assign unspecified roles consistently, without overriding user roles.
+Turn broad direction into concrete, filmable action: who does what, where, how the camera
+observes it, and what changes by the end. One clear main event fits the available duration;
+avoid vague lists such as "playing instruments or posing dynamically".
+Express requested tone through visible behavior: a parody needs an appropriate visual gag
+or comic contrast, rather than just the word "parody". Do not add comedy to a serious request.
+Maintain a coherent visual identity while developing the action; continuity does not mean
+repeating the same scene or freezing the location when the user asks for scene changes.
 Use [Shot 1] without time; only add further shots when asked, with increasing cut times within duration.
 For text-only/start/keyframe video use integrated_multimodal_description, overall_soundscape,
 non_diegetic_music as labeled sections. Identify a keyframe only when an actual image
@@ -30,6 +44,26 @@ Specify fully_preserved/partially_preserved/attribute_transfer/weak_reference fo
 fully_copy/partially_copy/reference/weak_reference for sound. State exact audio reuse for lipsync.
 All labels must agree with attachment order. Respect duration, avoid impossible action density.
 You are preparing instructions, not claiming to have generated a video.'''
+
+SCENE_DIRECTION = '''Direct the entire sequence using total_scenes and each clip's global index.
+Honor the original request over unsupported details introduced by the preliminary plan.
+Follow an explicit user storyboard, order, pacing and requested repetitions; do not replace
+them with your own formula. If no storyboard is supplied, develop a clear progression.
+When alternating requested threads/locations, maintain that order across batch boundaries.
+Each return must advance the action with a different concrete event, interaction or outcome;
+changing only the opening sentence or camera adjective is not a new scene. Keep stable cast
+and style anchors concise, rather than repeating whole descriptions from opening/previous.
+Give each clip a feasible main action, clear setting/framing and ending state that leads into
+the next beat. Vary framing and camera movement where suitable; do not invent extra cuts
+against the requested shot constraints. Preserve identities and wardrobe across location
+changes. Lip-sync performance clips need a clearly visible singer's mouth, not only distant
+crowd shots. Do not force singing into action-only clips unless requested.
+Make tone observable in the action, including concrete comic beats for a requested parody.
+Place development in middle clips and resolution only in the final clip; do not repeatedly
+restart the introduction or add an early finale. Do not invent timings of unheard beats/lyrics.
+Before returning, check every requested clip against request, previous and opening for
+unintended repeated action, omitted constraints and unsupported audio/costume details.
+Return only the required concise scene prompts; no commentary, analysis or extra JSON keys.'''
 
 PLAN_SCHEMA={'type':'object','properties':{
  'prompt':{'type':'string'},
