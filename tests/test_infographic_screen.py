@@ -38,6 +38,14 @@ class ScreenTests(unittest.TestCase):
    self.assertIn('Ingressi in ordine '+order,brief(opts))
   for value in ({'layout':'columns4'},{'layout':'rows2','panel_order':'231'},{'panel_interval':True},{'panel_interval':float('nan')},{'panel_interval':0},{'panel_appearance':'other'}):
    with self.assertRaises(ValueError):options(value=value)
+ def test_four_and_six_panel_orders_and_html_structure(self):
+  for layout,count,order in (('grid2x2',4,'2413'),('grid3x2',6,'362514'),('grid2x3',6,'654321')):
+   opts=options(value={'layout':layout,'panel_appearance':'sequence','panel_order':order})
+   html=''.join(f'<section data-panel="{n}"><h1>{n}</h1></section>' for n in range(1,count+1))
+   self.assertTrue(valid_panels(html,opts));self.assertIn(f'data-panel="{count}"',brief(opts));self.assertIn('Ingressi in ordine '+order,brief(opts))
+   self.assertFalse(valid_panels(html.replace(f'data-panel="{count}"','data-panel="1"'),opts))
+   for wrong in ('123',order+'1',order[:-1]+order[0],None,123456):
+    with self.assertRaises(ValueError):options(value={'layout':layout,'panel_order':wrong})
  def test_panels_must_exist_once_as_siblings(self):
   opts=options(value={'layout':'columns3'})
   for html in ('<main><section data-panel="1"></section><section data-panel="2"></section><section data-panel="3"></section></main>', '<section data-panel="3"></section><section data-panel="1"></section><section data-panel="2"></section>'):
@@ -55,7 +63,9 @@ class ScreenTests(unittest.TestCase):
   clips=[{'id':str(i),'mime':'video/mp4'} for i in range(3)]
   self.assertEqual(select_many(options(value={'layout':'columns3','video_id':'2'}),clips),[clips[2],clips[0],clips[1]])
   with self.assertRaises(ValueError):select_many(options(),clips)
-  with self.assertRaises(ValueError):select_many(options(value={'layout':'columns3'}),clips+[{'id':'extra','mime':'video/mp4'}])
+  six=clips+[{'id':str(i),'mime':'video/mp4'} for i in range(3,6)]
+  self.assertEqual(select_many(options(value={'layout':'grid3x2'}),six),six)
+  with self.assertRaises(ValueError):select_many(options(value={'layout':'grid3x2'}),six+[{'id':'extra','mime':'video/mp4'}])
   self.assertEqual(select_many(options(value={'layout':'columns3','video_background':'off'}),clips),[])
  def test_invalid_video_lists_are_validation_errors(self):
   for value in (None,[],[None],[{'asset_id':{}}]):

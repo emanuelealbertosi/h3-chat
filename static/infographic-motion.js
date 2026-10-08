@@ -2,21 +2,24 @@
 (()=>{
  const states=new WeakMap(),effects=['fade','slide','zoom','pan','blur','wipe','strobe','typewriter','appear'];
  const clamp=v=>Math.max(0,Math.min(1,v));
+ const layouts={full:[1,1],columns2:[2,1],rows2:[1,2],columns3:[3,1],rows3:[1,3],pip:[2,1],grid2x2:[2,2],grid3x2:[3,2],grid2x3:[2,3]};
+ const panelCount=layout=>{const [columns,rows]=layouts[layout]||layouts.full;return columns*rows;};
  function number(value,fallback,low=0,high=180){const n=Number(value);return value!==undefined&&value!==''&&Number.isFinite(n)?Math.max(low,Math.min(high,n)):fallback;}
  function freeze(doc){for(const element of doc.querySelectorAll('*')){element.style?.setProperty('animation','none','important');element.style?.setProperty('transition','none','important');}}
  function panelTimes(doc,options,duration){
-  const count={columns2:2,rows2:2,columns3:3,rows3:3,pip:2}[options.layout]||1;if(count===1)return [];
-  const order=options.panel_order==='auto'||!options.panel_order?'123'.slice(0,count):options.panel_order,interval=Math.min(number(options.panel_interval,.8,.2,30),Math.max(0,duration*.9-Math.min(.65,duration*.15))/Math.max(1,count-1));
-  const panels=[...doc.querySelectorAll('[data-panel]')].filter(e=>/^[123]$/.test(e.dataset.panel)&&Number(e.dataset.panel)<=count);
+  const count=panelCount(options.layout);if(count===1)return [];
+  const ids='123456'.slice(0,count),order=typeof options.panel_order==='string'&&options.panel_order.split('').sort().join('')===ids?options.panel_order:ids,interval=Math.min(number(options.panel_interval,.8,.2,30),Math.max(0,duration*.9-Math.min(.65,duration*.15))/Math.max(1,count-1));
+  const panels=[...doc.querySelectorAll('[data-panel]')].filter(e=>/^[1-6]$/.test(e.dataset.panel)&&Number(e.dataset.panel)<=count);
   for(const panel of panels){const sequence=options.panel_appearance==='sequence',start=sequence?order.indexOf(panel.dataset.panel)*interval:0;panel.dataset.start=String(start);panel.dataset.duration=String(Math.min(.65,duration*.15));delete panel.dataset.out;panel.dataset.motion=sequence&&['fade','slide','zoom','blur','wipe'].includes(panel.dataset.motion)?panel.dataset.motion:sequence?'fade':'appear';for(const child of panel.querySelectorAll('[data-motion]'))if(number(child.dataset.start,0)<start)child.dataset.start=String(start);}
   return panels;
  }
  function timingScale(nodes,duration){const latest=Math.max(0,...nodes.filter(e=>e.dataset.motion!=='pan').map(e=>number(e.dataset.start,0)+number(e.dataset.duration,.65,.05,30)));return latest>duration*.9?duration*.9/latest:1;}
+ function animationNodes(doc){const nodes=[...doc.querySelectorAll('[data-motion]')];return [...nodes.filter(e=>e.dataset.panel!==undefined),...nodes.filter(e=>e.dataset.panel===undefined)].slice(0,160);}
  function videoTracks(documents,motion){
   const options=motion.options||{},delayed=options.video_start==='panel'&&options.layout&&options.layout!=='full',allowed=new Set((motion.videos||(motion.video?[motion.video]:[])).map(v=>v.asset_id)),tracks=new Map(),targets=[];let offset=0;
   documents.forEach((doc,index)=>{
    const duration=motion.durations[index];if(delayed)for(const panel of panelTimes(doc,options,duration))doc.body.append(panel);
-   const scale=timingScale([...doc.querySelectorAll('[data-motion]')].slice(0,160),duration);
+   const scale=timingScale(animationNodes(doc),duration);
    for(const slot of doc.querySelectorAll('div[data-video-asset-id],[data-h3-video]')){
     const id=slot.dataset.videoAssetId||slot.dataset.h3Video;if(!allowed.has(id))continue;const panel=slot.closest('[data-panel]');if(delayed&&!panel)continue;
     const key=delayed?JSON.stringify([id,panel.dataset.panel]):id,start=delayed?offset+number(panel.dataset.start,0)*scale:0;
@@ -29,15 +32,14 @@
   return [...tracks.values()];
  }
  function screen(doc,options={},duration=30){
-  const layout=options.layout||'full',count={columns2:2,rows2:2,columns3:3,rows3:3,pip:2}[layout]||1;if(count===1)return;
+  const layout=options.layout||'full',count=panelCount(layout);if(count===1)return;
   const width=doc.defaultView.innerWidth,height=doc.defaultView.innerHeight;
   const panels=panelTimes(doc,options,duration);
   doc.body.style.setProperty('position','relative','important');doc.body.style.setProperty('overflow','hidden','important');
   for(const panel of panels){
    const index=Number(panel.dataset.panel)-1;doc.body.append(panel);
    let x=0,y=0,w=width,h=height;
-   if(layout.startsWith('columns')){w=width/count;x=index*w;}
-   if(layout.startsWith('rows')){h=height/count;y=index*h;}
+   if(layout!=='pip'){const [columns,rows]=layouts[layout];w=width/columns;h=height/rows;x=(index%columns)*w;y=Math.floor(index/columns)*h;}
    if(layout==='pip'&&index===1){w=width*.32;h=height*.32;x=width-w-width*.03;y=height-h-height*.03;}
    const styles={position:'absolute',left:x+'px',top:y+'px',right:'auto',bottom:'auto',width:w+'px',height:h+'px','min-width':'0','min-height':'0','max-width':'none','max-height':'none',margin:'0','box-sizing':'border-box',overflow:'hidden',transform:'none',translate:'none',rotate:'none',scale:'none',opacity:'1','z-index':String(index+1)};
    for(const [key,value] of Object.entries(styles))panel.style.setProperty(key,value,'important');
@@ -48,7 +50,7 @@
  function ease(t,kind){t=clamp(t);return kind==='linear'?t:kind==='snap'?1-Math.pow(1-t,4):t*t*(3-2*t);}
  function prepare(doc){
   if(states.has(doc))return states.get(doc);
-  const entries=[...doc.querySelectorAll('[data-motion]')].slice(0,160).map(element=>{
+  const entries=animationNodes(doc).map(element=>{
    const css=doc.defaultView.getComputedStyle(element),base={opacity:css.opacity,transform:css.transform,filter:css.filter,clipPath:css.clipPath};
    return {element,base,effect:effects.includes(element.dataset.motion)?element.dataset.motion:'fade'};
   });states.set(doc,entries);return entries;
@@ -84,5 +86,5 @@
    if(previous&&frame.contentDocument)apply(frame.contentDocument,durations[i]-.001,durations[i]);
   });return {index,time:local};
  }
- globalThis.H3Motion={apply,render,effects,freeze,screen,videoTracks};
+ globalThis.H3Motion={apply,render,effects,freeze,screen,videoTracks,panelCount};
 })();

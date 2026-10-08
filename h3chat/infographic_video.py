@@ -37,7 +37,7 @@ def select_many(opts,media):
         item=next((m for m in videos if m['id']==opts['video_id']),None)
         if not item:raise ValueError('Allega il video principale selezionato.')
         videos.remove(item);videos.insert(0,item)
-    if len(videos)>3:raise ValueError('Split screen: allega fino a tre video; rimuovi quelli che non vuoi usare.')
+    if len(videos)>6:raise ValueError('Split screen: allega fino a sei video; rimuovi quelli che non vuoi usare.')
     return videos
 
 def probe(path,poster):

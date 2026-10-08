@@ -101,7 +101,7 @@ def validate_motion(deck):
     if 'videos' in motion:
         from .infographic_video import validate
         videos=motion['videos']
-        if not isinstance(videos,list) or not 1<=len(videos)<=3:raise ValueError('Video dei riquadri non validi.')
+        if not isinstance(videos,list) or not 1<=len(videos)<=6:raise ValueError('Video dei riquadri non validi.')
         for video in videos:validate(video)
         if len({v['asset_id'] for v in videos})!=len(videos):raise ValueError('Video duplicati nei riquadri.')
 

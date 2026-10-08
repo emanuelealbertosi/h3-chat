@@ -27,6 +27,9 @@ Il batch locale rilascia gli altri motori, poi ripristina l’LLM per comporre l
 
 In **Infografica → Impostazioni → Composizione dello schermo** scegli due o tre
 riquadri affiancati, sopra/sotto, oppure principale con un riquadro sovrapposto.
+Sono disponibili anche **4 · griglia 2×2**, **6 · griglia 3×2** (tre colonne,
+due righe) e **6 · griglia 2×3** (due colonne, tre righe). Una scena contiene
+tutti i suoi pannelli: quattro o sei riquadri non richiedono quattro o sei scene.
 L’LLM progetta contenuti, colori, immagini ed effetti dentro ciascun riquadro;
 il motore mantiene soltanto la disposizione scelta e i suoi confini.
 
@@ -44,7 +47,14 @@ la posizione fisica, da sinistra a destra o dall’alto in basso; in 231 entra p
 il centrale, poi il destro e infine il sinistro. Gli intervalli si adattano alle
 scene brevi. Ogni riquadro rimane visibile dopo il proprio ingresso.
 
-Puoi allegare fino a tre MP4 e indicare nel prompt quali usare nei riquadri.
+Per quattro o sei pannelli trovi ordine normale, inverso e **Personalizzato**:
+scrivi ogni numero una sola volta, per esempio `2413` oppure `362514`.
+La numerazione nelle griglie procede per righe, da sinistra a destra e poi
+dall’alto in basso. In 3×2 la prima riga è 1, 2, 3 e la seconda 4, 5, 6.
+Per sei pannelli orizzontali scegli in genere 3×2; per un video verticale 2×3.
+Il contenuto di ogni riquadro resta liberamente progettato dall’LLM.
+
+Puoi allegare fino a sei MP4 e indicare nel prompt quali usare nei riquadri.
 I clip proseguono fra le scene e conservano le proporzioni con **Mostra intero**.
 Solo il video principale può mantenere il proprio audio originale; gli altri
 rimangono muti. Puoi combinare video, immagini, testi e diagrammi.
