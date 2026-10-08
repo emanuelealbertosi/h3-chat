@@ -14,7 +14,12 @@
   return panels;
  }
  function timingScale(nodes,duration){const latest=Math.max(0,...nodes.filter(e=>e.dataset.motion!=='pan').map(e=>number(e.dataset.start,0)+number(e.dataset.duration,.65,.05,30)));return latest>duration*.9?duration*.9/latest:1;}
- function animationNodes(doc){const nodes=[...doc.querySelectorAll('[data-motion]')];return [...nodes.filter(e=>e.dataset.panel!==undefined),...nodes.filter(e=>e.dataset.panel===undefined)].slice(0,160);}
+ function animationNodes(doc){const nodes=[...doc.querySelectorAll('[data-motion]')],root=e=>e.dataset.panel!==undefined||e.dataset.overlay!==undefined;return [...nodes.filter(root),...nodes.filter(e=>!root(e))].slice(0,160);}
+ function screenOverlays(doc){
+  // Older scenes used an animated sibling without an explicit overlay marker.
+  const candidates=[...doc.querySelectorAll('[data-overlay],[data-motion]')].filter(e=>e.dataset.panel===undefined&&!e.closest?.('[data-panel]')&&!e.querySelector?.('[data-panel]'));
+  return candidates.filter(e=>!candidates.some(parent=>parent!==e&&parent.contains?.(e)));
+ }
  function videoTracks(documents,motion){
   const options=motion.options||{},delayed=options.video_start==='panel'&&options.layout&&options.layout!=='full',allowed=new Set((motion.videos||(motion.video?[motion.video]:[])).map(v=>v.asset_id)),tracks=new Map(),targets=[];let offset=0;
   documents.forEach((doc,index)=>{
@@ -34,7 +39,7 @@
  function screen(doc,options={},duration=30){
   const layout=options.layout||'full',count=panelCount(layout);if(count===1)return;
   const width=doc.defaultView.innerWidth,height=doc.defaultView.innerHeight;
-  const panels=panelTimes(doc,options,duration);
+  const overlays=screenOverlays(doc),panels=panelTimes(doc,options,duration);
   doc.body.style.setProperty('position','relative','important');doc.body.style.setProperty('overflow','hidden','important');
   for(const panel of panels){
    const index=Number(panel.dataset.panel)-1;doc.body.append(panel);
@@ -44,7 +49,12 @@
    const styles={position:'absolute',left:x+'px',top:y+'px',right:'auto',bottom:'auto',width:w+'px',height:h+'px','min-width':'0','min-height':'0','max-width':'none','max-height':'none',margin:'0','box-sizing':'border-box',overflow:'hidden',transform:'none',translate:'none',rotate:'none',scale:'none',opacity:'1','z-index':String(index+1)};
    for(const [key,value] of Object.entries(styles))panel.style.setProperty(key,value,'important');
   }
-  for(const child of [...doc.body.children])if(!panels.includes(child)&&child.tagName!=='STYLE')child.style.setProperty('display','none','important');
+  for(const [index,overlay] of overlays.entries()){
+   doc.body.append(overlay);overlay.dataset.overlay='global';
+   const styles={position:'absolute',left:'0px',top:'0px',right:'auto',bottom:'auto',width:width+'px',height:height+'px','min-width':'0','min-height':'0','max-width':'none','max-height':'none',margin:'0','box-sizing':'border-box',overflow:'hidden','z-index':String(count+1+index)};
+   for(const [key,value] of Object.entries(styles))overlay.style.setProperty(key,value,'important');
+  }
+  for(const child of [...doc.body.children])if(!panels.includes(child)&&!overlays.includes(child)&&child.tagName!=='STYLE')child.style.setProperty('display','none','important');
   states.delete(doc);
  }
  function ease(t,kind){t=clamp(t);return kind==='linear'?t:kind==='snap'?1-Math.pow(1-t,4):t*t*(3-2*t);}

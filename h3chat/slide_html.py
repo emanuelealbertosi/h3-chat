@@ -87,7 +87,7 @@ def generate(engine,request,settings,cancel,on_text,stage,label='Pagina'):
                 'La risposta precedente non era una pagina HTML utilizzabile: '+str(exc)+
                 '\nRiscrivi SOLO questa pagina completa, rispettando contenuti, fonti, stile, formato, immagini e video autorizzati della richiesta. '+
                 'Inizia con gli elementi HTML visibili, poi aggiungi uno <style> breve e completo. Non restituire soltanto CSS, JSON o una spiegazione. '+
-                'Evita enumerazioni ripetitive di regole decorative: usa classi condivise, gradienti e SVG. Conserva data-panel e data-motion se richiesti. '+
+                'Evita enumerazioni ripetitive di regole decorative: usa classi condivise, gradienti e SVG. Conserva data-panel, data-overlay e data-motion se richiesti. '+
                 'Non cambiare narrazione o musica. Nessun JavaScript; nessun template obbligatorio.'}]
             tuning=settings|{'think_level':'off','temperature':min(settings.get('temperature',.7),.3)}
 

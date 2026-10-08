@@ -175,6 +175,15 @@ grandi si importano dalla sezione RAG, che ha limiti separati. Le sorgenti RAG
 collegate direttamente a percorsi esterni del server non vengono esposte nella galleria.
 Eliminare una chat non cancella i file conservati in galleria.
 
+## Scritte sopra tutti i pannelli
+
+Il prompt può chiedere un titolo o una scritta finale a schermo intero, sopra
+qualsiasi split screen o griglia. Il modello usa un contenitore `data-overlay="global"`
+separato dai pannelli, con tempi di ingresso e uscita relativi alla scena.
+Le vecchie scene con una sovraimpressione animata fuori dai pannelli sono
+compatibili: per recuperarla basta **Esporta / aggiorna MP4**, senza rigenerare
+le clip, la musica o l’HTML.
+
 ## Higgs: personalità e ritmo
 
 Voice offre personalità seria, vivace, spot e calda, oltre ai controlli personalizzati.
