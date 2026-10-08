@@ -96,7 +96,11 @@ def validate_motion(deck):
         validate(motion['video'])
 
 def build(app,job,payload,history,settings,model,cancel,stage,log,meta):
-    opts=settings['_infographic'];folder=app.data/'outputs'/job['id'];folder.mkdir(parents=True,exist_ok=True)
+    # Regenerate/queued jobs retain the settings snapshot from their creation.
+    # Complete newly introduced options at execution time without changing the
+    # stored snapshot or the user's model presets.
+    opts=options(value=settings.get('_infographic'));settings=settings|{'_infographic':opts}
+    folder=app.data/'outputs'/job['id'];folder.mkdir(parents=True,exist_ok=True)
     from .slide_context import compact_history
     from .slide_html import BRIEF as HTML_BRIEF,validate as validate_html
     from .voice import synthesize

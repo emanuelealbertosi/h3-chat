@@ -19,7 +19,7 @@ def asset(data,media,ident,mime):
     return path
 
 def select(opts,media):
-    if opts['video_background']=='off':return None
+    if opts.get('video_background','auto')=='off':return None
     videos=[m for m in media if m.get('mime')=='video/mp4']
     if opts.get('video_id'):
         item=next((m for m in videos if m['id']==opts['video_id']),None)

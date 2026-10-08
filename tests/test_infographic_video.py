@@ -1,7 +1,7 @@
 import json,tempfile,threading,unittest
 from pathlib import Path
-from unittest.mock import Mock
-from h3chat.infographics import options,plan_regia,validate_motion
+from unittest.mock import Mock,patch
+from h3chat.infographics import options,plan_regia,validate_motion,build
 from h3chat.infographic_video import select,asset,source_time
 
 class InfographicPlanningTests(unittest.TestCase):
@@ -34,6 +34,20 @@ class InfographicPlanningTests(unittest.TestCase):
         self.assertEqual(count[0],2)
 
 class VideoBackgroundTests(unittest.TestCase):
+    def test_saved_pre_video_job_is_normalized_before_selecting_video(self):
+        legacy={k:v for k,v in options().items() if not k.startswith('video_')}
+        legacy.update(duration=40,scenes=4,images='provided')
+        with tempfile.TemporaryDirectory() as tmp:
+            app=Mock();app.data=Path(tmp);settings={'_infographic':legacy}
+            with patch('h3chat.infographic_video.select',side_effect=RuntimeError('normalized')) as select_video:
+                with self.assertRaisesRegex(RuntimeError,'normalized'):
+                    build(app,{'id':'job'},{'media':[]},[],settings,{},threading.Event(),lambda _:None,Path(tmp)/'log',{})
+                normalized=select_video.call_args.args[0]
+                self.assertEqual(normalized['video_background'],'auto');self.assertEqual(normalized['video_fit'],'contain')
+                self.assertEqual(normalized['duration'],40);self.assertEqual(normalized['scenes'],4)
+                self.assertEqual(normalized['images'],'provided')
+            self.assertNotIn('video_background',settings['_infographic'])
+        self.assertIsNone(select(legacy,[]))
     def test_defaults_off_multiple_and_selected_attachment(self):
         a={'id':'one','mime':'video/mp4'};b={'id':'two','mime':'video/mp4'}
         self.assertEqual(select(options(),[a]),a);self.assertIsNone(select(options(value={'video_background':'off'}),[a]))
