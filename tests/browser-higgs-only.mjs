@@ -13,7 +13,7 @@ try{
  await page.waitForFunction(()=>document.querySelector('#voice-inputs [data-voice-field="emotion"]').value==='enthusiasm');
  assert.equal(await page.locator('#voice-inputs [data-voice-field="emotion"]').inputValue(),'enthusiasm');assert.equal(await page.locator('#voice-inputs [data-voice-field="pitch"]').inputValue(),'high');
  assert.equal(await page.locator('#voice-inputs [data-voice-field="emotion"]').evaluate(e=>e.closest('.prompt-field').hidden),false);
- await page.getByRole('button',{name:'Parametri del motore…'}).click();assert.match(await page.locator('.voice-parameters').textContent(),/Higgs Audio v3/);await page.locator('.voice-parameters footer button').click();
+ await page.click('[data-mode-settings="voice-inputs"]');assert.match(await page.locator('#voice-inputs').textContent(),/Higgs/);await page.locator('#prompt-mode-settings footer button').click();
  await page.route('**/api/chats/*/messages',r=>r.fulfill({json:{job_id:'synthetic',intent:'voice'}}));const pending=page.waitForRequest(r=>r.method()==='POST'&&r.url().endsWith('/messages'));
  await page.fill('#prompt','Testo: Oggi impariamo qualcosa di nuovo.');await page.locator('#composer').evaluate(e=>e.requestSubmit());const sent=(await pending).postDataJSON();assert.equal(sent.voice_fields.engine,'higgs');assert.equal(sent.voice_fields.emotion,'enthusiasm');assert.equal(sent.voice_fields.pitch,'high');assert.deepEqual(sent.voice_fields.params,{});
  await page.click('#settings-open');await page.click('[data-tab="advanced"]');assert.equal(await page.locator('[data-setting="voice_engine"] option').count(),1);assert.equal(await page.locator('[data-setting^="voice_qwen"],[data-setting^="voice_chatterbox"]').count(),0);

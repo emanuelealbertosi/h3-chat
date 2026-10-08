@@ -1,3 +1,4 @@
+import {initComposerSettings} from './composer-settings.js';
 const $=selector=>document.querySelector(selector);
 function button(text,id){const element=document.createElement('button');element.type='button';element.className='prompt-choice';element.textContent=text;if(id)element.id=id;return element;}
 function field(title){const element=document.createElement('div');element.className='prompt-field';const heading=document.createElement('span');heading.className='prompt-field-label';heading.textContent=title;element.append(heading);return element;}
@@ -44,7 +45,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  for(const id of ['slides-options','music-inputs','voice-inputs','video-hint'])context.append($('#'+id));
  slides.classList.add('prompt-slide-options');
  const count=$('#slides-count'),countLabel=count.closest('label');countLabel.classList.add('prompt-count');const minus=button('−'),plus=button('＋');minus.ariaLabel='Meno slide';plus.ariaLabel='Più slide';count.before(minus);count.after(plus);for(const [item,delta] of [[minus,-1],[plus,1]])item.onclick=()=>{count.value=Math.max(1,Math.min(30,(Number(count.value)||8)+delta));count.dispatchEvent(new Event('change',{bubbles:true}));render();};
- const slideTechnical=field('Presentazioni · opzioni tecniche');technicalBody.append(slideTechnical);
+ const slideTechnical=field('Presentazioni · opzioni tecniche');slides.append(slideTechnical);
  for(const id of ['slides-engine','slides-vision'])slideTechnical.append($('#'+id).closest('label'));
  for(const [id,title] of [['slides-format','Formato'],['slides-design','Stile'],['slides-detail','Contenuto']])pills($('#'+id),title);
  for(const id of ['slides-engine','slides-vision'])pills($('#'+id),id==='slides-engine'?'Motore slide':'Analisi delle figure');
@@ -69,6 +70,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  const llmPicker=pills($('#chat-model'),'Modello LLM',true);llmPicker.classList.add('prompt-llm-picker');technicalBody.append(llmPicker);const modelButton=button('Scegli LLM','prompt-llm-open');footer.prepend(modelButton);modelButton.onclick=()=>open('models');
  const identity=button('File e percorso del modello');identity.className='text-button';identity.onclick=()=>{dialog.close();$('#model-name').click();};llmPicker.append(identity);
  const update=()=>render();composer.addEventListener('change',update);composer.addEventListener('input',event=>{if(event.target!==$('#prompt'))render();});
+ const modeSettings=initComposerSettings({context,getState,onChange:render});
  function render(){
   const state=getState();if(!state)return;
   const value=visualControls.read(),mode=lab.value;
@@ -77,6 +79,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
   imagePanel.hidden=!value.image_model;slides.hidden=mode!=='slides';slideTechnical.hidden=mode!=='slides';generatedModels.hidden=!$('#slides-generate-images').checked;
   voiceMode.hidden=!!value.voice&&mode==='manim';context.hidden=!(mode==='slides'||mode==='manim'||mode==='infographic'||value.image_model||value.voice||value.music||value.video);
   const infographic=document.querySelector('#infographic-options');if(infographic)infographic.hidden=mode!=='infographic';
+  const manim=document.querySelector('#manim-presentation-options');if(manim)manim.hidden=mode!=='manim';
   assistant.textContent='Assistant '+(value.assistant?'On':'Off');assistant.title='Prepara le istruzioni con il LLM della chat';
   for(const update of mirrors)update();
   const model=state.models.find(m=>m.id===state.settings.chat_model),vision=!state.settings.vision_enabled?'Vision Off':model?.vision?.enabled?'Vision '+(model.api?'API':state.settings.vision_device.toUpperCase()):'Non vision';
@@ -85,6 +88,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
   technical.title=summary.textContent;
   modelButton.textContent='LLM · '+($('#chat-model').selectedOptions[0]?.textContent||'Scegli un modello');modelButton.title=$('#chat-model').title;modelButton.disabled=$('#chat-model').disabled;
   $('.side-bottom>small').textContent='H3 CHAT · '+state.version;
+  modeSettings.render();
  }
  return {render};
 }
