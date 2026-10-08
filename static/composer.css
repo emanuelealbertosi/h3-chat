@@ -22,3 +22,10 @@
 .prompt-mode-dialog[open]{display:flex;flex-direction:column;box-sizing:border-box}
 .prompt-mode-dialog>header,.prompt-mode-dialog>footer,.prompt-mode-dialog>nav{flex-shrink:0}
 .prompt-mode-dialog .prompt-options-body{min-height:0}
+
+/* Align messages and composer to the space left by the sidebar and canvas. */
+.conversation{container-type:inline-size;--chat-gutter:clamp(12px,3cqw,47px);--chat-frame-width:min(max(906px,78vw),calc(100cqw - 2 * var(--chat-gutter)))}
+.has-canvas .conversation{--chat-gutter:clamp(12px,3cqw,24px)}
+.conversation .scroll-area{padding-inline:0}
+.conversation #messages{width:var(--chat-frame-width);max-width:none}
+.conversation .composer-area{width:calc(var(--chat-frame-width) + 2 * var(--chat-gutter));max-width:none;padding-left:var(--chat-gutter);padding-right:var(--chat-gutter)}

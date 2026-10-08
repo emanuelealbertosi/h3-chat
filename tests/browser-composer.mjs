@@ -41,9 +41,13 @@ try{
  await page.click('#prompt-options-open');await page.waitForFunction(()=>document.querySelector('#chat-vision-max-refs').value==='8');assert.equal(await page.inputValue('#chat-vision-max-refs'),'8');await page.getByRole('button',{name:'Fatto',exact:true}).click();
  assert.match(await page.locator('#prompt-technical-summary').textContent(),/contesto.*max token/);
  await page.click('#sidebar-close');await page.waitForFunction(()=>document.querySelector('main').getBoundingClientRect().left===0);assert.equal(await page.locator('#sidebar').evaluate(e=>e.inert),true);
+ await page.waitForFunction(()=>document.querySelector('#composer').getBoundingClientRect().width>=innerWidth*.75);
+ const wide=await page.locator('#composer').evaluate(e=>e.getBoundingClientRect().width);assert.ok(wide>=1640*.75);
+ const aligned=await page.evaluate(()=>{const a=document.querySelector('#composer').getBoundingClientRect(),b=document.querySelector('#messages').getBoundingClientRect();return Math.abs(a.left-b.left)<2&&Math.abs(a.width-b.width)<2;});assert.ok(aligned);await page.screenshot({path:'work/composer-qa/wide-chat.png',fullPage:true});
  await page.reload();await page.waitForFunction(()=>document.body.classList.contains('sidebar-collapsed'));await page.click('#mobile-nav');assert.equal(await page.locator('#sidebar').evaluate(e=>e.inert),false);
  await page.click('#canvas-toggle');await page.locator('#canvas-splitter').waitFor();const initial=await page.locator('#canvas-panel').evaluate(e=>e.getBoundingClientRect().width),split=await page.locator('#canvas-splitter').boundingBox();
  await page.mouse.move(split.x+4,split.y+80);await page.mouse.down();await page.mouse.move(split.x-140,split.y+80);await page.mouse.up();const expanded=await page.locator('#canvas-panel').evaluate(e=>e.getBoundingClientRect().width);assert.ok(expanded>initial+100);
+ assert.ok(await page.locator('#composer').evaluate(e=>e.getBoundingClientRect().width)<wide-100);assert.equal(await page.locator('.conversation').evaluate(e=>e.scrollWidth>e.clientWidth+2),false);
  await page.locator('#canvas-splitter').press('ArrowRight');const narrowed=await page.locator('#canvas-panel').evaluate(e=>e.getBoundingClientRect().width);assert.ok(narrowed<expanded-20);
  await page.screenshot({path:'work/composer-qa/canvas.png',fullPage:true});await page.reload();await page.click('#canvas-toggle');assert.ok(Math.abs(await page.locator('#canvas-panel').evaluate(e=>e.getBoundingClientRect().width)-narrowed)<3);
  await page.locator('#canvas-splitter').press('End');assert.ok(await page.locator('.conversation').evaluate(e=>e.getBoundingClientRect().width)>=330);await page.locator('#canvas-splitter').dblclick();
