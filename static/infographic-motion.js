@@ -4,12 +4,34 @@
  const clamp=v=>Math.max(0,Math.min(1,v));
  function number(value,fallback,low=0,high=180){const n=Number(value);return value!==undefined&&value!==''&&Number.isFinite(n)?Math.max(low,Math.min(high,n)):fallback;}
  function freeze(doc){for(const element of doc.querySelectorAll('*')){element.style?.setProperty('animation','none','important');element.style?.setProperty('transition','none','important');}}
+ function panelTimes(doc,options,duration){
+  const count={columns2:2,rows2:2,columns3:3,rows3:3,pip:2}[options.layout]||1;if(count===1)return [];
+  const order=options.panel_order==='auto'||!options.panel_order?'123'.slice(0,count):options.panel_order,interval=Math.min(number(options.panel_interval,.8,.2,30),Math.max(0,duration*.9-Math.min(.65,duration*.15))/Math.max(1,count-1));
+  const panels=[...doc.querySelectorAll('[data-panel]')].filter(e=>/^[123]$/.test(e.dataset.panel)&&Number(e.dataset.panel)<=count);
+  for(const panel of panels){const sequence=options.panel_appearance==='sequence',start=sequence?order.indexOf(panel.dataset.panel)*interval:0;panel.dataset.start=String(start);panel.dataset.duration=String(Math.min(.65,duration*.15));delete panel.dataset.out;panel.dataset.motion=sequence&&['fade','slide','zoom','blur','wipe'].includes(panel.dataset.motion)?panel.dataset.motion:sequence?'fade':'appear';for(const child of panel.querySelectorAll('[data-motion]'))if(number(child.dataset.start,0)<start)child.dataset.start=String(start);}
+  return panels;
+ }
+ function timingScale(nodes,duration){const latest=Math.max(0,...nodes.filter(e=>e.dataset.motion!=='pan').map(e=>number(e.dataset.start,0)+number(e.dataset.duration,.65,.05,30)));return latest>duration*.9?duration*.9/latest:1;}
+ function videoTracks(documents,motion){
+  const options=motion.options||{},delayed=options.video_start==='panel'&&options.layout&&options.layout!=='full',allowed=new Set((motion.videos||(motion.video?[motion.video]:[])).map(v=>v.asset_id)),tracks=new Map(),targets=[];let offset=0;
+  documents.forEach((doc,index)=>{
+   const duration=motion.durations[index];if(delayed)for(const panel of panelTimes(doc,options,duration))doc.body.append(panel);
+   const scale=timingScale([...doc.querySelectorAll('[data-motion]')].slice(0,160),duration);
+   for(const slot of doc.querySelectorAll('div[data-video-asset-id],[data-h3-video]')){
+    const id=slot.dataset.videoAssetId||slot.dataset.h3Video;if(!allowed.has(id))continue;const panel=slot.closest('[data-panel]');if(delayed&&!panel)continue;
+    const key=delayed?JSON.stringify([id,panel.dataset.panel]):id,start=delayed?offset+number(panel.dataset.start,0)*scale:0;
+    if(!tracks.has(key)||tracks.get(key).start>start)tracks.set(key,{key,asset_id:id,start});
+    if(slot.dataset.h3Video)targets.push([slot,key]);
+   }
+   offset+=duration;
+  });
+  for(const [node,key] of targets){node.dataset.h3VideoChannel=key;node.dataset.h3VideoStart=String(tracks.get(key).start);}
+  return [...tracks.values()];
+ }
  function screen(doc,options={},duration=30){
   const layout=options.layout||'full',count={columns2:2,rows2:2,columns3:3,rows3:3,pip:2}[layout]||1;if(count===1)return;
   const width=doc.defaultView.innerWidth,height=doc.defaultView.innerHeight;
-  const order=options.panel_order==='auto'||!options.panel_order?'123'.slice(0,count):options.panel_order;
-  const interval=Math.min(number(options.panel_interval,.8,.2,5),duration*.5/Math.max(1,count-1)),sequence=options.panel_appearance==='sequence';
-  const panels=[...doc.querySelectorAll('[data-panel]')].filter(e=>/^[123]$/.test(e.dataset.panel)&&Number(e.dataset.panel)<=count);
+  const panels=panelTimes(doc,options,duration);
   doc.body.style.setProperty('position','relative','important');doc.body.style.setProperty('overflow','hidden','important');
   for(const panel of panels){
    const index=Number(panel.dataset.panel)-1;doc.body.append(panel);
@@ -19,10 +41,6 @@
    if(layout==='pip'&&index===1){w=width*.32;h=height*.32;x=width-w-width*.03;y=height-h-height*.03;}
    const styles={position:'absolute',left:x+'px',top:y+'px',right:'auto',bottom:'auto',width:w+'px',height:h+'px','min-width':'0','min-height':'0','max-width':'none','max-height':'none',margin:'0','box-sizing':'border-box',overflow:'hidden',transform:'none',translate:'none',rotate:'none',scale:'none',opacity:'1','z-index':String(index+1)};
    for(const [key,value] of Object.entries(styles))panel.style.setProperty(key,value,'important');
-   const start=sequence?order.indexOf(panel.dataset.panel)*interval:0;
-   panel.dataset.start=String(start);panel.dataset.duration=String(Math.min(.65,duration*.15));delete panel.dataset.out;
-   panel.dataset.motion=sequence&&['fade','slide','zoom','blur','wipe'].includes(panel.dataset.motion)?panel.dataset.motion:sequence?'fade':'appear';
-   for(const child of panel.querySelectorAll('[data-motion]'))if(number(child.dataset.start,0)<start)child.dataset.start=String(start);
   }
   for(const child of [...doc.body.children])if(!panels.includes(child)&&child.tagName!=='STYLE')child.style.setProperty('display','none','important');
   states.delete(doc);
@@ -36,10 +54,10 @@
   });states.set(doc,entries);return entries;
  }
  function apply(doc,time,duration){
-  const entries=prepare(doc),latest=Math.max(0,...entries.filter(e=>e.effect!=='pan').map(({element})=>number(element.dataset.start,0)+number(element.dataset.duration,.65,.05,30)));
+  const entries=prepare(doc);
   // Compress only overlong choreography; preserve its ordering and layout.
   // The last entrance finishes with a short readable hold before the cut.
-  const scale=latest>duration*.9?duration*.9/latest:1;
+  const scale=timingScale(entries.map(e=>e.element),duration);
   for(const {element,base,effect} of entries){
    const start=number(element.dataset.start,0)*scale,span=Math.max(.02,number(element.dataset.duration,.65,.05,30)*scale),raw=clamp((time-start)/span),p=ease(raw,element.dataset.ease),visible=time>=start;
    let opacity=visible?Number(base.opacity):0,transform='',filter=base.filter==='none'?'':base.filter,clip=base.clipPath;
@@ -66,5 +84,5 @@
    if(previous&&frame.contentDocument)apply(frame.contentDocument,durations[i]-.001,durations[i]);
   });return {index,time:local};
  }
- globalThis.H3Motion={apply,render,effects,freeze,screen};
+ globalThis.H3Motion={apply,render,effects,freeze,screen,videoTracks};
 })();

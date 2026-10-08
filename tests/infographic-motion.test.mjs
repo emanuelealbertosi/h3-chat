@@ -24,6 +24,23 @@ test('three panels preserve physical positions for every entrance order',()=>{
 });
 test('short scenes compress panel gaps but retain the chosen order',()=>{
  const {elements,doc}=panels();context.H3Motion.screen(doc,{layout:'rows3',panel_appearance:'sequence',panel_order:'321',panel_interval:5},1);
- assert.deepEqual(elements.map(e=>e.dataset.start),['0.5','0.25','0']);assert.deepEqual(elements.map(e=>e.style.values.top),['0px','240px','480px']);
- context.H3Motion.apply(doc,.8,1);for(const e of elements)assert.equal(e.style.values.opacity,'1');
+ assert.deepEqual(elements.map(e=>e.dataset.start),['0.75','0.375','0']);assert.deepEqual(elements.map(e=>e.style.values.top),['0px','240px','480px']);
+ context.H3Motion.apply(doc,.95,1);for(const e of elements)assert.equal(e.style.values.opacity,'1');
+});
+test('requested panel gaps stay intact when all entrances fit the scene',()=>{
+ const {elements,doc}=panels();context.H3Motion.screen(doc,{layout:'rows3',panel_appearance:'sequence',panel_order:'123',panel_interval:5},15);
+ assert.deepEqual(elements.map(e=>e.dataset.start),['0','5','10']);
+});
+
+function clockScene(ids){
+ const {elements,doc}=panels(),slots=ids.filter(Boolean).map((id,i)=>({dataset:{videoAssetId:id},closest:()=>elements[i]}));
+ doc.querySelectorAll=selector=>selector==='[data-panel]'?elements:selector==='[data-motion]'?doc.body.children:slots;
+ return doc;
+}
+test('delayed clocks distinguish one clip in different panels and continue across scenes',()=>{
+ const docs=[clockScene(['same','same',null]),clockScene(['same','same','later'])];
+ const motion={durations:[4,4],options:{layout:'columns3',panel_appearance:'sequence',panel_order:'231',panel_interval:.8,video_start:'panel'},videos:[{asset_id:'same'},{asset_id:'later'}]};
+ const clocks=Array.from(context.H3Motion.videoTracks(docs,motion));
+ assert.deepEqual(clocks.map(c=>[c.asset_id,c.start]),[['same',1.6],['same',0],['later',4.8]]);assert.notEqual(clocks[0].key,clocks[1].key);
+ motion.options.video_start='together';assert.deepEqual(Array.from(context.H3Motion.videoTracks(docs,motion)).map(c=>[c.asset_id,c.start]),[['same',0],['later',0]]);
 });

@@ -93,7 +93,7 @@ def audio(path,duration,rate,loop=None):
             n=min(cursor,result.shape[1]-start);result[:,start:start+n]=result[:,:n]
     return result
 
-def mix(request,cdp):
+def mix(request,cdp,tracks=None):
     import numpy as np
     motion=request['deck']['infographic'];duration=sum(motion['durations']);rate=48000
     voice=audio(request.get('voice'),duration,rate);music=audio(request.get('music'),duration,rate)
@@ -109,7 +109,14 @@ def mix(request,cdp):
     for video in videos:
         if video['sound']=='mute' or not video['audio']:continue
         from h3chat.infographic_video import asset
-        original=audio(asset(request['data'],request['media'],video['asset_id'],'video/mp4'),duration,rate,video['duration'] if video['end']=='loop' else None)
+        start=0
+        if motion.get('options',{}).get('video_start')=='panel' and motion.get('options',{}).get('layout','full')!='full':
+            matching=[t['start'] for t in (tracks or []) if t['asset_id']==video['asset_id']]
+            if not matching:continue
+            start=min(matching)
+        if start>=duration:continue
+        track=audio(asset(request['data'],request['media'],video['asset_id'],'video/mp4'),duration-start,rate,video['duration'] if video['end']=='loop' else None)
+        original=np.zeros_like(sound);shift=round(start*rate);count=min(track.shape[1],sound.shape[1]-shift);original[:,shift:shift+count]=track[:,:count]
         sound+=original*((1-.8*envelope)[None,:] if video['sound']=='duck' else 1)
     if motion['sfx']!='none':
         cues=cdp.evaluate("[...document.querySelectorAll('[data-h3-scene]')].map(f=>[...f.contentDocument.querySelectorAll('[data-motion]')].slice(0,8).map(e=>({start:Number(e.dataset.start)||0,effect:e.dataset.motion})))")
@@ -167,22 +174,23 @@ def run(request):
         if request.get('mode')=='layout':
             return {'pages':cdp.evaluate('Array.from(document.querySelectorAll("iframe"),f=>H3Infographic.measure(f.contentDocument,'+str(height)+','+json.dumps(deck['infographic'].get('options',{}))+'))')}
         cdp.evaluate('globalThis.motion='+json.dumps(deck['infographic']))
-        samples,rate=mix(request,cdp)
+        tracks=cdp.evaluate('H3Motion.videoTracks(Array.from(document.querySelectorAll("iframe"),f=>f.contentDocument),motion)')
+        samples,rate=mix(request,cdp,tracks)
         sources=deck['infographic'].get('videos') or ([deck['infographic']['video']] if deck['infographic'].get('video') else [])
-        used=set(cdp.evaluate("[...document.querySelectorAll('iframe')].flatMap(f=>[...f.contentDocument.querySelectorAll('[data-h3-video]')].map(e=>e.dataset.h3Video))"))
         from h3chat.infographic_video import Frames,asset
-        for spec in sources:
-            if spec['asset_id'] in used:decoders[spec['asset_id']]=Frames(asset(request['data'],request['media'],spec['asset_id'],'video/mp4'),spec)
+        for track in tracks:
+            spec=next(v for v in sources if v['asset_id']==track['asset_id'])
+            decoders[track['key']]=(Frames(asset(request['data'],request['media'],spec['asset_id'],'video/mp4'),spec),track['start'])
         count=math.ceil(duration*fps)
         with av.open(str(partial),'w',format='mp4',options={'movflags':'+faststart'}) as out:
             video=out.add_stream('libx264',rate=fps);video.width,video.height=size;video.pix_fmt='yuv420p';video.options={'crf':'20','preset':'fast'}
             audio_stream=out.add_stream('aac',rate=rate);audio_stream.layout='stereo';audio_stream.bit_rate=192000;audio_cursor=0
             for index in range(count):
                 cdp.evaluate(f'H3Motion.render(document,motion,{index/fps})')
-                for ident,decoder in decoders.items():
-                    buffer=io.BytesIO();decoder.image(index/fps).save(buffer,'JPEG',quality=90)
+                for channel,(decoder,start) in decoders.items():
+                    buffer=io.BytesIO();decoder.image(max(0,index/fps-start)).save(buffer,'JPEG',quality=90)
                     uri='data:image/jpeg;base64,'+base64.b64encode(buffer.getvalue()).decode()
-                    cdp.evaluate('Promise.all([...document.querySelectorAll("iframe")].flatMap(f=>[...f.contentDocument.querySelectorAll("[data-h3-video]")]).filter(i=>i.dataset.h3Video==='+json.dumps(ident)+').map(async i=>{i.src='+json.dumps(uri)+';await i.decode();}))',True)
+                    cdp.evaluate('Promise.all([...document.querySelectorAll("iframe")].flatMap(f=>[...f.contentDocument.querySelectorAll("[data-h3-video]")]).filter(i=>i.dataset.h3VideoChannel==='+json.dumps(channel)+').map(async i=>{i.src='+json.dumps(uri)+';await i.decode();}))',True)
                 shot=cdp.call('Page.captureScreenshot',{'format':'png','captureBeyondViewport':False,'fromSurface':True})['data']
                 with Image.open(io.BytesIO(base64.b64decode(shot))) as image:frame=av.VideoFrame.from_image(image.convert('RGB').resize(size,Image.Resampling.LANCZOS))
                 frame.pts=index;frame.time_base=Fraction(1,fps)
@@ -199,7 +207,7 @@ def run(request):
             for packet in audio_stream.encode(None):out.mux(packet)
         partial.replace(request['output']);return {'duration':count/fps,'width':size[0],'height':size[1]}
     finally:
-        for decoder in decoders.values():decoder.close()
+        for decoder,_ in decoders.values():decoder.close()
         if cdp:
             try:cdp.call('Browser.close')
             except (OSError,RuntimeError):pass

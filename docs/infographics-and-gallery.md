@@ -49,6 +49,21 @@ I clip proseguono fra le scene e conservano le proporzioni con **Mostra intero**
 Solo il video principale può mantenere il proprio audio originale; gli altri
 rimangono muti. Puoi combinare video, immagini, testi e diagrammi.
 
+In **Video → Partenza dei video**, **Insieme** conserva la linea temporale comune.
+**All’ingresso del pannello** tiene ogni video sul primo fotogramma fino al suo
+ingresso, poi lo riproduce da zero. Anche l’audio originale del video principale
+aspetta il suo ingresso. La scelta è disponibile anche nel canvas per le
+infografiche già create; premi **Esporta / aggiorna MP4** per aggiornare il filmato.
+
+L’intervallo fra ingressi è impostabile da 0,2 a 30 secondi e segue l’ordine scelto.
+Puoi scrivere «fai partire un video ogni 3 secondi» o «delay di 3 secondi fra i
+video»: il prompt abilita gli ingressi in sequenza e la partenza al pannello.
+Le scene troppo brevi comprimono i tempi per mostrare tutti i pannelli.
+La durata totale resta una scelta separata: per vedere integralmente tre clip
+da 15 secondi con partenze a 0, 3 e 6 secondi serve almeno una scena da 21 secondi.
+**Ferma l’ultimo fotogramma / Ripeti** resta indipendente dalla partenza; il video
+prosegue fra le scene dalla prima comparsa dello stesso abbinamento video-pannello.
+
 ## Usare un video già pronto
 
 In **Infografica → Video di sfondo**, premi **Allega video** oppure scegli un
@@ -59,7 +74,8 @@ Non richiede MiniMax o un nuovo modello video. Vision può descrivere il primo
 fotogramma; questa modalità non analizza il contenuto di tutto il filmato.
 
 - **Mostra intero** conserva le proporzioni e aggiunge spazio ai lati se necessario.
-- **Riempi · ritaglia** riempie il formato scelto senza deformare il filmato.
+- **Riempi · ritaglia** riempie il formato scelto senza deformare il filmato,
+  con un ritaglio centrale fisso che non segue il soggetto.
 - Se il filmato è corto, puoi fermare l’ultimo fotogramma o **Ripeti**.
 - L’audio originale è escluso di default. Puoi mantenerlo oppure abbassarlo
   durante la nuova voce. Con Ripeti, anche l’audio originale si ripete.

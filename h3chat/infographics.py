@@ -15,10 +15,10 @@ CHOICES={'format':tuple(FORMATS),'style':('auto','professional','playful','comic
  'music':('auto','none','uploaded','generate','jingle'),'sfx':('none','subtle','strong'),
  'transition':('auto','cut','fade','slide','zoom','wipe'),'voice_style':('auto','serious','lively','spot','warm','radio'),
  'output':('video','static'),'corners':('square','soft','round'),'frame':('dark','light'),
- 'video_background':('auto','off'),'video_fit':('contain','cover'),'video_end':('freeze','loop'),'video_audio':('mute','keep','duck')}
+ 'video_background':('auto','off'),'video_fit':('contain','cover'),'video_end':('freeze','loop'),'video_audio':('mute','keep','duck'),'video_start':('together','panel')}
 DEFAULTS={'format':'9:16','style':'auto','palette':'auto','shapes':'auto','pace':'auto','images':'auto',
  'music':'auto','sfx':'subtle','transition':'auto','voice_style':'auto','output':'video','duration':30,'scenes':3,'voice':True,'image_model':'','corners':'square','frame':'dark',
- 'video_background':'auto','video_id':'','video_fit':'contain','video_end':'freeze','video_audio':'mute'}|screen.DEFAULTS
+ 'video_background':'auto','video_id':'','video_fit':'contain','video_end':'freeze','video_audio':'mute','video_start':'together'}|screen.DEFAULTS
 
 def plan_regia(engine,base,brief,schema,settings,cancel,stage,scenes):
     """Bound planning separately from the user's final-output allowance.
@@ -64,6 +64,7 @@ def requested(prompt):
 def options(prompt='',value=None):
     if value is not None and (not isinstance(value,dict) or set(value)-set(DEFAULTS)):raise ValueError('Opzioni infografica non valide.')
     result=DEFAULTS|dict(value or {})
+    timing_span=screen.prompt_timing(prompt,result)
     screen.validate(result)
     for key,choices in CHOICES.items():
         if result[key] not in choices:raise ValueError('Opzione infografica non valida: '+key)
@@ -71,7 +72,8 @@ def options(prompt='',value=None):
         if type(result[key]) is not int or not lo<=result[key]<=hi:raise ValueError('Infografica: '+key+' fuori intervallo.')
     if type(result['voice']) is not bool or not isinstance(result['image_model'],str) or len(result['image_model'])>150:raise ValueError('Voce o modello infografica non valido.')
     if not isinstance(result['video_id'],str) or len(result['video_id'])>150:raise ValueError('Riferimento video non valido.')
-    match=re.search(r'\b(\d{1,3})\s*(?:secondi|seconds|sec\b|s\b)',prompt,re.I)
+    duration_prompt=prompt if timing_span is None else prompt[:timing_span[0]]+prompt[timing_span[1]:]
+    match=re.search(r'\b(\d{1,3})\s*(?:secondi|seconds|sec\b|s\b)',duration_prompt,re.I)
     if match:
         duration=int(match[1])
         if not 5<=duration<=120:raise ValueError('Infografiche animate: durata da 5 a 120 secondi.')

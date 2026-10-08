@@ -1,6 +1,7 @@
 """User-selected panel geometry; the LLM authors the HTML inside each panel."""
 from html.parser import HTMLParser
 from itertools import permutations
+import re
 LAYOUTS={'full':(1,'schermo intero'),'columns2':(2,'due colonne affiancate'),'rows2':(2,'due riquadri sopra/sotto'),
          'columns3':(3,'tre colonne affiancate'),'rows3':(3,'tre riquadri sovrapposti'),'pip':(2,'principale con riquadro in basso a destra')}
 DEFAULTS={'layout':'full','panel_appearance':'all','panel_order':'auto','panel_interval':.8}
@@ -10,7 +11,17 @@ def validate(opts):
     count=LAYOUTS[opts['layout']][0]
     if opts.get('panel_order') not in ('auto',*(''.join(p) for p in permutations('123'[:count]))):raise ValueError('Ordine dei riquadri non valido per questa composizione.')
     value=opts.get('panel_interval')
-    if type(value) not in (int,float) or not .2<=value<=5:raise ValueError('Intervallo fra riquadri: da 0,2 a 5 secondi.')
+    if type(value) not in (int,float) or not .2<=value<=30:raise ValueError('Intervallo fra riquadri: da 0,2 a 30 secondi.')
+
+def prompt_timing(prompt,opts):
+    if LAYOUTS.get(opts.get('layout'),(1,''))[0]==1:return
+    match=re.search(r'\b(?:video|riquadr[oi]|pannell[oi])\b.{0,60}?\b(?:ogni|intervallo(?:\s+di)?|delay(?:\s+di)?|ritardo(?:\s+di)?)\s+(\d+(?:[.,]\d+)?)\s*(?:second[oi]\b|s\b)',prompt,re.I)
+    if not match:match=re.search(r'\b(?:intervallo|delay|ritardo)\s+(?:di\s+)?(\d+(?:[.,]\d+)?)\s*(?:second[oi]\b|s\b).{0,40}\b(?:video|riquadr[oi]|pannell[oi])\b',prompt,re.I)
+    if match:
+        opts['panel_interval']=float(match[1].replace(',','.'));opts['panel_appearance']='sequence'
+        if re.search(r'\bvideo\b',match[0],re.I):opts['video_start']='panel'
+        unit=re.match(r'\s*(?:second[oi]\b|s\b)',prompt[match.end(1):],re.I)
+        return match.start(1),match.end(1)+unit.end()
 
 def brief(opts,duration=None):
     count,label=LAYOUTS[opts['layout']]

@@ -9,6 +9,19 @@ from h3chat.store import DEFAULTS
 ROOT=Path(__file__).resolve().parents[1]
 
 class ScreenTests(unittest.TestCase):
+ def test_video_start_defaults_and_prompt_interval(self):
+  self.assertEqual(options()['video_start'],'together')
+  for prompt in ('Fai partire un video ogni 3 secondi','Usa un delay di 3 secondi fra i video','Video con intervallo di 3 secondi'):
+   value=options(prompt,{'layout':'columns3'})
+   self.assertEqual((value['video_start'],value['panel_appearance'],value['panel_interval'],value['duration']),('panel','sequence',3,30))
+  value=options('Crea 21 secondi: fai partire un video ogni 3 secondi',{'layout':'columns3'})
+  self.assertEqual(value['duration'],21)
+  self.assertEqual(options('Video con un ritardo di 2,5 secondi',{'layout':'rows2'})['panel_interval'],2.5)
+  self.assertEqual(options('Video di 21 secondi con delay di 3 secondi',{'layout':'columns3'})['duration'],21)
+  self.assertEqual(options('Una lezione con esempi ogni 10 secondi',{'layout':'rows3'})['panel_interval'],.8)
+  self.assertEqual(options(value={'panel_interval':30})['panel_interval'],30)
+  for value in ({'video_start':'invalid'},{'panel_interval':31}):
+   with self.assertRaises(ValueError):options(value=value)
  def test_static_scene_requires_llm_animation_repair_and_rejects_unusable_timing(self):
   from h3chat.infographic_animation import ensure,playable
   for html in ('<h1>Fermo</h1>','<h1 data-motion="appear">Fermo</h1>','<h1 data-motion="fade" data-start="nan">Errato</h1>','<h1 data-motion="fade" data-start="50">Fuori scena</h1>','<h1 data-motion="fade" data-duration="0">Errato</h1>'):
