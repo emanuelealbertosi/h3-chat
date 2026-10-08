@@ -87,7 +87,7 @@ export async function renderSlides(target,value,options={}){
   const edit=document.createElement('button');edit.id='slide-edit';edit.textContent=selected.editing?'Termina modifica':'Modifica grafica';edit.disabled=!options.editable||!options.onChange||pageNotReady(deck.pages[selected.index]);
   edit.onclick=()=>{selected.editing=!selected.editing;renderSlides(target,value,options);};controls.append(edit);
   if(deck.engine==='llm'){
-    const {mountSlideRevision}=await import('./slide-ai.js');mountSlideRevision(target,selected,deck.pages[selected.index],options);
+    const {mountSlideRevision}=await import('./slide-ai.js');mountSlideRevision(target,selected,deck.pages[selected.index],{...options,animatedInfographic:!!deck.infographic&&deck.infographic.options?.output!=='static'});
   }
   const viewport=document.createElement('div');viewport.className='slides-viewport';target.append(viewport);
   const page=deck.pages[selected.index];const frame=await pageElement(deck,page,selected.index,value.media,options,viewport);

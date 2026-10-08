@@ -18,11 +18,12 @@ export function initSlideImages(){
 export function mountSlideRevision(target,selected,page,options){
  if(!options.onRegenerate)return;
  const details=document.createElement('details');details.className='slide-ai-revision no-export';details.open=!!selected.aiOpen;
- const summary=document.createElement('summary');summary.textContent='Ricrea questa slide con AI';details.append(summary);
+ const summary=document.createElement('summary');summary.textContent=options.animatedInfographic?'Ricrea questa scena animata con AI':'Ricrea questa slide con AI';details.append(summary);
  details.ontoggle=()=>selected.aiOpen=details.open;
  const form=document.createElement('form'),label=document.createElement('label'),input=document.createElement('textarea'),button=document.createElement('button'),error=document.createElement('p');
  label.textContent='Modifiche per la slide '+(selected.index+1);input.placeholder='Es. usa due colonne, una palette più vivace e amplia la spiegazione…';input.ariaLabel='Istruzioni AI per questa slide';input.rows=3;input.maxLength=8000;input.required=true;input.value=selected.aiPrompt||'';input.oninput=()=>selected.aiPrompt=input.value;
- button.type='submit';button.textContent='Ricrea solo questa slide';button.disabled=!options.editable||page.status==='writing';input.disabled=!options.editable;
+ button.type='submit';button.textContent=options.animatedInfographic?'Ricrea scena e aggiorna video':'Ricrea solo questa slide';button.disabled=!options.editable||page.status==='writing';input.disabled=!options.editable;
+ if(options.animatedInfographic){const note=document.createElement('p');note.className='small-note';note.textContent='Ricrea contenuti, tempi ed effetti di questa scena. Il filmato viene aggiornato conservando le altre scene, voce e musica.';form.append(note);}
  error.className='message-error';error.hidden=true;label.append(input);form.append(label,button,error);details.append(form);target.append(details);
  form.onsubmit=async event=>{event.preventDefault();button.disabled=true;error.hidden=true;try{await options.onRegenerate(selected.index,input.value);selected.aiPrompt='';selected.aiOpen=false;selected.follow=true;}catch(e){error.textContent=e.message;error.hidden=false;button.disabled=!options.editable;}};
 }

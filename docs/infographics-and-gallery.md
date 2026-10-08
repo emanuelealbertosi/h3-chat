@@ -23,6 +23,24 @@ e un modello immagini è configurato. **Allegati / galleria** usa quelle disponi
 **Genera con AI** prepara un unico piano e un batch con il modello selezionato.
 Il batch locale rilascia gli altri motori, poi ripristina l’LLM per comporre l’HTML.
 
+## Split screen e ordine degli ingressi
+
+In **Infografica → Impostazioni → Composizione dello schermo** scegli due o tre
+riquadri affiancati, sopra/sotto, oppure principale con un riquadro sovrapposto.
+L’LLM progetta contenuti, colori, immagini ed effetti dentro ciascun riquadro;
+il motore mantiene soltanto la disposizione scelta e i suoi confini.
+
+**Comparsa dei riquadri → In sequenza** abilita ordine e intervallo fra ingressi.
+Con tre riquadri puoi scegliere 123, 132, 213, 231, 312 o 321. I numeri indicano
+la posizione fisica, da sinistra a destra o dall’alto in basso; in 231 entra prima
+il centrale, poi il destro e infine il sinistro. Gli intervalli si adattano alle
+scene brevi. Ogni riquadro rimane visibile dopo il proprio ingresso.
+
+Puoi allegare fino a tre MP4 e indicare nel prompt quali usare nei riquadri.
+I clip proseguono fra le scene e conservano le proporzioni con **Mostra intero**.
+Solo il video principale può mantenere il proprio audio originale; gli altri
+rimangono muti. Puoi combinare video, immagini, testi e diagrammi.
+
 ## Usare un video già pronto
 
 In **Infografica → Video di sfondo**, premi **Allega video** oppure scegli un
@@ -92,6 +110,14 @@ voce o musica. Il player mostra l’ultimo video esportato; dopo una modifica
 serve una nuova esportazione. Il rendering usa Microsoft Edge presente in Windows
 e PyAV nel runtime privato. Stop chiude anche tutti i processi del renderer privato.
 Il video viene pubblicato soltanto quando completo.
+
+**Ricrea questa scena animata con AI → Ricrea scena e aggiorna video** riscrive
+soltanto la scena selezionata, compresi tempi ed effetti, e aggiorna automaticamente
+il filmato. Conserva le altre scene, la voce e la musica già generate. Se il modello
+restituisce HTML statico senza animazioni utilizzabili, l’app chiede una correzione
+prima di accettare il risultato. Per le modifiche grafiche manuali resta disponibile
+**Esporta / aggiorna MP4**. Nel canvas la vista iniziale mostra tutti gli elementi:
+premi **Anteprima** per riprodurre la scena.
 
 ## Galleria
 

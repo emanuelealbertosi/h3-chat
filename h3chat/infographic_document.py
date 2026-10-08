@@ -10,8 +10,8 @@ from .slides import FORMATS
 from .slide_html import source
 
 class Clean(HTMLParser):
-    def __init__(self,data,media):
-        super().__init__();self.data=Path(data);self.assets={m['id']:m for m in media if m.get('mime') in ('image/png','image/jpeg')};self.out=[];self.skipped=0;self.style=False
+    def __init__(self,data,media,videos=None):
+        super().__init__();self.data=Path(data);self.assets={m['id']:m for m in media if m.get('mime') in ('image/png','image/jpeg')};self.out=[];self.skipped=0;self.style=False;self.videos=videos or {}
     def handle_starttag(self,tag,attrs):
         if tag in ('script','iframe','object','embed','form','video','audio'):self.skipped+=1;return
         if self.skipped:return
@@ -31,6 +31,8 @@ class Clean(HTMLParser):
             if file.stat().st_size>16*1024**2:raise ValueError('Immagine infografica oltre 16 MB.')
             clean.append(' src="data:'+asset['mime']+';base64,'+base64.b64encode(file.read_bytes()).decode()+'"')
         self.out.append('<'+tag+''.join(clean)+'>')
+        video=self.videos.get(dict(attrs).get('data-video-asset-id')) if tag=='div' else None
+        if video:self.out.append(video)
     def handle_endtag(self,tag):
         if tag in ('script','iframe','object','embed','form','video','audio'):self.skipped=max(0,self.skipped-1);return
         if self.skipped:return
@@ -66,9 +68,15 @@ def document(root,data,deck,media):
         validate(video);asset(data,media,video['asset_id'],'video/mp4')
         poster=asset(data,media,video['poster_id'],'image/jpeg')
         if poster.stat().st_size>16*1024**2:raise ValueError('Anteprima video troppo grande.')
-        backdrop='<style>body{position:relative!important;isolation:isolate;background:transparent!important;height:'+str(height)+'px}html{background:#101820}img[data-h3-video]{position:absolute!important;inset:0!important;z-index:-1!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;object-fit:'+video['fit']+'!important;pointer-events:none!important}</style><img data-h3-video data-h3-trusted src="data:image/jpeg;base64,'+base64.b64encode(poster.read_bytes()).decode()+'">'
+        backdrop='<style>body{position:relative!important;isolation:isolate;background:transparent!important;height:'+str(height)+'px}html{background:#101820}img[data-h3-video]{position:absolute!important;inset:0!important;z-index:-1!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;object-fit:'+video['fit']+'!important;pointer-events:none!important}</style><img data-h3-video="'+html.escape(video['asset_id'],quote=True)+'" data-h3-trusted src="data:image/jpeg;base64,'+base64.b64encode(poster.read_bytes()).decode()+'">'
+    video_posters={}
+    for clip in deck.get('infographic',{}).get('videos',[]):
+        from .infographic_video import asset,validate
+        validate(clip);asset(data,media,clip['asset_id'],'video/mp4');poster=asset(data,media,clip['poster_id'],'image/jpeg')
+        if poster.stat().st_size>16*1024**2:raise ValueError('Anteprima video troppo grande.')
+        video_posters[clip['asset_id']]='<img data-h3-video="'+html.escape(clip['asset_id'],quote=True)+'" data-h3-trusted style="display:block;width:100%;height:100%;object-fit:'+clip['fit']+'" src="data:image/jpeg;base64,'+base64.b64encode(poster.read_bytes()).decode()+'">'
     for i,page in enumerate(deck['pages']):
-        cleaner=Clean(data,media);cleaner.feed(source(page.get('html','')))
+        cleaner=Clean(data,media,video_posters);cleaner.feed(source(page.get('html','')))
         inner='<!doctype html><html lang="it"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="'+html.escape(csp,quote=True)+'"><style>html,body{margin:0;width:'+str(width)+'px;height:'+str(height)+'px;overflow:hidden}*,*:before,*:after{box-sizing:border-box;animation:none!important;transition:none!important}'+fonts+math_css+'</style></head><body>'+''.join(cleaner.out)+backdrop+'</body></html>'
         frames.append('<iframe sandbox="allow-same-origin" data-h3-scene="'+str(i)+'" style="position:absolute;inset:0;width:100%;height:100%;border:0" srcdoc="'+html.escape(inner,quote=True)+'"></iframe>')
     return '<!doctype html><html style="background:'+background+'"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; frame-src \'self\'; style-src \'unsafe-inline\'; img-src data:; font-src data:; script-src \'none\'; connect-src \'none\'"></head><body style="margin:0;width:'+str(width)+'px;height:'+str(height)+'px;overflow:hidden;clip-path:inset(0 round '+str(radius)+'px);background:'+background+'">'+''.join(frames)+'</body></html>'

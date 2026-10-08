@@ -28,6 +28,18 @@ def select(opts,media):
     if len(videos)>1:raise ValueError('Hai allegato più video: scegli quello da usare come sfondo nelle opzioni Infografica.')
     return videos[0] if videos else None
 
+def select_many(opts,media):
+    if opts.get('layout','full')=='full':
+        item=select(opts,media);return [item] if item else []
+    if opts.get('video_background','auto')=='off':return []
+    videos=list({m['id']:m for m in media if m.get('mime')=='video/mp4'}.values())
+    if opts.get('video_id'):
+        item=next((m for m in videos if m['id']==opts['video_id']),None)
+        if not item:raise ValueError('Allega il video principale selezionato.')
+        videos.remove(item);videos.insert(0,item)
+    if len(videos)>3:raise ValueError('Split screen: allega fino a tre video; rimuovi quelli che non vuoi usare.')
+    return videos
+
 def probe(path,poster):
     import av
     with av.open(str(path),options={'protocol_whitelist':'file'}) as inp:

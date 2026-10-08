@@ -1,0 +1,32 @@
+import {spawn} from 'node:child_process';
+import {createRequire} from 'node:module';
+import {once} from 'node:events';
+import {createInterface} from 'node:readline';
+import {readFile} from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
+const child=spawn('runtime/python/python.exe',['-X','utf8','tests/serve_canvas_fixture.py'],{stdio:['ignore','pipe','pipe']});let diagnostics='';child.stderr.on('data',x=>diagnostics+=x);
+const lines=createInterface({input:child.stdout});const [line]=await Promise.race([once(lines,'line'),once(child,'exit').then(()=>{throw Error(diagnostics);})]);lines.close();const fixture=JSON.parse(line);
+const browser=await chromium.launch({channel:'msedge',headless:true}),page=await browser.newPage({viewport:{width:1600,height:1100}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+const api=(path,body,method='POST')=>page.evaluate(async({path,body,method})=>{const {token}=await(await fetch('/api/state')).json();const response=await fetch('/api/'+path,{method,headers:{'Content-Type':'application/json','X-H3-Token':token},body:JSON.stringify(body)}),value=await response.json();if(!response.ok)throw Error(value.error);return value;},{path,body,method});
+try{
+ await page.goto(fixture.url);await page.click(`[data-chat="${fixture.chat}"]`);await page.click('#prompt-infographic');await page.click('[data-mode-settings="infographic-options"]');
+ const choice=(field,value)=>page.locator(`[data-infographic-field="${field}"] [data-value="${value}"]`);
+ await choice('layout','columns3').click();await choice('panel_appearance','sequence').click();await choice('panel_order','231').click();assert.equal(await page.locator('[data-infographic-field="panel_order"] button:not([hidden])').count(),7);
+ await choice('layout','rows2').click();assert.equal(await choice('panel_order','auto').getAttribute('aria-pressed'),'true');assert.equal(await page.locator('[data-infographic-field="panel_order"] button:not([hidden])').count(),3);
+ await choice('layout','columns3').click();await choice('panel_order','231').click();await page.locator('[data-info="panel_interval"]').fill('0.8');
+ const clips=[];for(let i=1;i<=3;i++)clips.push(await api('uploads',{name:`clip${i}.mp4`,data:(await readFile(`work/infographic-screen-test/uploads/clip${i}.mp4`)).toString('base64')}));
+ await page.locator('#prompt-mode-settings footer button').click();await page.route('**/api/chats/*/messages',route=>route.fulfill({json:{job_id:'synthetic',canvas:true,intent:'infographic'}}));const sending=page.waitForRequest(r=>r.method()==='POST'&&r.url().endsWith('/messages'));await page.fill('#prompt','Confronta tre pannelli con ingressi 231');await page.locator('#composer').evaluate(e=>e.requestSubmit());const sent=(await sending).postDataJSON();assert.equal(sent.infographic.layout,'columns3');assert.equal(sent.infographic.panel_order,'231');assert.equal(sent.infographic.panel_interval,.8);
+ const posters=[];for(let i=1;i<=3;i++)posters.push(await api('uploads',{name:`poster${i}.jpg`,data:(await readFile(`work/infographic-screen-test/outputs/poster${i}.jpg`)).toString('base64')}));
+ const html=clips.map((clip,i)=>`<section data-panel="${i+1}" style="left:500px;position:absolute;width:900px"><div data-video-asset-id="${clip.id}" style="width:100%;height:100%"></div><h1 data-motion="fade" style="position:absolute;top:10px;color:white">Titolo ${i+1}</h1></section>`).join('');
+ const deck={version:1,engine:'llm',title:'Tre riquadri',format:'16:9',references:[],pages:[{title:'Tre',html,status:'ready',notes:'',sources:[]}],active:0,infographic:{version:1,durations:[3],transition:'cut',sfx:'none',options:sent.infographic,videos:clips.map((clip,i)=>({asset_id:clip.id,poster_id:posters[i].id,duration:2,width:320,height:240,audio:false,fit:'contain',end:'loop',sound:'mute'}))}};
+ await api('canvas/'+fixture.chat,{title:deck.title,content:'```h3-slides\n'+JSON.stringify(deck)+'\n```',media:[...clips,...posters]},'PUT');await page.reload();await page.click(`[data-chat="${fixture.chat}"]`);await page.click('#canvas-toggle');
+ const frame=()=>page.frameLocator('.h3-html-page iframe');await page.waitForFunction(()=>{const clips=[...document.querySelector('.h3-html-page iframe')?.contentDocument.querySelectorAll('video')||[]];return clips.length===3&&clips.every(e=>e.readyState>=2);});assert.equal(await frame().locator('video').count(),3);
+ const rects=await frame().locator('[data-panel]').evaluateAll(nodes=>nodes.map(e=>{const r=e.getBoundingClientRect();return [e.dataset.panel,r.left,r.top,r.width,r.height];}));for(let i=0;i<3;i++){assert.equal(rects[i][0],String(i+1));assert.ok(Math.abs(rects[i][1]-i*1280/3)<1);assert.ok(Math.abs(rects[i][3]-1280/3)<1);assert.equal(rects[i][4],720);}
+ for(const [time,visible] of [['0.7',['2']],['1.5',['2','3']],['2.6',['1','2','3']]]){await page.locator('[data-time]').fill(time);const showing=await frame().locator('[data-panel]').evaluateAll(nodes=>nodes.filter(e=>Number(getComputedStyle(e).opacity)>.98).map(e=>e.dataset.panel));assert.deepEqual(showing,visible);}
+ await page.locator('[data-time]').fill('2.5');await page.waitForFunction(()=>[...document.querySelector('.h3-html-page iframe').contentDocument.querySelectorAll('video')].every(e=>Math.abs(e.currentTime-.5)<.05&&e.muted&&getComputedStyle(e).objectFit==='contain'));
+ // Runtime panel tracks must not shift the identity of editable child tracks.
+ await page.locator('.infographic-timeline details summary').click();await page.getByLabel('Ingresso elemento 1',{exact:true}).fill('1.2');await page.getByLabel('Ingresso elemento 1',{exact:true}).dispatchEvent('change');await page.waitForFunction(()=>document.querySelector('#canvas-save-status')?.textContent.includes('Salvato'));
+ const saved=await page.evaluate(async chat=>await(await fetch('/api/canvas/'+chat)).json(),fixture.chat),parsed=JSON.parse(saved.content.slice(13,-4));assert.match(parsed.pages[0].html,/data-start="1.2"/);assert.doesNotMatch(parsed.pages[0].html,/data-h3-video|<video/);assert.equal(parsed.infographic.videos.length,3);
+ assert.deepEqual(errors,[]);console.log('PASS: split selectors, valid order reset, three authorized videos, panel geometry, ordered animation, video seeking and child-track persistence.');
+}catch(e){console.error(diagnostics);await page.screenshot({path:'work/infographic-screen-test/browser.png'});throw e;}finally{await browser.close();child.kill();}

@@ -63,6 +63,35 @@ class SlideAITests(unittest.TestCase):
         result=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4])
         self.assertEqual(result['pages'][1],original['pages'][1]);self.assertEqual(result['pages'][0]['status'],'interrupted')
 
+    def test_infographic_revision_recreates_motion_and_updates_movie_with_existing_audio(self):
+        chat=self.app.store.create_chat()['id'];_,deck=self.deck(chat)
+        deck['infographic']={'version':1,'durations':[3,3],'transition':'cut','sfx':'none','voice_id':'voice','music_id':'music','options':{'layout':'columns2','panel_appearance':'sequence','panel_order':'21'}}
+        media=[{'id':ident,'name':ident+'.wav','mime':'audio/wav','path':'uploads/'+ident+'.wav'} for ident in ('voice','music')]
+        media.append({'id':'old','name':'old.mp4','mime':'video/mp4','path':'outputs/old.mp4'})
+        for item in media:
+            path=self.app.data/item['path'];path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(b'fixture')
+        saved=self.app.store.canvas_history.save(chat,{'title':deck['title'],'content':encode(deck),'media':media})
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for):sent=enqueue(self.app,chat,{'artifact_id':saved['id'],'page':0,'prompt':'Cambia il titolo e anima i due pannelli'})
+        job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(sent['job_id'],))
+        attempts=[]
+        def complete(messages,settings,cancel,**kw):
+            self.assertIn('data-motion=',messages[0]['content']);self.assertIn('ordine 21',messages[0]['content']);self.assertIn('3 secondi',messages[0]['content'])
+            self.assertNotIn('HTML statico completo.',messages[0]['content']);attempts.append(messages)
+            if len(attempts)==1:return '<section data-panel="1"><h1>Nuovo</h1></section><section data-panel="2"><p>Secondo pannello</p></section>','stop'
+            self.assertIn('La scena restituita è statica',messages[-1]['content'])
+            return '<section data-panel="1"><h1 data-motion="fade" data-start=".8">Nuovo</h1></section><section data-panel="2"><p data-motion="slide">Secondo pannello</p></section>','stop'
+        def tool(worker,request,*args,**kwargs):
+            self.assertEqual(worker,'infographic-worker.py');self.assertEqual(request['deck']['pages'][1],deck['pages'][1])
+            self.assertEqual(request['voice'],str(self.app.data/'uploads/voice.wav'));self.assertEqual(request['music'],str(self.app.data/'uploads/music.wav'))
+            Path(request['output']).write_bytes(b'updated movie');return {}
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete),patch.object(self.app.engine,'tool_call',side_effect=tool) as render,patch.object(self.app.engine,'stop'):
+            self.app.execute_job(job,threading.Event())
+        answer=self.app.store.messages(chat)[-1];self.assertEqual(answer['status'],'done',answer['meta'].get('error'));self.assertEqual(render.call_count,1)
+        artifact=answer['meta']['artifact'];self.assertIn('aggiornato anche il filmato',answer['content'])
+        self.assertEqual(len(attempts),2)
+        self.assertNotIn('old',{m['id'] for m in artifact['media']});self.assertTrue({'voice','music'}<={m['id'] for m in artifact['media']})
+        self.assertEqual(self.app.store.canvas_history.get(chat,saved['id'])['content'],encode(deck))
+
     def test_all_images_are_planned_then_generated_before_html_and_catalog_is_reused(self):
         chat=self.app.store.create_chat()['id']
         with patch.object(self.app.engine,'require_model',side_effect=self.model_for):

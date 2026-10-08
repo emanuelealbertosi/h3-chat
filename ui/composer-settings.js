@@ -15,7 +15,7 @@ export function initComposerSettings({context,getState,onChange}){
   ['music-inputs','Music',()=>[$('#music-inputs [data-music-field="instrumental"]')?.checked?'Strumentale':'Con voce',$('#music-inputs [data-music-field="title"]')?.value,$('#music-inputs [data-music-field="style"]')?.value?.slice(0,100)].filter(Boolean).join(' · ')],
   ['voice-inputs','Voice',()=>['gender','delivery','emotion','expressiveness'].map(key=>selected('#voice-inputs [data-voice-field="'+key+'"]').replace('Auto · segue l’interpretazione','Auto')).filter(Boolean).join(' · ')],
   ['video-hint','Video',()=>['Immagini e audio dal prompt',getState()?.models.find(m=>m.id===getState()?.settings.video_model)?.name].filter(Boolean).join(' · ')],
-  ['infographic-options','Infografica',()=>['format','style','output','voice_style'].map(key=>chosen('[data-infographic-field="'+key+'"]')).filter(Boolean).join(' · ')],
+  ['infographic-options','Infografica',()=>['format','layout','panel_order','style','output','voice_style'].filter(key=>key!=='panel_order'||!$('[data-infographic-field="panel_order"]')?.hidden).map(key=>chosen('[data-infographic-field="'+key+'"]')).filter(Boolean).join(' · ')],
   ['manim-presentation-options','Manim',()=>$('#manim-presentation-enable')?.getAttribute('aria-pressed')==='true'?[...$('#manim-presentation-options').querySelectorAll('[data-manim-source][aria-pressed="true"],[data-manim-mode][aria-pressed="true"]')].map(e=>e.textContent.trim()).join(' · '):'Python libero · '+(getState()?.settings.manim_duration||8)+' s dal preset']
  ];
  function register(){

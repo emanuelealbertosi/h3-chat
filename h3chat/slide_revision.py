@@ -46,6 +46,21 @@ def build(app,job,payload,settings,model,cancel,stage,log_path,meta):
          f"Pagina {index+1}/{len(deck['pages'])}, viewport {FORMATS[deck['format']]}. Titolo: {page['title']}\n"+
          'Stile: '+json.dumps({k:deck.get(k,'') for k in ('visual_direction','design','detail')},ensure_ascii=False)+'\n'+
          'Catalogo immagini: '+json.dumps(images,ensure_ascii=False)+'\nFonti: '+sources[:room//3]+'\nHTML originale (dato da modificare):\n'+page.get('html','')[:room//2]}]
+    motion=deck.get('infographic')
+    if motion:
+        from .infographics import options as infographic_options
+        from . import infographic_screen as screen
+        from . import infographic_animation as animation
+        opts=infographic_options(value=motion.get('options',{}))
+        duration=motion['durations'][index]
+        request[0]['content']=request[0]['content'].replace(BRIEF,animation.HTML_BRIEF)
+        clips=motion.get('videos',[])
+        request[0]['content']+='\nQuesta pagina è una scena animata, non una slide statica. Conserva narrazione e durata: '+str(duration)+' secondi. Ricrea anche la regia degli ingressi con data-motion="fade|slide|zoom|pan|blur|wipe|strobe|typewriter|appear", data-start, data-duration e data-out opzionale, espressi in secondi entro la durata. Niente JavaScript, CSS animation o transition. Mantieni proporzioni e leggibilità.'+screen.brief(opts,duration)
+        request[-1]['content']+='\nOpzioni della scena: '+json.dumps(opts,ensure_ascii=False)+'\nNarrazione già registrata, da accompagnare senza riscriverla: '+page.get('notes','')
+        if clips:
+            request[0]['content']+='\nVideo autorizzati: '+json.dumps(clips,ensure_ascii=False)+'. Inserisci i clip solo tramite contenitori vuoti <div data-video-asset-id="ID" style="width:100%;height:100%"></div>; nessun tag video, iframe o URL esterno.'
+        elif motion.get('video'):
+            request[0]['content']+='\nIl video di sfondo è inserito dal motore. Crea solo sovraimpressioni, mantenendo trasparente il fondo della scena.'
     app.engine.prepare(settings,cancel,stage);app.engine.start_llama(model,settings,log_path,cancel,stage=stage)
     deck['active']=index;page['status']='writing';last=0
     def publish():
@@ -63,10 +78,18 @@ def build(app,job,payload,settings,model,cancel,stage,log_path,meta):
         raw,finish=app.engine.completion(request,settings,cancel,on_text=stream)
         if finish=='length':raise ValueError('Slide incompleta: aumenta Max token. La versione precedente resta nella cronologia.')
         if cancel.is_set():raise Cancelled()
-        page['html']=validate(raw);page['status']='ready'
+        html=validate(raw)
+        if motion:html=screen.ensure_panels(app.engine,request,settings,cancel,html,opts,stream)
+        if motion and opts['output']=='video':
+            html=animation.ensure(app.engine,request,settings,cancel,html,duration,stream)
+            if not screen.valid_panels(html,opts):raise ValueError('La correzione dell’animazione ha perso i riquadri: rigenera la scena.')
+        page['html']=html;page['status']='ready'
         page['sources']=[r['id'] for r in deck.get('references',[]) if '['+r['id']+']' in page['html']]
         page.pop('overrides',None);publish()
     except Exception:
         page['status']='interrupted';publish();raise
     stage(f'Slide {index+1} ricreata · altre pagine conservate')
+    if motion and opts['output']=='video':
+        from .infographics import render_saved
+        render_saved(app,job,settings|{'_infographic_render':{'deck':deck,'media':media}},cancel,stage,log_path,meta)
     return meta['artifact']

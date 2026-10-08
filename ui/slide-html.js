@@ -45,17 +45,26 @@ export async function htmlPage(deck,page,index,media,mount){
   const fonts=(await Promise.all(fontNames.map(async name=>`@font-face{font-family:${name};src:url("${await localFont('/static/'+name+'.ttf')}")}`))).join('');
   const background=deck.infographic?.video,clip=background&&media.find(m=>m.id===background.asset_id&&m.mime==='video/mp4'&&/^(uploads|outputs)\/[\w./-]+\.mp4$/i.test(m.path)&&!m.path.split('/').includes('..'));
   if(background&&!clip)throw Error('Video di sfondo non disponibile negli allegati.');
-  iframe.srcdoc=`<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; script-src 'none'; connect-src 'none'; ${clip?"media-src 'self';":''}"><style data-h3-trusted>html,body{margin:0;width:1280px;min-height:${height}px;box-sizing:border-box}*,*:before,*:after{box-sizing:border-box}${fonts}${deck.infographic?'*,*:before,*:after{animation:none!important;transition:none!important}':''}</style></head><body>${content}</body></html>`;
+  const splitClips=(deck.infographic?.videos||[]).map(spec=>({spec,asset:media.find(m=>m.id===spec.asset_id&&m.mime==='video/mp4'&&/^(uploads|outputs)\/[\w./-]+\.mp4$/i.test(m.path)&&!m.path.split('/').includes('..'))}));if(splitClips.some(c=>!c.asset))throw Error('Video del riquadro non disponibile negli allegati.');
+  iframe.srcdoc=`<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; script-src 'none'; connect-src 'none'; ${clip||splitClips.length?"media-src 'self';":''}"><style data-h3-trusted>html,body{margin:0;width:1280px;min-height:${height}px;box-sizing:border-box}*,*:before,*:after{box-sizing:border-box}${fonts}${deck.infographic?'*,*:before,*:after{animation:none!important;transition:none!important}':''}</style></head><body>${content}</body></html>`;
   frame.append(iframe);mount.append(frame);await loaded;
   const doc=iframe.contentDocument;
   if(clip){
-    const video=doc.createElement('video');video.dataset.h3Video='';video.dataset.h3Trusted='';video.muted=true;video.playsInline=true;video.preload='auto';video.loop=background.end==='loop';video.src='/media/'+clip.path;
+    const video=doc.createElement('video');video.dataset.h3Video=background.asset_id;video.dataset.h3Trusted='';video.muted=true;video.playsInline=true;video.preload='auto';video.loop=background.end==='loop';video.src='/media/'+clip.path;
     const poster=media.find(m=>m.id===background.poster_id&&m.mime==='image/jpeg'&&safePath(m.path));
     if(poster){const preview=new DOMParser().parseFromString(await markup({html:'<img data-asset-id="'+poster.id+'">'},[poster]),'text/html');video.poster=preview.querySelector('img')?.src||'';}
     const style=doc.createElement('style');style.dataset.h3Trusted='';style.textContent=`html{background:#101820}body{position:relative!important;isolation:isolate;background:transparent!important;overflow:hidden!important;height:${height}px}video[data-h3-video]{position:absolute!important;inset:0!important;z-index:-1!important;width:100%!important;height:100%!important;object-fit:${background.fit==='cover'?'cover':'contain'}!important;pointer-events:none!important}`;
     doc.head.append(style);doc.body.append(video);
   }
-  if(deck.infographic)H3Motion.freeze(doc);
+  for(const {spec,asset} of splitClips){
+    for(const slot of [...doc.querySelectorAll('div[data-video-asset-id]')].filter(e=>e.dataset.videoAssetId===spec.asset_id)){
+      const video=doc.createElement('video');video.dataset.h3Video=spec.asset_id;video.dataset.h3Trusted='';video.muted=true;video.playsInline=true;video.preload='auto';video.loop=spec.end==='loop';video.src='/media/'+asset.path;video.style.cssText='display:block;width:100%;height:100%;object-fit:'+(spec.fit==='cover'?'cover':'contain');
+      const poster=media.find(m=>m.id===spec.poster_id&&m.mime==='image/jpeg'&&safePath(m.path));
+      if(poster){const preview=new DOMParser().parseFromString(await markup({html:'<img data-asset-id="'+poster.id+'">'},[poster]),'text/html');video.poster=preview.querySelector('img')?.src||'';}
+      slot.prepend(video);
+    }
+  }
+  if(deck.infographic){H3Motion.screen(doc,deck.infographic.options,deck.infographic.durations[index]);H3Motion.freeze(doc);}
   await doc.fonts.ready;await Promise.all([...doc.images].map(img=>img.decode().catch(()=>{})));
   renderMath(doc.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false});
   // Local bundled math CSS is trusted and does not enable generated scripts.

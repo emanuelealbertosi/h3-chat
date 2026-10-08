@@ -4,6 +4,29 @@
  const clamp=v=>Math.max(0,Math.min(1,v));
  function number(value,fallback,low=0,high=180){const n=Number(value);return value!==undefined&&value!==''&&Number.isFinite(n)?Math.max(low,Math.min(high,n)):fallback;}
  function freeze(doc){for(const element of doc.querySelectorAll('*')){element.style?.setProperty('animation','none','important');element.style?.setProperty('transition','none','important');}}
+ function screen(doc,options={},duration=30){
+  const layout=options.layout||'full',count={columns2:2,rows2:2,columns3:3,rows3:3,pip:2}[layout]||1;if(count===1)return;
+  const width=doc.defaultView.innerWidth,height=doc.defaultView.innerHeight;
+  const order=options.panel_order==='auto'||!options.panel_order?'123'.slice(0,count):options.panel_order;
+  const interval=Math.min(number(options.panel_interval,.8,.2,5),duration*.5/Math.max(1,count-1)),sequence=options.panel_appearance==='sequence';
+  const panels=[...doc.querySelectorAll('[data-panel]')].filter(e=>/^[123]$/.test(e.dataset.panel)&&Number(e.dataset.panel)<=count);
+  doc.body.style.setProperty('position','relative','important');doc.body.style.setProperty('overflow','hidden','important');
+  for(const panel of panels){
+   const index=Number(panel.dataset.panel)-1;doc.body.append(panel);
+   let x=0,y=0,w=width,h=height;
+   if(layout.startsWith('columns')){w=width/count;x=index*w;}
+   if(layout.startsWith('rows')){h=height/count;y=index*h;}
+   if(layout==='pip'&&index===1){w=width*.32;h=height*.32;x=width-w-width*.03;y=height-h-height*.03;}
+   const styles={position:'absolute',left:x+'px',top:y+'px',right:'auto',bottom:'auto',width:w+'px',height:h+'px','min-width':'0','min-height':'0','max-width':'none','max-height':'none',margin:'0','box-sizing':'border-box',overflow:'hidden',transform:'none',translate:'none',rotate:'none',scale:'none',opacity:'1','z-index':String(index+1)};
+   for(const [key,value] of Object.entries(styles))panel.style.setProperty(key,value,'important');
+   const start=sequence?order.indexOf(panel.dataset.panel)*interval:0;
+   panel.dataset.start=String(start);panel.dataset.duration=String(Math.min(.65,duration*.15));delete panel.dataset.out;
+   panel.dataset.motion=sequence&&['fade','slide','zoom','blur','wipe'].includes(panel.dataset.motion)?panel.dataset.motion:sequence?'fade':'appear';
+   for(const child of panel.querySelectorAll('[data-motion]'))if(number(child.dataset.start,0)<start)child.dataset.start=String(start);
+  }
+  for(const child of [...doc.body.children])if(!panels.includes(child)&&child.tagName!=='STYLE')child.style.setProperty('display','none','important');
+  states.delete(doc);
+ }
  function ease(t,kind){t=clamp(t);return kind==='linear'?t:kind==='snap'?1-Math.pow(1-t,4):t*t*(3-2*t);}
  function prepare(doc){
   if(states.has(doc))return states.get(doc);
@@ -43,5 +66,5 @@
    if(previous&&frame.contentDocument)apply(frame.contentDocument,durations[i]-.001,durations[i]);
   });return {index,time:local};
  }
- globalThis.H3Motion={apply,render,effects,freeze};
+ globalThis.H3Motion={apply,render,effects,freeze,screen};
 })();
