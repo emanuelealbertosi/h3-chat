@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import time
 import wave
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'native'),str(ROOT/'runtime/voice/packages'),str(ROOT/'runtime/vision/packages')]
@@ -21,8 +22,8 @@ def run(request):
     spec=importlib.util.spec_from_file_location('h3_voice_backend',ROOT/'native/voice-backend.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     count=len(request['segments']);index=0
     def progress(**kw):emit('stage',message=f"Voice · segmento {index+1}/{count} · "+kw.get('message',f"sintesi · {kw.get('frames',0)} fotogrammi audio"))
-    engine=module.Engine(request['config'],progress);rate=engine.sample_rate
-    folder=Path(request['output']);partial=folder/'voce.partial.wav';cursor=0;srt=[];timeline=[]
+    started=time.monotonic();engine=module.Engine(request['config'],progress);rate=engine.sample_rate
+    folder=Path(request['output']);partial=folder/'voce.partial.wav';cursor=0;srt=[];timeline=[];timings=[]
     try:
         with wave.open(str(partial),'wb') as out:
             out.setnchannels(1);out.setsampwidth(2);out.setframerate(rate)
@@ -36,6 +37,7 @@ def run(request):
                     if type(seed) is not int or not -1<=seed<=2147483647:raise ValueError('Seed del segmento non valido.')
                     engine.seed=seed
                 progress(message='sintesi vocale');wav=engine.generate(segment['spoken'],segment['voice'])
+                timings.append(engine.last_timings)
                 from h3_voice_tempo import adjust
                 wav=adjust(wav,rate,segment.get('speed_factor',request['config'].get('speed_factor',1)))
                 if not len(wav) or not np.isfinite(wav).all():raise ValueError('Il modello ha prodotto audio vuoto o non valido.')
@@ -47,7 +49,9 @@ def run(request):
                 if index<count-1:
                     pause=round(rate*request['config']['pause_ms']/1000);out.writeframes(bytes(pause*2));cursor+=pause
         partial.replace(folder/'voce.wav');(folder/'voce.srt').write_text('\n\n'.join(srt),encoding='utf-8')
-        result={'duration':cursor/rate,'sample_rate':rate,'segments':count,'timeline':timeline}
+        result={'duration':cursor/rate,'sample_rate':rate,'segments':count,'timeline':timeline,
+                'performance':{'load_seconds':round(engine.load_seconds,3),'total_seconds':round(time.monotonic()-started,3),
+                    'precision':engine.precision,'segments':timings}}
         (folder/'voce-timeline.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
         return result
     finally:partial.unlink(missing_ok=True)

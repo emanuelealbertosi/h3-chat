@@ -6,6 +6,17 @@ from h3chat.voice import DEFAULTS,validate,validate_fields,configuration,synthes
 from h3chat.store import Store
 
 class HiggsOnlyTests(unittest.TestCase):
+ def test_regenerate_uses_current_precision_and_preserves_radio_controls(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   store=Store(tmp);chat=store.create_chat()['id']
+   original=store.settings()|{'voice_precision':'8bit','voice_seed':734,'_voice_fields':{'delivery':'radio'}}
+   ident=store.enqueue(chat,'Leggi il testo.',[],original,True)
+   store.execute("UPDATE jobs SET status='done' WHERE id=?",(ident,));store.execute("UPDATE messages SET status='done'")
+   current=store.settings()|{'voice_precision':'bf16'}
+   fresh=store.regenerate(chat,current);payload=json.loads(store.one('SELECT payload FROM jobs WHERE id=?',(fresh,))['payload'])
+   self.assertEqual(payload['settings']['voice_precision'],'bf16')
+   self.assertEqual(payload['settings']['voice_seed'],734)
+   self.assertEqual(payload['settings']['_voice_fields']['delivery'],'radio')
  def test_only_higgs_and_legacy_chat_controls_preserved(self):
   self.assertEqual(list(e.ENGINES),['higgs']);validate(copy.deepcopy(DEFAULTS))
   for old in e.RETIRED:

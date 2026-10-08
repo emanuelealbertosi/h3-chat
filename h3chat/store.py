@@ -223,6 +223,7 @@ class Store:
                 from .llm_options import KEYS
                 value['settings'].update({key:llm_settings[key] for key in ('chat_model','llm_device','vision_enabled',*KEYS)})
                 value['settings']['vision_device']=llm_settings.get('vision_device','cpu')
+                if 'voice_precision' in llm_settings:value['settings']['voice_precision']=llm_settings['voice_precision']
             value["settings"]=normalize_voice(value["settings"])
             payload=json.dumps(value)
             answer_id = original['message_id']

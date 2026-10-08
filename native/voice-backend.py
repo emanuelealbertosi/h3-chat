@@ -54,6 +54,7 @@ class IncompleteAudio(RuntimeError):
 
 class Engine:
     def __init__(self, config, progress=lambda **kw: None):
+        loading_started = time.monotonic()
         os.environ['HF_HUB_OFFLINE'] = '1'
         os.environ['TRANSFORMERS_OFFLINE'] = '1'
         os.environ['HF_HOME'] = str(DATA / 'cache')
@@ -120,6 +121,15 @@ class Engine:
         self.sample_rate = int(self.model.config.sample_rate)
         self.temperature = float(config['temperature'])
         self.seed = config.get('seed',-1)
+        self.precision = config['precision'] if use_cuda else 'fp32'
+        self.clock()
+        self.load_seconds = time.monotonic() - loading_started
+        self.last_timings = {}
+
+    def clock(self):
+        # Synchronize only at phase boundaries so timings include queued GPU work.
+        if self.model.device.type == 'cuda':self.torch.cuda.synchronize(self.model.device)
+        return time.monotonic()
 
     def reference(self, voice):
         key = voice['reference']
@@ -137,27 +147,33 @@ class Engine:
         if not all(hasattr(mod, item) for item in required):
             raise RuntimeError('Versione del modello non compatibile con questo adattatore. Consulta il README.')
         torch.manual_seed(self.seed if self.seed>=0 else stable_seed(voice['id']))
+        started = self.clock()
+        self.progress(stage='reference', message='Preparazione del campione vocale…')
         codes = self.reference(voice)
+        referenced = self.clock()
         cap = max_frames or min(4096, max(1000, len(text) * 7))
         with torch.inference_mode():
             delayed = mod.apply_delay_pattern(codes.to(torch.long))
             ids = m._build_prompt_ids(self.tokenizer, text, num_ref_tokens=delayed.shape[0], reference_text=voice.get('transcript') or None)
             embedded = m._prefill_embeds(ids, delayed)
+            self.progress(stage='prefill', message='Preparazione della frase…')
             output = m.model(inputs_embeds=embedded, use_cache=True)
             past = output.past_key_values
             hidden = output.last_hidden_state[:, -1, :]
             position = embedded.shape[1]
             state = mod._SamplerState(num_codebooks=m.num_codebooks)
             rows = []
-            started = time.monotonic()
+            sampling_started = self.clock()
             for index in range(cap):
                 logits = m.audio_head(hidden).to(torch.float32)[0]
                 row = mod._sampler_step(logits, state, temperature=self.temperature, top_p=0.95, top_k=50)
                 if state.generation_done:
                     break
-                rows.append(row.cpu())
+                # Keep the tiny code rows on their original device until decode.
+                # A per-row CPU copy serializes the GPU loop unnecessarily.
+                rows.append(row)
                 if index % 40 == 0:
-                    self.progress(stage='synthesis', frames=index, elapsed=round(time.monotonic()-started, 1))
+                    self.progress(stage='synthesis', frames=index, elapsed=round(time.monotonic()-sampling_started, 1))
                 next_embed = m.audio_embedding(row.unsqueeze(0)).unsqueeze(1)
                 output = m.model(inputs_embeds=next_embed.to(embedded.dtype), past_key_values=past,
                                  use_cache=True, cache_position=torch.tensor([position], device=m.device))
@@ -167,5 +183,12 @@ class Engine:
                 raise IncompleteAudio('La frase ha raggiunto il limite del modello. Riduci la lunghezza dei segmenti nelle Preferenze e ripeti: nessun audio troncato è stato pubblicato.')
             if len(rows) < m.num_codebooks:
                 raise IncompleteAudio('Il modello non ha prodotto parlato. Prova un altro campione o ripeti.')
+            sampled = self.clock()
+            self.progress(stage='decode', message='Conversione dei token in audio…')
             waveform = m._decode_codes(mod.reverse_delay_pattern(torch.stack(rows)))
+        finished = self.clock()
+        self.last_timings = {'reference_seconds':round(referenced-started,3),
+            'prefill_seconds':round(sampling_started-referenced,3),'synthesis_seconds':round(sampled-sampling_started,3),
+            'decode_seconds':round(finished-sampled,3),'total_seconds':round(finished-started,3),
+            'frames':len(rows),'audio_seconds':round(len(waveform)/self.sample_rate,3),'precision':self.precision}
         return waveform.numpy().astype('float32')

@@ -21,6 +21,7 @@ I lavori interrotti riprendono dalla voce e dai clip già salvati.
 Manim applica anche gli audio allegati dopo il rendering;
 MiniMax H3 può creare video lunghi quanto l’audio, divisi in scene con memoria.
 [Guida a voce, colonne sonore e video lunghi](docs/voice-and-soundtracks.md).
+[Precisione Higgs, qualità e tempi di generazione](docs/voice-quality.md).
 
 I provider LLM esterni si configurano da **Impostazioni → Provider LLM**:
 DeepSeek, OpenRouter oppure un endpoint personalizzato compatibile con Chat

@@ -174,6 +174,8 @@ def synthesize(app,folder,parts,settings,prompt,cancel,stage,log,meta):
     result=app.engine.tool_call('voice-worker.py',{'config':cfg,'segments':segments,'output':str(folder)},cancel,stage,log,timeout=14400)
     meta.update(voice_engine=cfg['engine'],voice_model=Path(cfg['model_path']).name,voice_identity=voice['id'],voice_reference=Path(voice['reference']).name,voice_controls=choice,voice_tags=acting['tags'] if cfg['engine']=='higgs' else [],voice_duration=result['duration'],voice_device=cfg['device'],assistant_on=settings.get('_assistant',True))
     meta['voice_parameters']={k:cfg[k] for k in ('temperature','seed','speed_factor','pause_ms')}
+    meta['voice_parameters']['precision']=cfg.get('precision',settings['voice_precision'])
+    if result.get('performance'):meta['voice_performance']=result['performance']
     if cfg['engine']=='higgs' and choice.get('delivery')=='radio':meta['voice_parameters']['segment_speed_factors']=[s['speed_factor'] for s in segments]
     if cfg['device']=='cpu':meta['device_warning']='La sintesi vocale sulla CPU può richiedere molto tempo e molta RAM.'
     return result,[{'id':uid(),'name':name,'mime':mime,'path':(folder/name).resolve().relative_to(app.data.resolve()).as_posix()} for name,mime in [('voce.wav','audio/wav'),('testo-voce.txt','text/plain'),('voce.srt','application/x-subrip')]]
