@@ -162,6 +162,9 @@ premi **Anteprima** per riprodurre la scena.
 
 ## Galleria
 
+Apri **Galleria** dal menu sinistro, sopra **Impostazioni e modelli**, oppure
+dal pulsante **▧ Galleria** accanto al **＋** degli allegati sotto il prompt.
+
 **Galleria**, accanto ad Allegati, raccoglie file caricati, documenti importati via
 browser nel RAG, risultati generati ed esportazioni. Cerca per nome e filtra per
 tipo e origine; seleziona uno o più file per aggiungerli al prompt in qualsiasi
