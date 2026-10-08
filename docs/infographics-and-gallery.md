@@ -111,12 +111,13 @@ serve una nuova esportazione. Il rendering usa Microsoft Edge presente in Window
 e PyAV nel runtime privato. Stop chiude anche tutti i processi del renderer privato.
 Il video viene pubblicato soltanto quando completo.
 
-**Ricrea questa scena animata con AI → Ricrea scena e aggiorna video** riscrive
-soltanto la scena selezionata, compresi tempi ed effetti, e aggiorna automaticamente
-il filmato. Conserva le altre scene, la voce e la musica già generate. Se il modello
+**Ricrea questa scena animata con AI → Ricrea solo questa scena** riscrive
+soltanto la scena selezionata, compresi tempi ed effetti. Conserva le altre scene,
+la voce, la musica e il filmato già generati. Per aggiornare il filmato premi
+separatamente **Esporta / aggiorna MP4**. Se il modello
 restituisce HTML statico senza animazioni utilizzabili, l’app chiede una correzione
-prima di accettare il risultato. Per le modifiche grafiche manuali resta disponibile
-**Esporta / aggiorna MP4**. Nel canvas la vista iniziale mostra tutti gli elementi:
+prima di accettare il risultato. Lo stesso comando aggiorna il filmato dopo
+le modifiche grafiche manuali. Nel canvas la vista iniziale mostra tutti gli elementi:
 premi **Anteprima** per riprodurre la scena.
 
 ## Galleria

@@ -89,7 +89,4 @@ def build(app,job,payload,settings,model,cancel,stage,log_path,meta):
     except Exception:
         page['status']='interrupted';publish();raise
     stage(f'Slide {index+1} ricreata · altre pagine conservate')
-    if motion and opts['output']=='video':
-        from .infographics import render_saved
-        render_saved(app,job,settings|{'_infographic_render':{'deck':deck,'media':media}},cancel,stage,log_path,meta)
     return meta['artifact']

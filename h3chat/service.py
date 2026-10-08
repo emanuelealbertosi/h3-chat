@@ -568,7 +568,6 @@ class Service:
                       'execution_mode':'Server esterno · LLM' if model.get('api') else 'Standalone · '+device_label(settings,'llm')}
                 revise_slide(self,job,payload,settings,model,cancel,stage,log_path,meta)
                 text=f"Ho ricreato la slide {settings['_slide_revision']['page']+1} nel canvas."
-                if meta.get('infographic'):text+=' Ho aggiornato anche il filmato, conservando voce e musica.'
                 self.store.update_answer(job,text,'done',meta=meta)
                 self.store.execute("UPDATE jobs SET status='done' WHERE id=?",(job['id'],));return
             if settings.get('_infographic_render'):

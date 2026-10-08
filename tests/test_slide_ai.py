@@ -63,7 +63,7 @@ class SlideAITests(unittest.TestCase):
         result=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4])
         self.assertEqual(result['pages'][1],original['pages'][1]);self.assertEqual(result['pages'][0]['status'],'interrupted')
 
-    def test_infographic_revision_recreates_motion_and_updates_movie_with_existing_audio(self):
+    def test_infographic_revision_recreates_motion_but_movie_updates_only_on_explicit_export(self):
         chat=self.app.store.create_chat()['id'];_,deck=self.deck(chat)
         deck['infographic']={'version':1,'durations':[3,3],'transition':'cut','sfx':'none','voice_id':'voice','music_id':'music','options':{'layout':'columns2','panel_appearance':'sequence','panel_order':'21'}}
         media=[{'id':ident,'name':ident+'.wav','mime':'audio/wav','path':'uploads/'+ident+'.wav'} for ident in ('voice','music')]
@@ -86,11 +86,19 @@ class SlideAITests(unittest.TestCase):
             Path(request['output']).write_bytes(b'updated movie');return {}
         with patch.object(self.app.engine,'require_model',side_effect=self.model_for),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete),patch.object(self.app.engine,'tool_call',side_effect=tool) as render,patch.object(self.app.engine,'stop'):
             self.app.execute_job(job,threading.Event())
-        answer=self.app.store.messages(chat)[-1];self.assertEqual(answer['status'],'done',answer['meta'].get('error'));self.assertEqual(render.call_count,1)
-        artifact=answer['meta']['artifact'];self.assertIn('aggiornato anche il filmato',answer['content'])
+        answer=self.app.store.messages(chat)[-1];self.assertEqual(answer['status'],'done',answer['meta'].get('error'));render.assert_not_called()
+        artifact=answer['meta']['artifact'];self.assertNotIn('aggiornato anche il filmato',answer['content'])
         self.assertEqual(len(attempts),2)
-        self.assertNotIn('old',{m['id'] for m in artifact['media']});self.assertTrue({'voice','music'}<={m['id'] for m in artifact['media']})
+        self.assertEqual(artifact['media'],media)
         self.assertEqual(self.app.store.canvas_history.get(chat,saved['id'])['content'],encode(deck))
+        from h3chat.infographics import enqueue_render
+        current=self.app.store.canvas_history.get(chat)
+        queued=enqueue_render(self.app,chat,{'artifact_id':current['id']})
+        render_job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(queued['job_id'],))
+        with patch.object(self.app.engine,'tool_call',side_effect=tool) as explicit_render,patch.object(self.app.engine,'stop'):
+            self.app.execute_job(render_job,threading.Event())
+        answer=self.app.store.messages(chat)[-1];self.assertEqual(answer['status'],'done',answer['meta'].get('error'));self.assertEqual(explicit_render.call_count,1)
+        self.assertNotIn('old',{m['id'] for m in answer['meta']['artifact']['media']});self.assertTrue({'voice','music'}<={m['id'] for m in answer['meta']['artifact']['media']})
 
     def test_all_images_are_planned_then_generated_before_html_and_catalog_is_reused(self):
         chat=self.app.store.create_chat()['id']
