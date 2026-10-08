@@ -164,6 +164,8 @@ def run(request):
         cdp.evaluate((ROOT/'static/vendor/infographic-renderer.js').read_text(encoding='utf-8'))
         cdp.evaluate('document.querySelectorAll("iframe").forEach((f,i)=>H3Infographic.prepare(f.contentDocument,'+str(height)+','+json.dumps(deck['infographic'].get('options',{}))+','+json.dumps(deck['infographic']['durations'])+'[i]))')
         cdp.evaluate("Promise.all([...document.querySelectorAll('iframe')].map(f=>f.contentDocument.fonts.ready))",True)
+        if request.get('mode')=='layout':
+            return {'pages':cdp.evaluate('Array.from(document.querySelectorAll("iframe"),f=>H3Infographic.measure(f.contentDocument,'+str(height)+','+json.dumps(deck['infographic'].get('options',{}))+'))')}
         cdp.evaluate('globalThis.motion='+json.dumps(deck['infographic']))
         samples,rate=mix(request,cdp)
         sources=deck['infographic'].get('videos') or ([deck['infographic']['video']] if deck['infographic'].get('video') else [])

@@ -3,6 +3,7 @@ import renderMath from 'katex/contrib/auto-render';
 import {editHtmlSlide} from './slide-html-editing.js';
 import {contentOverflows,fitMediaBounds} from './slide-html-bounds.js';
 import {readableText} from './slide-html-contrast.js';
+import {portraitLayout} from './infographic-layout.js';
 import '../static/infographic-motion.js';
 
 const heights={'16:9':720,'9:16':1280*16/9,'4:3':960,'16:10':800,'1:1':1280};
@@ -71,6 +72,7 @@ export async function htmlPage(deck,page,index,media,mount){
   if(doc.querySelector('.katex')){const style=document.createElement('style');style.dataset.h3Trusted='';style.textContent=await localMathCSS();doc.head.append(style);await doc.fonts.ready;}
   readableText(doc);
   if(fitMediaBounds(doc,height))frame.dataset.layoutAdjusted='true';
+  if(deck.infographic&&page.status==='ready'&&portraitLayout(doc,height,deck.infographic.options).issue)frame.dataset.portraitSparse='true';
   sessions.set(frame,{iframe,doc});return frame;
 }
 

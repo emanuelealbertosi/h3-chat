@@ -51,12 +51,14 @@ def build(app,job,payload,settings,model,cancel,stage,log_path,meta):
         from .infographics import options as infographic_options
         from . import infographic_screen as screen
         from . import infographic_animation as animation
+        from . import infographic_layout as layout
         opts=infographic_options(value=motion.get('options',{}))
         duration=motion['durations'][index]
         request[0]['content']=request[0]['content'].replace(BRIEF,animation.HTML_BRIEF)
         clips=motion.get('videos',[])
         request[0]['content']+='\nQuesta pagina è una scena animata, non una slide statica. Conserva narrazione e durata: '+str(duration)+' secondi. Ricrea anche la regia degli ingressi con data-motion="fade|slide|zoom|pan|blur|wipe|strobe|typewriter|appear", data-start, data-duration e data-out opzionale, espressi in secondi entro la durata. Niente JavaScript, CSS animation o transition. Mantieni proporzioni e leggibilità.'+screen.brief(opts,duration)
         request[-1]['content']+='\nOpzioni della scena: '+json.dumps(opts,ensure_ascii=False)+'\nNarrazione già registrata, da accompagnare senza riscriverla: '+page.get('notes','')
+        request[-1]['content']+=layout.brief(deck['format'])
         if clips:
             request[0]['content']+='\nVideo autorizzati: '+json.dumps(clips,ensure_ascii=False)+'. Inserisci i clip solo tramite contenitori vuoti <div data-video-asset-id="ID" style="width:100%;height:100%"></div>; nessun tag video, iframe o URL esterno.'
         elif motion.get('video'):
@@ -79,6 +81,10 @@ def build(app,job,payload,settings,model,cancel,stage,log_path,meta):
         if finish=='length':raise ValueError('Slide incompleta: aumenta Max token. La versione precedente resta nella cronologia.')
         if cancel.is_set():raise Cancelled()
         html=validate(raw)
+        if motion:
+            html,warning=layout.ensure(app,job,deck,index,media,request,settings,cancel,html,stream,stage,log_path)
+            page.pop('layout_warning',None)
+            if warning:page['layout_warning']=warning
         if motion:html=screen.ensure_panels(app.engine,request,settings,cancel,html,opts,stream)
         if motion and opts['output']=='video':
             html=animation.ensure(app.engine,request,settings,cancel,html,duration,stream)

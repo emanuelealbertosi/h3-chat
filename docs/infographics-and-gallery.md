@@ -30,6 +30,14 @@ riquadri affiancati, sopra/sotto, oppure principale con un riquadro sovrapposto.
 L’LLM progetta contenuti, colori, immagini ed effetti dentro ciascun riquadro;
 il motore mantiene soltanto la disposizione scelta e i suoi confini.
 
+Le scene 9:16 vengono progettate per tutta la superficie verticale. Prima di
+accettare una scena video a schermo intero, l’app ne misura l’impaginazione reale:
+se i contenuti restano compressi in alto con un grande vuoto, oppure il body usa
+dimensioni diverse dal formato scelto, chiede all’LLM una ricomposizione. La regia,
+le fonti, le immagini e la narrazione restano conservate. Il controllo non impone
+un template e lascia valide composizioni illustrate, formati orizzontali e split
+screen. Se il modello lascia ancora troppo spazio vuoto, il canvas lo segnala.
+
 **Comparsa dei riquadri → In sequenza** abilita ordine e intervallo fra ingressi.
 Con tre riquadri puoi scegliere 123, 132, 213, 231, 312 o 321. I numeri indicano
 la posizione fisica, da sinistra a destra o dall’alto in basso; in 231 entra prima

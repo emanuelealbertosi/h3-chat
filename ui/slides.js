@@ -100,7 +100,7 @@ export async function renderSlides(target,value,options={}){
   const warning=document.createElement('p');warning.className='slide-layout-warning no-export';const notices=[];
   if(frames.length>1)notices.push(`Contenuto distribuito in ${frames.length} pagine di continuazione, mantenendo il testo leggibile.`);
   if(deck.engine==='llm'&&htmlOverflow(frame))notices.push('Un elemento supera i bordi della slide. Puoi correggerlo con Modifica grafica o chiedere al modello di adattare la pagina.');
-  if(page.image_warning)notices.push(page.image_warning);warning.hidden=!notices.length;warning.textContent=notices.join(' ');target.append(warning);
+  if(page.image_warning)notices.push(page.image_warning);if(page.layout_warning)notices.push(page.layout_warning);else if(frame.dataset.portraitSparse)notices.push('Questa scena sfrutta solo parte del formato verticale. Puoi chiedere all’AI di ridistribuire i contenuti con Ricrea questa scena.');warning.hidden=!notices.length;warning.textContent=notices.join(' ');target.append(warning);
   const resize=()=>{const scale=Math.max(.1,(viewport.clientWidth||600)/1280);let top=0;for(const f of frames){f.style.position='absolute';f.style.top=top+'px';f.style.transform='scale('+scale+')';top+=f.offsetHeight*scale+16;}viewport.style.height=top+'px';};resize();const observer=new ResizeObserver(resize);observer.observe(viewport);observerByTarget.set(target,observer);
   if(selected.editing&&options.editable&&deck.engine==='llm')mountHtmlEditor(target,deck,selected.index,frame,options.onChange,options,value.media);
   if(deck.infographic&&page.status==='ready'&&!selected.editing)mountInfographic(target,deck,selected.index,frame,options,value);

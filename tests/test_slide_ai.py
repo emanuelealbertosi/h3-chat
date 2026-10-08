@@ -130,6 +130,28 @@ class SlideAITests(unittest.TestCase):
         self.assertFalse(options('').get('generate_images',False))
         with self.assertRaises(ValueError):options('',{'generate_images':'yes'})
 
+    def test_portrait_revision_measures_composition_and_asks_llm_to_reflow_without_movie_export(self):
+        chat=self.app.store.create_chat()['id'];_,deck=self.deck(chat);deck['format']='9:16'
+        deck['infographic']={'version':1,'durations':[10,10],'transition':'cut','sfx':'none','options':{'output':'video'}}
+        deck['pages'][0]['notes']='Una narrazione già registrata.'
+        saved=self.app.store.canvas_history.save(chat,{'title':deck['title'],'content':encode(deck),'media':[]})
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for):sent=enqueue(self.app,chat,{'artifact_id':saved['id'],'page':0,'prompt':'Adatta la composizione al formato verticale'})
+        job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(sent['job_id'],));calls=[];probes=[]
+        def complete(messages,settings,cancel,**kw):
+            calls.append(messages)
+            if len(calls)==1:
+                self.assertIn('VERTICALE',messages[-1]['content']);self.assertIn('Una narrazione già registrata.',messages[-1]['content'])
+                return '<h1 data-motion="fade">Layout compatto</h1>','stop'
+            self.assertIn('950 px',messages[-1]['content'])
+            return '<main data-motion="fade"><h1>Layout verticale</h1></main>','stop'
+        def tool(worker,request,*args,**kw):
+            self.assertEqual(request['mode'],'layout');self.assertEqual(len(request['deck']['pages']),1);probes.append(request)
+            return {'pages':[{'issue':len(probes)==1,'largest_gap':950,'gap_ratio':.42}]}
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete),patch.object(self.app.engine,'tool_call',side_effect=tool):self.app.execute_job(job,threading.Event())
+        answer=self.app.store.messages(chat)[-1];self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
+        result=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4]);self.assertEqual(len(probes),2);self.assertEqual(result['pages'][1],deck['pages'][1]);self.assertIn('Layout verticale',result['pages'][0]['html'])
+        self.assertEqual(result['pages'][0]['notes'],deck['pages'][0]['notes']);self.assertEqual(answer['meta']['artifact']['media'],[])
+
 
 class NaturalVoiceTests(unittest.TestCase):
     def test_natural_voice_does_not_force_flat_prosody_and_other_controls_remain_explicit(self):
