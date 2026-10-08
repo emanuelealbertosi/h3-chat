@@ -178,7 +178,10 @@ Eliminare una chat non cancella i file conservati in galleria.
 ## Scritte sopra tutti i pannelli
 
 Il prompt può chiedere un titolo o una scritta finale a schermo intero, sopra
-qualsiasi split screen o griglia. Il modello usa un contenitore `data-overlay="global"`
+qualsiasi split screen o griglia. La sovraimpressione ha sfondo trasparente,
+così i video restano visibili; bagliori e ombre del testo sono conservati.
+Una schermata con fondo è ammessa solo su richiesta esplicita, tramite
+`data-overlay-background="opaque"`. Il modello usa un contenitore `data-overlay="global"`
 separato dai pannelli, con tempi di ingresso e uscita relativi alla scena.
 Le vecchie scene con una sovraimpressione animata fuori dai pannelli sono
 compatibili: per recuperarla basta **Esporta / aggiorna MP4**, senza rigenerare

@@ -52,6 +52,8 @@
   for(const [index,overlay] of overlays.entries()){
    doc.body.append(overlay);overlay.dataset.overlay='global';
    const styles={position:'absolute',left:'0px',top:'0px',right:'auto',bottom:'auto',width:width+'px',height:height+'px','min-width':'0','min-height':'0','max-width':'none','max-height':'none',margin:'0','box-sizing':'border-box',overflow:'hidden','z-index':String(count+1+index)};
+   // A shared title is transparent over the clips. An opaque closing card is explicit.
+   if(overlay.dataset.overlayBackground!=='opaque')styles.background='transparent';
    for(const [key,value] of Object.entries(styles))overlay.style.setProperty(key,value,'important');
   }
   for(const child of [...doc.body.children])if(!panels.includes(child)&&!overlays.includes(child)&&child.tagName!=='STYLE')child.style.setProperty('display','none','important');

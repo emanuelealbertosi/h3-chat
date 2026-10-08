@@ -56,6 +56,7 @@ class ScreenTests(unittest.TestCase):
   opts=options(value={'layout':'columns3'})
   html='<main>'+''.join(f'<section data-panel="{i}"></section>' for i in range(1,4))+'<div data-overlay="global" data-motion="zoom" data-start="15">POWER</div></main>'
   self.assertTrue(valid_panels(html,opts));self.assertIn('data-overlay="global"',brief(opts));self.assertNotIn('Nessun altro contenuto fuori dalle sezioni',brief(opts))
+  self.assertIn('sfondo trasparente',brief(opts));self.assertIn('Solo se l’utente chiede esplicitamente',brief(opts))
  def test_malformed_model_structure_is_repaired_without_templates(self):
   opts=options(value={'layout':'rows2','panel_order':'21','panel_appearance':'sequence'});engine=Mock()
   html='<section data-panel="1"><h1>Originale</h1></section><section data-panel="2"><svg></svg></section>';engine.completion.return_value=(html,'stop')
