@@ -4,7 +4,7 @@
  const clamp=v=>Math.max(0,Math.min(1,v));
  const layouts={full:[1,1],columns2:[2,1],rows2:[1,2],columns3:[3,1],rows3:[1,3],pip:[2,1],grid2x2:[2,2],grid3x2:[3,2],grid2x3:[2,3]};
  const panelCount=layout=>{const [columns,rows]=layouts[layout]||layouts.full;return columns*rows;};
- function number(value,fallback,low=0,high=180){const n=Number(value);return value!==undefined&&value!==''&&Number.isFinite(n)?Math.max(low,Math.min(high,n)):fallback;}
+ function number(value,fallback,low=0,high=600){const n=Number(value);return value!==undefined&&value!==''&&Number.isFinite(n)?Math.max(low,Math.min(high,n)):fallback;}
  function freeze(doc){for(const element of doc.querySelectorAll('*')){element.style?.setProperty('animation','none','important');element.style?.setProperty('transition','none','important');}}
  function panelTimes(doc,options,duration){
   const count=panelCount(options.layout);if(count===1)return [];

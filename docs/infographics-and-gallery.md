@@ -208,3 +208,13 @@ emotive variano fra entusiasmo, calore, orgoglio e decisione. Il risultato
 dipende anche dal campione vocale: l'enfasi su singole parole non è garantita.
 Il profilo è disponibile anche nelle opzioni Voice e come preferenza predefinita.
 Le preferenze esistenti restano invariate.
+
+## Durata e scene
+
+In **Infografica → Impostazioni → Regia e audio** puoi scegliere da 5 a 600
+secondi e da 1 a 30 scene. I valori iniziali restano 30 secondi e 3 scene.
+Puoi anche scrivere «Crea un’infografica di 5 minuti in 12 scene». La voce
+misurata determina i tempi effettivi; la durata selezionata è indicativa.
+Sono supportate anche scene singole lunghe, ingressi oltre il terzo minuto
+e la riesportazione delle infografiche modificate. Il rendering dei video
+più lunghi richiede più tempo; la scadenza di esportazione si adegua alla durata.
