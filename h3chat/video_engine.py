@@ -3,7 +3,7 @@ import json
 import time
 from .downloads import Cancelled, safe_join
 from .video_options import options, validate_plan
-from .video_routing import BRIEF, PLAN_SCHEMA, direct_plan
+from .video_routing import BRIEF, PLAN_SCHEMA, direct_plan, attachment_instructions
 from .vision_runtime import status
 from .remote_llm import EmptyCompletion, StructuredCompletionError
 
@@ -37,7 +37,7 @@ class VideoEngine:
         if not settings.get('vision_enabled',True) or not llm.get('vision',{}).get('enabled') or len(visual)>llm.get('max_refs',4):visual=[]
         content+='\nVisible images supplied to Assistant: '+str(bool(visual))+'. Do not invent unseen visual details.'
         messages=self.chat_messages([{'role':'user','content':content,'media':visual,'status':'done','seq':1}],llm,settings)
-        messages[0]={'role':'system','content':BRIEF}
+        messages[0]={'role':'system','content':BRIEF+attachment_instructions(assets['images'],assets['audios'])}
         tuning=settings|{'think_level':'off','max_tokens':min(settings['video_prompt_max_tokens'],settings['context']//2)}
         raw,finish=self.completion(messages,tuning,cancel,on_text=lambda _:None,schema=PLAN_SCHEMA)
         if finish=='length':raise ValueError('Assistant video ha esaurito i token. Aumenta contesto/token o semplifica la richiesta.')
@@ -82,16 +82,19 @@ class VideoEngine:
         budget=min(settings['context']//2,settings['video_prompt_max_tokens'])
         tuning=settings|{'max_tokens':budget,'think_level':'off'}
         size=max(1,min(3,budget//768));scripts=[]
-        brief=BRIEF.replace('Return JSON prompt, images, audios.','Return only JSON {"scenes":[English prompt per requested clip]}.')+'\nDescribe one continuous film, preserving Picture/Audio labels, identities, style and the language of any supplied dialogue. Do not invent unheard lyrics. Return only the requested clips, in order. Use supplied previous prompts and opening as visual continuity, not as repeated action. No opening restart or finale before the last clip. Translate global keyframe times into LOCAL clip times. Each prompt must be concise while retaining the required MiniMax section labels; never return images/audios arrays.'
+        brief=BRIEF.replace('Return JSON prompt, images, audios.','Return only JSON {"scenes":[English prompt per requested clip]}.')+'\nDescribe one continuous film, preserving Picture/Audio labels, identities, style and the language of any supplied dialogue. Do not invent unheard lyrics. Return only the requested clips, in order. Use supplied previous prompts and opening as visual continuity, not as repeated action. No opening restart or finale before the last clip. Translate global keyframe times into LOCAL clip times. Each prompt must be concise while retaining the required MiniMax section labels; never return images/audios arrays.'+attachment_instructions(plan['images'],plan['audios'])
+        refs=[{'mime':'image/png'} for _ in plan['images']]+[{'mime':'audio/wav'} for _ in plan['audios']]
         def produce(group):
             schema={'type':'object','properties':{'scenes':{'type':'array','minItems':len(group),'maxItems':len(group),'items':{'type':'string'}}},'required':['scenes'],'additionalProperties':False}
-            for attempt in range(2 if len(group)==1 else 1):
+            correction=None
+            for attempt in range(2):
                 if cancel.is_set():raise Cancelled()
                 first,last=group[0]['index']+1,group[-1]['index']+1
                 stage(f'Assistant · sceneggiatura · scene {first}–{last}/{len(scenes)}'+(' · nuovo tentativo conciso' if attempt else ''))
                 context={'request':prompt,'plan':plan,'total_scenes':len(scenes),'film_duration':scenes[-1]['start']+scenes[-1]['duration'],'clips':group,'opening':scripts[0] if scripts else None,'previous':scripts[-2:]}
                 instructions=brief+f'\nOutput budget: {budget} tokens for {len(group)} clip(s). Aim for at most {max(40,min(220,budget//(3*len(group))))} words per clip.'
-                if attempt:instructions+=' Previous output was empty or incomplete. Return short, complete JSON immediately.'
+                if attempt and not correction:instructions+=' Previous output was empty or incomplete. Return short, complete JSON immediately.'
+                if correction:instructions+='\nPrevious output failed scene validation: '+correction+'. Rewrite this batch using only the allowed labels. Keep its visual action and original soundtrack; do not request or invent an image.'
                 try:
                     raw,finish=self.completion([{'role':'system','content':instructions},{'role':'user','content':json.dumps(context,ensure_ascii=False)}],tuning,cancel,on_text=lambda _:None,schema=schema)
                     if finish=='length':raise StructuredCompletionError('Output limit reached')
@@ -99,6 +102,16 @@ class VideoEngine:
                     except (ValueError,TypeError) as exc:raise StructuredCompletionError('Incomplete scene JSON') from exc
                     value=value.get('scenes') if isinstance(value,dict) and set(value)=={'scenes'} else None
                     if not isinstance(value,list) or len(value)!=len(group) or any(not isinstance(s,str) or not s.strip() for s in value):raise StructuredCompletionError('Incomplete scene list')
+                    try:
+                        from .video_timeline import scene_plan
+                        for text,clip in zip(value,group):
+                            # Validate the local prompt before any clip spends GPU time.
+                            local=scene_plan(plan,clip|{'last':clip['index']==scenes[-1]['index']},0,text)
+                            validate_plan(local,refs,clip['duration'])
+                    except ValueError as exc:
+                        if not attempt:
+                            correction=str(exc);stage('Assistant · correggo i riferimenti della sceneggiatura');continue
+                        raise ValueError(f'Assistant video: la scena {clip["index"]+1} non è valida anche dopo la correzione. {exc} Nessun video è stato avviato.') from exc
                     scripts.extend(value);return
                 except (EmptyCompletion,StructuredCompletionError) as exc:
                     if len(group)>1:
@@ -135,6 +148,13 @@ class VideoEngine:
             stage(f'Assistant · sceneggiatura continua in {len(scenes)} scene')
             llm=self.require_model(settings['chat_model'],'chat');self.start_llama(llm,settings,folder/'engine.log',cancel,stage=stage)
             scripts=self.scene_scripts(plan,scenes,settings,cancel,stage,prompt=prompt)
+        # Check remaining scripts too when resuming an older checkpoint or
+        # using Assistant Off, before loading the video model for any clip.
+        for position,scene in enumerate(scenes):
+            if resumed and position<resumed['completed']:continue
+            local=scene_plan(plan,scene|{'last':position==len(scenes)-1},index,scripts[position])
+            try:validate_plan(local,refs,scene['duration'])
+            except ValueError as exc:raise ValueError(f'Piano video: la scena {position+1} non è valida. {exc} Nessuna nuova scena è stata avviata.') from exc
         outputs=[safe_join(self.data,path) for path in resumed['outputs']] if resumed else []
         parameters=list(resumed['parameters']) if resumed else [];canvas=None
         def saved_canvas(p):return {'width':p['canvas_width'],'height':p['canvas_height'],'output_width':p['width'],'output_height':p['height'],'aspect':p['aspect'],'aspect_source':p['aspect_source'],'format_image':p.get('format_image')}

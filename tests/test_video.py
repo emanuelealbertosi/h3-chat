@@ -95,6 +95,16 @@ class VideoTests(unittest.TestCase):
             output,info=self.app.engine.refine_video([], 'anima questa immagine',refs,self.model,DEFAULTS|{'vision_enabled':False},threading.Event(),self.folder/'log',lambda _:None)
         start.assert_called_once();self.assertEqual(output,plan);self.assertEqual(info['model'],'Chat')
         self.assertNotIn('image_url',json.dumps(completion.call_args.args[0]))
+    def test_audio_only_assistant_plan_uses_real_inventory_without_picture_example(self):
+        refs=[{'mime':'audio/mpeg','name':'song.mp3'}]
+        plan={'prompt':'Original stage performance synchronized to <Audio 1>.','images':[],'audios':[{'index':1,'role':'lipsync','start':0}]}
+        with patch.object(self.app.engine,'require_model',return_value={'id':'chat','name':'Chat','vision':{'enabled':False}}),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',return_value=(json.dumps(plan),'stop')) as completion:
+            output,info=self.app.engine.refine_video([], 'crea un video musicale con lip-sync',refs,self.model,DEFAULTS,threading.Event(),self.folder/'log',lambda _:None)
+        self.assertEqual(output,plan)
+        instructions=completion.call_args.args[0][0]['content']
+        self.assertIn('Allowed Picture labels: NONE',instructions)
+        self.assertIn('Allowed Audio labels: <Audio 1>',instructions)
+        self.assertNotIn('<Picture 1>',instructions)
     def test_session_key_only_changes_for_loading_parameters(self):
         key=self.app.engine.session_key('video',self.model,DEFAULTS)
         self.assertEqual(key,self.app.engine.session_key('video',self.model,DEFAULTS|{'video_overrides':{self.model['id']:{'steps':13}}}))

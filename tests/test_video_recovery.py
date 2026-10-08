@@ -65,6 +65,18 @@ class RecoveryTests(unittest.TestCase):
             fresh=store.regenerate(chat);payload=json.loads(store.one('SELECT payload FROM jobs WHERE id=?',(fresh,))['payload'])
             self.assertNotIn('_video_resume',payload['settings'])
 
+    def test_resume_rejects_invented_picture_in_remaining_scene_before_gpu(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp).resolve();ident='a'*32;plan,outputs=self.fixture(data,ident);folder=data/'outputs'/ident
+            value=json.loads((folder/'scenes.json').read_text());value['prompts'][2]='Animate <Picture 1>.';save(folder,value)
+            engine=VideoEngine();engine.data=data;engine.scene_scripts=Mock();engine.generate_video=Mock()
+            audio={'id':'a','mime':'audio/wav','path':'track.wav'}
+            settings={'_video_duration':42,'_video_soundtrack':audio,'_video_resume':ident,'_assistant':True}
+            with self.assertRaisesRegex(ValueError,'scena 3.*Picture.*Nessuna nuova scena'):
+                engine.generate_long_video({'id':'m'},settings,plan,[audio],'b'*32,threading.Event(),lambda _:None,prompt='Music video')
+            engine.generate_video.assert_not_called();engine.scene_scripts.assert_not_called()
+            self.assertEqual(checkpoint(data,ident)['outputs'],outputs)
+
     def test_legacy_final_scene_recovery_preserves_local_keyframe_time(self):
         with tempfile.TemporaryDirectory() as tmp:
             data=Path(tmp);ident='a'*32;plan,outputs=self.fixture(data,ident);folder=data/'outputs'/ident

@@ -16,12 +16,16 @@ Keep speaker IDs (S1), (S2) stable and wrap dialogue in <d>[language] words</d>.
 Do not invent image details. Preserve visible identity, composition, wardrobe and lighting.
 Use [Shot 1] without time; only add further shots when asked, with increasing cut times within duration.
 For text-only/start/keyframe video use integrated_multimodal_description, overall_soundscape,
-non_diegetic_music as labeled sections. Explicitly identify keyframes:
-For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.
-Use analogous sentences at other requested keyframe times.
+non_diegetic_music as labeled sections. Identify a keyframe only when an actual image
+is assigned that role: use its existing Picture label, requested time and shot.
+With no image attachments, images must be empty. Never write a Picture label or claim
+a supplied start frame exists. Generate original visuals from the textual description;
+an audio-only music video does not require an image attachment.
 For reference images/audio use six labeled sections: subject_definitions, summary,
 retention_analysis, detailed_description, overall_soundscape, non_diegetic_music.
-Map reusable <Subject N> identities to <Picture N> and sound to <Audio N>.
+Map reusable <Subject N> identities to an existing Picture label only when an image
+actually supplies that subject; otherwise define the subject in words. Map sound to
+existing Audio labels. Do not invent labels for internal memory or future generated frames.
 Specify fully_preserved/partially_preserved/attribute_transfer/weak_reference for visuals;
 fully_copy/partially_copy/reference/weak_reference for sound. State exact audio reuse for lipsync.
 All labels must agree with attachment order. Respect duration, avoid impossible action density.
@@ -31,6 +35,14 @@ PLAN_SCHEMA={'type':'object','properties':{
  'prompt':{'type':'string'},
  'images':{'type':'array','items':{'type':'object','properties':{'index':{'type':'integer'},'role':{'type':'string','enum':['reference','keyframe']},'seconds':{'type':'number'}},'required':['index','role','seconds'],'additionalProperties':False}},
  'audios':{'type':'array','items':{'type':'object','properties':{'index':{'type':'integer'},'role':{'type':'string','enum':['reference','lipsync','reuse']},'start':{'type':'number'}},'required':['index','role','start'],'additionalProperties':False}}},'required':['prompt','images','audios'],'additionalProperties':False}
+
+def attachment_instructions(images,audios):
+    """Enumerate the actual user assets; generated memory is not an attachment."""
+    pictures=[f'<Picture {x["index"]}>' for x in images]
+    sounds=[f'<Audio {x["index"]}>' for x in audios]
+    return ('\nAllowed Picture labels: '+(', '.join(pictures) if pictures else 'NONE. No image was attached: never cite Picture labels or a supplied visual/keyframe')+
+            '.\nAllowed Audio labels: '+(', '.join(sounds) if sounds else 'NONE. No audio was attached: never cite Audio labels')+
+            '. These lists are exhaustive. Never invent other indices or label internal visual memory as a user attachment.')
 
 def route(history,settings):
     text=history[-1]['content'].strip()

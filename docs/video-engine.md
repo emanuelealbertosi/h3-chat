@@ -65,6 +65,14 @@ are unseen and does not invent image details. Audio is never presented to the
 text/vision LLM as if it had been transcribed. MiniMax H3 receives the actual files.
 The maximum Assistant output is saved per chat LLM in its preferences.
 
+An audio-only music video needs no picture: H3 creates its visuals from the
+textual description. Both the initial plan and the scene writer receive an
+exhaustive list of actual Picture/Audio labels; generated continuity frames are
+not user attachments. Every generated scene is validated before video inference.
+If the scene writer invents a reference, Assistant rewrites that batch once;
+a repeated invalid result stops planning without starting video generation.
+Remaining scenes from an older checkpoint are also checked before resuming.
+
 Attach up to **9 images and 3 audio files** (WAV, MP3, FLAC, OGG). Image limit:
 12 MB / 8192 px; audio limit: 64 MB. Numbering is separate by media type and follows
 attachment order. For example:

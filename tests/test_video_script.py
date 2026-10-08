@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import Mock
 from h3chat.video_engine import VideoEngine
 from h3chat.video_timeline import timeline
+from h3chat.video_routing import attachment_instructions
 from h3chat.remote_llm import Client,EmptyCompletion,StructuredCompletionError
 from h3chat.downloads import Cancelled
 
@@ -46,6 +47,44 @@ class SceneScriptTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'due tentativi'):
                 self.engine.generate_long_video({},settings,self.plan,[audio],'job',threading.Event(),lambda _:None,prompt='Synthetic')
         self.engine.generate_video.assert_not_called();self.assertEqual(self.engine.completion.call_count,3)
+    def test_audio_only_script_repairs_invented_picture_before_accepting_batch(self):
+        valid=['Stage performance with <Audio 1> lip sync.','Battle continues with <Audio 1> lip sync.']
+        self.engine.completion=Mock(side_effect=[
+            (json.dumps({'scenes':['Use <Picture 1> as start frame.',valid[1]]}),'stop'),
+            (json.dumps({'scenes':valid}),'stop')])
+        before=copy.deepcopy(self.plan);stages=[]
+        result=self.engine.scene_scripts(self.plan,timeline(30),self.settings,threading.Event(),stages.append,prompt='Music video from attached audio')
+        self.assertEqual(result,valid);self.assertEqual(self.plan,before)
+        first=self.engine.completion.call_args_list[0].args[0][0]['content']
+        retry=self.engine.completion.call_args_list[1].args[0][0]['content']
+        self.assertIn('Allowed Picture labels: NONE',first);self.assertIn('Allowed Audio labels: <Audio 1>',first)
+        self.assertNotIn('<Picture 1>',first);self.assertIn('Previous output failed scene validation',retry)
+        self.assertIn('correggo i riferimenti',' '.join(stages));self.assertEqual(self.engine.completion.call_count,2)
+    def test_repeated_invented_reference_fails_before_loading_video(self):
+        self.engine.completion=Mock(return_value=(json.dumps({'scenes':['Valid <Audio 1>.','Invented <Picture 1>.']}),'stop'))
+        self.engine.require_model=Mock(return_value={});self.engine.start_llama=Mock();self.engine.generate_video=Mock()
+        with tempfile.TemporaryDirectory() as tmp:
+            self.engine.data=Path(tmp);audio={'id':'track','mime':'audio/wav'}
+            settings=self.settings|{'chat_model':'synthetic','_assistant':True,'_video_duration':30,'_video_soundtrack':audio}
+            with self.assertRaisesRegex(ValueError,'scena 2.*dopo la correzione'):
+                self.engine.generate_long_video({},settings,self.plan,[audio],'job',threading.Event(),lambda _:None,prompt='Music video')
+        self.engine.generate_video.assert_not_called();self.assertEqual(self.engine.completion.call_count,2)
+    def test_actual_picture_and_audio_are_preserved_across_local_keyframe_times(self):
+        plan=copy.deepcopy(self.plan);plan['images']=[{'index':1,'role':'keyframe','seconds':20}]
+        self.engine.completion=Mock(return_value=(json.dumps({'scenes':['Retain <Picture 1> identity and <Audio 1>.','Keyframe <Picture 1> at 5 seconds; sing with <Audio 1>.']}),'stop'))
+        result=self.engine.scene_scripts(plan,timeline(30),self.settings,threading.Event(),lambda _:None,prompt='Use image and soundtrack')
+        self.assertEqual(len(result),2);self.assertEqual(plan['images'][0]['seconds'],20)
+        instructions=self.engine.completion.call_args.args[0][0]['content']
+        self.assertIn('Allowed Picture labels: <Picture 1>',instructions)
+        self.assertIn('Allowed Audio labels: <Audio 1>',instructions)
+    def test_invented_audio_is_repaired_and_no_attachment_inventory_is_explicit(self):
+        self.engine.completion=Mock(side_effect=[
+            (json.dumps({'scenes':['Reuse <Audio 2>.']}),'stop'),
+            (json.dumps({'scenes':['Reuse <Audio 1>.']}),'stop')])
+        result=self.engine.scene_scripts(self.plan,timeline(15),self.settings,threading.Event(),lambda _:None,prompt='Use soundtrack')
+        self.assertEqual(result,['Reuse <Audio 1>.']);self.assertEqual(self.engine.completion.call_count,2)
+        inventory=attachment_instructions([],[])
+        self.assertIn('Allowed Picture labels: NONE',inventory);self.assertIn('Allowed Audio labels: NONE',inventory)
     def test_provider_errors_and_cancellation_are_not_retried(self):
         self.engine.completion=Mock(side_effect=RuntimeError('Provider API 401'))
         with self.assertRaisesRegex(RuntimeError,'401'):self.engine.scene_scripts(self.plan,timeline(30),self.settings,threading.Event(),lambda _:None,prompt='Synthetic')
@@ -59,4 +98,3 @@ class SceneScriptTests(unittest.TestCase):
         client.exchange=exchange
         with self.assertRaisesRegex(EmptyCompletion,'esaurito i token'):
             client.completion({'model':'synthetic','thinking':'none'},'test',[],self.settings|{'temperature':.7},threading.Event(),on_text=lambda _:None)
-
