@@ -8,6 +8,13 @@ modelli, pianificazione, generazione e salvataggio. Rigenera riparte da zero.
 Per le vecchie risposte o le interruzioni senza un tempo completo viene indicato
 «Durata non registrata», senza ricostruire stime dai file.
 
+**Qwen Image 2.1 Turbo** è un modello immagini opzionale per creazione e
+modifica: preset 8 passi, CFG 1, Euler e sequenza ufficiale di campionamento.
+Disponibile nel catalogo INT8 oppure collegabile dal filesystem con il nuovo
+profilo Turbo, riutilizzando encoder e VAE Qwen 2.1 senza copiarli. Impostazioni
+per modello nelle Preferenze; i default già scelti restano invariati.
+[Guida al motore immagini](docs/vision-engine.md).
+
 **Infografica** crea grafica HTML/CSS originale dal prompt, dagli allegati e dal
 RAG, con formato verticale 9:16 iniziale. Può generare le illustrazioni in un
 solo batch, comporre voce e musica e produrre un MP4 con effetti, transizioni

@@ -13,7 +13,8 @@ export function requestTiming(message,job,now=Date.now()/1000){
   if(!started&&!valid(queued))return null;
   const elapsed=Math.max(0,now-(started?timing.started_at:queued));
   const waiting=started&&valid(queued)?Math.max(0,timing.started_at-queued):0;
-  return {text:(started?'Tempo trascorso: ':'In coda da: ')+formatDuration(elapsed)+(waiting>=1?' · Attesa in coda: '+formatDuration(waiting):''),title:'Include caricamento dei modelli, pianificazione, generazione e salvataggio. L’attesa in coda è separata.'};
+  const prefix=started?'Tempo trascorso: ':job?.status==='running'||message.status==='running'?'Tempo dalla richiesta: ':'In coda da: ';
+  return {text:prefix+formatDuration(elapsed)+(waiting>=1?' · Attesa in coda: '+formatDuration(waiting):''),title:'Include caricamento dei modelli, pianificazione, generazione e salvataggio. L’attesa in coda è separata.'};
  }
  if(!valid(timing.finished_at)||!valid(timing.elapsed_seconds))return {text:'Durata non registrata',title:'Per questa risposta non è disponibile un tempo completo e affidabile.'};
  const neverStarted=!valid(timing.started_at),waiting=valid(timing.queue_seconds)?timing.queue_seconds:0;

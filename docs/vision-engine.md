@@ -22,6 +22,20 @@ Per Qwen 2.1 serve il suo nuovo VAE a 64 canali, non quello del precedente Qwen 
 
 Preset Ming: 1024×1024, 12 step, CFG 1, Euler / Simple.
 Preset Qwen 2.1: 1024×1024, 25 step, CFG 1, Euler / Simple.
+Preset **Qwen Image 2.1 Turbo**: 1024×1024, 8 step, CFG 1, Euler e
+**Qwen 2.1 Turbo · 8 passi ufficiali**. Il worker usa i sigma salvati da Qwen:
+`1, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0`.
+Non applica un ulteriore shift. Ridurre a 8 i passi del modello base con Simple
+non equivale a usare il Turbo. Il diffusore è distinto; encoder Qwen3-VL 8B e
+VAE Qwen 2.1 a 64 canali possono essere riutilizzati dai percorsi originali.
+Il nuovo profilo si collega con Sfoglia e collega ed è disponibile anche nel
+catalogo scaricabile (diffusore INT8 ConvRot, encoder INT8 e VAE BF16).
+L'editing conserva i riferimenti e il rapporto d'aspetto come il modello base.
+Il preset ufficiale richiede 8 passi ed Euler; per esperimenti con altri passi
+scegli esplicitamente uno scheduler diverso. Gli altri preset restano invariati.
+Fonti: [checkpoint Qwen](https://huggingface.co/Qwen/Qwen-Image-2.1-Turbo) e
+[componenti Comfy-Org](https://huggingface.co/Comfy-Org/Qwen-Image-2.1).
+Licenza dei pesi: Qwen Research License, distinta dalla licenza dell'applicazione.
 I parametri si modificano per modello nelle Preferenze, attivando Avanzate.
 L'editing è nativo con riferimenti (denoise 1); conserva il rapporto del primo
 riferimento e adatta la risoluzione all'area impostata. Massimo quattro riferimenti.

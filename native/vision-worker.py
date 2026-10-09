@@ -15,7 +15,8 @@ import traceback
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / 'runtime/vision'
 dll_directory = os.add_dll_directory(str(RUNTIME / 'dlls')) if os.name=='nt' and (RUNTIME/'dlls').is_dir() else None
-sys.path[:0] = [str(RUNTIME / 'packages'), str(RUNTIME / 'core')]
+sys.path[:0] = [str(ROOT), str(RUNTIME / 'packages'), str(RUNTIME / 'core')]
+from h3chat.qwen_image21 import TURBO_SCHEDULER, TURBO_SIGMAS, validate_schedule
 os.environ.update(HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', HF_HUB_DISABLE_TELEMETRY='1',
                   HF_HOME=str(RUNTIME / 'cache'), PYTORCH_ENABLE_MPS_FALLBACK='1')
 # All third party print/log output goes to the job log, never to the JSON pipe.
@@ -217,7 +218,9 @@ class Worker:
                 'device': request.get('cache_device', 'auto'), 'dtype': request.get('cache_dtype', 'default')}
         sampler = request.get('sampler', 'euler')
         scheduler = request.get('scheduler', 'simple')
-        if sampler not in comfy.samplers.KSampler.SAMPLERS or scheduler not in comfy.samplers.KSampler.SCHEDULERS:
+        validate_schedule(self.architecture,request)
+        turbo=scheduler==TURBO_SCHEDULER
+        if sampler not in comfy.samplers.KSampler.SAMPLERS or (not turbo and scheduler not in comfy.samplers.KSampler.SCHEDULERS):
             raise ValueError('Sampler o scheduler non supportato da questo modello.')
         images = self.images(request.get('references', []))
         if len(images) > 4:
@@ -242,9 +245,13 @@ class Worker:
                 emit('progress',step=step+1,steps=total,step_seconds=now-last_step)
                 last_step=now
             try:
-                samples = comfy.sample.sample(model, noise, request['steps'], request['cfg'], sampler, scheduler,
+                # The fixed sigmas are already shifted by the official schedule.
+                # KSampler's named scheduler is only a constructor placeholder;
+                # passing sigmas overrides it without another time shift.
+                sampling={'sigmas':torch.tensor(TURBO_SIGMAS,dtype=torch.float32)} if turbo else {}
+                samples = comfy.sample.sample(model, noise, request['steps'], request['cfg'], sampler, 'simple' if turbo else scheduler,
                     positive, negative, latent, denoise=1.0, disable_pbar=True, seed=request['seed'],
-                    callback=progress)
+                    callback=progress,**sampling)
             finally:
                 self.release_gpu(model)
             del positive, negative, noise, latent, images
@@ -264,7 +271,8 @@ class Worker:
         if self.backend == 'cuda':comfy.model_management.soft_empty_cache(force=True)
         emit('done', parameters={'width':int(array.shape[1]), 'height':int(array.shape[0]),
              'steps':request['steps'], 'cfg':request['cfg'], 'sampler':sampler, 'scheduler':scheduler,
-             'seed':request['seed'], 'strength':1.0, 'engine':'vision', 'reference_count':reference_count})
+             'seed':request['seed'], 'strength':1.0, 'engine':'vision', 'reference_count':reference_count,
+             **({'sigmas':list(TURBO_SIGMAS)} if turbo else {})})
 
 
 def main():

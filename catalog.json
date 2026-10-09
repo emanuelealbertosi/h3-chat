@@ -315,5 +315,59 @@
     "size": 4531982517,
     "ram_gb": 10,
     "license": "CC BY-NC 4.0 · uso non commerciale. https://huggingface.co/audio-cpp/Yue2-3B-GGUF"
+  },
+  {
+    "id": "qwen-image21-turbo-int8",
+    "name": "Qwen Image 2.1 Turbo · INT8",
+    "capabilities": [
+      "create",
+      "edit"
+    ],
+    "description": "Creazione e modifica immagini a 8 passi, con scheduler ufficiale Turbo. Diffusore INT8 ConvRot, Qwen3-VL 8B INT8 e VAE Qwen 2.1 BF16. Modello opzionale; non cambia i tuoi default.",
+    "files": [
+      {
+        "role": "diffusion",
+        "repo": "Comfy-Org/Qwen-Image-2.1",
+        "revision": "a3c1a9e2efcba96124a9dc8600c0c07d6f5e68aa",
+        "filename": "diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors",
+        "url": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/a3c1a9e2efcba96124a9dc8600c0c07d6f5e68aa/diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors",
+        "path": "models/files/85d3244148cc2945-qwen_image_2.1_turbo_int8_convrot.safetensors",
+        "size": 7256783064,
+        "sha256": "85d3244148cc294581844d310a7338fed26d056e470666ec84cf1525b876fdab"
+      },
+      {
+        "role": "llm",
+        "repo": "Comfy-Org/Qwen-Image-2.1",
+        "revision": "a3c1a9e2efcba96124a9dc8600c0c07d6f5e68aa",
+        "filename": "text_encoders/qwen3vl_8b_int8_convrot.safetensors",
+        "url": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/a3c1a9e2efcba96124a9dc8600c0c07d6f5e68aa/text_encoders/qwen3vl_8b_int8_convrot.safetensors",
+        "path": "models/files/8bfd0f6e12abf2d2-qwen3vl_8b_int8_convrot.safetensors",
+        "size": 9350798360,
+        "sha256": "8bfd0f6e12abf2d2d697ecc888e5e90b0d6741d6708f05799f53afa560452e8f"
+      },
+      {
+        "role": "vae",
+        "repo": "Comfy-Org/Qwen-Image-2.1",
+        "revision": "a3c1a9e2efcba96124a9dc8600c0c07d6f5e68aa",
+        "filename": "vae/qwen_image_2.1_vae_bf16.safetensors",
+        "url": "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/a3c1a9e2efcba96124a9dc8600c0c07d6f5e68aa/vae/qwen_image_2.1_vae_bf16.safetensors",
+        "path": "models/files/bb21f7473051e1ac-qwen_image_2.1_vae_bf16.safetensors",
+        "size": 675509688,
+        "sha256": "bb21f7473051e1ac368515dd3f2e15cd44d7a11748ee8823e1ddca3e4876b7c9"
+      }
+    ],
+    "size": 17283091112,
+    "license": "Qwen Research License · uso non commerciale; https://huggingface.co/Qwen/Qwen-Image-2.1-Turbo/blob/main/LICENSE",
+    "ram_gb": 20,
+    "max_refs": 4,
+    "architecture": "qwen21",
+    "engine": "vision",
+    "steps": 8,
+    "cfg": 1,
+    "width": 1024,
+    "height": 1024,
+    "sampler": "euler",
+    "scheduler": "qwen21_turbo",
+    "strength": 1
   }
 ]

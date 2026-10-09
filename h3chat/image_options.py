@@ -36,7 +36,7 @@ def options(model, settings):
     if result['sampler']=='auto' and model.get('architecture') in ('flux2','qwen-edit','anima'):result['sampler']='euler'
     if model.get('engine')=='vision':
         if result['sampler']=='auto':result['sampler']='euler'
-        if result['scheduler']=='auto':result['scheduler']='simple'
+        if result['scheduler']=='auto':result['scheduler']='qwen21_turbo' if model.get('scheduler')=='qwen21_turbo' else 'simple'
     validate_options(model,result)
     if model.get('engine')!='vision' and (result['sampler'] not in NATIVE_SAMPLERS or result['scheduler'] not in NATIVE_SCHEDULERS):
         raise ValueError('Sampler o scheduler non supportato dal motore immagini selezionato.')

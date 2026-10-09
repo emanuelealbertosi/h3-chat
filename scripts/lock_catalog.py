@@ -64,6 +64,13 @@ def main():
            ("circlestone-labs/Anima", "split_files/vae/qwen_image_vae.safetensors", "vae")],
           architecture="anima", license="CircleStone Labs Non-Commercial License (Anima); NVIDIA Open Model License e licenze dei componenti. Vedi le schede originali dei pesi.",
           ram_gb=8, max_refs=0, steps=8, cfg=1, sampler="euler")
+    model("qwen-image21-turbo-int8", "Qwen Image 2.1 Turbo · INT8", ["create","edit"],
+          "Creazione e modifica immagini a 8 passi, con scheduler ufficiale Turbo. Diffusore INT8 ConvRot, Qwen3-VL 8B INT8 e VAE Qwen 2.1 BF16. Modello opzionale; non cambia i tuoi default.",
+          [("Comfy-Org/Qwen-Image-2.1", "diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors", "diffusion"),
+           ("Comfy-Org/Qwen-Image-2.1", "text_encoders/qwen3vl_8b_int8_convrot.safetensors", "llm"),
+           ("Comfy-Org/Qwen-Image-2.1", "vae/qwen_image_2.1_vae_bf16.safetensors", "vae")],
+          architecture="qwen21", engine="vision", license="Qwen Research License · uso non commerciale; https://huggingface.co/Qwen/Qwen-Image-2.1-Turbo/blob/main/LICENSE",
+          ram_gb=20, max_refs=4, steps=8, cfg=1, width=1024, height=1024, sampler="euler", scheduler="qwen21_turbo", strength=1)
     (ROOT / "catalog.json").write_text(json.dumps(models, ensure_ascii=False, indent=2), encoding="utf-8")
 
     llama = json.loads((ROOT / "work/llama-release.json").read_text(encoding="utf-8-sig"))

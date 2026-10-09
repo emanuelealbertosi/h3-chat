@@ -162,7 +162,7 @@ class VisualModelsTests(unittest.TestCase):
         self.assertIn('mmproj',engine.model_files(self.llm,on))
         self.assertNotIn('mmproj',engine.model_files(self.llm,off))
         self.assertNotEqual(engine.session_key('chat',self.llm,on),engine.session_key('chat',self.llm,off))
-        history=[{'role':'user','status':'done','seq':1,'content':'Descrivi','media':[{'path':'x.png'}]}]
+        history=[{'role':'user','status':'done','seq':1,'content':'Descrivi','media':[{'path':'x.png','mime':'image/png'}]}]
         with self.assertRaisesRegex(ValueError,'Vision è Off'):engine.chat_messages(history,self.llm,off)
 
     def test_projector_stays_cpu_in_resident_and_llm_is_reused(self):

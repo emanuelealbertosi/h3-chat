@@ -4,6 +4,7 @@ assert.equal(formatDuration(0),'0 s');assert.equal(formatDuration(62.9),'1 min 2
 assert.equal(requestTiming({role:'user',status:'done'}),null);
 const message={role:'assistant',status:'queued',meta:{}};
 assert.equal(requestTiming(message,{created:100},125).text,'In coda da: 25 s');
+assert.equal(requestTiming(message,{created:100,status:'running'},125).text,'Tempo dalla richiesta: 25 s');
 message.meta.timing={queued_at:100,started_at:125};message.status='running';
 assert.equal(requestTiming(message,{},190).text,'Tempo trascorso: 1 min 5 s · Attesa in coda: 25 s');
 message.status='done';Object.assign(message.meta.timing,{finished_at:190,elapsed_seconds:65,queue_seconds:25,total_seconds:90});
