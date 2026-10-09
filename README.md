@@ -1,5 +1,13 @@
 # H3-Chat
 
+Ogni risposta mostra il **tempo di elaborazione**, anche per immagini, musica,
+voce, video, slide e animazioni. Il cronometro avanza durante il lavoro e la
+durata resta sotto la risposta dopo il completamento, anche riaprendo la chat.
+L’attesa in coda è separata; il tempo di elaborazione comprende caricamento dei
+modelli, pianificazione, generazione e salvataggio. Rigenera riparte da zero.
+Per le vecchie risposte o le interruzioni senza un tempo completo viene indicato
+«Durata non registrata», senza ricostruire stime dai file.
+
 **Infografica** crea grafica HTML/CSS originale dal prompt, dagli allegati e dal
 RAG, con formato verticale 9:16 iniziale. Può generare le illustrazioni in un
 solo batch, comporre voce e musica e produrre un MP4 con effetti, transizioni

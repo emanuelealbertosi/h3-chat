@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {formatDuration,requestTiming} from '../ui/request-timing.js';
+assert.equal(formatDuration(0),'0 s');assert.equal(formatDuration(62.9),'1 min 2 s');assert.equal(formatDuration(3665),'1 h 1 min 5 s');
+assert.equal(requestTiming({role:'user',status:'done'}),null);
+const message={role:'assistant',status:'queued',meta:{}};
+assert.equal(requestTiming(message,{created:100},125).text,'In coda da: 25 s');
+message.meta.timing={queued_at:100,started_at:125};message.status='running';
+assert.equal(requestTiming(message,{},190).text,'Tempo trascorso: 1 min 5 s · Attesa in coda: 25 s');
+message.status='done';Object.assign(message.meta.timing,{finished_at:190,elapsed_seconds:65,queue_seconds:25,total_seconds:90});
+for(const now of [200,999999999])assert.equal(requestTiming(message,null,now).text,'Durata: 1 min 5 s · Attesa in coda: 25 s');
+assert.match(requestTiming(message).title,/1 min 30 s/);
+message.status='failed';assert.match(requestTiming(message).text,/Tempo impiegato: 1 min 5 s/);
+message.status='cancelled';message.meta.timing={started_at:null,finished_at:130,elapsed_seconds:0,queue_seconds:30,total_seconds:30};
+assert.equal(requestTiming(message).text,'Attesa in coda: 30 s');
+message.status='interrupted';message.meta.timing={started_at:100};assert.equal(requestTiming(message).text,'Durata non registrata');
+message.meta={};message.status='done';assert.equal(requestTiming(message).text,'Durata non registrata');
+message.meta.timing={started_at:100,finished_at:100.25,elapsed_seconds:.25};assert.equal(requestTiming(message).text,'Durata: <1 s');
+console.log('Live, queued, persistent, failed, cancelled and unavailable request timings passed.');

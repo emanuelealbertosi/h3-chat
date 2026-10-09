@@ -245,5 +245,6 @@ class Store:
                                          message_id=job['message_id'], activate=bool((meta or {}).get('canvas')))
         # Register before publishing the terminal answer, so concurrent history
         # polling cannot import the same output as an additional legacy entry.
-        self.execute("UPDATE messages SET content=?,status=?,media=?,meta=? WHERE id=?",
+        # Streaming and modality-specific metadata must retain the request clock.
+        self.execute("UPDATE messages SET content=?,status=?,media=?,meta=json_patch(?,CASE WHEN json_type(meta,'$.timing')='object' THEN json_object('timing',json_extract(meta,'$.timing')) ELSE '{}' END) WHERE id=?",
                      (content, status, json.dumps(media or []), json.dumps(meta or {}), job["message_id"]))

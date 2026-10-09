@@ -97,7 +97,7 @@ class Service:
     def state(self):
         from .document_limits import RAG_LIMITS
         models = self.refresh_models()
-        return {"token": self.token, "version": __version__, "settings": self.store.settings(), "profiles": PROFILES,"project_limits":RAG_LIMITS,
+        return {"token": self.token, "version": __version__, "server_time":time.time(), "settings": self.store.settings(), "profiles": PROFILES,"project_limits":RAG_LIMITS,
                 "api_providers":self.providers.list(),"api_presets":API_PRESETS,"voice_runtime":{"ready":voice_ready(self.root)},
                 "voice_engines":{"higgs":{"name":"Higgs Audio v3","ready":voice_ready(self.root)}},
                 "media_providers":self.media_providers.list(),
@@ -509,6 +509,8 @@ class Service:
             elif job["status"] == "queued":
                 self.store.execute("UPDATE jobs SET status='cancelled',stage='Interrotto' WHERE id=?", (job_id,))
                 self.store.execute("UPDATE messages SET status='cancelled' WHERE id=?", (job["message_id"],))
+                from .request_timing import finish
+                finish(self.store,job)
         return {"ok": True}
 
     def delete_chat(self, chat_id):
@@ -535,15 +537,18 @@ class Service:
                 self.engine.configure(self.store.settings())
 
     def execute_job(self, job, cancel):
+        from .request_timing import start as start_timing, finish as finish_timing
         text = ""
         meta = {}
         locked=False
+        timing=None
         try:
             while not self.compute_lock.acquire(timeout=.2):
                 if cancel.is_set():raise Cancelled()
                 self.store.execute("UPDATE jobs SET stage='Attesa indicizzazione RAG sulla GPU' WHERE id=?",(job['id'],))
             locked=True
             if cancel.is_set():raise Cancelled()
+            timing=start_timing(self.store,job)
             payload = json.loads(job["payload"])
             settings = voice_engines.normalize(DEFAULTS | payload["settings"])
             history = self.store.messages(job["chat_id"], payload["until"])
@@ -898,7 +903,9 @@ class Service:
             self.store.update_answer(job, text, status, meta=meta | {"error": error})
             self.store.execute("UPDATE jobs SET status=?,error=?,stage=? WHERE id=?", (status, error, error, job["id"]))
         finally:
-            try:self.store.execute("UPDATE chats SET updated=? WHERE id=?", (time.time(), job["chat_id"]))
+            try:
+                finish_timing(self.store,job,timing)
+                self.store.execute("UPDATE chats SET updated=? WHERE id=?", (time.time(), job["chat_id"]))
             finally:
                 if locked:self.compute_lock.release()
 

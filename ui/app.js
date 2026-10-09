@@ -3,6 +3,7 @@ import {renderProviders} from './api-providers.js';
 import {renderLlmPreferences,selectLlmPreferencesModel,syncLlmDraft,llmOptions} from './llm-settings.js';
 import {renderVideoSettings,appendVideoDetails,selectVideoPreferencesModel} from './video-settings.js';
 import {chatActivities,chatActivityIcon} from './chat-activity.js';
+import {requestTiming} from './request-timing.js';
 import {renderMusicSettings,appendMusicDetails,selectMusicPreferencesModel} from './music-settings.js';
 import {renderRich,appendMedia,escape as esc,saveBlob} from './render.js';
 import {exportPdf,exportDocx,exportPng} from './exports.js';
@@ -173,8 +174,8 @@ async function renderChat(){
   for(const message of chat.messages){
     const pending=message.role==='assistant'&&['queued','running'].includes(message.status);
     const job=pending?(state.jobs.find(j=>j.message_id===message.id)||activeJob()):null;
-    const elapsed=job?Math.max(0,Math.floor(Date.now()/1000-job.created)):0;
-    let article=document.getElementById('msg-'+message.id);const signature=JSON.stringify([message.content,message.status,message.media,message.meta,state.settings.chat_advanced,pending?job?.stage:null,pending?elapsed:null]);
+    const timing=requestTiming(message,job,state.server_time??Date.now()/1000);
+    let article=document.getElementById('msg-'+message.id);const signature=JSON.stringify([message.content,message.status,message.media,message.meta,state.settings.chat_advanced,pending?job?.stage:null,timing?.text]);
     if(article?.dataset.signature===signature)continue;
     if(!article){article=document.createElement('article');article.id='msg-'+message.id;article.className='message '+message.role;$('#messages').append(article);}
     article.dataset.signature=signature;
@@ -185,8 +186,7 @@ async function renderChat(){
     if(pending){
       const title=({create:'Creazione immagine',edit:'Modifica immagine',video:'Generazione video',music:'Generazione musica',slides:'Creazione slide nel canvas',infographic:'Creazione infografica nel canvas',transcribe:'Trascrizione audio',manim:message.meta.narrated_manim?'Animazione Manim con voce':'Animazione Manim',calculate:'Calcolo in corso',chat:message.meta.canvas?'Scrittura nel canvas':'Risposta in corso'})[message.meta.intent]||(job?.status==='queued'?'In attesa':'Preparazione della risposta');
       const activity=document.createElement('div');activity.className='generation-activity';activity.setAttribute('role','status');
-      const duration=elapsed<60?elapsed+' s':Math.floor(elapsed/60)+' min '+elapsed%60+' s';
-      activity.innerHTML=`<div class="thinking" aria-hidden="true"><i></i><i></i><i></i></div><div><strong>${esc(title)}</strong><span class="activity-stage">${esc(job?.stage||'Preparazione del motore…')}</span><small class="activity-elapsed">Tempo trascorso: ${duration}</small></div>`;
+      activity.innerHTML=`<div class="thinking" aria-hidden="true"><i></i><i></i><i></i></div><div><strong>${esc(title)}</strong><span class="activity-stage">${esc(job?.stage||'Preparazione del motore…')}</span><small class="activity-elapsed">${esc(timing?.text||'Preparazione del cronometro…')}</small></div>`;
       content.append(activity);
     }
     appendMedia(content,message.media,{api});appendMusicDetails(content,message,state.settings.chat_advanced);appendVideoDetails(content,message,state.settings.chat_advanced);appendToolsDetails(content,message,state.settings.chat_advanced);
@@ -203,6 +203,7 @@ async function renderChat(){
     if(message.role==='assistant'&&message.meta.think_level){const badge=document.createElement('span');badge.className='badge';badge.textContent='Think '+message.meta.think_level;badge.title=message.meta.api?message.meta.think_note:message.meta.think_budget+' token massimi di ragionamento';article.querySelector('.message-head').append(badge);}
     if(['failed','interrupted','cancelled'].includes(message.status)){const err=document.createElement('div');err.className='message-error';err.textContent=message.meta.error||'Risposta interrotta. Puoi riprovare.';content.append(err);}
     const actions=article.querySelector('.message-actions');
+    if(timing&&!pending){const duration=document.createElement('span');duration.className='message-duration';duration.textContent=timing.text;duration.title=timing.title;actions.append(duration);}
     if(message.status==='failed'&&message.meta.intent==='manim'&&message.meta.error?.startsWith('Durata errata:')){
       const recover=document.createElement('button');recover.className='text-button';recover.textContent='Recupera animazione';recover.onclick=act(async()=>{await api('/chats/'+current+'/recover-manim',{message_id:message.id});await refresh();toast('Animazione recuperata.');});actions.append(recover);
     }

@@ -38,6 +38,7 @@
 .generation-activity strong,.activity-stage,.activity-elapsed{display:block}
 .generation-activity .activity-stage{margin-top:4px;color:#607477}
 .activity-elapsed{margin-top:5px;color:#73827e;font-size:11px}
+.message-duration{color:var(--muted,#73827e);font-size:11px;line-height:1.5;flex-basis:100%}
 @media(prefers-reduced-motion:reduce){.thinking i{animation:none}}
 
 .video-output video{display:block;width:100%;max-height:70vh;border-radius:12px;background:#101918}.video-output figcaption{margin-top:8px}.audio-attachment{display:grid;place-items:center;height:64px;width:72px;font-size:30px}.video-settings{margin-top:20px}.video-settings .check{margin:12px 0}
