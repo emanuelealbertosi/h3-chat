@@ -37,6 +37,34 @@ class RequestTests(unittest.TestCase):
         # A short requested window is also allowed inside a track longer than ten minutes.
         self.assertEqual(audio_window('FORMAT: 15 seconds',1000)['duration'],15)
 
+    def test_complete_numbered_segments_are_scene_times_not_audio_crops(self):
+        for label in ('SEGMENT','SEGMENTO','CLIP','SCENE','SCENA','SHOT','INQUADRATURA','BLOCCO NARRATIVO'):
+            prompt=f'''COMPLETE 90-SECOND ANIME MUSIC VIDEO
+TOTAL AUDIO DURATION: approximately 89.5 seconds.
+VIDEO STRUCTURE: 6 consecutive 15-second generations.
+# {label} 1 — 00:00–00:15
+00:00–00:06 — INSTRUMENTAL
+AUDIO: INSTRUMENTAL.
+# {label} 2 — 00:15–00:30
+# {label} 3 — 00:30–00:45
+# {label} 4 — 00:45–01:00
+# {label} 5 — 01:00–01:15
+# {label} 6 — 01:15–01:29.544'''
+            for storyboard in (False,True):
+                with self.subTest(label=label,storyboard=storyboard):
+                    self.assertEqual(audio_window(prompt,89.5416667,storyboard=storyboard),
+                        {'start':0,'duration':89.5416667,'source_duration':89.5416667,'explicit':False})
+
+    def test_explicit_master_window_remains_independent_of_numbered_scene_times(self):
+        for scenes in ('SEGMENT 1 — 00:00–00:06',
+                       'SEGMENT 1 — 00:00–00:06\nSEGMENT 2 — 00:06–00:15'):
+            prompt='AUDIO: 00:15–00:30\n'+scenes
+            self.assertEqual(audio_window(prompt,90,storyboard=True),
+                {'start':15,'duration':15,'source_duration':90,'explicit':True})
+            with self.assertRaisesRegex(ValueError,'intervalli audio diversi'):
+                audio_window(prompt+'\nSOUNDTRACK: 00:30–00:45',90,storyboard=True)
+        self.assertEqual(audio_window('SEGMENT 2 — 00:15–00:30',90)['start'],15)
+
     def test_copy_guard_and_verbatim_speech(self):
         opening='An aerial camera flies over the stone walls, enters the bedroom, and shows the teacher turning off his ringing alarm clock.'
         self.assertEqual(repeated_scene([],['Clip 1 '+opening,'Clip 2 '+opening],'A parody'),2)

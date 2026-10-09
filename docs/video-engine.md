@@ -252,6 +252,13 @@ or a segment beyond the source audio fail before video generation. Without an
 explicit duration/window, the full-track behavior remains available. Saved
 checkpoints retain the source offset and reject recovery against another window.
 
+Multiple numbered headers such as `SEGMENT 1 — 00:00–00:15` and
+`SEGMENT 2 — 00:15–00:30` describe scene timing, not competing audio crops.
+This recognition also works in Continuazione mode; select Storyboard to obtain
+separate shots with hard cuts. A single numbered segment can still select that
+source window. An explicit `AUDIO:`/`SOUNDTRACK:` window takes precedence over
+numbered scene headers, while conflicting explicit master windows remain errors.
+
 With Assistant On, copied scene bodies in a batch or across previous batches
 trigger one bounded rewrite, with the rejected scenes visible to the planner.
 Repeated invalid scenes fail before GPU generation rather than silently repeating
