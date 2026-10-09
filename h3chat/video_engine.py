@@ -2,7 +2,7 @@
 import json
 import time
 from .downloads import Cancelled, safe_join
-from .video_options import options, validate_plan
+from .video_options import options, validate_plan, resolve_canvas
 from .video_routing import BRIEF, SCENE_DIRECTION, PLAN_SCHEMA, direct_plan, attachment_instructions
 from .vision_runtime import status
 from .remote_llm import EmptyCompletion, StructuredCompletionError
@@ -68,11 +68,23 @@ class VideoEngine:
         request={'op':'generate','output':str(output),'plan':plan,'options':opts,'format_prompt':prompt if prompt is not None else plan['prompt'],
                  'images':[str(safe_join(self.data,x['path'])) for x in refs if x['mime'].startswith('image/')],
                  'audios':[str(safe_join(self.data,x['path'])) for x in refs if x['mime'].startswith('audio/')]}
+        image_sizes=[]
+        if request['images']:
+            from PIL import Image
+            for path in request['images']:
+                with Image.open(path) as image:
+                    w,h=image.size
+                    if image.getexif().get(274) in (5,6,7,8):w,h=h,w
+                    image_sizes.append((w,h))
+        opts=resolve_canvas(opts,plan,image_sizes,request['format_prompt'])
+        if scene and scene.get('canvas'):opts.update(scene['canvas'])
+        request['options']=opts
         if scene:
             request.update(sequence=scene['sequence'],scene_index=scene['index'],canvas=scene.get('canvas'),audio_tail_padding=bool(scene.get('last')))
             if 'continuity' in scene:request['continuity']=scene['continuity']
             if scene.get('resume_memory'):request['resume_memory']=scene['resume_memory']
         (folder/'video-plan.json').write_text(json.dumps({'plan':plan,'parameters':opts},ensure_ascii=False,indent=2),encoding='utf-8')
+        stage(f"Video · formato {opts['aspect']} · {opts['output_width']}×{opts['output_height']}")
         startup_started=time.monotonic()
         session=self.start_video(model,settings,folder/'engine.log',cancel,stage)
         startup_seconds=time.monotonic()-startup_started
@@ -206,7 +218,7 @@ class VideoEngine:
             if position<completed:continue
             if cancel.is_set():raise Cancelled()
             scoped=scene|{'last':position==len(scenes)-1,'sequence':job_id,'canvas':canvas}
-            if resumed and position==completed and scene.get('continuity')!='cut':
+            if resumed and completed and position==completed and scene.get('continuity')!='cut':
                 anchor=max((i for i in range(position) if scenes[i].get('continuity')=='cut'),default=0) if storyboard else 0
                 scoped['resume_memory']={'opening':str(outputs[anchor]),'recent':[str(p) for p in outputs[anchor:][-2:]]}
             if storyboard:local,local_refs=local_plan(storyboard,scene,plan,refs,index,audio_start)

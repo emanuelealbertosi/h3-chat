@@ -8,7 +8,7 @@ def checkpoint(data,ident):
     try:value=json.loads((folder/'scenes.json').read_text(encoding='utf-8'))
     except (OSError,ValueError):raise ValueError('Nessuna scena video salvata da recuperare.')
     scenes=value.get('timeline');completed=value.get('completed');scripts=value.get('prompts');parameters=value.get('parameters')
-    if not isinstance(scenes,list) or not 1<=len(scenes)<=160 or type(completed) is not int or not 0<completed<=len(scenes) or not isinstance(scripts,list) or len(scripts)!=len(scenes) or any(not isinstance(p,str) or not p.strip() for p in scripts) or not isinstance(parameters,list) or len(parameters)!=completed:raise ValueError('Checkpoint video incompleto.')
+    if not isinstance(scenes,list) or not 1<=len(scenes)<=160 or type(completed) is not int or not 0<=completed<=len(scenes) or not isinstance(scripts,list) or len(scripts)!=len(scenes) or any(not isinstance(p,str) or not p.strip() for p in scripts) or not isinstance(parameters,list) or len(parameters)!=completed:raise ValueError('Checkpoint video incompleto.')
     outputs=value.get('outputs') or [f'outputs/{ident}/scene-{i+1:03d}/video.mp4' for i in range(completed)]
     if not isinstance(outputs,list) or len(outputs)!=completed:raise ValueError('Elenco scene salvate incompleto.')
     for output in outputs:

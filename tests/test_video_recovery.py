@@ -55,6 +55,22 @@ class RecoveryTests(unittest.TestCase):
             self.assertEqual(len(mux.call_args.args[1]),3);self.assertEqual(result['generation']['recovered_scenes'],2)
             new=json.loads((data/'outputs'/('b'*32)/'scenes.json').read_text());self.assertEqual(new['completed'],3);self.assertEqual(new['outputs'][:2],outputs)
 
+    def test_recovers_prepared_plan_before_first_scene_without_visual_memory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp).resolve();ident='a'*32;plan,_=self.fixture(data,ident)
+            folder=data/'outputs'/ident;value=json.loads((folder/'scenes.json').read_text())
+            value.update(completed=0,parameters=[],outputs=[]);save(folder,value)
+            self.assertEqual(checkpoint(data,ident)['completed'],0)
+            engine=VideoEngine();engine.data=data;engine.scene_scripts=Mock(side_effect=AssertionError('No replanning'));calls=[]
+            def generate(model,settings,local,refs,job,cancel,stage,**kwargs):
+                calls.append(kwargs['scene']);out=data/'outputs'/job/'video.mp4';out.parent.mkdir(parents=True);out.write_bytes(b'fixture')
+                return {'path':out.relative_to(data).as_posix(),'generation':{'width':960,'height':540,'canvas_width':960,'canvas_height':544,'aspect':'16:9','aspect_source':'preset'}}
+            engine.generate_video=generate;audio={'id':'a','mime':'audio/wav','path':'track.wav'}
+            with patch('h3chat.soundtrack.compose',return_value={'duration':42}):
+                result=engine.generate_long_video({'id':'m'},{'_video_duration':42,'_video_soundtrack':audio,'_video_resume':ident,'_assistant':True},plan,[audio],'b'*32,threading.Event(),lambda _:None,prompt='Synthetic')
+            self.assertEqual(len(calls),3);self.assertNotIn('resume_memory',calls[0]);self.assertIsNone(calls[0]['canvas'])
+            self.assertEqual(calls[1]['canvas']['aspect'],'16:9');self.assertEqual(result['generation']['recovered_scenes'],0)
+
     def test_regenerate_reuses_failed_checkpoint_but_completed_jobs_start_fresh(self):
         with tempfile.TemporaryDirectory() as tmp:
             store=Store(tmp);chat=store.create_chat()['id'];job=store.enqueue(chat,'Synthetic',[],DEFAULTS|{'_video':True})

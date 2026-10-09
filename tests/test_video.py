@@ -48,6 +48,12 @@ class VideoTests(unittest.TestCase):
         self.app.remove_external_model(self.model['id'])
         self.assertEqual(self.app.store.settings()['video_model'],'')
         self.assertTrue(all(Path(p).exists() for p in self.files.values()))
+
+    def test_linked_model_available_after_restart_before_any_browser_state_request(self):
+        self.app.close()
+        self.app=Service(ROOT,self.folder/'data',start_worker=False)
+        restored=self.app.engine.require_model(self.model['id'],'video')
+        self.assertEqual(self.app.engine.model_files(restored),self.files)
     def test_hybrid_default_selection_remains_editable(self):
         from h3chat.external_models import PROFILES
         hybrid=dict(self.files,diffusion=str(safetensors(self.folder/PROFILES['minimax-h3']['default_files']['diffusion'])))

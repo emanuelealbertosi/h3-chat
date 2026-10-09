@@ -60,10 +60,16 @@ def resolve_canvas(opts,plan,image_sizes,prompt=''):
     Keyframes own the format. Reference-only jobs can override it in the user's
     original prompt. The padded model canvas is cropped back after decoding.
     """
-    matches=list(re.finditer(r'(?<![\d.])(\d+(?:[.,]\d+)?)\s*[:/]\s*(\d+(?:[.,]\d+)?)(?![\d.])',prompt))
+    matches=list(re.finditer(r'(?<![\d.:])(\d+(?:[.,]\d+)?)\s*[:/]\s*(\d+(?:[.,]\d+)?)(?![\d.:])',prompt))
+    # A storyboard's song clocks are not aspect ratios. Exclude whole time
+    # ranges too, including unpadded clocks such as 1:6–1:9.
+    clock=r'\d{1,3}:\d{1,2}(?::\d{1,2})?(?:[.,]\d+)?'
+    windows=[m.span() for m in re.finditer(rf'(?<![\d.:]){clock}\s*(?:[–—-]|\bto\b|\ba\b)\s*{clock}(?![\d.:])',prompt,re.I)]
     explicit=None
     for match in matches:
         prefix=prompt[max(0,match.start()-50):match.start()]
+        if any(start<=match.start()<end for start,end in windows):continue
+        if ':' in match.group(0) and any(re.match(r'0\d',v) for v in match.groups()):continue
         # Fractions in a scene description are not output formats.
         if '/' in match.group(0) and not re.search(r'\b(?:format[oa]?|aspect|ratio|rapporto)\b',prefix,re.I):continue
         if re.search(r'\b(?:non|not)\s*(?:in\s+)?(?:format[oa]?\s+)?$',prefix,re.I):continue

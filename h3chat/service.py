@@ -72,6 +72,9 @@ class Service:
         self.compute_lock=threading.RLock();self.knowledge.compute_lock=self.compute_lock;self.knowledge.release_gpu=self.engine.stop
         self.current_id, self.cancel_event = None, None
         self.worker = threading.Thread(target=self.run, daemon=True)
+        # Linked models must be available before jobs run, independently of
+        # whether a browser has requested /api/state after startup.
+        self.refresh_models()
         if start_worker:
             self.worker.start()
 

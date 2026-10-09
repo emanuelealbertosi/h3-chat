@@ -144,7 +144,7 @@ Il canto italiano è sperimentale. I pesi YuE2 sono soggetti a **CC BY-NC 4.0**;
 
 ## Video · MiniMax H3
 
-Il video mantiene il formato del primo fotogramma guida, senza deformare le immagini. Con soli riferimenti puoi indicare un formato diverso nel prompt, per esempio «solo reference, formato 16:9». Senza immagini vale il formato richiesto o il preset. Il motore aggiunge il minimo margine per la propria griglia e lo rimuove dal file finale.
+Il video mantiene il formato del primo fotogramma guida, senza deformare le immagini. Con soli riferimenti puoi indicare un formato diverso nel prompt, per esempio «solo reference, formato 16:9». Senza immagini vale il formato richiesto o il preset (16:9 iniziale). I timestamp dello storyboard, come `01:06`, non cambiano il formato. Il formato e le dimensioni finali sono verificati e salvati prima di caricare i modelli. Il motore aggiunge il minimo margine per la propria griglia e lo rimuove dal file finale.
 
 In **Setup → Video**, il pulsante **Installa acceleratore video** aggiunge SageAttention e i suoi componenti al runtime privato. Il preset **Auto** lo usa quando disponibile; nelle impostazioni avanzate puoi scegliere Sage o PyTorch e la suddivisione dell’attenzione. L’offload completa e libera encoder e VAE prima di leggere il diffusore, poi libera il diffusore prima della decodifica. Tutto il calcolo video resta sulla GPU.
 
