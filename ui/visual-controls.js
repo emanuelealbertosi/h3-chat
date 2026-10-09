@@ -8,7 +8,7 @@ function normalizeVoice(value){return {...value,voice_fields:{...value.voice_fie
 export function initVisualControls({getState,getChatId}){
  const model=document.querySelector('#image-model'),assistant=document.querySelector('#image-assistant');
  const key=id=>'h3.visual-options.'+(id||'new');
- const read=()=>{try{return {image_model:'',assistant:true,music:false,video:false,video_quality:'high',web:false,transcribe:false,music_fields:{},...normalizeVoice(JSON.parse(localStorage.getItem(key(getChatId()))||'{}'))};}catch{return {image_model:'',assistant:true,music:false,video:false,video_quality:'high',web:false,transcribe:false,music_fields:{}};}};
+ const read=()=>{try{return {image_model:'',assistant:true,music:false,video:false,video_quality:'high',video_editing:'continuous',web:false,transcribe:false,music_fields:{},...normalizeVoice(JSON.parse(localStorage.getItem(key(getChatId()))||'{}'))};}catch{return {image_model:'',assistant:true,music:false,video:false,video_quality:'high',video_editing:'continuous',web:false,transcribe:false,music_fields:{}};}};
  function save(value){localStorage.setItem(key(getChatId()),JSON.stringify(value));render();}
  const voice=initVoiceControls({read,save,getState});
  const videoQuality=initVideoQuality({read,save,getState});

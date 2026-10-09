@@ -407,6 +407,10 @@ class Service:
         if type(video) is not bool:raise ValueError('Video: scegli attivo o disattivo.')
         from .video_options import quality as video_quality
         settings['_video_quality']=video_quality(body.get('video_quality','high'))
+        editing=body.get('video_editing','continuous')
+        if not isinstance(editing,str) or editing not in ('continuous','storyboard'):raise ValueError('Regia video: scegli Continuazione oppure Storyboard.')
+        if editing=='storyboard' and video and not assistant:raise ValueError('Storyboard richiede Assistant On per trasformare le scene descritte in una regia.')
+        settings['_video_editing']=editing
         if type(music) is not bool:raise ValueError('Music: scegli attivo o disattivo.')
         if sum((bool(selection),music,video,transcribe,voice))>1:raise ValueError('Scegli una sola modalità esplicita fra Voice, Video, Music, Trascrivi e immagini.')
         fields=validate_music_fields(body.get('music_fields',{}))
@@ -791,21 +795,27 @@ class Service:
             elif intent == "video":
                 from .video_options import with_prompt_duration
                 video_model=self.engine.require_model(settings['video_model'],'video')
+                if settings.get('_video_editing')=='storyboard' and not settings.get('_assistant',True):raise ValueError('Storyboard richiede Assistant On per pianificare le inquadrature.')
+                if settings.get('_video_editing')=='storyboard' and video_model.get('remote_media'):raise ValueError('Storyboard richiede MiniMax H3 standalone: il server remoto non supporta questa regia.')
                 refs=payload['media']
                 if not refs and re.search(r'\b(questa|questo|allegat\w*|precedente|this|previous)\b',payload['prompt'],re.I):
                     refs=next(([x for x in m['media'] if x['mime'].startswith(('image/','audio/'))] for m in reversed(history[:-1]) if any(x['mime'].startswith(('image/','audio/')) for x in m['media'])),[])
                 from .soundtrack import select as choose_soundtrack, probe as probe_soundtrack
-                soundtrack=choose_soundtrack(payload['prompt'],refs)
+                previous_audio=history[:-1] if re.search(r'\b(?:precedente|previous|già generat\w*)\b',payload['prompt'],re.I) else ()
+                soundtrack=choose_soundtrack(payload['prompt'],refs,previous_audio)
+                if soundtrack and not any(r['id']==soundtrack['id'] for r in refs):refs=[*refs,soundtrack]
                 if soundtrack:
                     audio_info=probe_soundtrack(self.engine,self.data,soundtrack,cancel,stage,log_path)
                     from .video_request import audio_window
-                    window=audio_window(payload['prompt'],audio_info['duration'])
+                    window=audio_window(payload['prompt'],audio_info['duration'],storyboard=settings.get('_video_editing')=='storyboard')
                     from .video_timeline import timeline
                     timeline(window['duration'])
                     settings=settings|{'_video_duration':window['duration'],'_video_audio_start':window['start'],
                         '_video_audio_source_duration':window['source_duration'],'_video_soundtrack':soundtrack}
                     stage(f'Video · segmento audio {window["start"]:g}–{window["start"]+window["duration"]:g} s')
-                else:settings=with_prompt_duration(settings,payload['prompt'])
+                else:
+                    if settings.get('_video_editing')=='storyboard':raise ValueError('Allega o richiama una traccia audio per creare lo storyboard musicale.')
+                    settings=with_prompt_duration(settings,payload['prompt'])
                 meta['model']=video_model['name'];self.store.update_answer(job,text,meta=meta)
                 if settings.get('_video_resume'):
                     from .video_resume import checkpoint

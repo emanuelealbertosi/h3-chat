@@ -6,7 +6,7 @@ from .downloads import safe_join
 def select(prompt, media, history=()):
     if re.search(r'\b(?:senza audio|muto|silent|no audio|without audio|solo (?:come )?riferimento|audio (?:solo )?(?:come )?reference)\b',prompt,re.I):return None
     audios=[m for m in media if m.get('mime','').startswith('audio/')]
-    if not audios and re.search(r'\b(?:audio|traccia|soundtrack|voce|musica|colonna sonora)\b',prompt,re.I):
+    if not audios and re.search(r'\b(?:audio|traccia|soundtrack|voce|musica|canzone|song|colonna sonora)\b',prompt,re.I):
         audios=next(([m for m in row.get('media',[]) if m.get('mime','').startswith('audio/')] for row in reversed(history) if any(m.get('mime','').startswith('audio/') for m in row.get('media',[]))),[])
     if not audios:return None
     match=re.search(r'\b(?:audio|traccia|track)\s*(\d+)\b',prompt,re.I)

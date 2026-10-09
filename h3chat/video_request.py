@@ -4,14 +4,15 @@ import re
 from .video_options import prompt_duration
 
 
-def audio_window(prompt,source_duration):
+def audio_window(prompt,source_duration,*,storyboard=False):
     if type(source_duration) not in (int,float) or not math.isfinite(source_duration) or source_duration<=0:
         raise ValueError('Durata della traccia audio non valida.')
     duration=prompt_duration(prompt,has_audio=True);start=0;end=None
+    if storyboard and re.search(r'\d+(?:[.,]\d+)?\s*(?:seconds?|second[io]|sec|s)\s*(?:per (?:clip|scena|inquadratura)|(?:for )?each (?:clip|shot|scene))',prompt,re.I):duration=None
     # Scope ranges to the overall timeline or audio instructions. Shot timings
     # (00:06–00:09, etc.) are not the requested soundtrack window.
     clock=r'\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?'
-    ranges=[]
+    ranges=[];scene_ranges=[]
     for line in prompt.splitlines():
         if not re.search(r'\b(?:absolute\s+timeline|timeline\s+assoluta|timeline|audio|soundtrack|traccia|segmento|segment)\b',line,re.I):continue
         match=re.search(rf'({clock})\s*(?:[–—-]|to|a)\s*({clock})',line,re.I)
@@ -20,7 +21,16 @@ def audio_window(prompt,source_duration):
                 parts=[float(p.replace(',','.')) for p in value.split(':')]
                 if any(p>=60 for p in parts[1:]):raise ValueError('Intervallo audio: minuti e secondi devono essere inferiori a 60.')
                 return sum(p*60**i for i,p in enumerate(reversed(parts)))
-            ranges.append((seconds(match[1]),seconds(match[2])))
+            interval=(seconds(match[1]),seconds(match[2]))
+            if storyboard and re.search(r'\b(?:clip|scene|scena|shot|inquadratura)\s*\d+\b',line,re.I):scene_ranges.append(interval)
+            else:ranges.append(interval)
+    if len(scene_ranges)==1:ranges=scene_ranges+ranges
+    elif len(scene_ranges)>1:
+        # Individual shot timelines describe the storyboard, not multiple
+        # conflicting soundtrack windows. Per-clip FORMAT values are not totals.
+        if duration is not None and duration<=15 and max(b for a,b in scene_ranges)>duration:
+            duration=None
+        ranges=[r for r in ranges if r not in scene_ranges]
     if ranges:
         start,end=ranges[0]
         if any(abs(a-start)>1e-6 or abs(b-end)>1e-6 for a,b in ranges[1:]):

@@ -261,3 +261,43 @@ are checked too. Assistant Off passes through the original prompt and does not
 invent progression for a multi-scene video. Both modes obey explicit timing.
 Quoted spoken/sung words under vocal/dialogue directions must survive the initial
 Assistant plan; an omission gets one bounded correction before any video starts.
+
+## Storyboard music montage
+
+**Video → Impostazioni → Regia → Storyboard · stacchi** is opt-in and enables
+Assistant On. Attach (or refer to) one complete soundtrack and numbered images,
+then describe the scenes, order, image references and optional cut times in the
+prompt. The planner creates one complete storyboard before loading MiniMax:
+variable shots of 1–15 seconds, exact full coverage, reference/start-frame images
+selected separately for each shot, and cut versus continued movement. Without
+specified timings it favors 4–8-second montage shots. Up to 160 shots are supported.
+No soundtrack is restarted per shot: the correct source interval conditions
+lip-sync, and the original track is muxed once across the final film. Reference
+images are filtered to each shot and their Picture indices remapped consistently.
+A hard cut clears previous visual memory and does not impose the preceding last
+frame; `continue` retains visual memory for the same action. The first output's
+canvas remains locked for consistent dimensions through the montage.
+
+The default **Continuazione · movimento continuo** preserves existing behavior.
+Storyboard requires the standalone MiniMax engine and a soundtrack. It is
+captured with each queued request and restored by Riutilizza/Rigenera. Checkpoints
+store the full storyboard so recovery preserves already rendered clips, timings,
+image assignments and source offsets without replanning. Advanced video details
+show the saved shot plan. Clips and their quality still depend on the generative
+model; timed hard cuts and continuous soundtrack composition are deterministic.
+More shots also incur more conditioning/loading work on machines using offload.
+
+Example with two images and a song:
+
+> Usa tutta la canzone come colonna sonora continua, formato 16:9.
+> Immagine 1: riferimento del protagonista; immagine 2: riferimento della cantante.
+> Prima scena: il protagonista arriva a scuola. Stacco su un primo piano della
+> cantante, poi entrambi cantano nel cortile. Inquadrature da 5–8 secondi;
+> prosegui con nuove azioni coerenti per coprire tutta la canzone. Mantieni le
+> identità, varia le inquadrature, lip-sync nelle scene cantate, nessuna voce aggiunta.
+
+`FORMAT: 15 seconds per clip` sets clip-scale intent, not a 15-second total film
+in Storyboard mode. An explicit whole-video duration or `AUDIO: 00:15–00:30`
+still selects only that window. A complete song without such a restriction sets
+the full film duration automatically. The storyboard is derived from the user's
+scene descriptions; the text LLM is not assumed to have heard/beat-analyzed audio.

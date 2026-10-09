@@ -70,6 +70,7 @@ class VideoEngine:
                  'audios':[str(safe_join(self.data,x['path'])) for x in refs if x['mime'].startswith('audio/')]}
         if scene:
             request.update(sequence=scene['sequence'],scene_index=scene['index'],canvas=scene.get('canvas'),audio_tail_padding=bool(scene.get('last')))
+            if 'continuity' in scene:request['continuity']=scene['continuity']
             if scene.get('resume_memory'):request['resume_memory']=scene['resume_memory']
         (folder/'video-plan.json').write_text(json.dumps({'plan':plan,'parameters':opts},ensure_ascii=False,indent=2),encoding='utf-8')
         startup_started=time.monotonic()
@@ -148,6 +149,16 @@ class VideoEngine:
         scripts=[plan['prompt']]*len(scenes)
         folder=self.data/'outputs'/job_id;folder.mkdir(parents=True,exist_ok=True)
         resumed=checkpoint(self.data,settings['_video_resume']) if settings.get('_video_resume') else None
+        storyboard=None
+        if settings.get('_video_editing')=='storyboard':
+            from .video_storyboard import build
+            if resumed:
+                storyboard=resumed.get('storyboard')
+                if not storyboard:raise ValueError('Il video salvato non contiene uno storyboard da recuperare.')
+                if abs(resumed['timeline'][-1]['start']+resumed['timeline'][-1]['duration']-settings['_video_duration'])>1/24:
+                    raise ValueError('La durata dello storyboard salvato è cambiata.')
+            else:storyboard=build(self,plan,refs,settings,prompt,cancel,stage,folder/'engine.log')
+            scenes=storyboard['shots'];scripts=[s['prompt'] for s in scenes]
         if resumed and (resumed['timeline']!=scenes or resumed.get('model',model.get('id',''))!=model.get('id','')):raise ValueError('Il modello o la durata audio sono cambiati: il video salvato non può essere ripreso.')
         if resumed and resumed.get('audio_start',0)!=audio_start:raise ValueError('Il segmento audio è cambiato: le scene salvate non possono essere riprese.')
         # Validate every exact source interval BEFORE spending GPU time. The
@@ -162,7 +173,7 @@ class VideoEngine:
                 if ordinal not in durations:durations[ordinal]=probe(self,self.data,audios[ordinal-1],cancel,stage,folder/'engine.log')['duration']
                 validate_audio_interval(durations[ordinal],entry['start'],scene['duration'],tail=position==len(scenes)-1)
         if resumed:scripts=resumed['prompts'];plan=resumed['plan']
-        elif len(scenes)>1 and settings.get('_assistant',True):
+        elif not storyboard and len(scenes)>1 and settings.get('_assistant',True):
             stage(f'Assistant · sceneggiatura continua in {len(scenes)} scene')
             llm=self.require_model(settings['chat_model'],'chat');self.start_llama(llm,settings,folder/'engine.log',cancel,stage=stage)
             scripts=self.scene_scripts(plan,scenes,settings,cancel,stage,prompt=prompt)
@@ -175,8 +186,12 @@ class VideoEngine:
         # using Assistant Off, before loading the video model for any clip.
         for position,scene in enumerate(scenes):
             if resumed and position<resumed['completed']:continue
-            local=scene_plan(plan,scene|{'last':position==len(scenes)-1},index,scripts[position],audio_start=audio_start)
-            try:validate_plan(local,refs,scene['duration'])
+            try:
+                if storyboard:
+                    from .video_storyboard import local_plan
+                    local,local_refs=local_plan(storyboard,scene,plan,refs,index,audio_start)
+                else:local=scene_plan(plan,scene|{'last':position==len(scenes)-1},index,scripts[position],audio_start=audio_start);local_refs=refs
+                validate_plan(local,local_refs,scene['duration'])
             except ValueError as exc:raise ValueError(f'Piano video: la scena {position+1} non è valida. {exc} Nessuna nuova scena è stata avviata.') from exc
         outputs=[safe_join(self.data,path) for path in resumed['outputs']] if resumed else []
         parameters=list(resumed['parameters']) if resumed else [];canvas=None
@@ -184,19 +199,22 @@ class VideoEngine:
         if parameters and 'canvas_width' in parameters[0]:canvas=saved_canvas(parameters[0])
         def relative_output(path):return path.resolve().relative_to(self.data.resolve()).as_posix()
         record={'timeline':scenes,'prompts':scripts,'plan':plan,'model':model.get('id',''),'audio_start':audio_start,'completed':len(outputs),'parameters':parameters,'outputs':[relative_output(p) for p in outputs]}
+        if storyboard:record['storyboard']=storyboard
         save_checkpoint(folder,record)
         completed=len(outputs)
         for position,scene in enumerate(scenes):
             if position<completed:continue
             if cancel.is_set():raise Cancelled()
             scoped=scene|{'last':position==len(scenes)-1,'sequence':job_id,'canvas':canvas}
-            if resumed and position==completed:
-                scoped['resume_memory']={'opening':str(outputs[0]),'recent':[str(p) for p in outputs[-2:]]}
-            local=scene_plan(plan,scoped,index,scripts[position],audio_start=audio_start)
+            if resumed and position==completed and scene.get('continuity')!='cut':
+                anchor=max((i for i in range(position) if scenes[i].get('continuity')=='cut'),default=0) if storyboard else 0
+                scoped['resume_memory']={'opening':str(outputs[anchor]),'recent':[str(p) for p in outputs[anchor:][-2:]]}
+            if storyboard:local,local_refs=local_plan(storyboard,scene,plan,refs,index,audio_start)
+            else:local=scene_plan(plan,scoped,index,scripts[position],audio_start=audio_start);local_refs=refs
             def report(label):stage(f'Scena {position+1}/{len(scenes)} · '+label)
-            item=self.generate_video(model,settings,local,refs,job_id+f'/scene-{position+1:03d}',cancel,report,prompt=prompt,scene=scoped)
+            item=self.generate_video(model,settings,local,local_refs,job_id+f'/scene-{position+1:03d}',cancel,report,prompt=prompt,scene=scoped)
             outputs.append(safe_join(self.data,item['path']));p=item['generation'];parameters.append(p)
             if not canvas and 'canvas_width' in p:canvas=saved_canvas(p)
             record.update(completed=position+1,outputs=[relative_output(p) for p in outputs]);save_checkpoint(folder,record)
         result=compose(self,outputs,safe_join(self.data,soundtrack['path']),folder/'video.mp4',cancel,stage,folder/'engine.log',audio_start=audio_start,audio_duration=settings['_video_duration'])
-        return {'id':job_id,'name':'Video MiniMax H3.mp4','mime':'video/mp4','path':(folder/'video.mp4').relative_to(self.data).as_posix(),'generation':parameters[0]|{'duration':result['duration'],'audio_start':audio_start,'scenes':len(scenes),'scene_parameters':parameters,'audio_preserved':True,'visual_memory':len(scenes)>1,'recovered_scenes':completed}}
+        return {'id':job_id,'name':'Video MiniMax H3.mp4','mime':'video/mp4','path':(folder/'video.mp4').relative_to(self.data).as_posix(),'generation':parameters[0]|{'duration':result['duration'],'audio_start':audio_start,'scenes':len(scenes),'scene_parameters':parameters,'audio_preserved':True,'visual_memory':len(scenes)>1,'recovered_scenes':completed,'editing':'storyboard' if storyboard else 'continuous',**({'storyboard':storyboard} if storyboard else {})}}

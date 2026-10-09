@@ -320,7 +320,7 @@ class Worker:
             if entry['role'] in ('lipsync','reuse'):master,master_z=audio,z
         # Internal memory follows explicit references, preserving Picture ordinals.
         # Opening anchor and two recent endings are visible to the text encoder.
-        if request.get('scene_index',0)>0:
+        if request.get('scene_index',0)>0 and request.get('continuity')!='cut':
             memory=[self.anchor,*self.recent]
             for image in memory:
                 if image is not None:items.append({'type':'image','data':image})
@@ -348,7 +348,7 @@ class Worker:
         generation_started=time.monotonic();timings={}
         torch,comfy=self.torch,self.comfy
         images=self.images(request['images'])
-        if request.get('sequence')!=getattr(self,'sequence',None) or request.get('scene_index',0)==0:
+        if request.get('sequence')!=getattr(self,'sequence',None) or request.get('scene_index',0)==0 or request.get('continuity')=='cut':
             self.sequence=request.get('sequence');self.anchor=None;self.recent=[]
         if request.get('resume_memory'):self.restore_memory(request['resume_memory'])
         opts=resolve_canvas(request['options'],request['plan'],[(im.shape[2],im.shape[1]) for im in images],request.get('format_prompt',request['plan'].get('prompt','')))
