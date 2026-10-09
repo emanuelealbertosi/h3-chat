@@ -18,7 +18,7 @@ def timeline(duration):
     frames=math.ceil(duration*24)
     return [{'index':i,'start':start/24,'duration':min(360,frames-start)/24,'frames':min(360,frames-start)} for i,start in enumerate(range(0,frames,360))]
 
-def scene_plan(plan,scene,soundtrack_index,prompt=None):
+def scene_plan(plan,scene,soundtrack_index,prompt=None,*,audio_start=0):
     result=copy.deepcopy(plan);start=scene['start'];end=start+scene['duration']
     result['prompt']=prompt or plan['prompt']
     for entry in result['images']:
@@ -28,9 +28,8 @@ def scene_plan(plan,scene,soundtrack_index,prompt=None):
             else:entry.update(role='reference',seconds=0)
     for entry in result['audios']:
         if entry['index']==soundtrack_index:
-            # The final soundtrack is the whole selected file, starting at zero.
-            # Ignore an Assistant-invented offset so conditioning stays in sync.
-            entry['start']=start
+            # Use the requested source window, regardless of invented LLM offsets.
+            entry['start']=audio_start+start
             if entry['role']=='reference':entry['role']='reuse'
     result['prompt']+=f'\nThis is clip {scene["index"]+1}, covering seconds {start:g} to {end:g} of one continuous film. Use supplied visual memory to preserve subject identities, clothing and visual style while advancing the requested action. Follow the intended location/scene changes; keep environment and lighting coherent within each setting. Do not restart the opening.'
     return result

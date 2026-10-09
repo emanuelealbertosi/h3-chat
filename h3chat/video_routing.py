@@ -19,6 +19,10 @@ Keep speaker IDs (S1), (S2) stable and wrap dialogue in <d>[language] words</d>.
 Do not invent image details. Preserve visible identity, composition, wardrobe and lighting.
 The original user request is authoritative: preserve explicit actions, sequence, timing,
 cast, costumes, instruments, visual style and framing. Fill only unspecified creative gaps.
+When the request selects an audio segment or absolute timeline, describe only that clip.
+Convert absolute storyboard times into clip-local times starting at zero, using audio_source_start.
+Keep the exact supplied sung/spoken words in the prompt, in their original language;
+generic instructions such as accurate lip sync cannot replace those words.
 Keep requested canonical appearances/costumes; do not guess unsupported costume colors
 or redesign characters. Assign unspecified roles consistently, without overriding user roles.
 Turn broad direction into concrete, filmable action: who does what, where, how the camera
@@ -98,6 +102,6 @@ def direct_plan(prompt,refs,duration):
         elif index==1 and (len(pictures)==1 and not re.search(r'\b(reference|riferimento)\b',prompt,re.I) or re.search(r'\b(start frame|first frame|frame iniziale|primo fotogramma)\b',prompt,re.I)):role,seconds='keyframe',0
         else:role,seconds='reference',0
         images.append({'index':index,'role':role,'seconds':seconds})
-    audio_role='lipsync' if re.search(r'lip[ -]?sync|sincronizz\w*\s+(?:labial|labbra)|canta|singing',prompt,re.I) else 'reuse' if re.search(r'audio originale|original audio|conserva.*audio',prompt,re.I) else 'reference'
+    audio_role='lipsync' if re.search(r'lip[ -]?sync|sincronizz\w*\s+(?:labial|labbra)|canta|\b(?:sing|sings|singing)\b|mouth movements|movimenti labiali',prompt,re.I) else 'reuse' if re.search(r'audio originale|original audio|conserva.*audio',prompt,re.I) else 'reference'
     plan={'prompt':prompt,'images':images,'audios':[{'index':i,'role':audio_role if i==1 else 'reference','start':0} for i in range(1,len(audios)+1)]}
     return validate_plan(plan,refs,duration)

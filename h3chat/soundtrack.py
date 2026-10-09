@@ -24,7 +24,8 @@ def probe(engine,data,item,cancel,stage,log):
     return engine.tool_call('media-compose-worker.py',{'op':'probe','path':str(safe_join(data,item['path']))},cancel,stage,log,timeout=300)
 
 
-def compose(engine,videos,audio,output,cancel,stage,log,*,retime=False,durations=None):
+def compose(engine,videos,audio,output,cancel,stage,log,*,retime=False,durations=None,audio_start=0,audio_duration=None):
     stage('Montaggio · applicazione della traccia audio originale' if audio else 'Montaggio · sequenza delle slide')
     return engine.tool_call('media-compose-worker.py',{'op':'compose','videos':[str(p) for p in videos],
-        'audio':str(audio) if audio else None,'output':str(output),'retime':retime,**({'durations':durations} if durations is not None else {})},cancel,stage,log,timeout=3600)
+        'audio':str(audio) if audio else None,'output':str(output),'retime':retime,**({'durations':durations} if durations is not None else {}),
+        **({'audio_start':audio_start,'audio_duration':audio_duration} if audio_start or audio_duration is not None else {})},cancel,stage,log,timeout=3600)

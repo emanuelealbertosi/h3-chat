@@ -798,9 +798,13 @@ class Service:
                 soundtrack=choose_soundtrack(payload['prompt'],refs)
                 if soundtrack:
                     audio_info=probe_soundtrack(self.engine,self.data,soundtrack,cancel,stage,log_path)
+                    from .video_request import audio_window
+                    window=audio_window(payload['prompt'],audio_info['duration'])
                     from .video_timeline import timeline
-                    timeline(audio_info['duration'])
-                    settings=settings|{'_video_duration':audio_info['duration'],'_video_soundtrack':soundtrack}
+                    timeline(window['duration'])
+                    settings=settings|{'_video_duration':window['duration'],'_video_audio_start':window['start'],
+                        '_video_audio_source_duration':window['source_duration'],'_video_soundtrack':soundtrack}
+                    stage(f'Video · segmento audio {window["start"]:g}–{window["start"]+window["duration"]:g} s')
                 else:settings=with_prompt_duration(settings,payload['prompt'])
                 meta['model']=video_model['name'];self.store.update_answer(job,text,meta=meta)
                 if settings.get('_video_resume'):

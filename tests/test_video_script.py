@@ -98,3 +98,28 @@ class SceneScriptTests(unittest.TestCase):
         client.exchange=exchange
         with self.assertRaisesRegex(EmptyCompletion,'esaurito i token'):
             client.completion({'model':'synthetic','thinking':'none'},'test',[],self.settings|{'temperature':.7},threading.Event(),on_text=lambda _:None)
+
+    def test_identical_scene_bodies_are_repaired_before_accepting_batch(self):
+        opening='The camera flies over the walls, approaches the bedroom, and shows the teacher waking up to his ringing alarm clock.'
+        later='The teacher leaves his bed, packs his books, and hurries down the stairs toward the school gate.'
+        self.engine.completion=Mock(side_effect=[(json.dumps({'scenes':[opening,opening]}),'stop'),(json.dumps({'scenes':[opening,later]}),'stop')])
+        stages=[];result=self.engine.scene_scripts(self.plan,timeline(30),self.settings,threading.Event(),stages.append,prompt='A continuous school parody')
+        self.assertEqual(result,[opening,later]);self.assertIn('scene ripetute',' '.join(stages))
+        context=json.loads(self.engine.completion.call_args_list[1].args[0][1]['content'])
+        self.assertEqual(context['rejected_scenes'],[opening,opening])
+
+    def test_copy_across_batches_is_rejected_before_loading_video(self):
+        text='The camera flies over the walls, approaches the bedroom, and shows the teacher waking up to his ringing alarm clock.'
+        self.engine.completion=Mock(return_value=(json.dumps({'scenes':[text]}),'stop'))
+        self.engine.require_model=Mock(return_value={});self.engine.start_llama=Mock();self.engine.generate_video=Mock()
+        with tempfile.TemporaryDirectory() as tmp:
+            self.engine.data=Path(tmp);audio={'id':'track','mime':'audio/wav'}
+            settings=self.settings|{'chat_model':'synthetic','_assistant':True,'_video_duration':30,'_video_soundtrack':audio,'video_prompt_max_tokens':256}
+            with self.assertRaisesRegex(ValueError,'scena 2.*ripete.*Nessun video'):
+                self.engine.generate_long_video({},settings,self.plan,[audio],'job',threading.Event(),lambda _:None,prompt='A continuous parody')
+        self.engine.generate_video.assert_not_called()
+
+    def test_deliberate_repeat_is_allowed(self):
+        text='The camera flies over the walls, approaches the bedroom, and shows the teacher waking up to his ringing alarm clock.'
+        self.engine.completion=Mock(return_value=(json.dumps({'scenes':[text,text]}),'stop'))
+        self.assertEqual(self.engine.scene_scripts(self.plan,timeline(30),self.settings,threading.Event(),lambda _:None,prompt='Ripeti la stessa scena due volte'),[text,text])

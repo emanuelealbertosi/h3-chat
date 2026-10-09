@@ -30,6 +30,7 @@ class VideoEngine:
         self.start_llama(llm,settings,log_path,cancel,stage=stage)
         assets={kind:[{'index':i,'name':x['name']} for i,x in enumerate([r for r in refs if r['mime'].startswith(mime)],1)] for kind,mime in (('images','image/'),('audios','audio/'))}
         content=json.dumps({'request':prompt,'duration':opts['duration'],'attachments':assets,
+             'audio_source_start':settings.get('_video_audio_start',0),
              'conversation':[{'role':m['role'],'text':m['content'][-2000:]} for m in history[-4:] if m.get('status')=='done']},ensure_ascii=False)
         # Reuse the chat model and its CPU mmproj when enabled. Audio is not sent
         # to a text/vision LLM and must never be presented as a transcription.
@@ -39,10 +40,18 @@ class VideoEngine:
         messages=self.chat_messages([{'role':'user','content':content,'media':visual,'status':'done','seq':1}],llm,settings)
         messages[0]={'role':'system','content':BRIEF+attachment_instructions(assets['images'],assets['audios'])}
         tuning=settings|{'think_level':'off','max_tokens':min(settings['video_prompt_max_tokens'],settings['context']//2)}
-        raw,finish=self.completion(messages,tuning,cancel,on_text=lambda _:None,schema=PLAN_SCHEMA)
-        if finish=='length':raise ValueError('Assistant video ha esaurito i token. Aumenta contesto/token o semplifica la richiesta.')
-        try:plan=validate_plan(json.loads(raw),refs,opts['duration'])
-        except (ValueError,TypeError) as exc:raise ValueError('Assistant: piano video non valido. '+str(exc)) from exc
+        from .video_request import spoken_lines
+        speech=spoken_lines(prompt)
+        for attempt in range(2):
+            raw,finish=self.completion(messages,tuning,cancel,on_text=lambda _:None,schema=PLAN_SCHEMA)
+            if finish=='length':raise ValueError('Assistant video ha esaurito i token. Aumenta contesto/token o semplifica la richiesta.')
+            try:plan=validate_plan(json.loads(raw),refs,opts['duration'])
+            except (ValueError,TypeError) as exc:raise ValueError('Assistant: piano video non valido. '+str(exc)) from exc
+            missing=[line for line in speech if line not in plan['prompt']]
+            if not missing:break
+            if attempt:raise ValueError('Assistant video ha omesso le parole del canto/dialogo anche dopo la correzione. Nessun video è stato avviato.')
+            stage('Assistant · recupero le parole esatte del canto/dialogo')
+            messages=messages+[{'role':'assistant','content':raw},{'role':'user','content':'Preserve these exact user-supplied spoken/sung words in the video prompt, in their original language: '+json.dumps(missing,ensure_ascii=False)+'. Keep all original timing and actions. Return the complete corrected JSON plan.'}]
         return plan,{'model':llm['name'],'max_tokens':tuning['max_tokens']}
 
     def generate_video(self,model,settings,plan,refs,job_id,cancel,stage,*,prompt=None,scene=None):
@@ -86,15 +95,16 @@ class VideoEngine:
         refs=[{'mime':'image/png'} for _ in plan['images']]+[{'mime':'audio/wav'} for _ in plan['audios']]
         def produce(group):
             schema={'type':'object','properties':{'scenes':{'type':'array','minItems':len(group),'maxItems':len(group),'items':{'type':'string'}}},'required':['scenes'],'additionalProperties':False}
-            correction=None
+            correction=None;rejected=None
             for attempt in range(2):
                 if cancel.is_set():raise Cancelled()
                 first,last=group[0]['index']+1,group[-1]['index']+1
                 stage(f'Assistant · sceneggiatura · scene {first}–{last}/{len(scenes)}'+(' · nuovo tentativo conciso' if attempt else ''))
                 context={'request':prompt,'plan':plan,'total_scenes':len(scenes),'film_duration':scenes[-1]['start']+scenes[-1]['duration'],'clips':group,'opening':scripts[0] if scripts else None,'previous':scripts[-2:]}
+                if rejected:context['rejected_scenes']=rejected
                 instructions=brief+f'\nOutput budget: {budget} tokens for {len(group)} clip(s). Aim for at most {max(40,min(220,budget//(3*len(group))))} words per clip.'
                 if attempt and not correction:instructions+=' Previous output was empty or incomplete. Return short, complete JSON immediately.'
-                if correction:instructions+='\nPrevious output failed scene validation: '+correction+'. Rewrite this batch using only the allowed labels. Keep its visual action and original soundtrack; do not request or invent an image.'
+                if correction:instructions+='\nPrevious output failed scene validation: '+correction+'. Rewrite this batch following the original request, correcting the invalid parts. Use only allowed labels and preserve the original soundtrack; do not request or invent an image. Do not replay an earlier action unless the user explicitly asked for that repetition.'
                 try:
                     raw,finish=self.completion([{'role':'system','content':instructions},{'role':'user','content':json.dumps(context,ensure_ascii=False)}],tuning,cancel,on_text=lambda _:None,schema=schema)
                     if finish=='length':raise StructuredCompletionError('Output limit reached')
@@ -112,6 +122,13 @@ class VideoEngine:
                         if not attempt:
                             correction=str(exc);stage('Assistant · correggo i riferimenti della sceneggiatura');continue
                         raise ValueError(f'Assistant video: la scena {clip["index"]+1} non è valida anche dopo la correzione. {exc} Nessun video è stato avviato.') from exc
+                    from .video_request import repeated_scene
+                    duplicate=repeated_scene(scripts,value,prompt)
+                    if duplicate:
+                        if not attempt:
+                            correction=f'Clip {duplicate} copies an earlier scene instead of advancing the action';rejected=value
+                            stage('Assistant · correggo le scene ripetute');continue
+                        raise ValueError(f'Assistant video: la scena {duplicate} ripete una scena precedente anche dopo la correzione. Nessun video è stato avviato.')
                     scripts.extend(value);return
                 except (EmptyCompletion,StructuredCompletionError) as exc:
                     if len(group)>1:
@@ -125,19 +142,20 @@ class VideoEngine:
         from .video_timeline import timeline,scene_plan,validate_audio_interval
         from .video_resume import checkpoint,save as save_checkpoint
         from .soundtrack import compose,probe
-        scenes=timeline(settings['_video_duration']);soundtrack=settings['_video_soundtrack']
+        scenes=timeline(settings['_video_duration']);soundtrack=settings['_video_soundtrack'];audio_start=settings.get('_video_audio_start',0)
         if model.get('remote_media') and len(scenes)>1:raise ValueError('Video a più scene con memoria: seleziona il motore MiniMax H3 standalone. Il server esterno deve supportare esplicitamente questa funzione.')
         index=next(i for i,m in enumerate([r for r in refs if r['mime'].startswith('audio/')],1) if m['id']==soundtrack['id'])
         scripts=[plan['prompt']]*len(scenes)
         folder=self.data/'outputs'/job_id;folder.mkdir(parents=True,exist_ok=True)
         resumed=checkpoint(self.data,settings['_video_resume']) if settings.get('_video_resume') else None
         if resumed and (resumed['timeline']!=scenes or resumed.get('model',model.get('id',''))!=model.get('id','')):raise ValueError('Il modello o la durata audio sono cambiati: il video salvato non può essere ripreso.')
+        if resumed and resumed.get('audio_start',0)!=audio_start:raise ValueError('Il segmento audio è cambiato: le scene salvate non possono essere riprese.')
         # Validate every exact source interval BEFORE spending GPU time. The
         # selected track's decoded length was already measured by the service.
-        durations={index:settings['_video_duration']}
+        durations={index:settings.get('_video_audio_source_duration',audio_start+settings['_video_duration'])}
         audios=[r for r in refs if r['mime'].startswith('audio/')]
         for position,scene in enumerate(scenes):
-            local=scene_plan(plan,scene|{'last':position==len(scenes)-1},index)
+            local=scene_plan(plan,scene|{'last':position==len(scenes)-1},index,audio_start=audio_start)
             for entry in local['audios']:
                 if entry['role'] not in ('reuse','lipsync'):continue
                 ordinal=entry['index']
@@ -148,11 +166,16 @@ class VideoEngine:
             stage(f'Assistant · sceneggiatura continua in {len(scenes)} scene')
             llm=self.require_model(settings['chat_model'],'chat');self.start_llama(llm,settings,folder/'engine.log',cancel,stage=stage)
             scripts=self.scene_scripts(plan,scenes,settings,cancel,stage,prompt=prompt)
+        if settings.get('_assistant',True):
+            from .video_request import repeated_scene
+            duplicate=repeated_scene([],scripts,prompt)
+            if duplicate and (not resumed or duplicate>resumed['completed']):
+                raise ValueError(f'Piano video: la scena {duplicate} ripete una scena precedente. Nessuna nuova scena è stata avviata. Invia una nuova richiesta per correggere il piano salvato.')
         # Check remaining scripts too when resuming an older checkpoint or
         # using Assistant Off, before loading the video model for any clip.
         for position,scene in enumerate(scenes):
             if resumed and position<resumed['completed']:continue
-            local=scene_plan(plan,scene|{'last':position==len(scenes)-1},index,scripts[position])
+            local=scene_plan(plan,scene|{'last':position==len(scenes)-1},index,scripts[position],audio_start=audio_start)
             try:validate_plan(local,refs,scene['duration'])
             except ValueError as exc:raise ValueError(f'Piano video: la scena {position+1} non è valida. {exc} Nessuna nuova scena è stata avviata.') from exc
         outputs=[safe_join(self.data,path) for path in resumed['outputs']] if resumed else []
@@ -160,7 +183,7 @@ class VideoEngine:
         def saved_canvas(p):return {'width':p['canvas_width'],'height':p['canvas_height'],'output_width':p['width'],'output_height':p['height'],'aspect':p['aspect'],'aspect_source':p['aspect_source'],'format_image':p.get('format_image')}
         if parameters and 'canvas_width' in parameters[0]:canvas=saved_canvas(parameters[0])
         def relative_output(path):return path.resolve().relative_to(self.data.resolve()).as_posix()
-        record={'timeline':scenes,'prompts':scripts,'plan':plan,'model':model.get('id',''),'completed':len(outputs),'parameters':parameters,'outputs':[relative_output(p) for p in outputs]}
+        record={'timeline':scenes,'prompts':scripts,'plan':plan,'model':model.get('id',''),'audio_start':audio_start,'completed':len(outputs),'parameters':parameters,'outputs':[relative_output(p) for p in outputs]}
         save_checkpoint(folder,record)
         completed=len(outputs)
         for position,scene in enumerate(scenes):
@@ -169,11 +192,11 @@ class VideoEngine:
             scoped=scene|{'last':position==len(scenes)-1,'sequence':job_id,'canvas':canvas}
             if resumed and position==completed:
                 scoped['resume_memory']={'opening':str(outputs[0]),'recent':[str(p) for p in outputs[-2:]]}
-            local=scene_plan(plan,scoped,index,scripts[position])
+            local=scene_plan(plan,scoped,index,scripts[position],audio_start=audio_start)
             def report(label):stage(f'Scena {position+1}/{len(scenes)} · '+label)
             item=self.generate_video(model,settings,local,refs,job_id+f'/scene-{position+1:03d}',cancel,report,prompt=prompt,scene=scoped)
             outputs.append(safe_join(self.data,item['path']));p=item['generation'];parameters.append(p)
             if not canvas and 'canvas_width' in p:canvas=saved_canvas(p)
             record.update(completed=position+1,outputs=[relative_output(p) for p in outputs]);save_checkpoint(folder,record)
-        result=compose(self,outputs,safe_join(self.data,soundtrack['path']),folder/'video.mp4',cancel,stage,folder/'engine.log')
-        return {'id':job_id,'name':'Video MiniMax H3.mp4','mime':'video/mp4','path':(folder/'video.mp4').relative_to(self.data).as_posix(),'generation':parameters[0]|{'duration':result['duration'],'scenes':len(scenes),'scene_parameters':parameters,'audio_preserved':True,'visual_memory':len(scenes)>1,'recovered_scenes':completed}}
+        result=compose(self,outputs,safe_join(self.data,soundtrack['path']),folder/'video.mp4',cancel,stage,folder/'engine.log',audio_start=audio_start,audio_duration=settings['_video_duration'])
+        return {'id':job_id,'name':'Video MiniMax H3.mp4','mime':'video/mp4','path':(folder/'video.mp4').relative_to(self.data).as_posix(),'generation':parameters[0]|{'duration':result['duration'],'audio_start':audio_start,'scenes':len(scenes),'scene_parameters':parameters,'audio_preserved':True,'visual_memory':len(scenes)>1,'recovered_scenes':completed}}

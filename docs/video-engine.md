@@ -122,8 +122,9 @@ timed phrases `immagine 1 a 0 secondi`, `immagine 2 a 7 secondi` assign keyframe
 `start frame`/`frame iniziale` anchors the first image. A single image is a start
 frame unless identified as a reference. Other images are references. `lip-sync`
 assigns the first audio as the exact source; `audio originale` requests reuse.
-Other audio is treated as a sound/voice reference. More complex plans and source
-offsets require Assistant On. Advanced details in chat display the resolved plan
+Other audio is treated as a sound/voice reference. Explicit soundtrack windows
+such as `AUDIO: 00:15–00:30` work with Assistant On or Off; more complex reference
+plans require Assistant On. Advanced details in chat display the resolved plan
 and actual generation parameters.
 
 ## Audio conditioning and export
@@ -238,3 +239,25 @@ activation/loading, while `timings` records conditioning, diffuser loading,
 sampling, decoder loading, video/audio decoding and MP4 saving.
 The first interval includes sampler preparation and GPU transfers; these are
 wall-clock measurements, not isolated CUDA-kernel profiling.
+
+## Explicit audio windows and storyboard validation
+
+An explicit duration or source segment wins over automatic full-song generation.
+For example, `FORMAT: 15 seconds` and `ABSOLUTE TIMELINE 00:00–00:15` produce one
+15-second clip even with a 90-second song. `AUDIO: 00:15–00:30` selects the next
+15 seconds of that file: the same offset is used for lip-sync conditioning and
+for deterministic final audio composition. Shot ranges without an audio/timeline
+label are not interpreted as soundtrack windows. Conflicting durations/windows
+or a segment beyond the source audio fail before video generation. Without an
+explicit duration/window, the full-track behavior remains available. Saved
+checkpoints retain the source offset and reject recovery against another window.
+
+With Assistant On, copied scene bodies in a batch or across previous batches
+trigger one bounded rewrite, with the rejected scenes visible to the planner.
+Repeated invalid scenes fail before GPU generation rather than silently repeating
+the opening. This catches copied text, not every possible semantic similarity;
+explicitly requested repetition remains possible. Existing checkpoint prompts
+are checked too. Assistant Off passes through the original prompt and does not
+invent progression for a multi-scene video. Both modes obey explicit timing.
+Quoted spoken/sung words under vocal/dialogue directions must survive the initial
+Assistant plan; an omission gets one bounded correction before any video starts.

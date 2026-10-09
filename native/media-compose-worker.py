@@ -26,7 +26,7 @@ def probe(path):
         if not samples:raise ValueError('Traccia audio vuota.')
         return {'duration':samples/rate,'sample_rate':rate,'samples':samples}
 
-def compose(videos,audio,output,retime=False,durations=None):
+def compose(videos,audio,output,retime=False,durations=None,audio_start=0,audio_duration=None):
     import av
     info=probe(audio) if audio else None;clips=[]
     for path in videos:
@@ -38,7 +38,14 @@ def compose(videos,audio,output,retime=False,durations=None):
     if not clips:raise ValueError('Nessuna scena da montare.')
     if durations is not None and (not isinstance(durations,list) or len(durations)!=len(clips) or any(type(t) not in (int,float) or not math.isfinite(t) or t<=0 for t in durations)):raise ValueError('Tempi delle scene non validi.')
     total=sum(c[1] for c in clips)
-    target=info['duration'] if info else sum(durations) if durations is not None else total
+    if type(audio_start) not in (int,float) or not math.isfinite(audio_start) or audio_start<0:
+        raise ValueError('Inizio del segmento audio non valido.')
+    if audio_duration is not None and (type(audio_duration) not in (int,float) or not math.isfinite(audio_duration) or audio_duration<=0):
+        raise ValueError('Durata del segmento audio non valida.')
+    if not info and (audio_start or audio_duration is not None):raise ValueError('Il segmento richiede una traccia audio.')
+    target=(audio_duration if audio_duration is not None else info['duration']-audio_start) if info else sum(durations) if durations is not None else total
+    if info and (audio_start>=info['duration'] or audio_start+target>info['duration']+1/24+1/8000):
+        raise ValueError('La traccia non copre il segmento audio richiesto.')
     scale=target/total if retime else 1
     if durations is not None:
         if not isinstance(durations,list) or len(durations)!=len(clips) or any(type(t) not in (int,float) or not math.isfinite(t) or t<=0 for t in durations):raise ValueError('Tempi delle scene non validi.')
@@ -82,24 +89,30 @@ def compose(videos,audio,output,retime=False,durations=None):
                 emit('stage',message='Montaggio · codifica della traccia originale')
                 with av.open(audio,options={'protocol_whitelist':'file'}) as source:
                     resampler=av.AudioResampler(format='fltp',layout='stereo',rate=48000)
-                    cursor=0
+                    cursor=0;source_cursor=0;first_sample=round(audio_start*48000);last_sample=round((audio_start+target)*48000)
                     def write(parts):
-                        nonlocal cursor
+                        nonlocal cursor,source_cursor
                         for part in parts:
+                            lo=max(0,first_sample-source_cursor);hi=min(part.samples,last_sample-source_cursor)
+                            source_cursor+=part.samples
+                            if hi<=lo:continue
+                            if lo or hi<part.samples:
+                                part=av.AudioFrame.from_ndarray(part.to_ndarray()[:,lo:hi].copy(),format='fltp',layout='stereo');part.sample_rate=48000
                             part.pts=cursor;part.time_base=Fraction(1,48000);cursor+=part.samples
                             for packet in sound.encode(part):out.mux(packet)
                     for frame in source.decode(source.streams.audio[0]):
                         frame.pts=None;write(resampler.resample(frame))
+                        if source_cursor>=last_sample:break
                     write(resampler.resample(None))
                 for packet in sound.encode(None):out.mux(packet)
         partial.replace(destination)
-        return {'path':str(destination),'duration':target,'frames':written,'fps':fps,'audio_preserved':bool(audio),'retimed':retime or durations is not None,'speed_factor':1/scale,'scene_durations':durations,'synchronization':'per-scene' if durations is not None else 'global'}
+        return {'path':str(destination),'duration':target,'frames':written,'fps':fps,'audio_preserved':bool(audio),'audio_start':audio_start,'retimed':retime or durations is not None,'speed_factor':1/scale,'scene_durations':durations,'synchronization':'per-scene' if durations is not None else 'global'}
     finally:partial.unlink(missing_ok=True)
 
 if __name__=='__main__':
     emit('hello')
     try:
         request=json.loads(sys.stdin.readline())
-        result=probe(request['path']) if request['op']=='probe' else compose(request['videos'],request['audio'],request['output'],request.get('retime',False),request.get('durations'))
+        result=probe(request['path']) if request['op']=='probe' else compose(request['videos'],request['audio'],request['output'],request.get('retime',False),request.get('durations'),request.get('audio_start',0),request.get('audio_duration'))
         emit('result',result=result)
     except Exception as error:emit('error',message=str(error))
