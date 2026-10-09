@@ -237,7 +237,7 @@ def build(app,job,payload,history,settings,model,cancel,stage,log,meta):
             if warning:page['layout_warning']=warning
             html=screen.ensure_panels(app.engine,request,settings|{'think_level':'off'},cancel,html,opts,writing)
             if opts['output']=='video':
-                html=ensure_animation(app.engine,request,settings|{'think_level':'off'},cancel,html,duration,writing)
+                html=ensure_animation(app.engine,request,settings|{'think_level':'off'},cancel,html,duration,writing,stage)
                 if not screen.valid_panels(html,opts):raise ValueError('La correzione dell’animazione ha perso i riquadri: rigenera la scena.')
             page['html']=html;page['sources']=list(dict.fromkeys(k for k in re.findall(r'\[([RDWI]\d+)\]',html) if k in {r['id'] for r in references}));page['status']='ready';publish()
         except Exception:

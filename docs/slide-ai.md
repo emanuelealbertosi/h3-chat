@@ -37,6 +37,19 @@ slide; non modificano retroattivamente le altre pagine. Questi controlli sono
 disponibili per **LLM · HTML libero**; il motore deterministico conserva i suoi
 temi. Le impostazioni delle infografiche restano separate.
 
+## Correzione delle scene statiche
+
+Una scena video deve contenere animazioni interpretate dal motore. Se il LLM
+restituisce HTML statico anche dopo la correzione della pagina, viene richiesto
+un piano di regia JSON: il modello sceglie gli elementi già presenti, gli
+effetti e i tempi. H3-Chat verifica target e durata e applica soltanto gli
+attributi di animazione all'HTML originale. Non sostituisce il layout con un
+template e non modifica testi, immagini, video, narrazione o musica.
+
+Il canvas riceve la pagina animata, mai il JSON di lavoro. Il piano può essere
+corretto una volta; errori del provider e interruzioni dell'utente non vengono
+ritentati. Questa correzione funziona anche nella ricreazione di singole scene.
+
 ## Ricreare una sola pagina
 
 Nel canvas scegli una slide HTML, apri **Ricrea questa slide con AI**, scrivi le

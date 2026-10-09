@@ -85,7 +85,7 @@ def build(app,job,payload,settings,model,cancel,stage,log_path,meta):
             if warning:page['layout_warning']=warning
         if motion:html=screen.ensure_panels(app.engine,request,settings,cancel,html,opts,stream)
         if motion and opts['output']=='video':
-            html=animation.ensure(app.engine,request,settings,cancel,html,duration,stream)
+            html=animation.ensure(app.engine,request,settings,cancel,html,duration,stream,stage)
             if not screen.valid_panels(html,opts):raise ValueError('La correzione dell’animazione ha perso i riquadri: rigenera la scena.')
         page['html']=html;page['status']='ready'
         page['sources']=[r['id'] for r in deck.get('references',[]) if '['+r['id']+']' in page['html']]

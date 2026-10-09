@@ -70,6 +70,29 @@ class SlideAITests(unittest.TestCase):
         self.assertEqual(result['background'],'dark');self.assertEqual(result['palette'],'vivid')
         self.assertEqual(result['pages'][1],deck['pages'][1])
 
+    def test_static_revision_can_receive_choreography_without_rewriting_other_pages_or_audio(self):
+        from h3chat.infographic_choreography import targets
+        from h3chat.infographic_animation import playable
+        chat=self.app.store.create_chat()['id'];_,deck=self.deck(chat)
+        deck['infographic']={'version':1,'durations':[3,3],'transition':'fade','sfx':'none','options':{'output':'video'}}
+        deck['pages'][0]['notes']='Spiegazione già registrata.'
+        saved=self.app.store.canvas_history.save(chat,{'title':deck['title'],'content':encode(deck),'media':[]})
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for):
+            sent=enqueue(self.app,chat,{'artifact_id':saved['id'],'page':0,'prompt':'Anima la spiegazione'})
+        job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(sent['job_id'],));html=deck['pages'][0]['html'];calls=[]
+        def complete(messages,settings,cancel,**kw):
+            calls.append(messages)
+            if kw.get('schema'):
+                row=next(row for row in targets(html) if row['tag']=='h1')
+                return json.dumps({'animations':[{'target':row['id'],'motion':'fade','start':.2,'duration':.7,'out':-1,'ease':'smooth'}]}),'stop'
+            return html,'stop'
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete),patch('h3chat.voice.synthesize') as voice:
+            self.app.execute_job(job,threading.Event())
+        answer=self.app.store.messages(chat)[-1];self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
+        result=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4])
+        self.assertTrue(playable(result['pages'][0]['html'],3));self.assertEqual(len(calls),3)
+        self.assertEqual(result['pages'][0]['notes'],deck['pages'][0]['notes']);self.assertEqual(result['pages'][1],deck['pages'][1]);voice.assert_not_called()
+
     def test_revision_refuses_foreign_artifact_and_cancel_keeps_other_pages(self):
         chat=self.app.store.create_chat()['id'];other=self.app.store.create_chat()['id'];saved,original=self.deck(chat)
         with self.assertRaises(ValueError):enqueue(self.app,other,{'artifact_id':saved['id'],'page':0,'prompt':'Cambia'})

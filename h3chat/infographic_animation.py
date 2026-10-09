@@ -1,7 +1,9 @@
 """Ask the authoring LLM to repair scenes that contain no playable animation."""
 from html.parser import HTMLParser
 import math
-from .slide_html import BRIEF,validate
+from .slide_html import BRIEF,validate,InvalidPage
+from .downloads import Cancelled
+from .remote_llm import EmptyCompletion
 
 HTML_BRIEF=BRIEF.replace('HTML statico completo.','HTML/CSS completo: le animazioni vengono interpretate dal motore tramite gli attributi data-motion, senza JavaScript.')
 BRIEF_MOTION='Assegna agli elementi visibili data-motion="fade|slide|zoom|pan|blur|wipe|strobe|typewriter|appear", data-start e data-duration in secondi; data-out è opzionale. Distribuisci gli ingressi lungo la scena, con una regia coerente con la narrazione. Non limitarti a una pagina statica. Nessun JavaScript, CSS animation o transition.'
@@ -19,11 +21,17 @@ def playable(html,duration):
             if effect!='appear' or start>0:self.found=True
     parser=Animation();parser.feed(html);return parser.found
 
-def ensure(engine,request,settings,cancel,html,duration,on_text):
+def ensure(engine,request,settings,cancel,html,duration,on_text,stage=None):
+    if cancel.is_set():raise Cancelled()
     if playable(html,duration):return html
+    original=html
     repair=request+[{'role':'assistant','content':html},{'role':'user','content':'La scena restituita è statica: mancano animazioni utilizzabili dal motore. Conserva composizione, contenuti, immagini e riquadri; aggiungi una vera regia degli elementi visibili per '+str(duration)+' secondi. '+BRIEF_MOTION+' Restituisci l’HTML completo.'}]
-    raw,finish=engine.completion(repair,settings,cancel,on_text=on_text)
-    if finish=='length':raise ValueError('Animazione incompleta: aumenta Max token.')
-    html=validate(raw)
-    if not playable(html,duration):raise ValueError('Il modello ha restituito ancora una pagina statica senza animazioni. Rigenera la scena o cambia modello.')
+    try:
+        raw,finish=engine.completion(repair,settings,cancel,on_text=on_text)
+        if cancel.is_set():raise Cancelled()
+        html=original if finish=='length' else validate(raw)
+    except (InvalidPage,EmptyCompletion):html=original
+    if not playable(html,duration):
+        from .infographic_choreography import repair as repair_choreography
+        return repair_choreography(engine,request,settings,cancel,original,duration,on_text,stage)
     return html
