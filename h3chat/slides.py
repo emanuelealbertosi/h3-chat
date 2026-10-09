@@ -93,7 +93,7 @@ def edit_options(prompt,content):
     if extra:count+=1 if extra[1].lower() in ('un','una') else int(extra[1])
     # An addition specifies an increment, not the new total.
     return options(prompt[:extra.start()]+prompt[extra.end():] if extra else prompt,
-                   {'count':count,'format':deck['format'],'engine':deck.get('engine','deterministic')}|{k:deck[k] for k in ('theme','typography','design','detail','engine','vision_scope') if k in deck})
+                   {'count':count,'format':deck['format'],'engine':deck.get('engine','deterministic')}|{k:deck[k] for k in ('theme','typography','design','detail','engine','vision_scope','background','background_color','palette') if k in deck})
 
 
 def options(prompt, body=None):
@@ -130,6 +130,8 @@ def options(prompt, body=None):
         if re.search(pattern,prompt,re.I):result['design']=design;break
     if re.search(r'\b(?:test[oi]\s+(?:complet[oi]|estes[oi]|integral[ei]|dettagliat[oi])|discorsiv[oa]|senza\s+sintetizzare|non\s+solo\s+(?:titoli|headlines?)|full\s+text)\b',prompt,re.I):result['detail']='full'
     elif re.search(r'\b(?:sintetic[oa]|solo\s+(?:titoli|headlines?)|in\s+sintesi)\b',prompt,re.I):result['detail']='concise'
+    from .slide_colors import options as color_options
+    result.update(color_options(body))
     return result
 
 
@@ -308,6 +310,8 @@ def validate_content(content, media):
     if deck.get('engine','deterministic') not in ('llm','deterministic'):raise ValueError('Motore slide non valido.')
     if deck.get('theme','lagoon') not in THEMES or deck.get('typography','modern') not in TYPOGRAPHY:raise ValueError('Tema slide non valido.')
     if deck.get('design','professional') not in DESIGNS or deck.get('detail','concise') not in ('concise','full'):raise ValueError('Stile o dettaglio slide non valido.')
+    from .slide_colors import options as color_options
+    color_options(deck)
     if 'title' in deck and (not isinstance(deck['title'],str) or len(deck['title'])>150):raise ValueError('Titolo presentazione non valido.')
     refs=deck.get('references', [])
     if not isinstance(refs,list) or len(refs)>100 or any(not isinstance(r,dict) or not isinstance(r.get('id'),str) or not isinstance(r.get('label'),str) or len(r['label'])>1000 for r in refs): raise ValueError('Fonti slide non valide.')
@@ -377,6 +381,9 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     base[0]['content']+='\nOPZIONI DELLA PRESENTAZIONE: '+json.dumps({k:opts.get(k,default) for k,default in (('design','professional'),('detail','concise'))},ensure_ascii=False)+'. detail=full richiede testi e spiegazioni completi, non una lista di headline.'
     from .slide_style import brief as style_brief
     base[0]['content']+='\n'+style_brief(opts.get('design','professional'))
+    if opts['engine']=='llm':
+        from .slide_colors import brief as color_brief
+        base[0]['content']+=color_brief(opts)
     base[-1]['content']+='\nCATALOGO IMMAGINI:\n'+catalog+'\nFONTI CITABILI:\n'+json.dumps(references,ensure_ascii=False)
     planning=settings|{'think_level':'off','temperature':.2,'max_tokens':min(settings['max_tokens'],max(768,min(3500,384+opts['count']*96))),
                        'llm_timeout':min(settings.get('llm_timeout',1800),300)}
@@ -415,7 +422,9 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
           'title':outline['title'][:150] or 'Presentazione','references':references,'pages':pages,'active':0}
     direction=outline.get('visual_direction','')
     if not isinstance(direction,str):raise ValueError('Direzione artistica delle slide non valida.')
-    if opts['engine']=='llm':deck['visual_direction']=direction[:2500]
+    if opts['engine']=='llm':
+        deck['visual_direction']=direction[:2500]
+        deck.update({k:opts[k] for k in ('background','background_color','palette') if k in opts})
     if opts.get('generate_images'):deck['image_generation']={'model':meta['slide_image_model'],'count':len(generated),
         'plan':[{k:item[k] for k in ('slide','asset_id','description')} for item in meta['slide_image_plan']]}
     def publish():

@@ -7,6 +7,7 @@ from .image_options import options as image_options
 from .visual_routing import assistant_format
 from .loras import for_model as loras_for_model
 from .slide_style import brief as style_brief,image_prompt
+from .slide_colors import brief as color_brief
 from .remote_llm import EmptyCompletion,StructuredCompletionError
 
 
@@ -18,7 +19,7 @@ def plan_images(engine,outline,history,settings,image_model,cancel,stage):
     size=max(1,min(count,limit//320));plan=[]
     common='Prepara le immagini della presentazione. Massimo una per slide. Se l’utente chiede una immagine per ogni slide, pianificale per tutte; altrimenti ometti quelle dove non aiutano.\n'+\
         'Scaletta completa: '+json.dumps(outline,ensure_ascii=False)+'\nStile: '+opts.get('design','professional')+'\n'+\
-        style_brief(opts.get('design','professional'))+'\n'+\
+        style_brief(opts.get('design','professional'))+(color_brief(opts) if opts.get('engine','llm')=='llm' else '')+'\n'+\
         'Il campo prompt deve contenere '+style+'. description è una breve descrizione italiana dell’illustrazione.\n'+\
         'Ogni prompt deve essere autosufficiente: traduci in inglese lo stile visivo e la direzione artistica della scaletta, includendo palette, trattamento e composizione coerenti. Il motore immagini non vede questa conversazione: non scrivere soltanto «come le slide» o un soggetto senza stile. Mantieni una stessa famiglia visiva per tutte le illustrazioni, variando soggetti e composizione.\n'+\
         'Genera illustrazioni, scene o metafore pertinenti. Nessun testo piccolo, grafico numerico, formula o citazione dentro immagini: questi saranno HTML/SVG precisi. Non attribuire valore documentale alle illustrazioni generate.'

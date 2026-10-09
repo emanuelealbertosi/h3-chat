@@ -18,6 +18,7 @@ import {initChatModels} from './chat-models.js';
 import {renderVoiceSettings} from './voice.js';
 import {readDeck,renderSlides,exportSlides,transferSlideView} from './slides.js';
 import {initSlideImages} from './slide-ai.js';
+import {initSlideColors} from './slide-colors.js';
 import {initComposerPanel} from './composer-panel.js';
 import {initManimPresentation} from './manim-presentation.js';
 import {initWorkspaceLayout} from './workspace-layout.js';
@@ -74,6 +75,7 @@ $('#lab-tool').onchange=()=>{manimPresentation?.render();infographicsUI?.render(
 $('#slides-options').insertAdjacentHTML('beforeend',' <label>Motore <select id="slides-engine" aria-label="Motore slide"><option value="llm">LLM · HTML libero</option><option value="deterministic">Deterministico</option></select></label> <label>Stile <select id="slides-design"><option value="professional">Serio / professionale</option><option value="playful">Giocoso / colorato</option><option value="comic">Fumettoso</option></select></label> <label>Contenuto <select id="slides-detail"><option value="concise">Sintesi</option><option value="full">Testi completi</option></select></label>');
 $('#slides-options').insertAdjacentHTML('beforeend',' <label title="Rapida analizza fino a 8 figure nuove, dando precedenza alle fonti della richiesta. Le descrizioni già disponibili vengono riutilizzate; tutte le figure restano inseribili.">Figure Vision <select id="slides-vision" aria-label="Analisi figure slide"><option value="relevant">Rapida · max 8 nuove</option><option value="all">Completa · tutte</option></select></label>');
 const slideImages=initSlideImages();
+const slideColors=initSlideColors();
 async function executeArtifact(lang,source){if(activeJob())throw Error('Attendi o interrompi il lavoro corrente.');if(!current)await newChat();await api('/chats/'+current+'/messages',{prompt:lang.startsWith('manim')?'Renderizza questa scena Manim':'Esegui questo calcolo con l’interprete',lab:lang.startsWith('manim')?'manim':'calculate',lab_source:source,canvas:canvasOpen,...projects.read()});await refresh();}
 function localCard(model){
   const m=model;
@@ -241,7 +243,7 @@ async function uploadFiles(files){
 async function send(event){event.preventDefault();if(userJob())return;const prompt=$('#prompt').value.trim();if(!prompt)return;
   $('#send').disabled=true;
   try{await chatModels.wait();if(!current){const fresh=await api('/chats',{collection_id:collection,project_id:project});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);manimPresentation?.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
-    await persistCanvas();const presentation=await manimPresentation.prepare();const sent=await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,...presentation,...visualControls.read(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='infographic'?{infographic:infographicsUI.read()}:{}),...($('#lab-tool').value==='slides'?{slides:{engine:$('#slides-engine').value,count:Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value,vision_scope:$('#slides-vision').value,...slideImages.read()}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()});
+    await persistCanvas();const presentation=await manimPresentation.prepare();const sent=await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,...presentation,...visualControls.read(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='infographic'?{infographic:infographicsUI.read()}:{}),...($('#lab-tool').value==='slides'?{slides:{engine:$('#slides-engine').value,count:Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value,vision_scope:$('#slides-vision').value,...slideColors.read(),...slideImages.read()}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()});
     if(['slides','infographic'].includes(sent.intent)){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}
     $('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);await refresh();
   }finally{$('#send').disabled=false;}

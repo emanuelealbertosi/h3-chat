@@ -52,6 +52,24 @@ class SlideAITests(unittest.TestCase):
         self.assertEqual(len(self.app.store.canvas_history.listing(chat)['items']),2)
         self.assertNotIn('<main>',answer['content'])
 
+    def test_revision_uses_saved_slide_colors_not_current_infographic_palette(self):
+        chat=self.app.store.create_chat()['id'];_,deck=self.deck(chat)
+        deck.update(background='dark',palette='vivid')
+        saved=self.app.store.canvas_history.save(chat,{'title':deck['title'],'content':encode(deck),'media':[]})
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for):
+            sent=enqueue(self.app,chat,{'artifact_id':saved['id'],'page':0,'prompt':'Amplia la spiegazione'})
+        job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(sent['job_id'],))
+        def complete(messages,settings,cancel,**kw):
+            self.assertIn('Sfondo principale scuro',messages[0]['content'])
+            self.assertIn('colori vivaci e saturi',messages[0]['content'])
+            return '<main><h1>Nuova spiegazione</h1></main>','stop'
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete):
+            self.app.execute_job(job,threading.Event())
+        answer=self.app.store.messages(chat)[-1];self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
+        result=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4])
+        self.assertEqual(result['background'],'dark');self.assertEqual(result['palette'],'vivid')
+        self.assertEqual(result['pages'][1],deck['pages'][1])
+
     def test_revision_refuses_foreign_artifact_and_cancel_keeps_other_pages(self):
         chat=self.app.store.create_chat()['id'];other=self.app.store.create_chat()['id'];saved,original=self.deck(chat)
         with self.assertRaises(ValueError):enqueue(self.app,other,{'artifact_id':saved['id'],'page':0,'prompt':'Cambia'})

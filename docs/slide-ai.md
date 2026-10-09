@@ -22,6 +22,21 @@ Il flusso delle presentazioni resta invariato quando **Illustrazioni AI · tutte
 è disattivato (impostazione iniziale). Documenti, figure RAG e allegati continuano
 a essere disponibili al LLM.
 
+## Sfondo e palette
+
+In **Slide → Impostazioni** trovi pulsanti separati per **Sfondo** e **Palette**.
+Entrambi partono da **Automatico**: il comportamento precedente resta invariato.
+Puoi scegliere sfondo chiaro, scuro o personalizzato con il selettore colore,
+e palette naturale, pastello, vivace, neon o monocromatica. Il LLM riceve queste
+preferenze nella scaletta, in ogni pagina HTML e nel piano delle illustrazioni;
+continua a comporre liberamente il layout. Le istruzioni esplicite nel prompt
+prevalgono sui selettori. Viene richiesto contrasto leggibile fra sfondo e testo.
+
+Le scelte vengono salvate nel deck e riutilizzate nella ricreazione di una sola
+slide; non modificano retroattivamente le altre pagine. Questi controlli sono
+disponibili per **LLM · HTML libero**; il motore deterministico conserva i suoi
+temi. Le impostazioni delle infografiche restano separate.
+
 ## Ricreare una sola pagina
 
 Nel canvas scegli una slide HTML, apri **Ricrea questa slide con AI**, scrivi le

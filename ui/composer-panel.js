@@ -47,7 +47,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  const count=$('#slides-count'),countLabel=count.closest('label');countLabel.classList.add('prompt-count');const minus=button('−'),plus=button('＋');minus.ariaLabel='Meno slide';plus.ariaLabel='Più slide';count.before(minus);count.after(plus);for(const [item,delta] of [[minus,-1],[plus,1]])item.onclick=()=>{count.value=Math.max(1,Math.min(30,(Number(count.value)||8)+delta));count.dispatchEvent(new Event('change',{bubbles:true}));render();};
  const slideTechnical=field('Presentazioni · opzioni tecniche');slides.append(slideTechnical);
  for(const id of ['slides-engine','slides-vision'])slideTechnical.append($('#'+id).closest('label'));
- for(const [id,title] of [['slides-format','Formato'],['slides-design','Stile'],['slides-detail','Contenuto']])pills($('#'+id),title);
+ for(const [id,title] of [['slides-format','Formato'],['slides-design','Stile'],['slides-detail','Contenuto'],['slides-background','Sfondo'],['slides-palette','Palette']])pills($('#'+id),title);
  for(const id of ['slides-engine','slides-vision'])pills($('#'+id),id==='slides-engine'?'Motore slide':'Analisi delle figure');
  const imageToggle=toggle($('#slides-generate-images'),'Illustrazioni AI · tutte insieme',slides);imageToggle.classList.add('prompt-slide-images');
  const imageModels=$('#slides-image-model'),generatedModels=pills(imageModels,'Modello per le illustrazioni',true);

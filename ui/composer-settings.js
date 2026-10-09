@@ -11,7 +11,7 @@ export function initComposerSettings({context,getState,onChange}){
  let current=null,opener=null;
  const definitions=[
   ['prompt-image-panel','Immagini',()=>selected('#image-model')],
-  ['slides-options','Slide',()=>[$('#slides-count')?.value+' slide',selected('#slides-format'),selected('#slides-design'),selected('#slides-detail'),$('#slides-generate-images')?.checked?'Illustrazioni AI':''].filter(Boolean).join(' · ')],
+  ['slides-options','Slide',()=>[$('#slides-count')?.value+' slide',selected('#slides-format'),selected('#slides-design'),selected('#slides-detail'),$('#slides-engine')?.value==='llm'?'Sfondo '+($('#slides-background')?.value==='custom'?$('#slides-background-color')?.value:selected('#slides-background').toLowerCase()):'',$('#slides-engine')?.value==='llm'?'Palette '+selected('#slides-palette').toLowerCase():'',$('#slides-generate-images')?.checked?'Illustrazioni AI':''].filter(Boolean).join(' · ')],
   ['music-inputs','Music',()=>[$('#music-inputs [data-music-field="instrumental"]')?.checked?'Strumentale':'Con voce',$('#music-inputs [data-music-field="title"]')?.value,$('#music-inputs [data-music-field="style"]')?.value?.slice(0,100)].filter(Boolean).join(' · ')],
   ['voice-inputs','Voice',()=>['gender','delivery','emotion','expressiveness'].map(key=>selected('#voice-inputs [data-voice-field="'+key+'"]').replace('Auto · segue l’interpretazione','Auto')).filter(Boolean).join(' · ')],
   ['video-hint','Video',()=>['Immagini e audio dal prompt',getState()?.models.find(m=>m.id===getState()?.settings.video_model)?.name].filter(Boolean).join(' · ')],

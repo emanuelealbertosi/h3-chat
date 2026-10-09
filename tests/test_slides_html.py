@@ -64,6 +64,23 @@ class HTMLTests(fixtures.GenerationTests):
         self.assertNotIn('Non creare codice HTML',calls[0][0][0]['content'])
         self.assertNotIn('<style>',answer['content'])
 
+    def test_color_preferences_reach_outline_and_every_page_and_are_saved(self):
+        job=self.enqueue('Crea 2 slide',slides={'background':'custom','background_color':'#EAF0FF','palette':'pastel'});calls=[]
+        def complete(messages,settings,cancel,**kw):
+            calls.append(messages)
+            self.assertIn('Sfondo principale del colore #eaf0ff',messages[0]['content'])
+            self.assertIn('colori pastello',messages[0]['content'])
+            if kw.get('schema'):
+                return json.dumps({'title':'Corso','visual_direction':'Avorio e azzurro pastello',
+                    'slides':[{'title':t,'purpose':'Spiega'} for t in ('A','B')]}),'stop'
+            return '<main style="background:#eaf0ff"><h1>Pagina originale</h1></main>','stop'
+        with patch.object(self.app.engine,'require_model',return_value=self.model),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete):
+            self.app.execute_job(job,threading.Event())
+        answer=self.app.store.messages(job['chat_id'])[-1];self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
+        deck=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4])
+        self.assertEqual([deck[k] for k in ('background','background_color','palette')],['custom','#eaf0ff','pastel'])
+        self.assertEqual(len(calls),3);validate_content(encode(deck),[])
+
     def test_default_and_legacy_edit_engines(self):
         self.assertEqual(options('')['engine'],'llm')
         self.assertEqual(options('',{'engine':'deterministic'})['engine'],'deterministic')
