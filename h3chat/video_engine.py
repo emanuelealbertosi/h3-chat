@@ -73,7 +73,7 @@ class VideoEngine:
         with output.open('rb') as stream:
             if stream.read(12)[4:8]!=b'ftyp':raise RuntimeError('Il motore non ha prodotto un MP4 valido.')
         session.uses+=1
-        actual=opts|done.get('parameters',{})|{'startup_seconds':startup_seconds}
+        actual=opts|done.get('parameters',{})|{'startup_seconds':startup_seconds,'quality':settings.get('_video_quality','high')}
         (folder/'video-plan.json').write_text(json.dumps({'plan':plan,'parameters':actual},ensure_ascii=False,indent=2),encoding='utf-8')
         return {'id':job_id,'name':'Video MiniMax H3.mp4','mime':'video/mp4','path':output.relative_to(self.data).as_posix(),'generation':actual}
 

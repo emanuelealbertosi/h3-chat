@@ -27,6 +27,26 @@ video default. Hybrid is the preferred model and is selected automatically when 
 first use; an already installed Ming/Qwen runtime is reused. Model license terms
 still apply and weights are not included in the application archive.
 
+## Request quality
+
+In the chat's **Video → Impostazioni → Qualità** dialog, **Alta · preset attuale**
+is the default and keeps the selected model's saved parameters (normally 0.7 MP
+and 12 steps). **Media · più rapida** caps resolution at 0.5 MP and steps at 8;
+lower custom values stay lower, except lip-sync still uses at least 8 steps.
+Duration, frame rate, aspect handling, references, sampler, scheduler, attention
+and loading policies remain unchanged. Media trades detail and refinement for
+less generation work; actual time depends on hardware and offload, and model
+loading is not made faster by this profile.
+
+The preference belongs to the chat, is captured in each queued request, and is
+retained by **Riutilizza** and **Rigenera**. It applies to automatically routed
+MiniMax videos too, including every scene of a long video. It never edits the
+administrator's per-model preset and does not affect Manim or HTML infographics.
+The response displays the selected profile and reported resolution/steps.
+Remote H3 video requests apply the same caps; Alta without overrides preserves
+the server's defaults. These profiles do not automatically enable VEDA or add
+Turbo/LoRA models.
+
 ## Per-model defaults
 
 | Setting | Default |

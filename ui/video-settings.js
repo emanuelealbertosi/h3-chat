@@ -28,6 +28,7 @@ export function renderVideoSettings(container,{state,draft,link,edit,pickFile,in
 }
 export function appendVideoDetails(content,message,advanced){
  const parameters=message.meta.video_parameters;
+ if(parameters?.quality){const note=document.createElement('p');note.className='small-note video-quality-result';note.textContent='Qualità video · '+(parameters.quality==='medium'?'Media':'Alta')+(Number.isFinite(parameters.megapixels)?' · '+parameters.megapixels.toLocaleString('it-IT')+' MP':'')+(Number.isFinite(parameters.steps)?' · '+parameters.steps+' passi':'');content.append(note);}
  if(parameters&&typeof parameters.sampling_seconds==='number'){
   const time=value=>value<60?Math.round(value)+' s':Math.floor(value/60)+' min '+Math.round(value%60)+' s';
   const steps=(parameters.step_seconds||[]).filter(x=>Number.isFinite(x)&&x>=0),steady=steps.length>1?steps.slice(1):steps;

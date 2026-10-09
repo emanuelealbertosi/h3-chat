@@ -10,6 +10,19 @@ DEFAULTS = {'duration':15, 'megapixels':.7, 'aspect':'16:9', 'steps':12, 'cfg':1
             'veda_predictor':'', 'veda_sparsity':90, 'veda_reference_sparsity':90}
 ASPECTS = ('16:9','9:16','1:1','4:3','3:4')
 
+def quality(value='high'):
+    if not isinstance(value,str) or value not in ('high','medium'):
+        raise ValueError('Qualità video: scegli Alta oppure Media.')
+    return value
+
+def apply_quality(parameters,value='high'):
+    """Request-only caps; never change the model's saved generation parameters."""
+    result=dict(parameters)
+    if quality(value)=='medium':
+        result['megapixels']=min(result.get('megapixels',DEFAULTS['megapixels']),.5)
+        result['steps']=min(result.get('steps',DEFAULTS['steps']),8)
+    return result
+
 def validate(value):
     if not isinstance(value,dict) or set(value)-set(DEFAULTS):raise ValueError('Parametri video non riconosciuti.')
     result=DEFAULTS|value
@@ -33,7 +46,7 @@ def validate(value):
     return result
 
 def options(model,settings,randomize=True):
-    result=validate(settings.get('video_overrides',{}).get(model['id'],{}))
+    result=apply_quality(validate(settings.get('video_overrides',{}).get(model['id'],{})),settings.get('_video_quality','high'))
     if randomize and result['seed']==-1:result['seed']=secrets.randbelow(2**31)
     a,b=map(int,result['aspect'].split(':'));ratio=a/b
     result['width']=max(32,round(math.sqrt(result['megapixels']*1024**2*ratio)/32)*32)

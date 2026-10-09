@@ -43,6 +43,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  lab.closest('label').hidden=true;
  const imagePanel=field('Modello immagini');imagePanel.id='prompt-image-panel';context.append(imagePanel);imagePanel.append(image.closest('label'));pills(image,'Scegli il modello',true);
  for(const id of ['slides-options','music-inputs','voice-inputs','video-hint'])context.append($('#'+id));
+ pills($('#video-quality'),'Qualità');
  slides.classList.add('prompt-slide-options');
  const count=$('#slides-count'),countLabel=count.closest('label');countLabel.classList.add('prompt-count');const minus=button('−'),plus=button('＋');minus.ariaLabel='Meno slide';plus.ariaLabel='Più slide';count.before(minus);count.after(plus);for(const [item,delta] of [[minus,-1],[plus,1]])item.onclick=()=>{count.value=Math.max(1,Math.min(30,(Number(count.value)||8)+delta));count.dispatchEvent(new Event('change',{bubbles:true}));render();};
  const slideTechnical=field('Presentazioni · opzioni tecniche');slides.append(slideTechnical);

@@ -405,6 +405,8 @@ class Service:
         if type(web) is not bool or type(transcribe) is not bool:raise ValueError('Web/Trascrivi: scegli attivo o disattivo.')
         if transcribe and not any(x['mime'].startswith('audio/') for x in media):raise ValueError('Allega un audio per trascriverlo.')
         if type(video) is not bool:raise ValueError('Video: scegli attivo o disattivo.')
+        from .video_options import quality as video_quality
+        settings['_video_quality']=video_quality(body.get('video_quality','high'))
         if type(music) is not bool:raise ValueError('Music: scegli attivo o disattivo.')
         if sum((bool(selection),music,video,transcribe,voice))>1:raise ValueError('Scegli una sola modalità esplicita fra Voice, Video, Music, Trascrivi e immagini.')
         fields=validate_music_fields(body.get('music_fields',{}))

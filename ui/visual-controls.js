@@ -1,5 +1,6 @@
 import {escape as esc} from './render.js';
 import {initVoiceControls} from './voice.js';
+import {initVideoQuality} from './video-quality.js';
 
 function normalizeVoice(value){return {...value,voice_fields:{...value.voice_fields,engine:'higgs',params:{}}};}
 
@@ -7,12 +8,14 @@ function normalizeVoice(value){return {...value,voice_fields:{...value.voice_fie
 export function initVisualControls({getState,getChatId}){
  const model=document.querySelector('#image-model'),assistant=document.querySelector('#image-assistant');
  const key=id=>'h3.visual-options.'+(id||'new');
- const read=()=>{try{return {image_model:'',assistant:true,music:false,video:false,web:false,transcribe:false,music_fields:{},...normalizeVoice(JSON.parse(localStorage.getItem(key(getChatId()))||'{}'))};}catch{return {image_model:'',assistant:true,music:false,video:false,web:false,transcribe:false,music_fields:{}};}};
+ const read=()=>{try{return {image_model:'',assistant:true,music:false,video:false,video_quality:'high',web:false,transcribe:false,music_fields:{},...normalizeVoice(JSON.parse(localStorage.getItem(key(getChatId()))||'{}'))};}catch{return {image_model:'',assistant:true,music:false,video:false,video_quality:'high',web:false,transcribe:false,music_fields:{}};}};
  function save(value){localStorage.setItem(key(getChatId()),JSON.stringify(value));render();}
  const voice=initVoiceControls({read,save,getState});
+ const videoQuality=initVideoQuality({read,save,getState});
  function render(){
   const state=getState();if(!state)return;
   voice.render();
+  videoQuality.render();
   const value=read(),items=state.models.filter(m=>m.capabilities.some(c=>['create','edit'].includes(c)));
   const signature=JSON.stringify(items.map(m=>[m.id,m.name,m.ready]));
   if(model.dataset.signature!==signature){model.innerHTML='<option value="">Automatico · dal prompt</option>'+items.map(m=>`<option value="${esc(m.id)}" ${m.ready?'':'disabled'}>${esc(m.name)}${m.ready?'':' · non disponibile'}</option>`).join('');model.dataset.signature=signature;}

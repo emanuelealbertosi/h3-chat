@@ -55,6 +55,11 @@ class MediaProviders:
         assets=[{'name':r['name'],'data':base64.b64encode(safe_join(self.store.root,r['path']).read_bytes()).decode()} for r in refs]
         if cfg['adapter']=='h3':
             params=settings.get('image_overrides',{}).get(model['id'],{}) if task in ('create','edit') else settings.get('music_overrides',{}).get(model['id'],{}) if task=='music' else settings.get('video_overrides',{}).get(model['id'],{})
+            if task=='video':
+                from .video_options import apply_quality
+                params=apply_quality(params,settings.get('_video_quality','high'))
+                if plan and any(a['role']=='lipsync' for a in plan.get('audios',[])) and 'steps' in params:
+                    params['steps']=max(8,params['steps'])
             ticket=self.client.exchange(cfg,key,cancel,path='/v1/h3/generations',body={'task':task,'model':cfg['model'],'prompt':prompt,'assets':assets,'parameters':params,'device':cfg['device'],'composition':composition,'plan':plan},timeout=60)
             ident=ticket.get('id')
             if not isinstance(ident,str) or not re.fullmatch(r'[a-f0-9]{32}',ident):raise ValueError('Il server non ha restituito un lavoro valido.')
@@ -101,4 +106,4 @@ class MediaProviders:
         if mime=='audio/wav' and not (raw.startswith(b'RIFF') and raw[8:12]==b'WAVE'):raise ValueError('Audio WAV non valido.')
         if mime=='video/mp4' and raw[4:8]!=b'ftyp':raise ValueError('Video MP4 non valido.')
         relative=f'outputs/{job_id}/remote.{ext}';target=safe_join(self.store.root,relative);target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(raw)
-        return {'id':uid(),'path':relative,'name':result.get('name','output.'+ext),'mime':mime,'generation':result.get('generation',{})|{'remote':True}}
+        return {'id':uid(),'path':relative,'name':result.get('name','output.'+ext),'mime':mime,'generation':result.get('generation',{})|{'remote':True}|({'quality':settings.get('_video_quality','high')} if task=='video' else {})}
