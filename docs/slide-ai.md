@@ -51,6 +51,16 @@ competere con le attivazioni o di forzare memoria condivisa di Windows.
 Finito il batch, il processo immagini viene chiuso e il LLM viene ripristinato
 con contesto, layer GPU, MTP e accelerazione originali, senza ridurne i parametri.
 Le immagini su server esterno non richiedono di scaricare il LLM locale.
+
+Il piano completo viene raccolto in gruppi di pagine dimensionati sul limite
+**Max token istruzioni immagini** del LLM, distinto da **Max token di risposta**.
+Con 2.200 token, per esempio, 15 pagine vengono pianificate in gruppi di 6, 6 e 3.
+Se una risposta è troncata, il gruppo viene suddiviso prima di tentare nuovamente;
+una singola pagina ha al massimo due tentativi. Si mantengono numeri globali,
+scaletta completa e direzione artistica. Tutta la pianificazione deve completarsi
+prima di scaricare il LLM o generare immagini: il batch del modello immagini
+resta unico. Questo vale anche per le immagini delle infografiche. I valori
+salvati di contesto e token non vengono aumentati automaticamente.
 Durante la generazione Ming / Qwen Image viene mostrato anche il tempo
 dell'ultimo passo, per distinguere il caricamento dal calcolo effettivo.
 
