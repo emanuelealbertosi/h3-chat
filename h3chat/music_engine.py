@@ -5,7 +5,7 @@ import json
 import wave
 from pathlib import Path
 from .downloads import Cancelled
-from .music_options import options, validate_fields
+from .music_options import options, validate_fields, worker_options
 from .music_routing import MUSIC_BRIEF, direct_composition
 from .music_runtime import backend, executable
 
@@ -46,7 +46,7 @@ class MusicEngine:
  def generate_music(self,model,settings,composition,job_id,cancel,stage):
   if model.get('remote_media'):return self.remote_generate(model,settings,'',[],job_id,cancel,stage,composition=composition)
   folder=self.data/'outputs'/job_id;folder.mkdir(parents=True,exist_ok=True)
-  output=folder/'audio.wav';opts=options(model,settings)
+  output=folder/'audio.wav';opts=worker_options(options(model,settings))
   if composition['abc'] and opts['cot']=='off':raise ValueError('Per usare ABC scegli Melodia o Melodia e accordi nelle preferenze Musica.')
   stage('Caricamento / riuso · '+model['name'])
   session=self.start_music(model,settings,folder/'engine.log',cancel,stage=stage)

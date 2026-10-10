@@ -1,5 +1,6 @@
 import {escape as esc} from './render.js';
 import {renderMusicQualityPreferences} from './music-quality.js';
+import {durationField,bindDuration} from './music-duration.js';
 let selected=null;
 export const selectMusicPreferencesModel=id=>{selected=id;};
 const labels={cfg_scale:'CFG · aderenza allo stile',num_inference_steps:'Passi di sintesi',abc_temperature:'Spartito · temperatura',abc_top_p:'Spartito · top P',abc_top_k:'Spartito · top K',abc_repetition_penalty:'Spartito · penalità ripetizioni',abc_penalty_window:'Spartito · finestra penalità',abc_min_tokens:'Spartito · token minimi',abc_max_tokens:'Spartito · token massimi',semantic_temperature:'Audio · temperatura',semantic_top_p:'Audio · top P',semantic_top_k:'Audio · top K',semantic_repetition_penalty:'Audio · penalità ripetizioni',semantic_penalty_window:'Audio · finestra penalità',semantic_min_tokens:'Audio · token minimi',semantic_max_tokens:'Audio · token massimi'};
@@ -14,6 +15,8 @@ export function renderMusicSettings(container,{state,draft,link,edit,install,dow
  if(model?.remote_media){const note=document.createElement('p');note.className='small-note';note.textContent='Server esterno: il dispositivo si sceglie nel collegamento. Senza override vengono usati i parametri del modello sul server.';container.prepend(note);}
  const rerender=()=>renderMusicSettings(container,{state,draft,link,edit,install,download,changed});
  renderMusicQualityPreferences(container,{state,draft,changed,rerender,onModel:id=>{selected=id;}});
+ const duration=document.createElement('div');duration.innerHTML=durationField(values.max_duration,'model');container.querySelector('.music-preset-summary').after(duration);
+ bindDuration(duration,'model',value=>{if(!selected)return;draft.music_overrides??={};draft.music_overrides[selected]={...(draft.music_overrides[selected]||{}),max_duration:value};changed();});
  container.querySelector('[data-setting="music_model"]').onchange=e=>{draft.music_model=e.target.value;draft.music_quality='model';selected=e.target.value;rerender();changed();};
  container.querySelector('#music-link').onclick=link;
  container.querySelector('#music-model-paths').onclick=()=>model&&edit(model);

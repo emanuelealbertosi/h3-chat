@@ -55,6 +55,7 @@ class MediaProviders:
         assets=[{'name':r['name'],'data':base64.b64encode(safe_join(self.store.root,r['path']).read_bytes()).decode()} for r in refs]
         if cfg['adapter']=='h3':
             params=settings.get('image_overrides',{}).get(model['id'],{}) if task in ('create','edit') else settings.get('music_overrides',{}).get(model['id'],{}) if task=='music' else settings.get('video_overrides',{}).get(model['id'],{})
+            if task=='music' and params.get('max_duration') is None:params={k:v for k,v in params.items() if k!='max_duration'}
             if task=='video':
                 from .video_options import apply_quality
                 params=apply_quality(params,settings.get('_video_quality','high'))

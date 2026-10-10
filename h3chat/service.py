@@ -421,6 +421,8 @@ class Service:
         fields=validate_music_fields(body.get('music_fields',{}))
         from .music_quality import capture as capture_music_quality
         settings=capture_music_quality(settings,body.get('music_quality'))
+        from .music_options import capture_duration
+        settings=capture_duration(settings,body.get('music_max_duration'))
         settings = settings | {'_image_model':selection,'_assistant':assistant,'_music':music,'_music_fields':fields,'_video':video,'_web':web,'_transcribe':transcribe}
         settings.update(_voice=voice,_voice_fields=validate_voice_fields(body.get('voice_fields',{})))
         rag=body.get('rag',settings['rag_enabled'])

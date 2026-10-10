@@ -167,6 +167,7 @@ class Store:
         lora_meta["video_quality"]=settings.get("_video_quality","high")
         lora_meta["video_editing"]=settings.get("_video_editing","continuous")
         lora_meta["music_quality"]=settings.get("music_quality","model")
+        lora_meta["music_max_duration"]=settings.get("_music_max_duration")
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             chat = db.execute("SELECT * FROM chats WHERE id=?", (chat_id,)).fetchone()

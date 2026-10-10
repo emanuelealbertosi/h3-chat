@@ -12,12 +12,41 @@ NUMBERS = {
  'semantic_min_tokens':(0,9000,200), 'semantic_max_tokens':(200,12000,9000),
 }
 INTEGER = {'num_inference_steps'} | {k for k in NUMBERS if any(s in k for s in ('top_k','window','tokens'))}
-DEFAULTS = {k:v[2] for k,v in NUMBERS.items()} | {'cot':'full','seed':831001}
+DEFAULTS = {k:v[2] for k,v in NUMBERS.items()} | {'cot':'full','seed':831001,'max_duration':None}
+
+
+def duration(value):
+ if value is not None and (type(value) not in (int,float) or not math.isfinite(value) or not .04<=value<=900):
+  raise ValueError('Durata massima musica: scegli da 0,04 a 900 secondi, oppure disattiva il limite.')
+ return value
+
+
+def capture_duration(settings,value=None):
+ import copy
+ result=copy.deepcopy(settings);result['_music_max_duration']=duration(value)
+ if value is not None:
+  result.setdefault('music_overrides',{}).setdefault(result['music_model'],{})['max_duration']=value
+ return result
+
+
+def worker_options(value):
+ """YuE2GenerateMusic equivalent: 25 codec frames per second, before inference.
+
+ audio.cpp consumes semantic_max_tokens rather than the ComfyUI alias.
+ An explicit seconds limit replaces that token limit; absence leaves it intact.
+ """
+ result=dict(value);seconds=duration(result.get('max_duration'))
+ if seconds is not None:
+  result['semantic_max_tokens']=max(1,round(seconds*25))
+  result['semantic_min_tokens']=min(result['semantic_min_tokens'],result['semantic_max_tokens'])
+ else:result.pop('max_duration',None)
+ return result
 
 
 def validate(value, *, partial=False):
  if not isinstance(value,dict) or set(value)-set(DEFAULTS):raise ValueError('Parametri musica non riconosciuti.')
  result=DEFAULTS|value
+ duration(result['max_duration'])
  if result['cot'] not in ('off','melody','full'):raise ValueError('Pianificazione musicale non valida.')
  if type(result['seed']) is not int or not -1<=result['seed']<2**53:raise ValueError('Seed musica: usa -1 oppure un intero tra 0 e 2^53-1.')
  for k,(lo,hi,_) in NUMBERS.items():
@@ -31,6 +60,7 @@ def validate(value, *, partial=False):
 def options(model,settings,*,randomize=True):
  value=validate(settings.get('music_overrides',{}).get(model['id'],{}))
  if randomize and value['seed']==-1:value['seed']=secrets.randbelow(2**31)
+ if value['max_duration'] is None:value.pop('max_duration')
  return value
 
 

@@ -3,7 +3,7 @@ import {build} from 'esbuild';
 import assert from 'node:assert/strict';
 const require=createRequire(import.meta.url),{chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
 const browser=await chromium.launch({channel:'msedge',headless:true}),page=await browser.newPage();
-const result=await build({entryPoints:['ui/music-settings.js','ui/music-quality.js'],bundle:true,write:false,outdir:'work/music-quality-ui-test',format:'iife',globalName:'MusicUI'});
+const result=await build({entryPoints:['ui/music-settings.js','ui/music-quality.js','ui/music-duration.js'],bundle:true,write:false,outdir:'work/music-quality-ui-test',format:'iife',globalName:'MusicUI'});
 try{
  await page.setContent('<div id="preferences"></div><section id="music-inputs"></section>');
  await page.evaluate(result.outputFiles.find(f=>f.path.endsWith('music-settings.js')).text);
@@ -23,6 +23,17 @@ try{
  assert.equal(await page.locator('[data-music-setting="num_inference_steps"]').inputValue(),'32');
  await page.locator('[data-setting="music_model"]').selectOption('bf16');
  assert.equal(await page.evaluate(()=>draft.music_quality),'model');
+ assert.equal(await page.locator('[data-duration-enable="model"]').isChecked(),false);
+ assert.equal(await page.locator('[data-duration-seconds="model"]').isDisabled(),true);
+ await page.locator('[data-duration-enable="model"]').check();
+ await page.locator('[data-duration-seconds="model"]').fill('120');
+ assert.equal(await page.evaluate(()=>draft.music_overrides.bf16.max_duration),120);
+ await page.locator('#music-settings-model').selectOption('q8');
+ assert.equal(await page.locator('[data-duration-enable="model"]').isChecked(),false);
+ await page.locator('#music-settings-model').selectOption('bf16');
+ assert.equal(await page.locator('[data-duration-seconds="model"]').inputValue(),'120');
+ await page.locator('[data-duration-enable="model"]').uncheck();
+ assert.equal(await page.evaluate(()=>draft.music_overrides.bf16.max_duration),null);
  await page.evaluate(result.outputFiles.find(f=>f.path.endsWith('music-quality.js')).text);
  await page.evaluate(()=>{state.settings=draft;globalThis.choice={};globalThis.controls=MusicUI.initMusicQuality({getState:()=>state,read:()=>choice,save:value=>{choice=value;controls.render();}});controls.render();});
  await page.locator('button[data-music-quality="high"]').click();
@@ -32,5 +43,19 @@ try{
  assert.match(await page.locator('[data-music-quality-summary]').innerText(),/Q8.*32 passi/);
  await page.evaluate(()=>{state.settings.music_quality_profiles.high.model='';controls.render();});
  assert.equal(await page.locator('button[data-music-quality="high"]').isDisabled(),true);
- console.log('PASS: high/low select their real models, adjustable per-profile steps, manual-model compatibility, chat buttons and clear unconfigured presets.');
+ await page.evaluate(result.outputFiles.find(f=>f.path.endsWith('music-duration.js')).text);
+ await page.evaluate(()=>{globalThis.durationControls=MusicUI.initMusicDuration({getState:()=>state,read:()=>choice,save:value=>{choice=value;durationControls.render();}});durationControls.render();});
+ assert.equal(await page.locator('[data-duration-enable="chat"]').isChecked(),false);
+ assert.equal(await page.locator('[data-duration-seconds="chat"]').isDisabled(),true);
+ await page.locator('[data-duration-enable="chat"]').check();
+ await page.locator('[data-duration-seconds="chat"]').fill('48');
+ assert.equal(await page.evaluate(()=>choice.music_max_duration),48);
+ assert.equal(await page.evaluate(()=>choice.music_fields?.max_duration),undefined);
+ await page.locator('[data-duration-enable="chat"]').uncheck();
+ assert.equal(await page.evaluate(()=>choice.music_max_duration),null);
+ assert.equal(await page.locator('[data-duration-seconds="chat"]').isDisabled(),true);
+ await page.evaluate(()=>{choice.music_max_duration=75;durationControls.render();});
+ assert.equal(await page.locator('[data-duration-seconds="chat"]').inputValue(),'75');
+ assert.equal(await page.locator('[data-duration-enable="chat"]').isChecked(),true);
+ console.log('PASS: quality profiles, model settings and optional duration controls; disabled defaults, independent presets, request override, disable and restore.');
 }finally{await browser.close();}
