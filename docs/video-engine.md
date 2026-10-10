@@ -291,9 +291,20 @@ Assistant plan; an omission gets one bounded correction before any video starts.
 Assistant On. Attach (or refer to) one complete soundtrack and numbered images,
 then describe the scenes, order, image references and optional cut times in the
 prompt. The planner creates one complete storyboard before loading MiniMax:
-variable shots of 1–15 seconds, exact full coverage, reference/start-frame images
-selected separately for each shot, and cut versus continued movement. Without
-specified timings it favors 4–8-second montage shots. Up to 160 shots are supported.
+generation clips of 1–15 seconds, exact full coverage, reference/start-frame images
+selected separately for each clip, and cut versus continued movement. A generated
+clip can contain several visual shots: internal cuts are written as `[Shot 2] At
+MM:SS.mmm` in that clip's prompt, without separate model loading or conditioning.
+Write **“9 clip”** (or “nine clips”) to require exactly nine generation calls.
+Numbered `CLIP 1`, `CLIP 2`, etc. blocks also set the count; complete timeline
+intervals on those headers are validated before inference. Narrative `SCENA`
+headers and internal shot counts do not automatically add generation calls.
+An explicit generation count takes precedence over a count of narrative scenes.
+Without a count it uses the minimum required to cover the soundtrack, up to 15
+seconds per generation; untimed clips should be distributed near evenly and retain
+the full ending. Up to 160 generation clips are supported. Impossible counts or
+invalid time coverage fail before video inference. A planner that returns more
+clips than requested must repair its plan; it cannot silently launch extra clips.
 No soundtrack is restarted per shot: the correct source interval conditions
 lip-sync, and the original track is muxed once across the final film. Reference
 images are filtered to each shot and their Picture indices remapped consistently.
@@ -306,16 +317,20 @@ Storyboard requires the standalone MiniMax engine and a soundtrack. It is
 captured with each queued request and restored by Riutilizza/Rigenera. Checkpoints
 store the full storyboard so recovery preserves already rendered clips, timings,
 image assignments and source offsets without replanning. Advanced video details
-show the saved shot plan. Clips and their quality still depend on the generative
-model; timed hard cuts and continuous soundtrack composition are deterministic.
-More shots also incur more conditioning/loading work on machines using offload.
+show the saved clip plan and count policy. The planned number is shown in the
+progress message before loading MiniMax; generation progress uses `Clip 1/9`.
+Clips and their quality still depend on the generative model. Cuts between generated
+clips and continuous soundtrack composition are deterministic; internal cuts and
+action timing remain generative. More generation clips also incur more
+conditioning/loading work on machines using offload.
 
 Example with two images and a song:
 
 > Usa tutta la canzone come colonna sonora continua, formato 16:9.
 > Immagine 1: riferimento del protagonista; immagine 2: riferimento della cantante.
 > Prima scena: il protagonista arriva a scuola. Stacco su un primo piano della
-> cantante, poi entrambi cantano nel cortile. Inquadrature da 5–8 secondi;
+> cantante, poi entrambi cantano nel cortile. Usa 9 clip da generare, con
+> inquadrature più brevi e stacchi interni descritti nel prompt di ciascun clip;
 > prosegui con nuove azioni coerenti per coprire tutta la canzone. Mantieni le
 > identità, varia le inquadrature, lip-sync nelle scene cantate, nessuna voce aggiunta.
 

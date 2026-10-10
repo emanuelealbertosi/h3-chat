@@ -57,10 +57,10 @@ class StoryboardTests(unittest.TestCase):
         bad=copy.deepcopy(self.value);bad['shots'][-1]['end']=20
         engine=VideoEngine();engine.require_model=Mock(return_value={});engine.start_llama=Mock()
         engine.completion=Mock(side_effect=[(json.dumps(bad),'stop'),(json.dumps(self.value),'stop')])
-        result=build(engine,self.plan,self.refs,self.settings,'A film',threading.Event(),Mock(),Path('log'))
+        result=build(engine,self.plan,self.refs,self.settings,'A film in 3 clip',threading.Event(),Mock(),Path('log'))
         self.assertEqual(len(result['shots']),3);self.assertEqual(engine.completion.call_count,2)
         engine.completion=Mock(side_effect=RuntimeError('Provider 401'))
-        with self.assertRaisesRegex(RuntimeError,'401'):build(engine,self.plan,self.refs,self.settings,'A film',threading.Event(),Mock(),Path('log'))
+        with self.assertRaisesRegex(RuntimeError,'401'):build(engine,self.plan,self.refs,self.settings,'A film in 3 clip',threading.Event(),Mock(),Path('log'))
         self.assertEqual(engine.completion.call_count,1)
 
     def test_per_clip_duration_does_not_shorten_entire_song(self):
@@ -93,7 +93,7 @@ class StoryboardTests(unittest.TestCase):
                 return {'path':path.relative_to(engine.data).as_posix(),'generation':{'width':960,'height':540,'canvas_width':960,'canvas_height':544,'aspect':'16:9','aspect_source':'preset'}}
             engine.generate_video=generate
             with patch('h3chat.soundtrack.compose',return_value={'duration':24}) as mux:
-                result=engine.generate_long_video({'id':'hybrid'},self.settings,self.plan,self.refs,'a'*32,threading.Event(),Mock(),prompt='A film')
+                result=engine.generate_long_video({'id':'hybrid'},self.settings,self.plan,self.refs,'a'*32,threading.Event(),Mock(),prompt='A film in 3 clip')
             self.assertEqual([scene['continuity'] for _,_,scene in calls],['cut','cut','continue'])
             self.assertEqual([plan['audios'][0]['start'] for plan,_,_ in calls],[15,21,30])
             self.assertEqual([[r['id'] for r in refs] for _,refs,_ in calls],[['i2','audio'],['i1','audio'],['audio']])

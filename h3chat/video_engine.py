@@ -231,7 +231,7 @@ class VideoEngine:
                 scoped['resume_memory']={'opening':str(outputs[anchor]),'recent':[str(p) for p in outputs[anchor:][-2:]]}
             if storyboard:local,local_refs=local_plan(storyboard,scene,plan,refs,index,audio_start)
             else:local=scene_plan(plan,scoped,index,scripts[position],audio_start=audio_start,shared=not settings.get('_assistant',True));local_refs=refs
-            def report(label):stage(f'Scena {position+1}/{len(scenes)} · '+label)
+            def report(label):stage(f'{"Clip" if storyboard else "Scena"} {position+1}/{len(scenes)} · '+label)
             item=self.generate_video(model,settings,local,local_refs,job_id+f'/scene-{position+1:03d}',cancel,report,prompt=prompt,scene=scoped)
             outputs.append(safe_join(self.data,item['path']));p=item['generation'];parameters.append(p)
             if not canvas and 'canvas_width' in p:canvas=saved_canvas(p)

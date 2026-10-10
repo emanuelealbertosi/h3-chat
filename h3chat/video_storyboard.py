@@ -1,4 +1,5 @@
 """Plan ordered, timed shots and select only their actual image references."""
+import copy
 import json
 import math
 import re
@@ -6,6 +7,7 @@ from .downloads import Cancelled
 from .remote_llm import EmptyCompletion, StructuredCompletionError
 from .video_options import validate_plan
 from .video_request import repeated_scene, spoken_lines
+from .video_clip_budget import contract, requested
 
 MAX_SHOTS=160
 SCHEMA={'type':'object','properties':{
@@ -21,11 +23,14 @@ SCHEMA={'type':'object','properties':{
     'required':['style','shots'],'additionalProperties':False}
 
 
-def validate(value,duration,refs,request,*,audio_start=0):
+def validate(value,duration,refs,request,*,audio_start=0,clip_budget=None):
     if not isinstance(value,dict) or set(value)!= {'style','shots'} or not isinstance(value['style'],str) or not value['style'].strip() or len(value['style'])>1200:
         raise ValueError('Stile dello storyboard non valido.')
     shots=value['shots'];images=[r for r in refs if r['mime'].startswith('image/')]
     if not isinstance(shots,list) or not 1<=len(shots)<=MAX_SHOTS:raise ValueError('Storyboard: da 1 a 160 inquadrature.')
+    if clip_budget is None and requested(request)[0] is not None:clip_budget=contract(request,duration,audio_start=audio_start)
+    if clip_budget and len(shots)!=clip_budget['count']:
+        raise ValueError(f"Storyboard: servono esattamente {clip_budget['count']} clip da generare; ricevuti {len(shots)}. Raggruppa gli stacchi interni nei prompt, senza aggiungere generazioni.")
     target=math.ceil(duration*24);cursor=0;scenes=[]
     for index,shot in enumerate(shots):
         if not isinstance(shot,dict) or set(shot)-{'time_basis'}!= {'end','prompt','continuity','lip_sync','images'}:raise ValueError('Inquadratura storyboard non valida.')
@@ -35,6 +40,8 @@ def validate(value,duration,refs,request,*,audio_start=0):
             if abs(end-duration)>1/24:raise ValueError('Lo storyboard deve coprire tutta la durata richiesta.')
             frame=target
         else:frame=round(end*24)
+        if clip_budget and clip_budget['end_frames'] and frame!=clip_budget['end_frames'][index]:
+            raise ValueError(f"Il clip {index+1} deve terminare a {clip_budget['end_frames'][index]/24:g} secondi, come richiesto.")
         frames=frame-cursor
         if not 1<=frames<=360 or (frames<24 and index!=len(shots)-1):raise ValueError('Ogni inquadratura deve durare da 1 a 15 secondi, salvo la coda finale.')
         if shot['continuity'] not in ('cut','continue') or type(shot['lip_sync']) is not bool:raise ValueError('Stacco o lip-sync storyboard non valido.')
@@ -63,16 +70,29 @@ def validate(value,duration,refs,request,*,audio_start=0):
 
 
 def build(engine,plan,refs,settings,prompt,cancel,stage,log):
+    duration=settings['_video_duration'];clip_budget=contract(prompt,duration,audio_start=settings.get('_video_audio_start',0))
+    stage(f"Storyboard · {clip_budget['count']} clip da generare · stacchi interni al prompt")
     llm=engine.require_model(settings['chat_model'],'chat');engine.start_llama(llm,settings,log,cancel,stage=stage)
-    duration=settings['_video_duration'];budget=min(settings['context']//2,settings['video_prompt_max_tokens'])
+    budget=min(settings['context']//2,settings['video_prompt_max_tokens'])
     context={'request':prompt,'duration':duration,'audio_source_start':settings.get('_video_audio_start',0),
+             'generation_clips':clip_budget['count'],'minimum_generation_clips':clip_budget['minimum'],
+             'required_clip_ends':[frame/24 for frame in clip_budget['end_frames']],
              'images':[{'index':i,'name':r['name']} for i,r in enumerate([r for r in refs if r['mime'].startswith('image/')],1)]}
     instructions='''Direct a music-video storyboard covering the entire requested duration.
-Return JSON style, shots. style contains only stable cast, wardrobe and visual aesthetic,
+Return JSON style, shots. Each shots item is ONE GPU GENERATION CLIP, not one
+visual shot or cut. Return EXACTLY generation_clips items. Never multiply GPU
+calls for camera cuts or action changes. style contains only stable cast, wardrobe and visual aesthetic,
 not a replay of the opening, and no Picture labels. Each shot has end (seconds relative
 to this video), prompt (English visible action/camera), continuity (cut or continue),
 lip_sync, images [{index,role}]. Start is the preceding end, starting at zero.
-Shots last 1–15 seconds, the last may have a shorter tail. End the last exactly at duration.
+Generation clips last 1–15 seconds, the last may have a shorter tail. End the last
+exactly at duration. If required_clip_ends is nonempty, use those exact ends.
+Without explicit clip timings, use near-even durations across generation_clips,
+leaving enough time for the complete requested ending. Internal visual cuts can
+occur at any appropriate local time inside a clip; keep every requested action.
+In each prompt use [Shot 1] without a timestamp for the first visual shot, then
+[Shot 2] At MM:SS.mmm, [Shot 3] At MM:SS.mmm, etc. for internal cuts. Restart
+shot numbering in each clip. A clip with one uninterrupted shot needs no extra cuts.
 Each shot also declares time_basis: prefer local for narrative timestamps within
 its prompt, from 00:00 to that shot's duration. Subtract the shot start from global
 film times, or audio_source_start + shot start from SOURCE audio times. Declare
@@ -81,14 +101,17 @@ end always remains a global FILM time, regardless of time_basis in the prompt.
 Honor every user scene, order, timing, cast and image assignment. Use global image
 indices from the supplied inventory. Reference preserves identity/style; keyframe
 uses that image as the first frame. Only select images relevant to each shot.
-A cut is a true new shot/location/framing and does not force the preceding last frame.
-continue is only for an explicit continuation of the same action/in-camera movement.
-Use cuts by default for montage; do not create arbitrary extra cuts against the request.
-Without requested shot timings, favor varied shots of roughly 4–8 seconds for a music
-montage, rather than a succession of identical 15-second introductions. Respect
+A clip's continuity=cut starts it without the preceding last frame; continuity=continue
+is only for continuation across GENERATION CLIP boundaries. Internal cuts stay
+inside that clip's prompt and do not create new shots-array items. Use cut at
+clip boundaries by default for montage; do not invent extra visual cuts against
+the request. A 15-second clip may contain multiple shorter visual shots. Respect
 explicit wardrobe changes and the reference chosen for each scene; stable identity
 does not mean every scene must use the same location, costume or composition.
-Split actions longer than 15s into continued shots, without restarting the action.
+Split actions longer than 15s across the allocated generation clips, without
+restarting the action. Select all references needed by the internal visual shots
+of that clip. Only a clip's starting image can be role=keyframe; images needed
+after an internal cut are role=reference and must be mentioned in the prompt.
 Keep prompts concise and concrete. Preserve exact user-supplied sung/spoken words
 and their language in the matching shot. Do not invent unheard lyrics, singers,
 beat timings or transcriptions. Music is one continuous original track under every
@@ -96,7 +119,10 @@ shot, never a fresh song or loop per shot. lip_sync=true only for visible perfor
 requested by the user; other shots keep the music without forcing singing.
 Image labels, if used, must refer to images selected in that shot. No Audio labels
 are needed in your prompts. Fill creative gaps only where the user left them open.
-Before returning check full time coverage, scene progression and image assignments.'''
+Before returning check EXACT generation clip count, full time coverage, internal
+cut clocks, scene progression, complete ending and image assignments.'''
+    schema=copy.deepcopy(SCHEMA)
+    schema['properties']['shots'].update(minItems=clip_budget['count'],maxItems=clip_budget['count'])
     tuning=settings|{'max_tokens':budget,'think_level':'off'}
     messages=[{'role':'system','content':instructions+f'\nTotal output budget: {budget} tokens. Use concise shot descriptions.'},
               {'role':'user','content':json.dumps(context,ensure_ascii=False)}]
@@ -104,10 +130,11 @@ Before returning check full time coverage, scene progression and image assignmen
         if cancel.is_set():raise Cancelled()
         stage('Assistant · regia dello storyboard'+(' · correzione' if attempt else ''))
         try:
-            raw,finish=engine.completion(messages,tuning,cancel,on_text=lambda _:None,schema=SCHEMA)
+            raw,finish=engine.completion(messages,tuning,cancel,on_text=lambda _:None,schema=schema)
             if finish=='length':raise StructuredCompletionError('Output storyboard incompleto: aumenta i token Assistant video.')
-            result=validate(json.loads(raw),duration,refs,prompt,audio_start=settings.get('_video_audio_start',0))
-            stage(f'Storyboard · {len(result["shots"])} inquadrature · traccia continua')
+            result=validate(json.loads(raw),duration,refs,prompt,audio_start=settings.get('_video_audio_start',0),clip_budget=clip_budget)
+            result['clip_budget']=clip_budget
+            stage(f'Storyboard confermato · {len(result["shots"])} generazioni · stacchi interni · traccia continua')
             return result
         except (ValueError,TypeError,EmptyCompletion,StructuredCompletionError) as exc:
             if attempt:raise ValueError('Assistant: storyboard non valido dopo la correzione. '+str(exc)+' Nessun video è stato avviato.') from exc
