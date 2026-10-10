@@ -111,6 +111,20 @@ class VideoTests(unittest.TestCase):
         self.assertIn('Allowed Picture labels: NONE',instructions)
         self.assertIn('Allowed Audio labels: <Audio 1>',instructions)
         self.assertNotIn('<Picture 1>',instructions)
+
+    def test_large_assistant_budget_reaches_completion_and_remains_context_bounded(self):
+        refs=[{'mime':'audio/mpeg','name':'song.mp3'}]
+        plan={'prompt':'Performance with <Audio 1>.','images':[],'audios':[{'index':1,'role':'reuse','start':0}]}
+        for configured,expected in ((16000,16000),(100000,40000)):
+            settings=DEFAULTS|{'context':80000,'video_prompt_max_tokens':configured}
+            with patch.object(self.app.engine,'require_model',return_value={'id':'chat','name':'Chat','vision':{'enabled':False}}),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',return_value=(json.dumps(plan),'stop')) as completion:
+                _,info=self.app.engine.refine_video([], 'Create a music video',refs,self.model,settings,threading.Event(),self.folder/'log',lambda _:None)
+            self.assertEqual(completion.call_args.args[1]['max_tokens'],expected)
+            self.assertEqual(info['max_tokens'],expected)
+            self.assertEqual(settings['video_prompt_max_tokens'],configured)
+        with patch.object(self.app.engine,'require_model',return_value={'id':'chat','name':'Chat','vision':{'enabled':False}}),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',return_value=('Incomplete','length')):
+            with self.assertRaisesRegex(ValueError,'40000 token.*Max token istruzioni video'):
+                self.app.engine.refine_video([], 'Create a music video',refs,self.model,settings,threading.Event(),self.folder/'log',lambda _:None)
     def test_session_key_only_changes_for_loading_parameters(self):
         key=self.app.engine.session_key('video',self.model,DEFAULTS)
         self.assertEqual(key,self.app.engine.session_key('video',self.model,DEFAULTS|{'video_overrides':{self.model['id']:{'steps':13}}}))

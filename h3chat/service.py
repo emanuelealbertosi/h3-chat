@@ -246,7 +246,7 @@ class Service:
             if not isinstance(key,str) or len(key)>150:raise ValueError('Identificativo preset musicale non valido.')
             validate_music_options(value)
         if type(s['video_auto']) is not bool or type(s['video_advanced']) is not bool:raise ValueError('Video: opzione non valida.')
-        if type(s['video_prompt_max_tokens']) is not int or not 256<=s['video_prompt_max_tokens']<=8192:raise ValueError('Token Assistant video: scegli da 256 a 8192.')
+        if type(s['video_prompt_max_tokens']) is not int or not 256<=s['video_prompt_max_tokens']<=MAX_OUTPUT_TOKENS:raise ValueError(f'Token Assistant video: scegli da 256 a {MAX_OUTPUT_TOKENS}.')
         if not isinstance(s['video_overrides'],dict) or len(s['video_overrides'])>100:raise ValueError('Preset video non validi.')
         for key,value in s['video_overrides'].items():
             if not isinstance(key,str) or len(key)>150:raise ValueError('Identificativo preset video non valido.')

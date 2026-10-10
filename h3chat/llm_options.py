@@ -17,7 +17,7 @@ def defaults(profile):
 def validate(values):
     if not isinstance(values,dict) or set(values)-set(KEYS):raise ValueError('Parametri del preset LLM non validi.')
     if 'llm_timeout' in values and (type(values['llm_timeout']) is not int or not 60<=values['llm_timeout']<=14400):raise ValueError('Tempo massimo LLM: da 60 a 14400 secondi.')
-    for key,lo,hi in (('vision_max_refs',1,12),('context',1024,MAX_CONTEXT),('max_tokens',64,MAX_OUTPUT_TOKENS),('gpu_layers',0,999),('mtp_draft_tokens',1,8),('prompt_max_tokens',256,8192),('music_prompt_max_tokens',256,8192),('video_prompt_max_tokens',256,8192)):
+    for key,lo,hi in (('vision_max_refs',1,12),('context',1024,MAX_CONTEXT),('max_tokens',64,MAX_OUTPUT_TOKENS),('gpu_layers',0,999),('mtp_draft_tokens',1,8),('prompt_max_tokens',256,8192),('music_prompt_max_tokens',256,8192),('video_prompt_max_tokens',256,MAX_OUTPUT_TOKENS)):
         if key in values and (type(values[key]) is not int or not lo<=values[key]<=hi):raise ValueError(f'{key}: inserisci un intero tra {lo} e {hi}.')
     if 'temperature' in values and (type(values['temperature']) not in (int,float) or not math.isfinite(values['temperature']) or not 0<=values['temperature']<=2):raise ValueError('Temperatura LLM fuori intervallo.')
     if 'think_level' in values and values['think_level'] not in ('off','low','med','high','xhigh'):raise ValueError('Thinking LLM non valido.')

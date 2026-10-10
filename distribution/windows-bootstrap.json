@@ -1,7 +1,7 @@
 {
   "archive": "windows-bootstrap.zip",
-  "size": 3700758,
-  "sha256": "5a0d8ded0bbbe744c55e9d6988ab1acd224eb14f326bc4c9ee72536c098c0210",
+  "size": 3700804,
+  "sha256": "76d4391cad0cec4bb6f46d3024cf5c77cfb1b84d97adebd5f1d9aa385a784d66",
   "sources": {
     "ui/api-providers.js": "e655a70bf19b32109cb8ba889601a28d7e2372c9a54eb5a255ac7a3c7924ad90",
     "ui/app.js": "3fe8757b3281c31878d1cfbc689eae63e422a54fefa76587d6e45c56f60a00cd",
@@ -18,7 +18,7 @@
     "ui/infographic-renderer.js": "960e16ce34b1d8d96d278f0f4c6e5a116037b25ac4d29189139419fe189c60a1",
     "ui/infographic-text-controls.js": "e03ad0fced6cdbfe41c65dc9b7bface60a497b87f86aaa10f364709dfaf97c43",
     "ui/infographics.js": "20b62c7fbf10331526c691ab57cd74b0a2175e1206da33c80b95ac8d6fd4b07f",
-    "ui/llm-settings.js": "2940ee0a94763c528a923188fed0372ed33e2700fc86c8d25cc0dafb4ede472a",
+    "ui/llm-settings.js": "84f32c07c431ae507040a02e6060d8c5315ee3929e9398742a738835c45725bd",
     "ui/local-models.js": "c3ff2ef4148f919af7d1ae2f0aab49ba197011d2967d36a91bddf22e57175476",
     "ui/loras.js": "11c2165cf527e9df489644e5c623767ea150b9ce93c532e0b330971213466c33",
     "ui/manim-presentation.js": "35659c28fad0a13b81a2d5672dfdf9bfdc63a8edba3acc75e33ee911d6dec4f5",
@@ -55,8 +55,8 @@
     "ui/voice.js": "1b0e7212722774b8e40777bb8c048f3b57ab0fa9cb8ccd3cc89d5f25c3e60bde",
     "ui/workspace-layout.js": "a57a7752919cb09f1802247f2ea0e1b7a66e697f9ba632ce8bcec6b5e121f981",
     "ui/workspace-settings.js": "0220a9d8aa5731b1ab99557360c6bf6703c9e34fac73e3492f18f02f42c14bf8",
-    "package.json": "c291d13d36651b9e2e23f6cd4db392c721e2c6d77df5536c9852d024dbe7ca4a",
-    "package-lock.json": "4903cc74f38d9111ffbb8b8506ed6286266a426f142be2e42965a5c3aab9511e",
+    "package.json": "b855efa21d8ab282c1fdf4241fc5f0905928f29079e8c276bc969d41e5632a1e",
+    "package-lock.json": "08a9db9860597b2e49fe2fda9178b0e594750a532f798585344fa1367f5bb2f3",
     "scripts/build-ui.mjs": "089c2a1d0b582b34114c7b684f104d52a2a216a35efd1a4ec3f4940c2ece84b4",
     "scripts/Launcher.cs": "806ae2fed5c690ba6d2680883ab103ed22b99dff9a74ab46ef5970b8238bca87",
     "native/sd-worker.cpp": "6c3b306db0db2d0f7597b73adbe46864a0438bf5782f02d11dd4884d45dc94bb",
@@ -71,7 +71,7 @@
   "files": {
     "H3-Chat.exe": "776a15737dda9bc9fd90575430869e79def535989fa69c43f2a06df5e5eb0da9",
     "native/h3-sd-worker.exe": "8c29e2eacd15fa9a704b977cb69ed345d06495c2ec7e2702087d0278ba29fb00",
-    "static/app.js": "d701441dbbc7b9a56675b5c561a7ce61034a4e1be404d1759f81e83450bce720",
+    "static/app.js": "308e8b5cba9757d29fc83f303f25e5b04bb0a9a05f2d42a14984cddd92b336ab",
     "static/vendor/fonts/KaTeX_AMS-Regular.ttf": "68534840bcfdd2bffb6f0e8deb48684dd01e7f04ea2813267577afb906de1d13",
     "static/vendor/fonts/KaTeX_AMS-Regular.woff": "30da91e84c893f875e252689faebdc590b2871145e8adc7f9a9d4dbd8ce0b251",
     "static/vendor/fonts/KaTeX_AMS-Regular.woff2": "0cdd387c9590a1a9f9794560022dbb59654a7d86f187aa0c81495ad42d3a7308",

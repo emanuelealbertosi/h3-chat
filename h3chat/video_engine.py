@@ -44,7 +44,7 @@ class VideoEngine:
         speech=spoken_lines(prompt)
         for attempt in range(2):
             raw,finish=self.completion(messages,tuning,cancel,on_text=lambda _:None,schema=PLAN_SCHEMA)
-            if finish=='length':raise ValueError('Assistant video ha esaurito i token. Aumenta contesto/token o semplifica la richiesta.')
+            if finish=='length':raise ValueError(f"Assistant video ha esaurito il limite effettivo di {tuning['max_tokens']} token. Aumenta Max token istruzioni video nelle impostazioni del modello LLM; il limite effettivo è al massimo metà del contesto. Con un provider API vale anche il limite del servizio.")
             try:plan=validate_plan(json.loads(raw),refs,opts['duration'])
             except (ValueError,TypeError) as exc:raise ValueError('Assistant: piano video non valido. '+str(exc)) from exc
             missing=[line for line in speech if line not in plan['prompt']]

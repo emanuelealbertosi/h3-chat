@@ -68,6 +68,24 @@ class LlmPresetsTests(unittest.TestCase):
   self.assertEqual(value['settings']['vision_device'],'gpu');self.assertEqual(value['prompt'],'Descrivi la figura')
   self.assertEqual(len(self.app.store.chat(chat['id'])['messages']),2)
 
+ def test_video_assistant_large_budget_presets_retry_and_validation(self):
+  initial=self.app.store.settings()
+  self.assertEqual(self.app.validate_settings({})['video_prompt_max_tokens'],initial['video_prompt_max_tokens'])
+  saved=self.app.save_settings({'chat_model':'qwen3-06','context':80000,'video_prompt_max_tokens':24000})
+  chat=self.app.store.create_chat();original=self.app.store.enqueue(chat['id'],'Synthetic video',[],saved)
+  self.app.cancel(original)
+  self.assertEqual(self.app.save_settings({'chat_model':'qwen3-4'})['video_prompt_max_tokens'],3000)
+  self.app.save_settings({'video_prompt_max_tokens':100000})
+  self.assertEqual(self.app.save_settings({'chat_model':'qwen3-06'})['video_prompt_max_tokens'],24000)
+  self.app.save_settings({'video_prompt_max_tokens':16000})
+  replay=self.app.regenerate(chat['id'])['job_id']
+  snapshot=json.loads(self.app.store.one('SELECT payload FROM jobs WHERE id=?',(replay,))['payload'])['settings']
+  self.assertEqual(snapshot['video_prompt_max_tokens'],16000)
+  self.assertEqual(snapshot['context'],80000)
+  for value in (255,100001,True,16384.5,'16000'):
+   with self.assertRaises(ValueError):self.app.validate_settings({'video_prompt_max_tokens':value})
+   with self.assertRaises(ValueError):self.app.validate_settings({'llm_overrides':{'qwen3-06':{'video_prompt_max_tokens':value}}})
+
  def test_vision_reference_limit_defaults_presets_validation_and_retry_snapshot(self):
   self.assertEqual(self.app.store.settings()['vision_max_refs'],4)
   first=self.app.save_settings({'chat_model':'qwen3-06','vision_max_refs':8})

@@ -70,6 +70,16 @@ class StoryboardTests(unittest.TestCase):
         self.assertEqual(audio_window('Usa tutta la canzone\nCLIP 1 TIMELINE 00:00–00:15\nFORMAT: 15 seconds\nCLIP 2 TIMELINE 00:15–00:30',90,storyboard=True)['duration'],90)
         self.assertEqual(audio_window('CLIP 2 TIMELINE 00:15–00:30\nFORMAT: 15 seconds',90,storyboard=True)['start'],15)
 
+    def test_large_storyboard_budget_is_used_without_exceeding_half_context(self):
+        engine=VideoEngine();engine.require_model=Mock(return_value={});engine.start_llama=Mock()
+        engine.completion=Mock(return_value=(json.dumps(self.value),'stop'))
+        for configured,expected in ((16000,16000),(100000,40000)):
+            settings=self.settings|{'video_prompt_max_tokens':configured}
+            build(engine,self.plan,self.refs,settings,'A film in 3 clip',threading.Event(),Mock(),Path('log'))
+            self.assertEqual(engine.completion.call_args.args[1]['max_tokens'],expected)
+            self.assertEqual(engine.completion.call_args.args[1]['think_level'],'off')
+            self.assertEqual(settings['video_prompt_max_tokens'],configured)
+
     def test_local_clip_ends_and_invented_character_sheet_keyframe_are_corrected(self):
         value={'style':'Kratos and Freya in the cabin.','shots':[
             {'end':15,'prompt':'[Shot 1] <Picture 1> as Kratos. [Shot 2] At 00:03, Freya lowers the axe.',
