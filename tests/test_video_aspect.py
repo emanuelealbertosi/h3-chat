@@ -31,6 +31,11 @@ class VideoAspectTests(unittest.TestCase):
                 self.assertEqual(value['aspect'],ratio);self.assertEqual(value['aspect_source'],'prompt')
         self.assertEqual(self.resolve(images,[(1024,768)])['aspect'],'4:3')
 
+    def test_format_at_end_of_sentence_is_preserved_with_portrait_identity_reference(self):
+        for ending in ('.',', then make six clips.','\n'):
+            value=self.resolve([{'index':1,'role':'reference','seconds':0}],[(896,1184)],'Video format 16:9'+ending)
+            self.assertEqual((value['aspect'],value['aspect_source']),('16:9','prompt'))
+
     def test_portrait_source_and_custom_ratio_are_not_replaced_with_presets(self):
         value=self.resolve([{'index':1,'role':'keyframe','seconds':0}],[(600,1000)])
         self.assertEqual(value['aspect'],'3:5')

@@ -60,7 +60,7 @@ def resolve_canvas(opts,plan,image_sizes,prompt=''):
     Keyframes own the format. Reference-only jobs can override it in the user's
     original prompt. The padded model canvas is cropped back after decoding.
     """
-    matches=list(re.finditer(r'(?<![\d.:])(\d+(?:[.,]\d+)?)\s*[:/]\s*(\d+(?:[.,]\d+)?)(?![\d.:])',prompt))
+    matches=list(re.finditer(r'(?<![\d.:])(\d+(?:[.,]\d+)?)\s*[:/]\s*(\d+(?:[.,]\d+)?)(?![\d:]|[.,]\d)',prompt))
     # A storyboard's song clocks are not aspect ratios. Exclude whole time
     # ranges too, including unpadded clocks such as 1:6–1:9.
     clock=r'\d{1,3}:\d{1,2}(?::\d{1,2})?(?:[.,]\d+)?'

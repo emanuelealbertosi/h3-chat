@@ -65,6 +65,23 @@ AUDIO: INSTRUMENTAL.
                 audio_window(prompt+'\nSOUNDTRACK: 00:30–00:45',90,storyboard=True)
         self.assertEqual(audio_window('SEGMENT 2 — 00:15–00:30',90)['start'],15)
 
+    def test_two_clip_local_timelines_do_not_crop_the_song_to_fifteen_seconds(self):
+        prompt='''Create a cinematic music video using the supplied 30-second audio excerpt.
+Two consecutive video clips, 15 seconds each.
+For BOTH clips, the timeline starts at 00:00 and ends at 00:15.
+## CLIP 1 — FREYA SAVES KRATOS
+### LOCAL TIMELINE: 00:00–00:15
+00:03–00:07 — FREYA INTERVENES
+## CLIP 2 — HOLD ME TOGETHER
+### LOCAL TIMELINE: 00:00–00:15
+00:04–00:08 — EVERYTHING FALLS APART'''
+        for source in (30,29.998):
+            value=audio_window(prompt,source,storyboard=True)
+            self.assertEqual((value['start'],value['duration']),(0,source))
+        explicit='AUDIO: 01:00–01:30\n'+prompt
+        self.assertEqual(audio_window(explicit,90,storyboard=True)['start'],60)
+        self.assertEqual(audio_window(explicit,90,storyboard=True)['duration'],30)
+
     def test_copy_guard_and_verbatim_speech(self):
         opening='An aerial camera flies over the stone walls, enters the bedroom, and shows the teacher turning off his ringing alarm clock.'
         self.assertEqual(repeated_scene([],['Clip 1 '+opening,'Clip 2 '+opening],'A parody'),2)

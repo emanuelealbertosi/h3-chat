@@ -5,6 +5,7 @@ import katex from 'katex';
 import mermaid from 'mermaid';
 import Chart from 'chart.js/auto';
 import {validateChart} from './chart-schema.js';
+import {addVideoAudioControl} from './video-playback.js';
 
 export const escape = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function saveBlob(blob,name){document.dispatchEvent(new CustomEvent('h3-export',{detail:{blob,name}}));const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
@@ -76,7 +77,7 @@ export function appendMedia(target,media,{api}={}) {
   for(const m of media||[]){
     const figure=document.createElement('figure'),url='/media/'+escape(m.path);
     if(!m.mime?.startsWith('image/')&&!m.mime?.startsWith('audio/')&&!m.mime?.startsWith('video/')){figure.className='document-output';figure.innerHTML=`<a href="${url}" download="${escape(m.name)}">▤ ${escape(m.name)} · Scarica</a>`;}
-    else if(m.mime?.startsWith('video/')){figure.className='video-output';figure.innerHTML=`<video controls playsinline preload="metadata" src="${url}" aria-label="${escape(m.name)}"></video><figcaption><a href="${url}" download="${escape(m.name)}">Scarica MP4</a></figcaption>`;}
+    else if(m.mime?.startsWith('video/')){figure.className='video-output';figure.innerHTML=`<video controls playsinline preload="metadata" src="${url}" aria-label="${escape(m.name)}"></video><figcaption><a href="${url}" download="${escape(m.name)}">Scarica MP4</a></figcaption>`;addVideoAudioControl(figure);}
     else if(m.mime?.startsWith('audio/')){
       figure.className='audio-output';figure.innerHTML=`<div class="audio-title">♫ ${escape(m.name)}</div><audio class="no-export" controls preload="metadata" src="${url}" aria-label="${escape(m.name)}"></audio><figcaption class="no-export audio-downloads"></figcaption>`;
       const caption=figure.querySelector('figcaption');

@@ -71,13 +71,19 @@ def validate(value,duration,refs,request,*,audio_start=0,clip_budget=None):
 
 def build(engine,plan,refs,settings,prompt,cancel,stage,log):
     duration=settings['_video_duration'];clip_budget=contract(prompt,duration,audio_start=settings.get('_video_audio_start',0))
+    # With the minimum number of clips there is no useful timing choice for
+    # the LLM: use 15-second windows and the exact decoded audio tail.
+    ends=clip_budget['end_frames']
+    if not ends and clip_budget['count']==clip_budget['minimum']:
+        ends=[min((i+1)*360,math.ceil(duration*24)) for i in range(clip_budget['count'])]
+        clip_budget=clip_budget|{'end_frames':ends}
     stage(f"Storyboard · {clip_budget['count']} clip da generare · stacchi interni al prompt")
     llm=engine.require_model(settings['chat_model'],'chat');engine.start_llama(llm,settings,log,cancel,stage=stage)
     budget=min(settings['context']//2,settings['video_prompt_max_tokens'])
     context={'request':prompt,'duration':duration,'audio_source_start':settings.get('_video_audio_start',0),
              'generation_clips':clip_budget['count'],'minimum_generation_clips':clip_budget['minimum'],
              'required_clip_ends':[frame/24 for frame in clip_budget['end_frames']],
-             'images':[{'index':i,'name':r['name']} for i,r in enumerate([r for r in refs if r['mime'].startswith('image/')],1)]}
+             'images':[{'index':i,'name':r['name'],'role':next((x['role'] for x in plan.get('images',[]) if x['index']==i),'reference')} for i,r in enumerate([r for r in refs if r['mime'].startswith('image/')],1)]}
     instructions='''Direct a music-video storyboard covering the entire requested duration.
 Return JSON style, shots. Each shots item is ONE GPU GENERATION CLIP, not one
 visual shot or cut. Return EXACTLY generation_clips items. Never multiply GPU
@@ -101,6 +107,10 @@ end always remains a global FILM time, regardless of time_basis in the prompt.
 Honor every user scene, order, timing, cast and image assignment. Use global image
 indices from the supplied inventory. Reference preserves identity/style; keyframe
 uses that image as the first frame. Only select images relevant to each shot.
+The inventory role is authoritative: never promote a reference character sheet,
+face, costume or location into a keyframe. A reference guides identity/style,
+not the opening composition or output aspect ratio. Explicitly associate each
+selected Picture label with its intended character in that clip's prompt.
 A clip's continuity=cut starts it without the preceding last frame; continuity=continue
 is only for continuation across GENERATION CLIP boundaries. Internal cuts stay
 inside that clip's prompt and do not create new shots-array items. Use cut at
@@ -128,17 +138,32 @@ cut clocks, scene progression, complete ending and image assignments.'''
               {'role':'user','content':json.dumps(context,ensure_ascii=False)}]
     for attempt in range(2):
         if cancel.is_set():raise Cancelled()
+        raw='{}'
         stage('Assistant · regia dello storyboard'+(' · correzione' if attempt else ''))
         try:
             raw,finish=engine.completion(messages,tuning,cancel,on_text=lambda _:None,schema=schema)
             if finish=='length':raise StructuredCompletionError('Output storyboard incompleto: aumenta i token Assistant video.')
-            result=validate(json.loads(raw),duration,refs,prompt,audio_start=settings.get('_video_audio_start',0),clip_budget=clip_budget)
+            value=json.loads(raw)
+            # Keep directing actions with the LLM, but never let it redefine
+            # the already allocated audio windows or attachment semantics.
+            if isinstance(value,dict) and isinstance(value.get('shots'),list):
+                authoritative={x['index']:x['role'] for x in plan.get('images',[])}
+                for i,shot in enumerate(value['shots']):
+                    if not isinstance(shot,dict):continue
+                    if ends and len(value['shots'])==len(ends) and type(shot.get('end')) in (int,float) and math.isfinite(shot['end']):
+                        shot['end']=ends[i]/24
+                    if isinstance(shot.get('images'),list):
+                        for image in shot['images']:
+                            if isinstance(image,dict) and authoritative.get(image.get('index'))=='reference' and image.get('role')=='keyframe':
+                                image['role']='reference'
+            result=validate(value,duration,refs,prompt,audio_start=settings.get('_video_audio_start',0),clip_budget=clip_budget)
             result['clip_budget']=clip_budget
             stage(f'Storyboard confermato · {len(result["shots"])} generazioni · stacchi interni · traccia continua')
             return result
         except (ValueError,TypeError,EmptyCompletion,StructuredCompletionError) as exc:
             if attempt:raise ValueError('Assistant: storyboard non valido dopo la correzione. '+str(exc)+' Nessun video è stato avviato.') from exc
-            messages.append({'role':'user','content':'Correct the storyboard before generation: '+str(exc)+'. Return the complete JSON, following the original request.'})
+            messages.extend([{'role':'assistant','content':raw},
+                             {'role':'user','content':'Correct the storyboard before generation: '+str(exc)+'. Return the complete JSON, following the original request. Clip ends are GLOBAL FILM seconds, independent of local action clocks. Required ends: '+json.dumps([frame/24 for frame in ends])+'.'}])
 
 
 def local_plan(storyboard,shot,global_plan,refs,soundtrack_index,audio_start):

@@ -15,6 +15,9 @@ def audio_window(prompt,source_duration,*,storyboard=False):
     ranges=[];scene_ranges=[]
     indexed_scene=r'\b(?:clip|scene|scena|shot|inquadratura|segment|segmento|blocco(?:\s+narrativo)?)\s*\d+\b'
     for line in prompt.splitlines():
+        # A LOCAL TIMELINE heading below a clip title schedules its visuals;
+        # it is not a request to crop the soundtrack to the first 15 seconds.
+        if re.search(r'\b(?:local\s+timeline|timeline\s+locale)\b',line,re.I) and not re.search(r'\b(?:audio|soundtrack|traccia)\b',line,re.I):continue
         numbered=bool(re.search(indexed_scene,line,re.I))
         if not numbered and not re.search(r'\b(?:absolute\s+timeline|timeline\s+assoluta|timeline|audio|soundtrack|traccia|segmento|segment)\b',line,re.I):continue
         match=re.search(rf'({clock})\s*(?:[–—-]|to|a)\s*({clock})',line,re.I)

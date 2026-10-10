@@ -70,6 +70,39 @@ class StoryboardTests(unittest.TestCase):
         self.assertEqual(audio_window('Usa tutta la canzone\nCLIP 1 TIMELINE 00:00–00:15\nFORMAT: 15 seconds\nCLIP 2 TIMELINE 00:15–00:30',90,storyboard=True)['duration'],90)
         self.assertEqual(audio_window('CLIP 2 TIMELINE 00:15–00:30\nFORMAT: 15 seconds',90,storyboard=True)['start'],15)
 
+    def test_local_clip_ends_and_invented_character_sheet_keyframe_are_corrected(self):
+        value={'style':'Kratos and Freya in the cabin.','shots':[
+            {'end':15,'prompt':'[Shot 1] <Picture 1> as Kratos. [Shot 2] At 00:03, Freya lowers the axe.',
+             'time_basis':'local','continuity':'cut','lip_sync':True,'images':[{'index':1,'role':'keyframe'}]},
+            {'end':15,'prompt':'[Shot 1] <Picture 1> as Kratos singing. [Shot 2] At 00:08, the wardrobe collapses.',
+             'time_basis':'local','continuity':'cut','lip_sync':True,'images':[{'index':1,'role':'reference'}]}]}
+        engine=VideoEngine();engine.require_model=Mock(return_value={});engine.start_llama=Mock()
+        engine.completion=Mock(return_value=(json.dumps(value),'stop'))
+        settings=self.settings|{'_video_duration':30,'_video_audio_start':0}
+        prompt='Two consecutive video clips, 15 seconds each. Video format 16:9. All internal shot times are clip-local.'
+        result=build(engine,self.plan,self.refs,settings,prompt,threading.Event(),Mock(),Path('log'))
+        self.assertEqual([(x['start'],x['end']) for x in result['shots']],[(0,15),(15,30)])
+        self.assertEqual(engine.completion.call_count,1)
+        from h3chat.video_options import resolve_canvas,DEFAULTS
+        for shot in result['shots']:
+            local,selected=local_plan(result,shot,self.plan,self.refs,1,0)
+            self.assertEqual(local['images'][0]['role'],'reference')
+            self.assertEqual(selected[0]['id'],'i1')
+            canvas=resolve_canvas(DEFAULTS,local,[(896,1184)],prompt)
+            self.assertEqual((canvas['aspect'],canvas['aspect_source']),('16:9','prompt'))
+            self.assertIn('<Picture 1>',local['prompt'])
+        context=json.loads(engine.completion.call_args.args[0][1]['content'])
+        self.assertEqual(context['required_clip_ends'],[15,30])
+        self.assertEqual(context['images'][0]['role'],'reference')
+
+    def test_user_start_frame_keeps_its_role_and_original_aspect(self):
+        value=copy.deepcopy(self.value);value['shots'][0]['images']=[{'index':2,'role':'keyframe'}]
+        plan=copy.deepcopy(self.plan);plan['images'][1]['role']='keyframe'
+        engine=VideoEngine();engine.require_model=Mock(return_value={});engine.start_llama=Mock()
+        engine.completion=Mock(return_value=(json.dumps(value),'stop'))
+        result=build(engine,plan,self.refs,self.settings,'A film in 3 clip',threading.Event(),Mock(),Path('log'))
+        self.assertEqual(result['shots'][0]['images'][0]['role'],'keyframe')
+
     def test_native_cuts_skip_previous_visual_memory_and_forced_start_frame(self):
         tree=ast.parse((ROOT/'native/video-worker.py').read_text(encoding='utf-8'))
         definition=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='Worker')
