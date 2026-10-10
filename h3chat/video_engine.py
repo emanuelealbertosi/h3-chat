@@ -70,12 +70,10 @@ class VideoEngine:
                  'audios':[str(safe_join(self.data,x['path'])) for x in refs if x['mime'].startswith('audio/')]}
         image_sizes=[]
         if request['images']:
-            from PIL import Image
-            for path in request['images']:
-                with Image.open(path) as image:
-                    w,h=image.size
-                    if image.getexif().get(274) in (5,6,7,8):w,h=h,w
-                    image_sizes.append((w,h))
+            # Pillow belongs to the bundled video runtime, not the HTTP host.
+            # Read headers in a small cancellable worker without loading Torch.
+            image_sizes=self.tool_call('image-size-worker.py',{'paths':request['images']},
+                cancel,stage,folder/'image-size.log',timeout=30)['sizes']
         opts=resolve_canvas(opts,plan,image_sizes,request['format_prompt'])
         if scene and scene.get('canvas'):opts.update(scene['canvas'])
         request['options']=opts

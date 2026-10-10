@@ -71,6 +71,7 @@ SEGMENT 6 — 01:15–01:29.544
             Image.new('RGB',(400,300)).save(image,exif=exif)
             session=Mock();session.uses=0;session.wait.return_value={}
             session.send.side_effect=lambda req:Path(req['output']).write_bytes(b'\0\0\0\x18ftypmp42')
+            engine.tool_call=Mock(return_value={'sizes':[[300,400]]})
             for ident,refs,pictures,prompt,ratio in (
                 ('text',[],[],'SEGMENT 5 — 01:00–01:15\n01:06–01:12 CHORUS','16:9'),
                 ('image',[{'mime':'image/jpeg','path':'frame.jpg'}],[{'index':1,'role':'keyframe','seconds':0}],'Anima in 16:9','3:4')):
@@ -82,6 +83,8 @@ SEGMENT 6 — 01:15–01:29.544
                 engine.start_video=Mock(side_effect=before_load)
                 with patch('h3chat.veda.preflight'):
                     engine.generate_video({'id':'model','name':'Synthetic'}, {},{'prompt':prompt,'images':pictures,'audios':[]},refs,ident,threading.Event(),Mock(),prompt=prompt)
+            engine.tool_call.assert_called_once()
+            self.assertEqual(engine.tool_call.call_args.args[:2],('image-size-worker.py',{'paths':[str(image)]}))
 
 
 if __name__=='__main__':unittest.main()
