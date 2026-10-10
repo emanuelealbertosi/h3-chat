@@ -3,8 +3,23 @@ import re
 from .downloads import safe_join
 
 
+def excludes_soundtrack(prompt):
+    # Silence assigned to a character is not silence assigned to the output.
+    # Likewise, image references and bans on *additional* sound keep the track.
+    media=r'(?:video|film|filmato|movie|animation|animazione|output|render)'
+    silence=r'(?:silent|mute|muted|mut[oa])'
+    qualifiers=r'(?:(?:must|should|be|is|completely|entirely|deve|essere|sia|completamente|del\s+tutto)\s+)*'
+    return bool(re.search(
+        r'\b(?:senza\s+audio|no\s+audio|without\s+audio)\b(?!\s+(?:aggiuntiv\w*|extra|additional|new|changes|modific\w*)\b)'
+        r'|\b'+silence+r'\s+'+media+r'\b'
+        r'|\b'+media+r'\s+'+qualifiers+silence+r'\b'
+        r'|^\s*(?:'+silence+r'|solo\s+(?:come\s+)?riferimento)\s*[.!]?\s*$'
+        r'|\b(?:audio|traccia|soundtrack)\s+(?:solo\s+)?(?:come\s+)?(?:reference|riferimento)\b'
+        r'|\b(?:audio|traccia|soundtrack)\s+(?:as\s+)?reference\s+only\b',prompt,re.I|re.M))
+
+
 def select(prompt, media, history=()):
-    if re.search(r'\b(?:senza audio|muto|silent|no audio|without audio|solo (?:come )?riferimento|audio (?:solo )?(?:come )?reference)\b',prompt,re.I):return None
+    if excludes_soundtrack(prompt):return None
     audios=[m for m in media if m.get('mime','').startswith('audio/')]
     if not audios and re.search(r'\b(?:audio|traccia|soundtrack|voce|musica|canzone|song|colonna sonora)\b',prompt,re.I):
         audios=next(([m for m in row.get('media',[]) if m.get('mime','').startswith('audio/')] for row in reversed(history) if any(m.get('mime','').startswith('audio/') for m in row.get('media',[]))),[])
