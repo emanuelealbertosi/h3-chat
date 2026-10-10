@@ -10,4 +10,5 @@ globalThis.H3Infographic={measure:portraitLayout,prepare(doc,height,options={},d
  H3Motion.freeze(doc);
  renderMath(doc.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false});
  readableText(doc);fitMediaBounds(doc,height);
+ H3Motion.configure(doc,options);
 }};

@@ -8,6 +8,7 @@ from .downloads import Cancelled,safe_join
 from .slides import FORMATS,encode,validate_content
 from .message_content import append_text
 from . import infographic_screen as screen
+from . import infographic_text as typography
 
 MAX_DURATION=600
 MAX_SCENES=30
@@ -24,7 +25,8 @@ CHOICES={'format':tuple(FORMATS),'style':('auto','professional','playful','comic
  'video_background':('auto','off'),'video_fit':('contain','cover'),'video_end':('freeze','loop'),'video_audio':('mute','keep','duck'),'video_start':('together','panel')}
 DEFAULTS={'format':'9:16','style':'auto','palette':'auto','shapes':'auto','pace':'auto','images':'auto',
  'music':'auto','sfx':'subtle','transition':'auto','voice_style':'auto','output':'video','duration':30,'scenes':3,'voice':True,'image_model':'','corners':'square','frame':'dark',
- 'video_background':'auto','video_id':'','video_fit':'contain','video_end':'freeze','video_audio':'mute','video_start':'together'}|screen.DEFAULTS
+ 'video_background':'auto','video_id':'','video_fit':'contain','video_end':'freeze','video_audio':'mute','video_start':'together'}|screen.DEFAULTS|typography.DEFAULTS
+CHOICES.update(typography.CHOICES)
 
 def plan_regia(engine,base,brief,schema,settings,cancel,stage,scenes):
     """Bound planning separately from the user's final-output allowance.
@@ -73,6 +75,7 @@ def options(prompt='',value=None):
     result=DEFAULTS|dict(value or {})
     timing_span=screen.prompt_timing(prompt,result)
     screen.validate(result)
+    typography.validate(result)
     for key,choices in CHOICES.items():
         if result[key] not in choices:raise ValueError('Opzione infografica non valida: '+key)
     for key,lo,hi in (('duration',5,MAX_DURATION),('scenes',1,MAX_SCENES)):
@@ -224,7 +227,7 @@ def build(app,job,payload,history,settings,model,cancel,stage,log,meta):
         if cancel.is_set():raise Cancelled()
         duration=deck['infographic']['durations'][index];deck['active']=index;page['status']='writing';publish()
         request=base+[{'role':'user','content':HTML_BRIEF+'\nCrea solo questa scena dell’infografica, in HTML/CSS libero. Opzioni: '+json.dumps(opts,ensure_ascii=False)+'\nDirezione artistica: '+plan['visual_direction']+'\nScaletta completa: '+json.dumps(plan['scenes'],ensure_ascii=False)+'\nSCENA '+str(index+1)+': '+json.dumps(plan['scenes'][index],ensure_ascii=False)+'\nViewport: '+str(width)+' x '+str(height)+' px. Durata: '+str(duration)+' secondi. Immagini autorizzate: '+image_catalog(media)+'\nFonti citabili: '+json.dumps(references,ensure_ascii=False)+'. Indica riferimenti reali con [R1], [D1], [W1] se pertinenti; non inventare citazioni.'+
-          '\nNon usare CSS animation o transition, né JavaScript. Per ogni elemento da animare assegna data-motion="fade|slide|zoom|pan|blur|wipe|strobe|typewriter|appear", data-start="secondi", data-duration="secondi", data-out="secondi opzionali per uscita", data-ease="smooth|linear|snap". start e duration restano entro la durata della scena; data-out è l’inizio della dissolvenza finale. I valori temporali sono numeri decimali. Il motore applica i movimenti a questi elementi senza cambiare il layout. Distribuisci gli ingressi durante la narrazione, non tutti al secondo zero. Per typewriter usa un singolo titolo o una riga. Usa zoom/pan sulle immagini, fade/slide/blur sui testi, strobe solo se richiesto. Mantieni testo leggibile e gerarchia tipografica forte. Grafici e numeri devono essere HTML/SVG precisi. Non ripetere lo stesso layout per tutte le scene.'+video_brief+screen.brief(opts,duration)}]
+          '\nNon usare CSS animation o transition, né JavaScript. Per ogni elemento da animare assegna data-motion="fade|slide|zoom|pan|blur|wipe|strobe|typewriter|appear|bump|drop|wave|flip", data-start="secondi", data-duration="secondi", data-out="secondi opzionali per uscita", data-ease="smooth|linear|snap". start e duration restano entro la durata della scena; data-out è l’inizio della dissolvenza finale. I valori temporali sono numeri decimali. Il motore applica i movimenti a questi elementi senza cambiare il layout. Distribuisci gli ingressi durante la narrazione, non tutti al secondo zero. Per typewriter usa un singolo titolo o una riga. Usa zoom/pan sulle immagini, fade/slide/blur sui testi, strobe solo se richiesto. Mantieni testo leggibile e gerarchia tipografica forte. Grafici e numeri devono essere HTML/SVG precisi. Non ripetere lo stesso layout per tutte le scene.'+video_brief+screen.brief(opts,duration)+typography.brief(opts)}]
         last=[0]
         def writing(value):
             import time

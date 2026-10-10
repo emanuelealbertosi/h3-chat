@@ -6,7 +6,7 @@ from html.parser import HTMLParser
 from .downloads import Cancelled
 from .remote_llm import EmptyCompletion, StructuredCompletionError
 
-EFFECTS=('fade','slide','zoom','pan','blur','wipe','strobe','typewriter','appear')
+from .infographic_text import EFFECTS
 TIMELINE=('motion','start','duration','out','ease')
 VISIBLE={'main','section','article','div','header','footer','aside','h1','h2','h3','h4','h5','h6',
          'p','li','img','svg','g','text','figure','figcaption','table','tr','td','th','ul','ol'}

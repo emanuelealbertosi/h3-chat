@@ -3,10 +3,11 @@ from html.parser import HTMLParser
 import math
 from .slide_html import BRIEF,validate,InvalidPage
 from .downloads import Cancelled
+from .infographic_text import EFFECTS
 from .remote_llm import EmptyCompletion
 
 HTML_BRIEF=BRIEF.replace('HTML statico completo.','HTML/CSS completo: le animazioni vengono interpretate dal motore tramite gli attributi data-motion, senza JavaScript.')
-BRIEF_MOTION='Assegna agli elementi visibili data-motion="fade|slide|zoom|pan|blur|wipe|strobe|typewriter|appear", data-start e data-duration in secondi; data-out è opzionale. Distribuisci gli ingressi lungo la scena, con una regia coerente con la narrazione. Non limitarti a una pagina statica. Nessun JavaScript, CSS animation o transition.'
+BRIEF_MOTION='Assegna agli elementi visibili data-motion="fade|slide|zoom|pan|blur|wipe|strobe|typewriter|appear|bump|drop|wave|flip", data-start e data-duration in secondi; data-out è opzionale. Distribuisci gli ingressi lungo la scena, con una regia coerente con la narrazione. Non limitarti a una pagina statica. Nessun JavaScript, CSS animation o transition.'
 
 def playable(html,duration):
     class Animation(HTMLParser):
@@ -14,7 +15,7 @@ def playable(html,duration):
         def handle_starttag(self,tag,attrs):
             if tag in ('script','style','meta','link'):return
             values=dict(attrs);effect=values.get('data-motion')
-            if effect not in ('fade','slide','zoom','pan','blur','wipe','strobe','typewriter','appear'):return
+            if effect not in EFFECTS:return
             try:start=float(values.get('data-start',0));span=float(values.get('data-duration',.65))
             except (TypeError,ValueError):return
             if not math.isfinite(start) or not math.isfinite(span) or not 0<=start<duration or span<=0:return

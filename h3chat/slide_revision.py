@@ -52,12 +52,13 @@ def build(app,job,payload,settings,model,cancel,stage,log_path,meta):
         from .infographics import options as infographic_options
         from . import infographic_screen as screen
         from . import infographic_animation as animation
+        from .infographic_text import brief as text_brief
         from . import infographic_layout as layout
         opts=infographic_options(value=motion.get('options',{}))
         duration=motion['durations'][index]
         request[0]['content']=request[0]['content'].replace(BRIEF,animation.HTML_BRIEF)
         clips=motion.get('videos',[])
-        request[0]['content']+='\nQuesta pagina è una scena animata, non una slide statica. Conserva narrazione e durata: '+str(duration)+' secondi. Ricrea anche la regia degli ingressi con data-motion="fade|slide|zoom|pan|blur|wipe|strobe|typewriter|appear", data-start, data-duration e data-out opzionale, espressi in secondi entro la durata. Niente JavaScript, CSS animation o transition. Mantieni proporzioni e leggibilità.'+screen.brief(opts,duration)
+        request[0]['content']+='\nQuesta pagina è una scena animata, non una slide statica. Conserva narrazione e durata: '+str(duration)+' secondi. Ricrea anche la regia degli ingressi con data-motion="fade|slide|zoom|pan|blur|wipe|strobe|typewriter|appear|bump|drop|wave|flip", data-start, data-duration e data-out opzionale, espressi in secondi entro la durata. Niente JavaScript, CSS animation o transition. Mantieni proporzioni e leggibilità.'+screen.brief(opts,duration)+text_brief(opts)
         request[-1]['content']+='\nOpzioni della scena: '+json.dumps(opts,ensure_ascii=False)+'\nNarrazione già registrata, da accompagnare senza riscriverla: '+page.get('notes','')
         request[-1]['content']+=layout.brief(deck['format'])
         if clips:

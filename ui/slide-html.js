@@ -71,6 +71,7 @@ export async function htmlPage(deck,page,index,media,mount){
   // Local bundled math CSS is trusted and does not enable generated scripts.
   if(doc.querySelector('.katex')){const style=document.createElement('style');style.dataset.h3Trusted='';style.textContent=await localMathCSS();doc.head.append(style);await doc.fonts.ready;}
   readableText(doc);
+  if(deck.infographic)H3Motion.configure(doc,deck.infographic.options||{});
   if(fitMediaBounds(doc,height))frame.dataset.layoutAdjusted='true';
   if(deck.infographic&&page.status==='ready'&&portraitLayout(doc,height,deck.infographic.options).issue)frame.dataset.portraitSparse='true';
   sessions.set(frame,{iframe,doc});return frame;
