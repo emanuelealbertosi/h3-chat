@@ -196,6 +196,25 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                     if key != keep:
                         self._drop(key)
 
+    def _release_idle_ram_for_chat(self, model, settings, cancel, stage):
+        """Keep warm workers only when the incoming model has enough RAM."""
+        if self.policy!='on_demand' or not (self.warm_image or self.cache.snapshot()['mapped_bytes']):return
+        from .hardware import assess_model, detect_hardware
+        hardware=detect_hardware(refresh=True)
+        free=hardware['ram'].get('free_mb')
+        assessment=assess_model(model,settings,hardware)
+        needed=(assessment['ram_gb']+.75)*1024
+        gpus=[g for g in hardware['gpu'] if settings['backend']!='cuda' or g.get('vendor')=='NVIDIA']
+        gpu=gpus[0] if settings['profile']!='cpu' and settings['backend']!='cpu' and len(gpus)==1 else None
+        gpu_pressure=bool(gpu and gpu.get('free_mb') is not None and assessment.get('vram_gb',0)>0 and gpu['free_mb']<(assessment['vram_gb']+.5)*1024)
+        if cancel.is_set():raise Cancelled()
+        if not gpu_pressure and (free is None or free>=needed):return
+        if stage:stage('Recupero RAM / VRAM · rilascio motore immagini inattivo e cache prima del modello chat')
+        if self.warm_image:
+            self.warm_image.stop()
+            self.warm_image=None
+        self.cache.clear()
+
     def _activate(self, kind, model, settings, log_path, cancel, stage=None):
         with self.process_lock:
             if cancel.is_set():
@@ -215,6 +234,8 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                     self.warm_image.stop()
                     self.warm_image = None
             session = self.sessions.get(key)
+            if kind=='chat' and not (session and session.ready and session.alive()):
+                self._release_idle_ram_for_chat(model,settings,cancel,stage)
             if not session:
                 warm = self.warm_image
                 if kind == 'image' and model.get('engine') == 'vision' and warm:

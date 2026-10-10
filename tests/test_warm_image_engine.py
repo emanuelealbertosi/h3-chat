@@ -99,6 +99,52 @@ class WarmEngineTests(unittest.TestCase):
         self.assertTrue(image.ready)
         image.send.assert_not_called()
 
+    def test_ram_pressure_closes_only_idle_image_and_cache_before_chat_load(self):
+        image=self.vision();stage=Mock();original_cache=self.settings['ram_cache_gb']
+        hardware={'ram':{'free_mb':11000},'gpu':[]}
+        with patch('h3chat.hardware.detect_hardware',return_value=hardware),patch('h3chat.hardware.assess_model',return_value={'ram_gb':16}):
+            chat=self.engine._activate('chat',self.models['llm'],self.settings,self.root/'chat.log',self.cancel,stage=stage)
+        self.assertFalse(image.alive());self.assertIsNone(self.engine.warm_image)
+        self.assertEqual(self.engine.cache.snapshot()['mapped_bytes'],0)
+        self.assertIs(self.engine.active,chat);self.assertEqual(self.engine.policy,'on_demand')
+        self.assertEqual(self.settings['ram_cache_gb'],original_cache)
+        self.assertTrue(any('Recupero RAM' in call.args[0] for call in stage.call_args_list))
+
+    def test_enough_or_unknown_ram_preserves_warm_worker(self):
+        for free in (32000,None):
+            image=self.vision()
+            with patch('h3chat.hardware.detect_hardware',return_value={'ram':{'free_mb':free},'gpu':[]}),patch('h3chat.hardware.assess_model',return_value={'ram_gb':16}):
+                self.loaded('chat','llm')
+            self.assertTrue(image.alive());self.assertIs(self.engine.warm_image,image)
+            self.engine.stop()
+
+    def test_vram_pressure_also_releases_idle_worker_without_changing_context(self):
+        image=self.vision();settings=self.settings|{'profile':'balanced','backend':'cuda'}
+        hardware={'ram':{'free_mb':32000},'gpu':[{'vendor':'NVIDIA','free_mb':1000}]}
+        with patch('h3chat.hardware.detect_hardware',return_value=hardware),patch('h3chat.hardware.assess_model',return_value={'ram_gb':2,'vram_gb':4}):
+            chat=self.engine._activate('chat',self.models['llm'],settings,self.root/'chat.log',self.cancel)
+        self.assertFalse(image.alive());self.assertIsNone(self.engine.warm_image)
+        self.assertEqual(chat.settings['context'],self.settings['context'])
+
+    def test_reused_chat_does_not_reclaim_warm_worker_and_resident_is_untouched(self):
+        image=self.vision();self.loaded('chat','llm')
+        with patch('h3chat.hardware.detect_hardware') as detect:
+            self.loaded('chat','llm');detect.assert_not_called()
+        self.assertTrue(image.alive())
+        self.engine.stop();image=self.vision(self.settings|{'memory_policy':'resident'})
+        with patch('h3chat.hardware.detect_hardware') as detect:
+            self.loaded('chat','llm',self.settings|{'memory_policy':'resident'});detect.assert_not_called()
+        self.assertTrue(image.alive());self.assertTrue(image.ready)
+
+    def test_cancel_during_pressure_check_does_not_close_idle_worker(self):
+        image=self.vision();self.loaded('chat','llm');self.engine.abort_active()
+        def cancelled(*args,**kwargs):
+            self.cancel.set();return {'ram':{'free_mb':11000},'gpu':[]}
+        from h3chat.downloads import Cancelled
+        with patch('h3chat.hardware.detect_hardware',side_effect=cancelled),patch('h3chat.hardware.assess_model',return_value={'ram_gb':16}):
+            with self.assertRaises(Cancelled):self.engine._activate('chat',self.models['llm'],self.settings,self.root/'chat.log',self.cancel)
+        self.assertTrue(image.alive())
+
 
 class WorkerLifecycleTests(unittest.TestCase):
     def test_unload_releases_models_without_reinitializing_libraries(self):
