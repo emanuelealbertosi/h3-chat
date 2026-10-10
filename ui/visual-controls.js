@@ -1,6 +1,7 @@
 import {escape as esc} from './render.js';
 import {initVoiceControls} from './voice.js';
 import {initVideoQuality} from './video-quality.js';
+import {initMusicQuality} from './music-quality.js';
 
 function normalizeVoice(value){return {...value,voice_fields:{...value.voice_fields,engine:'higgs',params:{}}};}
 
@@ -12,10 +13,12 @@ export function initVisualControls({getState,getChatId}){
  function save(value){localStorage.setItem(key(getChatId()),JSON.stringify(value));render();}
  const voice=initVoiceControls({read,save,getState});
  const videoQuality=initVideoQuality({read,save,getState});
+ const musicQuality=initMusicQuality({read,save,getState});
  function render(){
   const state=getState();if(!state)return;
   voice.render();
   videoQuality.render();
+  musicQuality.render();
   const value=read(),items=state.models.filter(m=>m.capabilities.some(c=>['create','edit'].includes(c)));
   const signature=JSON.stringify(items.map(m=>[m.id,m.name,m.ready]));
   if(model.dataset.signature!==signature){model.innerHTML='<option value="">Automatico · dal prompt</option>'+items.map(m=>`<option value="${esc(m.id)}" ${m.ready?'':'disabled'}>${esc(m.name)}${m.ready?'':' · non disponibile'}</option>`).join('');model.dataset.signature=signature;}

@@ -238,6 +238,8 @@ class Service:
         if type(s['music_auto']) is not bool or type(s['music_advanced']) is not bool:raise ValueError('Musica: opzione non valida.')
         if s['music_backend'] not in ('auto','cpu','cuda'):raise ValueError('Musica: scegli CPU o CUDA.')
         if type(s['music_threads']) is not int or not 1<=s['music_threads']<=64:raise ValueError('Thread musica: scegli da 1 a 64.')
+        from .music_quality import validate as validate_music_quality
+        validate_music_quality(s,self.catalog)
         if type(s['music_prompt_max_tokens']) is not int or not 256<=s['music_prompt_max_tokens']<=8192:raise ValueError('Token Assistant musica: scegli da 256 a 8192.')
         if not isinstance(s['music_overrides'],dict) or len(s['music_overrides'])>100:raise ValueError('Preset musica non validi.')
         for key,value in s['music_overrides'].items():
@@ -417,6 +419,8 @@ class Service:
         if type(music) is not bool:raise ValueError('Music: scegli attivo o disattivo.')
         if sum((bool(selection),music,video,transcribe,voice))>1:raise ValueError('Scegli una sola modalità esplicita fra Voice, Video, Music, Trascrivi e immagini.')
         fields=validate_music_fields(body.get('music_fields',{}))
+        from .music_quality import capture as capture_music_quality
+        settings=capture_music_quality(settings,body.get('music_quality'))
         settings = settings | {'_image_model':selection,'_assistant':assistant,'_music':music,'_music_fields':fields,'_video':video,'_web':web,'_transcribe':transcribe}
         settings.update(_voice=voice,_voice_fields=validate_voice_fields(body.get('voice_fields',{})))
         rag=body.get('rag',settings['rag_enabled'])

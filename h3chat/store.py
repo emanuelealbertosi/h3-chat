@@ -28,6 +28,7 @@ DEFAULTS = {
     "profile": "low", "backend": "vulkan", "chat_model": "", "create_model": "",
     "music_model": "yue2-q8", "music_auto": True, "music_backend": "cuda", "music_threads": 8,
     "music_advanced": False, "music_overrides": {}, "music_prompt_max_tokens": 2200,
+    "music_quality": "model", "music_quality_profiles": {"high":{"model":"","steps":60},"low":{"model":"","steps":32}},
     "edit_model": "", "diagram_model": "", "diagram_auto": True, "vision_enabled": True, "vision_device": "cpu", "prompt_max_tokens": 2200, "context": 4096, "gpu_layers": 20, "max_tokens": 1024,
     "image_advanced": False, "chat_advanced": False, "image_overrides": {}, "image_cfg": 7,
     "lora_dirs": [], "image_sampler": "auto", "image_scheduler": "auto", "seed": -1, "negative_prompt": "",
@@ -165,6 +166,7 @@ class Store:
         lora_meta={"manim_presentation":settings.get("_manim_presentation"),"voice":settings.get("_voice",False),"voice_fields":settings.get("_voice_fields",{}),"web":settings.get("_web",False),"transcribe":settings.get("_transcribe",False),"video":settings.get("_video",False),"music":settings.get("_music",False),"music_fields":settings.get("_music_fields",{}),"image_model":settings.get("_image_model",""),"assistant":settings.get("_assistant",True),"loras":[{k:l[k] for k in ("id","name","weight","model_id","model_name")} for l in loras]}
         lora_meta["video_quality"]=settings.get("_video_quality","high")
         lora_meta["video_editing"]=settings.get("_video_editing","continuous")
+        lora_meta["music_quality"]=settings.get("music_quality","model")
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             chat = db.execute("SELECT * FROM chats WHERE id=?", (chat_id,)).fetchone()
