@@ -242,6 +242,22 @@ wall-clock measurements, not isolated CUDA-kernel profiling.
 
 ## Explicit audio windows and storyboard validation
 
+Narrative times are normalized before inference. New scene and storyboard
+responses declare `time_basis`: `local` (preferred), `video` (global film time),
+or `source` (absolute source-audio time). The engine subtracts the clip start,
+and the selected audio-window offset for source times, then checks that every
+event lies within the clip. For example, 00:21 in film clip 00:15–00:30 becomes
+00:06. Existing local times are retained; unambiguous global clocks in older
+checkpoints are repaired before rendering remaining clips. Mixed or invalid
+bases trigger the planner's correction attempt before loading MiniMax.
+
+Clock ranges, fractional times and explicitly timed seconds are supported.
+Dialogue/lyrics and Picture/Audio labels are preserved verbatim. Audio offsets,
+keyframe offsets, shot durations and global storyboard `end` values retain
+their independent meanings. With Assistant Off, a shared timed story is scoped
+to each clip's overlapping actions. This removes coordinate errors in prompts;
+the generative model still determines the exact visual realization of cuts.
+
 An explicit duration or source segment wins over automatic full-song generation.
 For example, `FORMAT: 15 seconds` and `ABSOLUTE TIMELINE 00:00–00:15` produce one
 15-second clip even with a 90-second song. `AUDIO: 00:15–00:30` selects the next

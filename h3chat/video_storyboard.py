@@ -12,22 +12,23 @@ SCHEMA={'type':'object','properties':{
     'style':{'type':'string','maxLength':1200},
     'shots':{'type':'array','minItems':1,'maxItems':MAX_SHOTS,'items':{'type':'object','properties':{
         'end':{'type':'number'},'prompt':{'type':'string','maxLength':2400},
+        'time_basis':{'type':'string','enum':['local','video','source']},
         'continuity':{'type':'string','enum':['cut','continue']},'lip_sync':{'type':'boolean'},
         'images':{'type':'array','items':{'type':'object','properties':{
             'index':{'type':'integer'},'role':{'type':'string','enum':['reference','keyframe']}},
             'required':['index','role'],'additionalProperties':False}}},
-        'required':['end','prompt','continuity','lip_sync','images'],'additionalProperties':False}}},
+        'required':['end','prompt','time_basis','continuity','lip_sync','images'],'additionalProperties':False}}},
     'required':['style','shots'],'additionalProperties':False}
 
 
-def validate(value,duration,refs,request):
+def validate(value,duration,refs,request,*,audio_start=0):
     if not isinstance(value,dict) or set(value)!= {'style','shots'} or not isinstance(value['style'],str) or not value['style'].strip() or len(value['style'])>1200:
         raise ValueError('Stile dello storyboard non valido.')
     shots=value['shots'];images=[r for r in refs if r['mime'].startswith('image/')]
     if not isinstance(shots,list) or not 1<=len(shots)<=MAX_SHOTS:raise ValueError('Storyboard: da 1 a 160 inquadrature.')
     target=math.ceil(duration*24);cursor=0;scenes=[]
     for index,shot in enumerate(shots):
-        if not isinstance(shot,dict) or set(shot)!= {'end','prompt','continuity','lip_sync','images'}:raise ValueError('Inquadratura storyboard non valida.')
+        if not isinstance(shot,dict) or set(shot)-{'time_basis'}!= {'end','prompt','continuity','lip_sync','images'}:raise ValueError('Inquadratura storyboard non valida.')
         end=shot['end']
         if type(end) not in (int,float) or not math.isfinite(end) or not 0<end<=duration+1/24:raise ValueError('Tempo finale storyboard fuori intervallo.')
         if index==len(shots)-1:
@@ -48,8 +49,10 @@ def validate(value,duration,refs,request):
         if sum(x['role']=='keyframe' for x in chosen)>1:raise ValueError('Scegli un solo frame iniziale per inquadratura.')
         labels=[int(n) for n in re.findall(r'<Picture\s+(\d+)>',shot['prompt']+' '+value['style'],re.I)]
         if any(n not in seen for n in labels):raise ValueError('La descrizione cita un’immagine non selezionata per questa inquadratura.')
-        scenes.append({'index':index,'start':cursor/24,'duration':frames/24,'frames':frames,'end':frame/24,
-                       'prompt':shot['prompt'].strip(),'images':chosen,'continuity':shot['continuity'],'lip_sync':shot['lip_sync']})
+        from .video_timing import localize
+        clip={'index':index,'start':cursor/24,'duration':frames/24,'frames':frames,'end':frame/24}
+        description=localize(shot['prompt'].strip(),clip,basis=shot.get('time_basis','auto'),audio_start=audio_start)
+        scenes.append(clip|{'prompt':description,'time_basis':'local','images':chosen,'continuity':shot['continuity'],'lip_sync':shot['lip_sync']})
         cursor=frame
     if cursor!=target:raise ValueError('Storyboard incompleto.')
     if any(line not in '\n'.join(s['prompt'] for s in scenes) for line in spoken_lines(request)):
@@ -70,6 +73,11 @@ not a replay of the opening, and no Picture labels. Each shot has end (seconds r
 to this video), prompt (English visible action/camera), continuity (cut or continue),
 lip_sync, images [{index,role}]. Start is the preceding end, starting at zero.
 Shots last 1–15 seconds, the last may have a shorter tail. End the last exactly at duration.
+Each shot also declares time_basis: prefer local for narrative timestamps within
+its prompt, from 00:00 to that shot's duration. Subtract the shot start from global
+film times, or audio_source_start + shot start from SOURCE audio times. Declare
+video or source only if deliberately keeping those coordinates. Never mix bases.
+end always remains a global FILM time, regardless of time_basis in the prompt.
 Honor every user scene, order, timing, cast and image assignment. Use global image
 indices from the supplied inventory. Reference preserves identity/style; keyframe
 uses that image as the first frame. Only select images relevant to each shot.
@@ -98,7 +106,7 @@ Before returning check full time coverage, scene progression and image assignmen
         try:
             raw,finish=engine.completion(messages,tuning,cancel,on_text=lambda _:None,schema=SCHEMA)
             if finish=='length':raise StructuredCompletionError('Output storyboard incompleto: aumenta i token Assistant video.')
-            result=validate(json.loads(raw),duration,refs,prompt)
+            result=validate(json.loads(raw),duration,refs,prompt,audio_start=settings.get('_video_audio_start',0))
             stage(f'Storyboard · {len(result["shots"])} inquadrature · traccia continua')
             return result
         except (ValueError,TypeError,EmptyCompletion,StructuredCompletionError) as exc:
@@ -113,7 +121,8 @@ def local_plan(storyboard,shot,global_plan,refs,soundtrack_index,audio_start):
         index=int(match[1])
         if index not in mapping:raise ValueError('Immagine non selezionata nell’inquadratura.')
         return f'<Picture {mapping[index]}>'
-    description=re.sub(r'<Picture\s+(\d+)>',remap,shot['prompt'],flags=re.I)
+    from .video_timing import localize
+    description=localize(re.sub(r'<Picture\s+(\d+)>',remap,shot['prompt'],flags=re.I),shot,basis=shot.get('time_basis','auto'),audio_start=audio_start)
     keep='; '.join(f'<Picture {i}> fully_preserved identity/style' for i in range(1,len(chosen)+1))
     start=audio_start+shot['start']
     prompt=f'subject_definitions: {storyboard["style"]}\nsummary: {description}\nretention_analysis: {keep}; <Audio {soundtrack_index}> fully_copy original audio.\ndetailed_description: {description}\noverall_soundscape: Original <Audio {soundtrack_index}> from source seconds {start:g} to {start+shot["duration"]:g}, unchanged.\nnon_diegetic_music: Preserve the original supplied track continuously; no replacement music or extra dialogue.'

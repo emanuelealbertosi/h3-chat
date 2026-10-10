@@ -18,9 +18,11 @@ def timeline(duration):
     frames=math.ceil(duration*24)
     return [{'index':i,'start':start/24,'duration':min(360,frames-start)/24,'frames':min(360,frames-start)} for i,start in enumerate(range(0,frames,360))]
 
-def scene_plan(plan,scene,soundtrack_index,prompt=None,*,audio_start=0):
+def scene_plan(plan,scene,soundtrack_index,prompt=None,*,audio_start=0,shared=False,normalize=True):
     result=copy.deepcopy(plan);start=scene['start'];end=start+scene['duration']
-    result['prompt']=prompt or plan['prompt']
+    from .video_timing import localize,shared_story
+    text=prompt or plan['prompt']
+    result['prompt']=(shared_story(text,scene) if shared else localize(text,scene,audio_start=audio_start)) if normalize else text
     for entry in result['images']:
         when=entry['seconds']
         if entry['role']=='keyframe':
@@ -31,5 +33,5 @@ def scene_plan(plan,scene,soundtrack_index,prompt=None,*,audio_start=0):
             # Use the requested source window, regardless of invented LLM offsets.
             entry['start']=audio_start+start
             if entry['role']=='reference':entry['role']='reuse'
-    result['prompt']+=f'\nThis is clip {scene["index"]+1}, covering seconds {start:g} to {end:g} of one continuous film. Use supplied visual memory to preserve subject identities, clothing and visual style while advancing the requested action. Follow the intended location/scene changes; keep environment and lighting coherent within each setting. Do not restart the opening.'
+    result['prompt']+=f'\nAll narrative clocks above are LOCAL to this clip: 0–{scene["duration"]:g} seconds. The source audio offset is handled separately. This is clip {scene["index"]+1}, covering global film seconds {start:g} to {end:g}. Use supplied visual memory to preserve subject identities, clothing and visual style while advancing the requested action. Follow the intended location/scene changes; keep environment and lighting coherent within each setting. Do not restart the opening.'
     return result

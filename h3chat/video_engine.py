@@ -102,18 +102,19 @@ class VideoEngine:
         budget=min(settings['context']//2,settings['video_prompt_max_tokens'])
         tuning=settings|{'max_tokens':budget,'think_level':'off'}
         size=max(1,min(3,budget//768));scripts=[]
-        brief=BRIEF.replace('Return JSON prompt, images, audios.','Return only JSON {"scenes":[English prompt per requested clip]}.')+'\nDescribe one continuous film, preserving Picture/Audio labels, identities, style and the language of any supplied dialogue. Do not invent unheard lyrics. Return only the requested clips, in order. Use supplied previous prompts and opening as visual continuity, not as repeated action. No opening restart or finale before the last clip. Translate global keyframe times into LOCAL clip times. Each prompt must be concise while retaining the required MiniMax section labels; never return images/audios arrays.\n'+SCENE_DIRECTION+attachment_instructions(plan['images'],plan['audios'])
+        brief=BRIEF.replace('Return JSON prompt, images, audios.','Return only JSON {"scenes":[{"prompt":English prompt per requested clip,"time_basis":"local"}]}.')+'\nDescribe one continuous film, preserving Picture/Audio labels, identities, style and the language of any supplied dialogue. Do not invent unheard lyrics. Return only the requested clips, in order. Use supplied previous prompts and opening as visual continuity, not as repeated action. No opening restart or finale before the last clip. Translate global keyframe times into LOCAL clip times. Each prompt must be concise while retaining the required MiniMax section labels; never return images/audios arrays.\n'+SCENE_DIRECTION+attachment_instructions(plan['images'],plan['audios'])
         refs=[{'mime':'image/png'} for _ in plan['images']]+[{'mime':'audio/wav'} for _ in plan['audios']]
         def produce(group):
-            schema={'type':'object','properties':{'scenes':{'type':'array','minItems':len(group),'maxItems':len(group),'items':{'type':'string'}}},'required':['scenes'],'additionalProperties':False}
+            schema={'type':'object','properties':{'scenes':{'type':'array','minItems':len(group),'maxItems':len(group),'items':{'type':'object','properties':{'prompt':{'type':'string'},'time_basis':{'type':'string','enum':['local','video','source']}},'required':['prompt','time_basis'],'additionalProperties':False}}},'required':['scenes'],'additionalProperties':False}
             correction=None;rejected=None
             for attempt in range(2):
                 if cancel.is_set():raise Cancelled()
                 first,last=group[0]['index']+1,group[-1]['index']+1
                 stage(f'Assistant · sceneggiatura · scene {first}–{last}/{len(scenes)}'+(' · nuovo tentativo conciso' if attempt else ''))
-                context={'request':prompt,'plan':plan,'total_scenes':len(scenes),'film_duration':scenes[-1]['start']+scenes[-1]['duration'],'clips':group,'opening':scripts[0] if scripts else None,'previous':scripts[-2:]}
+                context={'request':prompt,'plan':plan,'total_scenes':len(scenes),'film_duration':scenes[-1]['start']+scenes[-1]['duration'],'audio_source_start':settings.get('_video_audio_start',0),'clips':group,'opening':scripts[0] if scripts else None,'previous':scripts[-2:]}
                 if rejected:context['rejected_scenes']=rejected
                 instructions=brief+f'\nOutput budget: {budget} tokens for {len(group)} clip(s). Aim for at most {max(40,min(220,budget//(3*len(group))))} words per clip.'
+                instructions+='\nEach scenes item is {"prompt":English MiniMax prompt,"time_basis":"local"}. All action/cut/vocal timestamps must run from 00:00 to this clip duration. Subtract clips.start from global FILM times; subtract audio_source_start + clips.start from SOURCE audio times. Preserve the exact order, timing intervals and words of the original request. Do not move actions to different times. time_basis="video" or "source" is allowed only when clocks deliberately use that coordinate system; never mix bases within a prompt. Previous prompts use their own clip-local clocks, not the clocks for this clip.'
                 if attempt and not correction:instructions+=' Previous output was empty or incomplete. Return short, complete JSON immediately.'
                 if correction:instructions+='\nPrevious output failed scene validation: '+correction+'. Rewrite this batch following the original request, correcting the invalid parts. Use only allowed labels and preserve the original soundtrack; do not request or invent an image. Do not replay an earlier action unless the user explicitly asked for that repetition.'
                 try:
@@ -122,8 +123,17 @@ class VideoEngine:
                     try:value=json.loads(raw)
                     except (ValueError,TypeError) as exc:raise StructuredCompletionError('Incomplete scene JSON') from exc
                     value=value.get('scenes') if isinstance(value,dict) and set(value)=={'scenes'} else None
-                    if not isinstance(value,list) or len(value)!=len(group) or any(not isinstance(s,str) or not s.strip() for s in value):raise StructuredCompletionError('Incomplete scene list')
+                    if not isinstance(value,list) or len(value)!=len(group):raise StructuredCompletionError('Incomplete scene list')
                     try:
+                        from .video_timing import localize
+                        normalized=[]
+                        for item,clip in zip(value,group):
+                            if isinstance(item,str):text=item;basis='auto'
+                            elif isinstance(item,dict) and set(item)=={'prompt','time_basis'}:text=item['prompt'];basis=item['time_basis']
+                            else:raise StructuredCompletionError('Incomplete scene prompt')
+                            if not isinstance(text,str) or not text.strip():raise StructuredCompletionError('Empty scene prompt')
+                            normalized.append(localize(text,clip,basis=basis,audio_start=settings.get('_video_audio_start',0)))
+                        value=normalized
                         from .video_timeline import scene_plan
                         for text,clip in zip(value,group):
                             # Validate the local prompt before any clip spends GPU time.
@@ -176,7 +186,7 @@ class VideoEngine:
         durations={index:settings.get('_video_audio_source_duration',audio_start+settings['_video_duration'])}
         audios=[r for r in refs if r['mime'].startswith('audio/')]
         for position,scene in enumerate(scenes):
-            local=scene_plan(plan,scene|{'last':position==len(scenes)-1},index,audio_start=audio_start)
+            local=scene_plan(plan,scene|{'last':position==len(scenes)-1},index,audio_start=audio_start,normalize=False)
             for entry in local['audios']:
                 if entry['role'] not in ('reuse','lipsync'):continue
                 ordinal=entry['index']
@@ -200,7 +210,7 @@ class VideoEngine:
                 if storyboard:
                     from .video_storyboard import local_plan
                     local,local_refs=local_plan(storyboard,scene,plan,refs,index,audio_start)
-                else:local=scene_plan(plan,scene|{'last':position==len(scenes)-1},index,scripts[position],audio_start=audio_start);local_refs=refs
+                else:local=scene_plan(plan,scene|{'last':position==len(scenes)-1},index,scripts[position],audio_start=audio_start,shared=not settings.get('_assistant',True));local_refs=refs
                 validate_plan(local,local_refs,scene['duration'])
             except ValueError as exc:raise ValueError(f'Piano video: la scena {position+1} non è valida. {exc} Nessuna nuova scena è stata avviata.') from exc
         outputs=[safe_join(self.data,path) for path in resumed['outputs']] if resumed else []
@@ -220,7 +230,7 @@ class VideoEngine:
                 anchor=max((i for i in range(position) if scenes[i].get('continuity')=='cut'),default=0) if storyboard else 0
                 scoped['resume_memory']={'opening':str(outputs[anchor]),'recent':[str(p) for p in outputs[anchor:][-2:]]}
             if storyboard:local,local_refs=local_plan(storyboard,scene,plan,refs,index,audio_start)
-            else:local=scene_plan(plan,scoped,index,scripts[position],audio_start=audio_start);local_refs=refs
+            else:local=scene_plan(plan,scoped,index,scripts[position],audio_start=audio_start,shared=not settings.get('_assistant',True));local_refs=refs
             def report(label):stage(f'Scena {position+1}/{len(scenes)} · '+label)
             item=self.generate_video(model,settings,local,local_refs,job_id+f'/scene-{position+1:03d}',cancel,report,prompt=prompt,scene=scoped)
             outputs.append(safe_join(self.data,item['path']));p=item['generation'];parameters.append(p)
