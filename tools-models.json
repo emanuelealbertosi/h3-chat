@@ -1,7 +1,7 @@
 {
   "whisper-small": {
     "id": "whisper-small",
-    "name": "Whisper Small · multilingue",
+    "name": "Whisper Small \u00b7 multilingue",
     "revision": "536b0662742c02347bc0e980a01041f333bce120",
     "license": "MIT",
     "files": [
@@ -39,7 +39,7 @@
   },
   "whisper-tiny": {
     "id": "whisper-tiny",
-    "name": "Whisper Tiny · multilingue",
+    "name": "Whisper Tiny \u00b7 multilingue",
     "revision": "d90ca5fe260221311c53c58e660288d3deb8d356",
     "license": "MIT",
     "files": [
@@ -77,7 +77,7 @@
   },
   "embeddinggemma": {
     "id": "embeddinggemma",
-    "name": "EmbeddingGemma 300M Q8 · multilingue",
+    "name": "EmbeddingGemma 300M Q8 \u00b7 multilingue",
     "license": "Gemma terms of use",
     "revision": "0f741b5a6585bd53aeb15cd1372c56f2a0f65e12",
     "files": [
@@ -91,7 +91,7 @@
   },
   "ovis-omni-3b": {
     "id": "ovis-omni-3b",
-    "name": "Ovis-Omni-Embedding-3B · 2048 dimensioni",
+    "name": "Ovis-Omni-Embedding-3B \u00b7 2048 dimensioni",
     "license": "Apache-2.0",
     "revision": "08547b8479edc10edc9878597438ebd076f74dff",
     "files": [
@@ -165,7 +165,7 @@
   },
   "embeddinggemma2": {
     "id": "embeddinggemma2",
-    "name": "EmbeddingGemma 2 · 740M · multimodale",
+    "name": "EmbeddingGemma 2 \u00b7 740M \u00b7 multimodale",
     "revision": "914f7f89142e33e77833254d9c9b90c3cef7303b",
     "license": "Apache-2.0",
     "files": [
@@ -228,26 +228,6 @@
         "path": "models/EmbeddingGemma-2/tokenizer_config.json",
         "size": 1599,
         "sha256": "17bd5d6e9364ca49a534e1502076593317c298d4a663623091ed45388f004874"
-      }
-    ]
-  },
-  "seedvr2-3b": {
-    "id": "seedvr2-3b",
-    "name": "SeedVR2 3B FP8 + VAE",
-    "revision": "09ced71023636e9bc8cdf9cdecfb2625d1e691e8",
-    "license": "Apache-2.0",
-    "files": [
-      {
-        "path": "models/seedvr2/seedvr2_ema_3b_fp8_e4m3fn.safetensors",
-        "url": "https://huggingface.co/numz/SeedVR2_comfyUI/resolve/09ced71023636e9bc8cdf9cdecfb2625d1e691e8/seedvr2_ema_3b_fp8_e4m3fn.safetensors",
-        "size": 3391544696,
-        "sha256": "3bf1e43ebedd570e7e7a0b1b60d6a02e105978f505c8128a241cde99a8240cff"
-      },
-      {
-        "path": "models/seedvr2/ema_vae_fp16.safetensors",
-        "url": "https://huggingface.co/numz/SeedVR2_comfyUI/resolve/09ced71023636e9bc8cdf9cdecfb2625d1e691e8/ema_vae_fp16.safetensors",
-        "size": 501324814,
-        "sha256": "20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1"
       }
     ]
   }

@@ -413,4 +413,4 @@ Le impostazioni richiedono uno stato aggiornato dal motore prima di aprirsi; se 
 
 ## Upscale video
 
-RTX Video Super Resolution e SeedVR2 3B FP8 sono disponibili come motori opzionali e autonomi, per video generati o esterni. Premi **Upscale** sotto un video oppure accanto alla galleria; configura default, installazione e collegamenti ai pesi in **Impostazioni → Upscale video**. Prove brevi, proporzioni, tempi, audio originale e recupero dei blocchi interrotti: [guida](docs/upscale.md).
+RTX Video Super Resolution è disponibile come motore opzionale e autonomo, per video generati o esterni. Premi **Upscale** sotto un video oppure accanto alla galleria; configura default, installazione e qualità RTX in **Impostazioni → Upscale video**. Prove brevi, proporzioni, tempi, audio originale e recupero dei blocchi interrotti: [guida](docs/upscale.md).

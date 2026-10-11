@@ -39,12 +39,9 @@ class UpscaleTests(unittest.TestCase):
                 for packet in sound.encode(None):output.mux(packet)
         return stamps
 
-    def request(self,source,engine='rtx',**extra):
-        config=upscale_runtime.DEFAULTS|{'engine':engine,'preview':False,'start':0,'duration':None}|extra
+    def request(self,source,**extra):
+        config=upscale_runtime.DEFAULTS|{'engine':'rtx','preview':False,'start':0,'duration':None}|extra
         result={'source':str(source),'output':str(self.root/'new.mp4'),'cache':str(self.root/'cache'),'config':config}
-        if engine=='seed':
-            (self.root/'model').write_bytes(b'model');(self.root/'vae').write_bytes(b'vae')
-            result.update(model=str(self.root/'model'),vae=str(self.root/'vae'))
         return result
 
     @staticmethod
@@ -87,15 +84,15 @@ class UpscaleTests(unittest.TestCase):
         source.touch()
         with self.assertRaisesRegex(ValueError,'cambiati'):worker.upscale(request,self.processor)
 
-    def test_preview_audio_and_seed_overlap_do_not_repeat_frames(self):
+    def test_preview_audio_does_not_repeat_frames(self):
         source=self.root/'source.mp4';self.make(source)
-        request=self.request(source,'seed',preview=True,start=.5,duration=1.5)
+        request=self.request(source,preview=True,start=.5,duration=1.5)
         calls=[]
         def processor(config,w,h):
             def run(arrays,overlap):calls.append((len(arrays),overlap));return self.processor(config,w,h)[0](arrays,overlap)
             return run,lambda:None
         result=worker.upscale(request,processor)
-        self.assertEqual(result['frames'],36);self.assertEqual(calls,[(32,0),(8,4)])
+        self.assertEqual(result['frames'],36);self.assertEqual(calls,[(32,0),(4,0)])
         with av.open(str(self.root/'new.mp4')) as output:
             frames=list(output.decode(video=0));self.assertAlmostEqual(float(frames[0].pts*frames[0].time_base),0,places=4)
         with av.open(str(self.root/'new.mp4')) as output:
@@ -130,12 +127,19 @@ class UpscaleTests(unittest.TestCase):
 
     def test_options_admin_paths_and_guest_permissions(self):
         with self.assertRaises(ValueError):upscale.options(self.root,{'options':{'seed_model':'private.safetensors'}})
-        for body in ({'start':float('nan')},{'preview':'yes'},{'options':{'seed_batch':8}}):
+        for body in ({'start':float('nan')},{'preview':'yes'},{'options':{'crf':13}}):
             with self.assertRaises(ValueError):upscale.options(self.root,body)
         self.assertTrue(guest_allowed('/api/chats/123/upscale','POST'))
         self.assertFalse(guest_allowed('/api/upscale/settings','GET'))
-        public=upscale_runtime.describe(self.root);self.assertNotIn('seed_model',public['settings'])
-        self.assertIn('seed_model',upscale_runtime.describe(self.root,admin=True)['settings'])
+        self.assertEqual(upscale_runtime.describe(self.root)['settings'],upscale_runtime.DEFAULTS)
+
+    def test_old_defaults_migrate_but_removed_engine_requests_are_rejected(self):
+        folder=self.root/'data';folder.mkdir()
+        (folder/'upscale.json').write_text(json.dumps({'engine':'seed','target':'1440p','seed_model':'old.safetensors','seed_batch':9,'rtx_quality':'ultra','crf':20}))
+        self.assertEqual(upscale_runtime.settings(self.root),{'engine':'rtx','target':'1440p','rtx_quality':'ultra','crf':20})
+        with self.assertRaisesRegex(ValueError,'rimosso'):upscale.options(self.root,{'options':{'engine':'seed'}})
+        with self.assertRaisesRegex(ValueError,'disponibile'):worker.upscale({'config':{'engine':'seed'}})
+        self.assertFalse(upscale_runtime.ready(self.root,'upscale_seed'))
 
     def test_queue_uses_resolved_media_and_disables_assistant_rag(self):
         from types import SimpleNamespace

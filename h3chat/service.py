@@ -413,6 +413,14 @@ class Service:
         if type(web) is not bool or type(transcribe) is not bool:raise ValueError('Web/Trascrivi: scegli attivo o disattivo.')
         if transcribe and not any(x['mime'].startswith('audio/') for x in media):raise ValueError('Allega un audio per trascriverlo.')
         if type(video) is not bool:raise ValueError('Video: scegli attivo o disattivo.')
+        if 'video_parameters' in body:
+            value=body['video_parameters']
+            if not video or not isinstance(value,dict) or set(value)-{'megapixels','duration'}:
+                raise ValueError('Parametri della richiesta video non validi.')
+            video_id=settings['video_model']
+            self.engine.require_model(video_id,'video')
+            preset=validate_video_options(settings.get('video_overrides',{}).get(video_id,{})|value)
+            settings['video_overrides']=settings.get('video_overrides',{})|{video_id:preset}
         from .video_options import quality as video_quality
         settings['_video_quality']=video_quality(body.get('video_quality','high'))
         editing=body.get('video_editing','continuous')

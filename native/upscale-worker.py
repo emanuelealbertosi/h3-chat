@@ -5,7 +5,6 @@ import hashlib
 import json
 import math
 import os
-import re
 from pathlib import Path
 import sys
 import time
@@ -62,52 +61,6 @@ def rtx_processor(config,width,height):
                 output.append(restored)
         return output
     return run,effect.close
-
-def seed_processor(config,width,height,model,vae):
-    import numpy as np
-    import torch
-    folder=ROOT/'runtime/upscale/seedvr2';sys.path.insert(0,str(folder))
-    import inference_cli as cli
-    original_log=cli.debug.log
-    def report(message,*args,**kw):
-        original_log(message,*args,**kw)
-        match=re.search(r'(Encoding|Upscaling|Decoding) batch (\d+)/(\d+)',str(message))
-        if match:
-            label={'Encoding':'codifica VAE','Upscaling':'ricostruzione dettagli','Decoding':'decodifica VAE'}[match[1]]
-            emit('stage',message=f'Upscale · SeedVR2 · {label} · gruppo {match[2]}/{match[3]}')
-    cli.debug.log=report
-    import src.core.model_configuration as model_configuration
-    from src.utils.model_registry import DEFAULT_VAE
-    dit_name='seedvr2_ema_3b_fp8_e4m3fn.safetensors'
-    # Resolve the selected files in place, even when DiT and VAE are in different directories.
-    def find(filename,base=None,*args,**kw):
-        if filename==dit_name:return str(Path(model).resolve())
-        if filename==DEFAULT_VAE:return str(Path(vae).resolve())
-        raise ValueError('Componente SeedVR2 non selezionato: '+str(filename))
-    model_configuration.find_model_file=find
-    # The upstream registry can check for files before loading: never permit implicit downloads.
-    import src.utils.constants as constants
-    constants.find_model_file=find
-    argv=sys.argv[:]
-    try:
-        sys.argv=['seedvr2',str(model),'--cuda_device','0','--dit_model',dit_name,'--model_dir',str(Path(model).parent),
-            '--resolution',str(min(width,height)),'--max_resolution',str(max(width,height)),
-            '--batch_size',str(config['seed_batch']),'--uniform_batch_size','--seed',str(config['seed']),
-            '--color_correction',config['seed_color'],'--vae_encode_tiled','--vae_decode_tiled',
-            '--vae_encode_tile_size',str(config['seed_tile']),'--vae_decode_tile_size',str(config['seed_tile']),
-            '--vae_encode_tile_overlap','64','--vae_decode_tile_overlap','64',
-            '--cache_dit','--cache_vae','--dit_offload_device','cpu','--vae_offload_device','cpu',
-            '--blocks_to_swap',str(config['seed_swap']),'--attention_mode','sdpa']
-        args=cli.parse_arguments()
-    finally:sys.argv=argv
-    cache={}
-    def run(arrays,overlap):
-        frames=torch.from_numpy(np.stack(arrays)).float().div_(255)
-        with torch.inference_mode():result=cli._single_gpu_direct_processing(frames,args,'0',cache)
-        if len(result)!=len(arrays):raise ValueError('SeedVR2 ha cambiato il numero di fotogrammi.')
-        return result[overlap:].mul(255).clamp(0,255).to(torch.uint8).cpu().numpy()
-    def close():cache.clear()
-    return run,close
 
 def encode_chunk(path,arrays,stamps,durations,width,height,rate,crf,sar):
     import av
@@ -178,6 +131,7 @@ def mux(chunks,source,output,start,end,origin,audio=True,display_matrix=None):
     finally:partial.unlink(missing_ok=True)
 
 def upscale(request,processor_factory=None):
+    if request['config'].get('engine')!='rtx':raise ValueError('Questo motore upscale non è più disponibile. Avvia una nuova richiesta RTX VSR.')
     import av
     source=Path(request['source']);output=Path(request['output']);cache=Path(request['cache']);config=request['config']
     if source.resolve()==output.resolve():raise ValueError('L’upscale deve creare un nuovo file.')
@@ -188,14 +142,13 @@ def upscale(request,processor_factory=None):
         if not reader.streams.video:raise ValueError('Il file non contiene un video.')
         stream=reader.streams.video[0];rate=stream.average_rate or stream.guessed_rate or Fraction(24)
         width,height=dimensions(stream.width,stream.height,config['target'])
-        if config['engine']=='rtx' and max(width/stream.width,height/stream.height)>4.01:raise ValueError('RTX VSR supporta al massimo 4×. Scegli SeedVR2 o un formato più piccolo.')
-        chunk_size=min(32,config['seed_batch']*4-4) if config['engine']=='seed' else 32
+        if max(width/stream.width,height/stream.height)>4.01:raise ValueError('RTX VSR supporta al massimo 4×. Scegli un formato più piccolo.')
+        chunk_size=32
         signature={'chunk_frames':chunk_size,'source':stat(source),'config':config,'width':width,'height':height}
-        if config['engine']=='seed':signature.update(model=stat(request['model']),vae=stat(request['vae']))
         checkpoint=cache/'checkpoint.json'
         saved=json.loads(checkpoint.read_text(encoding='utf-8')) if checkpoint.exists() else {'signature':signature,'chunks':[]}
         if saved['signature']!=signature:raise ValueError('Il video o i parametri sono cambiati: avvia un nuovo upscale.')
-        overlap=4 if config['engine']=='seed' else 0
+        overlap=0
         sar=stream.sample_aspect_ratio or Fraction(1);display_matrix=None
         tail=[];arrays=[];stamps=[];durations=[];parts=[];index=0;count=0;origin=None;final_stamp=0;final_end=0;process=None;close=lambda:None;load_seconds=0;restore_seconds=0;encode_seconds=0
         def flush():
@@ -212,17 +165,15 @@ def upscale(request,processor_factory=None):
                 if not valid:raise ValueError('Un blocco salvato non è più valido: avvia una nuova elaborazione.')
                 emit('stage',message=f'Upscale · recupero blocco {index}')
             else:
-                emit('stage',message=f'Upscale · {"RTX VSR" if config["engine"]=="rtx" else "SeedVR2"} · {stamps[-1]-start:.1f} s')
+                emit('stage',message=f'Upscale · RTX VSR · {stamps[-1]-start:.1f} s')
                 if process is None:
                     load_started=time.monotonic()
-                    emit('stage',message='Upscale · caricamento '+('RTX VSR' if config['engine']=='rtx' else 'SeedVR2'))
+                    emit('stage',message='Upscale · caricamento RTX VSR')
                     if processor_factory:process,close=processor_factory(config,width,height)
                     else:
-                        # Upstream CLI selects this allocator; choose it before importing PyTorch.
-                        if config['engine']=='seed':os.environ.setdefault('PYTORCH_CUDA_ALLOC_CONF','backend:cudaMallocAsync')
                         import torch
                         if not torch.cuda.is_available():raise ValueError('L’upscale richiede una GPU NVIDIA compatibile e il runtime CUDA installato.')
-                        process,close=rtx_processor(config,width,height) if config['engine']=='rtx' else seed_processor(config,width,height,request['model'],request['vae'])
+                        process,close=rtx_processor(config,width,height)
                     load_seconds+=time.monotonic()-load_started
                 restore_started=time.monotonic()
                 restored=process(tail+arrays,len(tail))

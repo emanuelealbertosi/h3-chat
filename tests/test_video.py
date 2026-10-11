@@ -32,6 +32,16 @@ class VideoTests(unittest.TestCase):
         self.assertEqual((opts['duration'],opts['megapixels'],opts['frames'],opts['width'],opts['height']),(15,.7,360,1152,640))
         for bad in ({'duration':16},{'steps':True},{'megapixels':float('nan')},{'seed':False},{'offload':'yes'},{'sampler':'lcm'}):
             with self.subTest(bad=bad),self.assertRaises(ValueError):validate(bad)
+    def test_request_resolution_is_validated_and_does_not_change_saved_presets(self):
+        before=self.app.store.settings()['video_overrides']
+        chat=self.app.store.create_chat()['id']
+        ident=self.app.send(chat,{'prompt':'Un video di 15 secondi','video':True,'assistant':False,'video_parameters':{'megapixels':1,'duration':15}})['job_id']
+        saved=json.loads(self.app.store.one('SELECT payload FROM jobs WHERE id=?',(ident,))['payload'])['settings']
+        parameters=options(self.model,saved,False)
+        self.assertEqual((parameters['megapixels'],parameters['duration'],parameters['steps']),(1,15,12))
+        self.assertEqual(self.app.store.settings()['video_overrides'],before)
+        for value in ({'megapixels':1.1},{'duration':16},{'megapixels':True},{'veda_predictor':'F:/private.safetensors'}):
+            with self.subTest(value=value),self.assertRaises(ValueError):self.app.send(chat,{'prompt':'Test','video':True,'assistant':False,'video_parameters':value})
     def test_routing_and_precedence(self):
         for prompt in ('crea un video musicale','anima questa immagine','Puoi generare un filmato con lip-sync?','make a video'):
             self.assertEqual(route([{'content':prompt}],DEFAULTS)['intent'],'video')
