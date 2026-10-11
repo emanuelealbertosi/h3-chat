@@ -136,8 +136,14 @@ def main(r):
         total=len(r['timeline'])
         for scene in r['timeline']:
             path=folder/f'clip-{scene["index"]+1:03d}.mp4'
-            if path.is_file() and abs(info(path)['duration']-scene['duration'])<.05:continue
-            app.ff(['-ss',str(scene['start']),'-i',source,'-t',str(scene['duration']),'-an','-vf','fps=24,scale=trunc(iw/2)*2:trunc(ih/2)*2','-frames:v',str(scene['frames']),'-c:v','libx264','-preset','fast','-crf','18',path],f'Preparazione clip esterno {scene["index"]+1}/{total}')
+            if path.is_file():
+                try:
+                    if abs(info(path)['duration']-scene['duration'])<.05:continue
+                except Exception:pass # Replace an incomplete cached clip after Stop.
+            part=folder/f'clip-{scene["index"]+1:03d}.pending.mp4'
+            app.ff(['-ss',str(scene['start']),'-i',source,'-t',str(scene['duration']),'-an','-vf','fps=24,scale=trunc(iw/2)*2:trunc(ih/2)*2','-frames:v',str(scene['frames']),'-c:v','libx264','-preset','fast','-crf','18',part],f'Preparazione clip esterno {scene["index"]+1}/{total}')
+            if abs(info(part)['duration']-scene['duration'])>.05:raise RuntimeError('Preparazione del clip esterno incompleta.')
+            part.replace(path)
         return {'clips':total}
     if op=='fit_video':
         output=Path(r['output'])

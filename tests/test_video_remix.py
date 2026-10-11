@@ -89,5 +89,13 @@ class RemixMediaTests(unittest.TestCase):
     def test_reference_is_an_exact_requested_excerpt(self):
         result=self.call('reference',reference=str(self.new),start=.2,duration=.5,separate=False)
         with wave.open(result['path']) as a:self.assertEqual(a.getnframes(),24000)
+    def test_interrupted_external_import_replaces_incomplete_cache(self):
+        cache=self.folder/'clip-001.mp4';cache.write_bytes(b'incomplete')
+        result=self.call('import_clips',timeline=[{'index':0,'start':0,'duration':3,'frames':72}])
+        self.assertEqual(result['clips'],1)
+        before=cache.read_bytes();self.assertEqual(before[4:8],b'ftyp')
+        self.call('import_clips',timeline=[{'index':0,'start':0,'duration':3,'frames':72}])
+        self.assertEqual(cache.read_bytes(),before)
+        self.assertFalse((self.folder/'clip-001.pending.mp4').exists())
 
 if __name__=='__main__':unittest.main()
