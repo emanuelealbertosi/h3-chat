@@ -84,6 +84,26 @@ def chunked_attention(torch,attention,chunks):
         return output if skip_output_reshape else output.transpose(1,2).reshape(b,seq,heads*dim)
     return run
 
+def conditioning_memory(tokens,device=None):
+    """Budget expanded Qwen3-VL image tokens before placing encoder weights.
+
+    H3's bundled encoder has no activation estimator. Counting just the image
+    placeholder leaves too little CUDA workspace for the expanded multimodal
+    sequence; Windows may spill allocations instead of raising an OOM.
+    Keep all supplied pixels/tokens and leave headroom for fp32 Qwen activations.
+    """
+    sequence=0;images=0;largest_vision=0
+    for batch in tokens.get('qwen3vl_32b',[]):
+        for token,*_ in batch:
+            if isinstance(token,dict) and token.get('type')=='image':
+                h,w=token['data'].shape[-3:-1]
+                merged=math.ceil(h/32)*math.ceil(w/32)
+                sequence+=merged;images+=1;largest_vision=max(largest_vision,merged*4)
+            else:sequence+=1
+    reserve=sequence*5120*96+largest_vision*1152*48
+    logging.info('H3 encoder workspace: %d expanded tokens, %d images, %.2f MB reserved',sequence,images,reserve/1024**2)
+    return reserve
+
 def read_audio(path,start,seconds,exact=False,tail_padding=False):
     """Decode a bounded source interval. PyAV is bundled; no external ffmpeg."""
     import av
@@ -229,6 +249,8 @@ class Worker:
         device=comfy.model_management.get_torch_device()
         self.clip=comfy.sd.load_clip([files['llm']],clip_type=comfy.sd.CLIPType.MINIMAX,
             model_options={'load_device':device,'offload_device':torch.device('cpu') if self.offload else device,'initial_device':torch.device('cpu')})
+        if not hasattr(self.clip.cond_stage_model,'memory_estimation_function'):
+            self.clip.cond_stage_model.memory_estimation_function=conditioning_memory
         emit('stage',message='Video · lettura VAE video e audio')
         self.vae=comfy.sd.VAE(sd=comfy.utils.load_torch_file(files['vae'],safe_load=True))
         self.audio_vae=comfy.sd.VAE(sd=comfy.utils.load_torch_file(files['audio_vae'],safe_load=True))
@@ -268,10 +290,29 @@ class Worker:
         # quantized encoder's unsafe CUDA->CPU .to() path in torch/c10 on Windows.
         # Comfy's loaded-model list has weak references, not ownership.
         import gc
+        # ComfyUI resets these at graph node boundaries. The standalone worker
+        # has no graph executor: release transfer buffers and their module
+        # references explicitly before dropping the finished phase's weights.
+        self.comfy.model_management.reset_cast_buffers()
         for name in names:setattr(self,name,None)
         gc.collect()
         self.comfy.model_management.cleanup_models()
         self.comfy.model_management.soft_empty_cache(force=True)
+
+    def memory_snapshot(self, phase):
+        cuda=self.torch.cuda
+        if not callable(getattr(cuda,'memory_allocated',None)):return None
+        free,total=cuda.mem_get_info()
+        loaded=[]
+        for item in self.comfy.model_management.current_loaded_models:
+            model=item.model
+            if model is not None:loaded.append(type(model.model).__name__)
+        snapshot={'phase':phase,'allocated_mb':round(cuda.memory_allocated()/1024**2,2),
+            'reserved_mb':round(cuda.memory_reserved()/1024**2,2),'free_mb':round(free/1024**2,2),
+            'total_mb':round(total/1024**2,2),'pinned_mb':round(self.comfy.model_management.TOTAL_PINNED_MEMORY/1024**2,2),
+            'loaded_models':loaded}
+        logging.info('H3 memory: %s',json.dumps(snapshot))
+        return snapshot
 
     def images(self,paths):
         import numpy as np
@@ -345,7 +386,7 @@ class Worker:
 
     def generate(self,request):
         from h3chat.video_options import resolve_canvas
-        generation_started=time.monotonic();timings={}
+        generation_started=time.monotonic();timings={};memory=[]
         torch,comfy=self.torch,self.comfy
         images=self.images(request['images'])
         if request.get('sequence')!=getattr(self,'sequence',None) or request.get('scene_index',0)==0 or request.get('continuity')=='cut':
@@ -367,16 +408,19 @@ class Worker:
             conditioning_started=time.monotonic()
             positive,latent,master,grid_frames=self.condition(request,images)
             timings['conditioning']=time.monotonic()-conditioning_started
+            memory.append(self.memory_snapshot('after_conditioning'))
             images=None
             diffuser_started=time.monotonic()
             if self.offload:
                 emit('stage',message='Video · rilascio encoder e VAE dopo il condizionamento')
                 self.discard('clip','vae','audio_vae')
+                memory.append(self.memory_snapshot('conditioners_released'))
             if self.model is None:self.load_diffuser()
             if opts.get('attention')=='veda':
                 attention_backend=self.configure_attention('veda',opts.get('attention_chunks',0),opts)
             else:attention_backend=self.configure_attention(opts.get('attention','auto'),opts.get('attention_chunks',0))
             timings['diffuser_load']=time.monotonic()-diffuser_started
+            memory.append(self.memory_snapshot('before_sampling'))
             negative=[[torch.zeros_like(value),info.copy()] for value,info in positive]
             model=self.h3.MiniMaxH3SigmaShift.execute(self.model,opts['shift_video'],opts['shift_audio'])[0]
             noise=comfy.sample.prepare_noise(latent['samples'],opts['seed'])
@@ -387,6 +431,7 @@ class Worker:
                 nonlocal last_step
                 now=time.monotonic();seconds=now-last_step;last_step=now
                 step_seconds.append(seconds)
+                if step in (0,total-1):memory.append(self.memory_snapshot('step_'+str(step+1)))
                 logging.info('H3 sampling step %d/%d: %.2f s',step+1,total,seconds)
                 emit('progress',step=step+1,steps=total,step_seconds=seconds)
             samples=comfy.sample.sample(model,noise,opts['steps'],opts['cfg'],opts['sampler'],opts['scheduler'],positive,negative,latent['samples'],noise_mask=latent.get('noise_mask'),disable_pbar=True,seed=opts['seed'],
@@ -409,6 +454,7 @@ class Worker:
                     release(self.veda_patch)
                 self.veda_base_model=None;self.veda_patch=None
                 self.discard('model')
+                memory.append(self.memory_snapshot('diffuser_released'))
                 self.vae=comfy.sd.VAE(sd=comfy.utils.load_torch_file(self.files['vae'],safe_load=True))
             timings['decoder_load']=time.monotonic()-decoder_started
             emit('stage',message='Video · decodifica fotogrammi sulla GPU')
@@ -436,7 +482,7 @@ class Worker:
             write_video(request['output'],pixels,master,opts['frames'])
             timings['saving']=time.monotonic()-saving_started
         timings['sampling']=sampling_seconds;timings['generation']=time.monotonic()-generation_started
-        emit('done',parameters={'fps':24,'duration':opts['frames']/24,'model_frames':grid_frames,'output_frames':opts['frames'],'width':opts['output_width'],'height':opts['output_height'],'canvas_width':opts['width'],'canvas_height':opts['height'],'aspect':opts['aspect'],'aspect_source':opts['aspect_source'],'format_image':opts['format_image'],'engine':'minimax-h3','attention_backend':attention_backend,'attention_requested':opts.get('attention','auto'),'veda':veda_result,'attention_chunks':self.attention_chunks,'sampling_seconds':sampling_seconds,'step_seconds':step_seconds,'timings':timings,'audio_sample_rate':master['sample_rate'],'audio_preserved':any(x['role'] in ('lipsync','reuse') for x in request['plan']['audios'])})
+        emit('done',parameters={'fps':24,'duration':opts['frames']/24,'model_frames':grid_frames,'output_frames':opts['frames'],'width':opts['output_width'],'height':opts['output_height'],'canvas_width':opts['width'],'canvas_height':opts['height'],'aspect':opts['aspect'],'aspect_source':opts['aspect_source'],'format_image':opts['format_image'],'engine':'minimax-h3','attention_backend':attention_backend,'attention_requested':opts.get('attention','auto'),'veda':veda_result,'attention_chunks':self.attention_chunks,'sampling_seconds':sampling_seconds,'step_seconds':step_seconds,'timings':timings,'memory':[x for x in memory if x is not None],'audio_sample_rate':master['sample_rate'],'audio_preserved':any(x['role'] in ('lipsync','reuse') for x in request['plan']['audios'])})
 
 def main():
     emit('hello');worker=Worker()

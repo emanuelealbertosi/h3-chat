@@ -27,7 +27,7 @@ class VideoMemoryOrderTests(unittest.TestCase):
         comfy.utils = ModuleType('comfy.utils');comfy.utils.load_torch_file = Mock(return_value={})
         comfy.utils._TYPES = {}
         comfy.sample = ModuleType('comfy.sample');comfy.sample.prepare_noise = Mock(return_value=object())
-        comfy.model_management = SimpleNamespace(cleanup_models=Mock(), soft_empty_cache=Mock(), load_models_gpu=Mock())
+        comfy.model_management = SimpleNamespace(cleanup_models=Mock(), soft_empty_cache=Mock(), reset_cast_buffers=Mock(), load_models_gpu=Mock())
         h3 = SimpleNamespace(MiniMaxH3SigmaShift=SimpleNamespace(execute=lambda model, *args: (model,)))
         extras = ModuleType('comfy_extras');extras.nodes_minimax_h3 = h3
         modules = {'torch': torch, 'comfy': comfy, 'comfy_extras': extras,
@@ -124,6 +124,7 @@ class VideoMemoryOrderTests(unittest.TestCase):
         if offload:
             self.assertEqual(comfy.sd.VAE.call_count, 2)
             self.assertEqual(comfy.model_management.soft_empty_cache.call_count, 4)
+            self.assertEqual(comfy.model_management.reset_cast_buffers.call_count, 4)
 
     def test_on_demand_weights_do_not_overlap_before_or_after_sampling(self):
         self.exercise(True)

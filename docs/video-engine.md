@@ -76,6 +76,16 @@ are capped at 0.98 MP when used; the saved values and 0.7 MP default are unchang
 This does not guarantee sufficient VRAM or faster generation, especially with
 many image references and lip-sync.
 
+The standalone worker estimates the Qwen3-VL encoder's activation workspace
+from the expanded image tokens before loading its weights. This reserves CUDA
+workspace without shrinking references or changing precision. Between finished
+phases it synchronizes and releases Comfy's weight-transfer buffers before
+collecting the encoder/VAEs or diffuser, avoiding retained buffers across phases.
+Engine logs and saved generation parameters include memory snapshots after
+conditioning, after component release, and at the first/last sampling steps.
+They distinguish live models, allocated/reserved CUDA memory and pinned host RAM;
+Windows shared GPU memory and disk paging must be checked separately.
+
 ## One chat, automatic or explicit
 
 Use **Video** for an explicit request, or ask to create a video/animate an image.
