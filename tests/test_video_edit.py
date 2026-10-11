@@ -139,4 +139,61 @@ class VideoEditTests(unittest.TestCase):
         manifest=describe(self.app,chat,new)
         self.assertEqual(manifest['images'][2]['id'],extra['id']);self.assertEqual(manifest['clips'][1]['images'],[3])
 
+    def test_invalid_partial_intervals_are_rejected_without_queuing(self):
+        chat,ident,*_=self.original()
+        for span in ({'start':4},{'end':9},{'start':True,'end':9},{'start':float('nan'),'end':9},
+                     {'start':-1,'end':9},{'start':9,'end':4},{'start':4,'end':4.5},{'start':4,'end':16}):
+            with self.subTest(span=span),self.assertRaises(ValueError):
+                request(self.app,chat,{'source':ident,'assistant':False,'patches':[{'clip':2,'prompt':'Close-up'}|span]})
+        self.assertEqual(len(self.app.store.all('SELECT id FROM jobs')),1)
+
+    def test_partial_interval_uses_correct_audio_and_preserves_clip_timeline(self):
+        chat,ident,refs,outputs,params=self.original()
+        original=(self.app.data/'outputs'/ident/'scenes.json').read_bytes()
+        new=request(self.app,chat,{'source':ident,'assistant':False,'patches':[{'clip':2,'prompt':'Close-up','start':4.01,'end':9.01,'lip_sync':True}]})['job_id']
+        def generate(model,settings,plan,selected,job,cancel,stage,**kw):
+            self.assertEqual(plan['audios'][0],{'index':1,'role':'lipsync','start':26})
+            self.assertEqual((kw['scene']['frames'],kw['scene']['duration'],kw['scene']['start']),(120,5,19))
+            self.assertIn('global film interval 19–24 seconds',plan['prompt'])
+            out=self.app.data/'outputs'/job/'video.mp4';out.parent.mkdir(parents=True);out.write_bytes(b'\x00\x00\x00\x18ftypisom')
+            return {'path':out.relative_to(self.app.data).as_posix(),'generation':params|{'duration':5,'output_frames':120}}
+        def splice(worker,body,*args,**kw):
+            self.assertEqual(worker,'video-splice-worker.py')
+            self.assertEqual((body['start_frame'],body['end_frame'],body['total_frames']),(96,216,360))
+            self.assertEqual(body['original'],str(self.app.data/outputs[1]))
+            Path(body['output']).write_bytes(b'\x00\x00\x00\x18ftypisommerged')
+            return {'frames':360,'duration':15}
+        with patch.object(self.app.engine,'generate_video',side_effect=generate) as gpu,patch.object(self.app.engine,'tool_call',side_effect=splice),patch('h3chat.soundtrack.probe',return_value={'duration':60}),patch('h3chat.soundtrack.compose',return_value={'duration':42}) as mux:
+            self.app.execute_job(self.app.store.one('SELECT * FROM jobs WHERE id=?',(new,)),threading.Event())
+        answer=self.app.store.chat(chat)['messages'][-1];self.assertEqual(answer['status'],'done',answer['meta'])
+        gpu.assert_called_once();saved=checkpoint(self.app.data,new)
+        self.assertEqual(saved['timeline'][1]['start'],15);self.assertEqual(saved['timeline'][1]['frames'],360)
+        self.assertEqual(saved['parameters'][1]['duration'],15);self.assertEqual(saved['parameters'][1]['output_frames'],360)
+        self.assertEqual(saved['outputs'][::2],outputs[::2]);self.assertTrue(saved['outputs'][1].endswith('edited.mp4'))
+        self.assertEqual(mux.call_args.kwargs['audio_start'],7);self.assertEqual(mux.call_args.kwargs['audio_duration'],42)
+        self.assertEqual((self.app.data/'outputs'/ident/'scenes.json').read_bytes(),original)
+        self.assertEqual(answer['meta']['video_parameters']['replaced_intervals'],[{'clip':2,'start':4,'end':9}])
+        self.assertEqual(describe(self.app,chat,new)['clips'][1]['end'],30)
+
+    def test_failed_splice_recovers_generated_interval_without_new_gpu_work(self):
+        chat,ident,refs,outputs,params=self.original()
+        new=request(self.app,chat,{'source':ident,'assistant':False,'patches':[{'clip':3,'prompt':'Close-up','start':1,'end':4}]})['job_id']
+        def generate(model,settings,plan,selected,job,cancel,stage,**kw):
+            self.assertFalse(kw['scene']['last'])
+            out=self.app.data/'outputs'/job/'video.mp4';out.parent.mkdir(parents=True);out.write_bytes(b'\x00\x00\x00\x18ftypisom')
+            return {'path':out.relative_to(self.app.data).as_posix(),'generation':params}
+        calls=0
+        def splice(worker,body,*args,**kw):
+            nonlocal calls
+            calls+=1
+            if calls==1:raise RuntimeError('Synthetic interrupted splice')
+            Path(body['output']).parent.mkdir(parents=True,exist_ok=True);Path(body['output']).write_bytes(b'\x00\x00\x00\x18ftypisom')
+            return {'frames':288}
+        with patch.object(self.app.engine,'generate_video',side_effect=generate) as gpu,patch.object(self.app.engine,'tool_call',side_effect=splice),patch('h3chat.soundtrack.probe',return_value={'duration':60}),patch('h3chat.soundtrack.compose',return_value={'duration':42}):
+            self.app.execute_job(self.app.store.one('SELECT * FROM jobs WHERE id=?',(new,)),threading.Event())
+            self.assertEqual(self.app.store.chat(chat)['messages'][-1]['status'],'failed')
+            recovered=self.app.regenerate(chat)['job_id']
+            self.app.execute_job(self.app.store.one('SELECT * FROM jobs WHERE id=?',(recovered,)),threading.Event())
+        gpu.assert_called_once();self.assertEqual(calls,2);self.assertEqual(self.app.store.chat(chat)['messages'][-1]['status'],'done')
+
 if __name__=='__main__':unittest.main()
