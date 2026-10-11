@@ -51,7 +51,7 @@ Turbo/LoRA models.
 
 | Setting | Default |
 | --- | --- |
-| Duration | 15 seconds |
+| Duration | 12 seconds (selectable up to 15) |
 | Resolution | 0.7 MP using H3's 1024² pixels/MP convention |
 | Aspect | 16:9, rounded to 1152×640 |
 | Frame rate | 24 fps |
@@ -85,6 +85,14 @@ Engine logs and saved generation parameters include memory snapshots after
 conditioning, after component release, and at the first/last sampling steps.
 They distinguish live models, allocated/reserved CUDA memory and pinned host RAM;
 Windows shared GPU memory and disk paging must be checked separately.
+
+On supported CUDA PyTorch builds the standalone worker selects `cudaMallocAsync`
+before importing Torch, matching ComfyUI's default allocator and weight-transfer
+path. Explicit `PYTORCH_ALLOC_CONF` / `PYTORCH_CUDA_ALLOC_CONF` settings are
+preserved, with the newer variable taking precedence. Memory snapshots name the
+active allocator: PyTorch's reserved-memory statistics are allocator-specific
+and should not be compared across native and async backends as physical VRAM.
+Use the driver/Windows counters when comparing their actual memory footprint.
 
 ## One chat, automatic or explicit
 

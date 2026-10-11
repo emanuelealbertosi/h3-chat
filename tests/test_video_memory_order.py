@@ -15,10 +15,10 @@ class VideoMemoryOrderTests(unittest.TestCase):
         tree = ast.parse((ROOT/'native/video-worker.py').read_text(encoding='utf-8'))
         definition = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'Worker')
         events = []
-        namespace = {'emit': lambda event, **values: events.append((event, values)), 'write_video': Mock(), 'read_safetensors':Mock(return_value=({},{})), 'time':time, 'logging':Mock()}
+        namespace = {'emit': lambda event, **values: events.append((event, values)), 'write_video': Mock(), 'read_safetensors':Mock(return_value=({},{})), 'configure_cuda_allocator':Mock(return_value=False),'os':SimpleNamespace(environ={}), 'time':time, 'logging':Mock()}
         exec(compile(ast.Module(body=[definition], type_ignores=[]), '<video-worker>', 'exec'), namespace)
         worker = namespace['Worker']()
-        torch = SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: True),
+        torch = SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: True,get_allocator_backend=lambda:'native'),
             set_num_threads=Mock(), no_grad=contextlib.nullcontext)
         comfy = ModuleType('comfy')
         comfy.cli_args = ModuleType('comfy.cli_args');comfy.cli_args.args = SimpleNamespace()

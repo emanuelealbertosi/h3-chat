@@ -33,6 +33,26 @@ faulthandler.enable(file=sys.stderr)
 def emit(event,**values):
     wire.write(json.dumps({'event':event,**values},ensure_ascii=False)+'\n');wire.flush()
 
+def configure_cuda_allocator(environ,torch_version):
+    """Match ComfyUI's CUDA allocator setup before importing PyTorch.
+
+    Keep explicit operator configuration, including the newer variable name.
+    The bundled CUDA runtime supports async allocation; non-CUDA/old builds
+    retain PyTorch's default. Comfy's weight-transfer path must use the same
+    allocator setting rather than its native cast-buffer path.
+    """
+    config=environ.get('PYTORCH_ALLOC_CONF') or environ.get('PYTORCH_CUDA_ALLOC_CONF')
+    if config is None:
+        try:
+            major=int(torch_version.split('.',1)[0])
+            cuda=int(torch_version.split('+cu',1)[1].split('.',1)[0])
+        except (ValueError,IndexError):major=cuda=0
+        if major>=2 and cuda>=114:
+            config='backend:cudaMallocAsync'
+            environ['PYTORCH_CUDA_ALLOC_CONF']=config
+    options=dict(item.strip().split(':',1) for item in (config or '').split(',') if ':' in item)
+    return options.get('backend','native').strip()=='cudaMallocAsync'
+
 def read_safetensors(path,torch,types):
     """Own writable CPU buffers; avoid c10 storage slicing and duplicate maps."""
     import struct
@@ -189,9 +209,14 @@ class Worker:
         args=comfy.cli_args.args
         args.cpu=False;args.highvram=not request['offload'];args.lowvram=request['offload']
         args.disable_dynamic_vram=True;args.reserve_vram=2.5;args.gpu_only=not request['offload']
+        from importlib.metadata import version,PackageNotFoundError
+        try:torch_version=version('torch')
+        except PackageNotFoundError:torch_version=''
+        args.cuda_malloc=configure_cuda_allocator(os.environ,torch_version)
         import torch
         if not torch.cuda.is_available():raise ValueError('MiniMax H3 richiede una GPU NVIDIA CUDA. Nessun passaggio automatico al calcolo CPU.')
         torch.set_num_threads(request.get('threads',4));self.torch=torch
+        logging.info('H3 CUDA allocator: %s',torch.cuda.get_allocator_backend())
         import comfy.sd
         import comfy.utils
         import comfy.sample
@@ -307,7 +332,8 @@ class Worker:
         for item in self.comfy.model_management.current_loaded_models:
             model=item.model
             if model is not None:loaded.append(type(model.model).__name__)
-        snapshot={'phase':phase,'allocated_mb':round(cuda.memory_allocated()/1024**2,2),
+        allocator=getattr(cuda,'get_allocator_backend',None)
+        snapshot={'phase':phase,'allocator':allocator() if callable(allocator) else 'unknown','allocated_mb':round(cuda.memory_allocated()/1024**2,2),
             'reserved_mb':round(cuda.memory_reserved()/1024**2,2),'free_mb':round(free/1024**2,2),
             'total_mb':round(total/1024**2,2),'pinned_mb':round(self.comfy.model_management.TOTAL_PINNED_MEMORY/1024**2,2),
             'loaded_models':loaded}

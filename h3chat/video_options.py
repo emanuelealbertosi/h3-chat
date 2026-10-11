@@ -4,7 +4,7 @@ import re
 import secrets
 from fractions import Fraction
 
-DEFAULTS = {'duration':15, 'megapixels':.7, 'aspect':'16:9', 'steps':12, 'cfg':1,
+DEFAULTS = {'duration':12, 'megapixels':.7, 'aspect':'16:9', 'steps':12, 'cfg':1,
             'sampler':'res_multistep', 'scheduler':'simple', 'seed':-1,
             'shift_video':12, 'shift_audio':3, 'offload':True, 'attention':'auto','attention_chunks':0,
             'veda_predictor':'', 'veda_sparsity':90, 'veda_reference_sparsity':90}

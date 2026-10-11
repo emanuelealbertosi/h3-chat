@@ -29,7 +29,8 @@ class VideoTests(unittest.TestCase):
     def test_defaults_and_invalid_numbers(self):
         opts=options(self.model,DEFAULTS,False)
         self.assertEqual(opts['steps'],12)
-        self.assertEqual((opts['duration'],opts['megapixels'],opts['frames'],opts['width'],opts['height']),(15,.7,360,1152,640))
+        self.assertEqual((opts['duration'],opts['megapixels'],opts['frames'],opts['width'],opts['height']),(12,.7,288,1152,640))
+        self.assertEqual(validate({'duration':15})['duration'],15)
         for bad in ({'duration':16},{'steps':True},{'megapixels':float('nan')},{'seed':False},{'offload':'yes'},{'sampler':'lcm'}):
             with self.subTest(bad=bad),self.assertRaises(ValueError):validate(bad)
     def test_request_resolution_is_validated_and_does_not_change_saved_presets(self):
