@@ -597,6 +597,12 @@ class Service:
                 from .upscale import render as upscale_video
                 upscale_video(self,job,payload,settings,cancel,stage,log_path)
                 return
+            if settings.get('_video_recreate'):
+                from .video_recreate import render as recreate_video
+                meta={'intent':'video','canvas':bool(payload.get('canvas')),'execution_mode':'Standalone · GPU · ricreazione'}
+                self.store.update_answer(job,'',meta=meta)
+                recreate_video(self,job,payload,settings,cancel,stage,log_path)
+                return
             if settings.get('_video_edit'):
                 from .video_edit import render as edit_video
                 meta={'intent':'video','canvas':bool(payload.get('canvas')),'execution_mode':'Standalone · GPU · post-produzione'}

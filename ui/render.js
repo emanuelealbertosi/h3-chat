@@ -73,7 +73,7 @@ export async function renderRich(target,text,{final=true,sources=[],onCitation=n
   }
 }
 
-export function appendMedia(target,media,{api,onEditVideo,onUpscaleVideo}={}) {
+export function appendMedia(target,media,{api,onEditVideo,onRecreateVideo,onUpscaleVideo}={}) {
   for(const m of media||[]){
     const figure=document.createElement('figure'),url='/media/'+escape(m.path);
     if(!m.mime?.startsWith('image/')&&!m.mime?.startsWith('audio/')&&!m.mime?.startsWith('video/')){figure.className='document-output';figure.innerHTML=`<a href="${url}" download="${escape(m.name)}">▤ ${escape(m.name)} · Scarica</a>`;}
@@ -95,6 +95,7 @@ export function appendMedia(target,media,{api,onEditVideo,onUpscaleVideo}={}) {
       if(!m.path.toLowerCase().endsWith('.wav')&&!m.path.toLowerCase().endsWith('.mp3')){const a=document.createElement('a');a.href='/media/'+m.path;a.download=m.name;a.textContent='Scarica originale';caption.append(a);}
     }
     else{figure.className='image-output';figure.innerHTML=`<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="${escape(m.name)}" loading="lazy"></a><figcaption class="no-export">${escape(m.name)} <a href="${url}" download>Scarica originale</a></figcaption>`;}
+    if(m.mime?.startsWith('video/')&&onRecreateVideo&&m.generation?.engine==='minimax-h3'&&/^[a-f0-9]{32}$/.test(m.id)){const button=document.createElement('button');button.type='button';button.className='text-button';button.textContent='Ricrea video';button.onclick=()=>onRecreateVideo(m);figure.querySelector('figcaption').append(button);}
     target.append(figure);
   }
 }

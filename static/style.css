@@ -56,3 +56,5 @@
 .upscale-dialog .field{margin-bottom:14px}.upscale-source{padding:14px;border-radius:10px;background:var(--soft,#edf0e8);margin:16px 0}.upscale-source video{display:block;width:100%;max-height:200px;background:#111;border-radius:8px}.upscale-source video[hidden]{display:none}
 .upscale-file{display:flex;gap:8px;align-items:center}.upscale-file input{min-width:0;flex:1}.upscale-settings [data-status]{overflow-wrap:anywhere}.upscale-dialog input[type=number]{max-width:140px}.upscale-settings .field{margin:14px 0}
 @media(max-width:600px){.upscale-dialog{padding:16px}.upscale-dialog .settings-grid{grid-template-columns:1fr}.upscale-dialog footer{flex-wrap:wrap}.upscale-file{flex-wrap:wrap}}
+
+.video-recreate-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}.video-recreate-grid .field{min-width:0}.video-recreate-dialog .check{margin-top:12px}.video-recreate-dialog pre{white-space:pre-wrap;overflow-wrap:anywhere}.video-recreate-dialog .video-edit-clips{padding-top:16px}@media(max-width:600px){.video-recreate-grid{grid-template-columns:1fr}}
