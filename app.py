@@ -153,6 +153,9 @@ class Handler(BaseHTTPRequestHandler):
                     return self.json(self.app.hardware())
                 if len(parts) == 3 and parts[:2] == ["api", "chats"]:
                     return self.json(self.app.store.chat(parts[2]))
+                if len(parts)==5 and parts[:2]==['api','chats'] and parts[3]=='video-edit':
+                    from h3chat.video_edit import describe
+                    return self.json(describe(self.app,parts[2],parts[4]))
                 if len(parts) == 3 and parts[:2] == ["api", "canvas"]:
                     return self.json(self.app.store.canvas_history.get(parts[2]))
                 if len(parts) == 4 and parts[:2] == ['api', 'canvas'] and parts[3] == 'history':
@@ -290,6 +293,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(self.app.cancel(parts[2]))
             if len(parts) == 4 and parts[:2] == ["api", "chats"] and parts[3] == "messages" and method == "POST":
                 return self.json(self.app.send(parts[2], body), 202)
+            if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='video-edit' and method=='POST':
+                from h3chat.video_edit import request
+                return self.json(request(self.app,parts[2],body),202)
             if len(parts) == 4 and parts[:2] == ["api", "chats"] and parts[3] == "regenerate" and method == "POST":
                 return self.json(self.app.regenerate(parts[2]), 202)
             if len(parts) == 4 and parts[:2] == ['api','chats'] and parts[3] == 'recover-manim' and method == 'POST':

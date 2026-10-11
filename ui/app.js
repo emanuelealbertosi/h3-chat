@@ -25,6 +25,7 @@ import {initManimPresentation} from './manim-presentation.js';
 import {initWorkspaceLayout} from './workspace-layout.js';
 import {initGallery} from './gallery.js';
 import {initInfographics} from './infographics.js';
+import {openVideoEdit} from './video-edit.js';
 
 const $=s=>document.querySelector(s);
 let composerUI=null,manimPresentation=null,infographicsUI=null;
@@ -84,6 +85,7 @@ function localCard(model){
 }
 function activeJob(){return state?.jobs.find(j=>j.chat_id===current&&['queued','running'].includes(j.status));}
 function userJob(){return state?.jobs.find(j=>['queued','running'].includes(j.status));}
+const editVideo=act(async media=>{await chatModels.wait();await openVideoEdit({api,chatId:current,source:media.id,busy:userJob,onQueued:async()=>{await refresh();toast('Modifiche video in coda.');}});});
 function modelName(id){return modelLabel(state?.models.find(m=>m.id===id));}
 
 async function refresh(){
@@ -189,7 +191,7 @@ async function renderChat(){
       activity.innerHTML=`<div class="thinking" aria-hidden="true"><i></i><i></i><i></i></div><div><strong>${esc(title)}</strong><span class="activity-stage">${esc(job?.stage||'Preparazione del motore…')}</span><small class="activity-elapsed">${esc(timing?.text||'Preparazione del cronometro…')}</small></div>`;
       content.append(activity);
     }
-    appendMedia(content,message.media,{api});appendMusicDetails(content,message,state.settings.chat_advanced);appendVideoDetails(content,message,state.settings.chat_advanced);appendToolsDetails(content,message,state.settings.chat_advanced);
+    appendMedia(content,message.media,{api,onEditVideo:message.role==='assistant'&&message.status==='done'?editVideo:null});appendMusicDetails(content,message,state.settings.chat_advanced);appendVideoDetails(content,message,state.settings.chat_advanced);appendToolsDetails(content,message,state.settings.chat_advanced);
     if(message.role==='assistant')projects.append(content,message);
     if(message.meta.quote_warnings?.length){const warning=document.createElement('p');warning.className='render-error';warning.textContent='Citazione letterale da verificare: '+message.meta.quote_warnings.join(' ');content.append(warning);}
     if(message.meta.slide_warning){const warning=document.createElement('p');warning.className='small-note';warning.textContent=message.meta.slide_warning;content.append(warning);}
@@ -324,7 +326,7 @@ async function renderCanvas(){
       canvasFollow=false;canvasSelection++;canvas.content=content;if(media)canvas.media=media;canvasDirty=true;$('#canvas-source').value=content;
       await persistCanvas();await renderCanvas();
     }});}catch(e){$('#canvas-preview').textContent=e.message;}}
-    else{$('#canvas-preview').classList.remove('slides-preview');await renderRich($('#canvas-preview'),value.content,options);appendMedia($('#canvas-preview'),value.media,{api});}
+    else{$('#canvas-preview').classList.remove('slides-preview');await renderRich($('#canvas-preview'),value.content,options);appendMedia($('#canvas-preview'),value.media,{api,onEditVideo:editVideo});}
   });await renderQueue;}
 }
 async function persistCanvas(){clearTimeout(canvasSaveTimer);if(canvasSaving){await canvasSaving;if(canvasDirty)return persistCanvas();return;}if(!canvasDirty)return;

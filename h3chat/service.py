@@ -581,6 +581,12 @@ class Service:
             def stage(label):
                 LOG.info("Lavoro %s · %s", job["id"][:8], label)
                 self.store.execute("UPDATE jobs SET stage=? WHERE id=?", (label, job["id"]))
+            if settings.get('_video_edit'):
+                from .video_edit import render as edit_video
+                meta={'intent':'video','canvas':bool(payload.get('canvas')),'execution_mode':'Standalone · GPU · post-produzione'}
+                self.store.update_answer(job,'',meta=meta)
+                edit_video(self,job,payload,settings,cancel,stage,log_path)
+                return
             if settings.get('_slide_revision'):
                 from .slide_revision import build as revise_slide
                 model=self.engine.require_model(settings['chat_model'],'chat')

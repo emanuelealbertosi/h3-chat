@@ -73,11 +73,11 @@ export async function renderRich(target,text,{final=true,sources=[],onCitation=n
   }
 }
 
-export function appendMedia(target,media,{api}={}) {
+export function appendMedia(target,media,{api,onEditVideo}={}) {
   for(const m of media||[]){
     const figure=document.createElement('figure'),url='/media/'+escape(m.path);
     if(!m.mime?.startsWith('image/')&&!m.mime?.startsWith('audio/')&&!m.mime?.startsWith('video/')){figure.className='document-output';figure.innerHTML=`<a href="${url}" download="${escape(m.name)}">▤ ${escape(m.name)} · Scarica</a>`;}
-    else if(m.mime?.startsWith('video/')){figure.className='video-output';figure.innerHTML=`<video controls playsinline preload="metadata" src="${url}" aria-label="${escape(m.name)}"></video><figcaption><a href="${url}" download="${escape(m.name)}">Scarica MP4</a></figcaption>`;addVideoAudioControl(figure);}
+    else if(m.mime?.startsWith('video/')){figure.className='video-output';figure.innerHTML=`<video controls playsinline preload="metadata" src="${url}" aria-label="${escape(m.name)}"></video><figcaption><a href="${url}" download="${escape(m.name)}">Scarica MP4</a></figcaption>`;addVideoAudioControl(figure);if(onEditVideo&&m.generation?.scenes&&/^[a-f0-9]{32}$/.test(m.id)){const button=document.createElement('button');button.type='button';button.className='text-button';button.textContent='Modifica clip';button.onclick=()=>onEditVideo(m);figure.querySelector('figcaption').append(button);}}
     else if(m.mime?.startsWith('audio/')){
       figure.className='audio-output';figure.innerHTML=`<div class="audio-title">♫ ${escape(m.name)}</div><audio class="no-export" controls preload="metadata" src="${url}" aria-label="${escape(m.name)}"></audio><figcaption class="no-export audio-downloads"></figcaption>`;
       const caption=figure.querySelector('figcaption');
