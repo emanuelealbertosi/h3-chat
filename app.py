@@ -152,6 +152,13 @@ class Handler(BaseHTTPRequestHandler):
                 if path=='/api/upscale/settings':
                     from h3chat.upscale_runtime import describe
                     return self.json(describe(ROOT,admin=True))
+                if path=='/api/remix/settings':
+                    from h3chat.remix_runtime import describe
+                    return self.json(describe(ROOT,admin=True))
+                if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='video-remix':
+                    self.app.store.chat(parts[2])
+                    from h3chat.remix_runtime import describe
+                    return self.json(describe(ROOT))
                 if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='upscale':
                     self.app.store.chat(parts[2])
                     from h3chat.upscale_runtime import describe
@@ -298,6 +305,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(request(self.app,parts[2],body),202)
             if path == "/api/uploads" and method == "POST":
                 return self.json(self.app.upload(body), 201)
+            if path=='/api/remix/settings' and method=='POST':
+                from h3chat.remix_runtime import save
+                return self.json(save(ROOT,body))
+            if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='video-remix' and method=='POST':
+                from h3chat.video_remix import request
+                return self.json(request(self.app,parts[2],body),202)
             if path == "/api/chats" and method == "POST":
                 return self.json(self.app.store.create_chat(collection_id=body.get("collection_id"),project_id=body.get('project_id')), 201)
             if path == "/api/downloads" and method == "POST":

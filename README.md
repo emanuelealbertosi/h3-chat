@@ -1,5 +1,7 @@
 # H3-Chat
 
+**Modifica video** importa anche MP4 esterni e mostra intervalli di massimo 15 secondi, modificabili per intero o solo in parte. **Remix** cambia audio, voce Higgs, canto sulla base originale o timbro clonato con motori interni. [Uso e installazione](docs/video-remix.md).
+
 Ogni risposta mostra il **tempo di elaborazione**, anche per immagini, musica,
 voce, video, slide e animazioni. Il cronometro avanza durante il lavoro e la
 durata resta sotto la risposta dopo il completamento, anche riaprendo la chat.

@@ -86,3 +86,5 @@ Qwen Image 2.1 Turbo is an optional separately downloaded model under the Qwen R
 
 Optional standalone video upscale:
 - NVIDIA Python VFX / RTX Video SDK is proprietary and downloaded from NVIDIA; no NVIDIA SDK binaries are redistributed in this repository. The downloaded package retains its license notices.
+
+Remix audio/video: standalone audio.cpp CLI (Apache-2.0), HTDemucs/SeedVC adapters and vocal alignment helpers adapted from the user-owned H3-Music project. No H3-Music runtime dependency. Optional FFmpeg 7.1.1 full build is GPL-3.0-or-later; retained build configuration, source links and license in licenses/remix-FFmpeg-build-license.txt and licenses/remix-NOTICE.txt. Model weights are selected separately and are not redistributed.

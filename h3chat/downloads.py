@@ -174,6 +174,17 @@ class Downloads:
             if task['kind']=='runtime' and task['id'].startswith('upscale_'):
                 from .upscale_runtime import prepare
                 prepare(self.root,task['id'])
+            if task['kind']=='runtime' and task['id']=='remix_score':
+                from .residency import Session
+                session=Session(('remix-setup',(),()),'tool',{'id':'remix-setup','name':'Remix'},{},{},self.root/'runtime/remix/install-score.log')
+                try:
+                    session.start([self.root/'runtime/python/python.exe','-X','utf8',self.root/'native/video-remix-worker.py'],ipc=True,cwd=self.root)
+                    session.wait('hello',task['cancel'],30)
+                    session.send({'op':'install_score'})
+                    def stage(message):
+                        with self.lock:task['file']=message
+                    session.wait('result',task['cancel'],14400,stage)
+                finally:session.stop()
             # Marker is only written after every model component has been verified.
             if task['kind']=='runtime' and task['id']=='voice':
                 from .voice import mark_ready

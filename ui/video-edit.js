@@ -3,10 +3,19 @@ import {openGallery} from './gallery.js';
 
 export const clipClock=value=>{const millis=Math.round(Math.max(0,Number(value)||0)*1000),seconds=Math.floor(millis/1000);return Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0')+(millis%1000?'.'+String(millis%1000).padStart(3,'0'):'');};
 
+export function chooseVideoForEdit({api,onSelect}){
+ const dialog=document.createElement('dialog');dialog.className='upscale-dialog';dialog.innerHTML=`<header><h2>Modifica video</h2><button type="button" class="icon-button" data-close aria-label="Chiudi">×</button></header><p>Scegli un video generato o carica un MP4 esterno. Vedrai i clip o intervalli di massimo 15 secondi.</p><div class="upscale-choices"><button type="button" class="btn" data-gallery>Dalla galleria</button><button type="button" class="btn primary" data-upload>Carica dal PC</button></div><input type="file" accept="video/mp4,.mp4" hidden><p class="settings-error" role="alert" hidden></p>`;document.body.append(dialog);
+ const q=s=>dialog.querySelector(s);dialog.onclose=()=>dialog.remove();q('[data-close]').onclick=()=>dialog.close();
+ const selected=async media=>{dialog.close();await onSelect(media);};
+ q('[data-gallery]').onclick=()=>openGallery({api,kind:'video',multiple:false,onSelect:items=>selected(items[0])});q('[data-upload]').onclick=()=>q('input').click();
+ q('input').onchange=async e=>{const error=q('[role="alert"]'),button=q('[data-upload]');try{const file=e.target.files[0];if(!file)return;if(file.size>64*1024**2)throw Error('Carica un MP4 di massimo 64 MB.');button.disabled=true;button.textContent='Caricamento…';const url=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);});const media=await api('/uploads',{name:file.name,data:String(url).split(',')[1]});await selected(media);}catch(e){error.textContent=e.message;error.hidden=false;}finally{button.disabled=false;button.textContent='Carica dal PC';e.target.value='';}};dialog.showModal();return dialog;
+}
+
 export async function openVideoEdit({api,chatId,source,busy,onQueued}){
  const data=await api('/chats/'+chatId+'/video-edit/'+source);
  const dialog=document.createElement('dialog');dialog.className='video-edit-dialog';dialog.ariaLabel='Modifica clip del video';
  dialog.innerHTML=`<header><div><span class="eyebrow">POST-PRODUZIONE</span><h2>Modifica clip</h2><p>Scegli i tratti e descrivi le modifiche. La nuova versione conserva canzone, durata e formato.</p></div><button type="button" class="icon-button" data-close aria-label="Chiudi">×</button></header><form><div class="video-edit-toolbar"><label class="check"><input type="checkbox" name="assistant" checked> Assistant On</label><button type="button" class="btn small" data-gallery>Riferimenti dalla galleria</button><button type="button" class="btn small" data-upload>Carica immagini</button><input type="file" accept="image/*" multiple data-files hidden></div><div class="video-edit-clips"></div><p class="settings-error" data-error role="alert" hidden></p><footer><span data-summary>Seleziona almeno un clip</span><button class="btn primary" type="submit" disabled>Crea nuova versione</button></footer></form>`;
+ if(data.imported)dialog.querySelector('header p').textContent='Video esterno · intervalli di massimo 15 secondi. MiniMax rigenera il tratto da un’immagine iniziale; il raccordo visivo può cambiare. Il montaggio usa 24 fps e conserva l’audio. Se scegli solo un tratto, il fotogramma originale viene recuperato dal suo inizio.';
  document.body.append(dialog);const q=s=>dialog.querySelector(s),draft=new Map(),extra=[];
  dialog.onclose=()=>{for(const v of dialog.querySelectorAll('video'))v.pause();dialog.remove();};q('[data-close]').onclick=()=>dialog.close();
  const error=text=>{q('[data-error]').textContent=text;q('[data-error]').hidden=!text;};
@@ -30,15 +39,17 @@ export async function openVideoEdit({api,chatId,source,busy,onQueued}){
   if(!data.partial_edit)card.querySelector('[data-part]').hidden=true;
   card.querySelector('[data-enabled]').onchange=e=>{item.enabled=e.target.checked;card.querySelector('[data-fields]').hidden=!item.enabled;card.classList.toggle('selected',item.enabled);summary();};
   card.querySelector('[data-prompt]').oninput=e=>{item.prompt=e.target.value;};card.querySelector('[data-lipsync]').onchange=e=>{item.lip_sync=e.target.checked;};
-  const c=s=>card.querySelector(s),video=c('video');let previewing=false;
+  const c=s=>card.querySelector(s),video=c('video'),previewOffset=clip.preview_start||0;let previewing=false;
+  if(previewOffset)video.addEventListener('loadedmetadata',()=>{video.currentTime=previewOffset;},{once:true});
   const syncRange=()=>{c('[data-first]').value=item.first;c('[data-last]').value=item.last;c('[data-start]').value=Number((item.first/24).toFixed(3));c('[data-end]').value=Number((item.last/24).toFixed(3));c('[data-track]').style.left=item.first/frames*100+'%';c('[data-track]').style.width=(item.last-item.first)/frames*100+'%';c('[data-range-info]').textContent='Rigenera '+clipClock((item.last-item.first)/24)+' · nel film '+clipClock(clip.start+item.first/24)+'–'+clipClock(clip.start+item.last/24);summary();};
   const mode=partial=>{item.range=partial;c('[data-range]').hidden=!partial;c('[data-whole]').setAttribute('aria-pressed',String(!partial));c('[data-part]').setAttribute('aria-pressed',String(partial));previewing=false;video.pause();syncRange();};
   c('[data-whole]').onclick=()=>mode(false);c('[data-part]').onclick=()=>mode(true);
-  const change=(edge,frame)=>{if(!Number.isFinite(frame)){syncRange();return;}if(edge==='first')item.first=Math.max(0,Math.min(item.last-24,Math.round(frame)));else item.last=Math.min(frames,Math.max(item.first+24,Math.round(frame)));previewing=false;video.pause();syncRange();if(video.readyState)video.currentTime=(edge==='first'?item.first:Math.max(item.first,item.last-1))/24;};
+  const change=(edge,frame)=>{if(!Number.isFinite(frame)){syncRange();return;}if(edge==='first')item.first=Math.max(0,Math.min(item.last-24,Math.round(frame)));else item.last=Math.min(frames,Math.max(item.first+24,Math.round(frame)));previewing=false;video.pause();syncRange();if(video.readyState)video.currentTime=previewOffset+(edge==='first'?item.first:Math.max(item.first,item.last-1))/24;};
   c('[data-first]').oninput=e=>change('first',Number(e.target.value));c('[data-last]').oninput=e=>change('last',Number(e.target.value));
   c('[data-start]').onchange=e=>change('first',e.target.value===''?NaN:Number(e.target.value)*24);c('[data-end]').onchange=e=>change('last',e.target.value===''?NaN:Number(e.target.value)*24);
-  c('[data-preview]').onclick=async()=>{try{video.currentTime=item.first/24;previewing=true;await video.play();}catch{previewing=false;error('Anteprima non disponibile. Puoi comunque scegliere i tempi del tratto.');}};
-  video.addEventListener('timeupdate',()=>{if(previewing&&video.currentTime>=item.last/24){previewing=false;video.pause();}});
+  c('[data-preview]').onclick=async()=>{try{video.currentTime=previewOffset+item.first/24;previewing=true;await video.play();}catch{previewing=false;error('Anteprima non disponibile. Puoi comunque scegliere i tempi del tratto.');}};
+  video.addEventListener('play',()=>{if(data.imported&&(video.currentTime<previewOffset||video.currentTime>=previewOffset+frames/24))video.currentTime=previewOffset;});
+  video.addEventListener('timeupdate',()=>{const stop=previewing?previewOffset+item.last/24:data.imported?previewOffset+frames/24:Infinity;if(video.currentTime>=stop){previewing=false;video.pause();}});
   syncRange();
  }
  function addImages(items){for(const image of items){if(!image.mime?.startsWith('image/'))throw Error('Scegli immagini come nuovi riferimenti.');if(data.images.some(x=>x.id===image.id))continue;if(extra.length>=9)throw Error('Puoi aggiungere fino a nove nuove immagini.');extra.push(image);data.images.push({index:data.images.length+1,id:image.id,name:image.name,url:image.url||'/media/'+image.path});}for(const card of q('.video-edit-clips').children){const number=Number(card.querySelector('video').getAttribute('aria-label').match(/\d+$/)[0]);references(card,draft.get(number));}}

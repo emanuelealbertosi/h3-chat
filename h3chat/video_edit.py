@@ -13,7 +13,9 @@ def source(app, chat_id, ident):
     if not isinstance(ident,str) or not re.fullmatch(r'[a-f0-9]{32}',ident):
         raise ValueError('Video da modificare non valido.')
     row=app.store.one("SELECT j.payload,m.meta FROM jobs j JOIN messages m ON m.id=j.message_id WHERE j.id=? AND j.chat_id=? AND j.status='done' AND m.status='done'",(ident,chat_id))
-    if not row:raise ValueError('Scegli un video completato di questa chat.')
+    if not row or not (app.data/'outputs'/ident/'scenes.json').is_file():
+        from .video_import import source as imported_source
+        return imported_source(app,ident)
     record=checkpoint(app.data,ident)
     if record['completed']!=len(record['timeline']):raise ValueError('Il video contiene clip incompleti.')
     payload=json.loads(row['payload']);meta=json.loads(row['meta'])
@@ -33,15 +35,16 @@ def source(app, chat_id, ident):
     duration=meta.get('video_parameters',{}).get('duration',cursor)
     if type(duration) not in (int,float) or not math.isfinite(duration) or abs(cursor-duration)>1/24+1e-6:
         raise ValueError('La durata salvata non coincide con i clip.')
-    return {'record':record,'payload':payload,'meta':meta,'refs':refs,'images':images,'audio':audios[track['index']-1],'duration':duration}
+    return {'record':record,'payload':payload,'meta':meta,'refs':refs,'images':images,'audio':audios[track['index']-1],'duration':duration,'source_size':record.get('imported_size')}
 
 
 def describe(app,chat_id,ident):
     value=source(app,chat_id,ident);record=value['record']
     return {'source':ident,'duration':value['duration'],'partial_edit':True,
+        'imported':bool(value.get('imported')),
         'images':[{'index':i,'id':r['id'],'name':r['name'],'url':'/media/'+r['path']} for i,r in enumerate(value['images'],1)],
         'clips':[{'clip':i+1,'start':s['start'],'end':s['start']+s['duration'],
-            'url':'/media/'+record['outputs'][i],'prompt':record['prompts'][i],
+            'url':'/media/'+(value['imported']['path'] if value.get('imported') else record['outputs'][i]),'preview_start':s['start'] if value.get('imported') else 0,'prompt':record['prompts'][i],
             'images':[x['index'] for x in s.get('images',record['plan']['images'])],
             'mode':s.get('generation_mode','reference'),
             'start_image':next((x['index'] for x in s.get('images',[]) if x['role']=='keyframe'),None),
@@ -103,6 +106,15 @@ def request(app,chat_id,body):
     extra=[r for r in extra if r['id'] not in known]
     value['images']+=extra
     patches=validate_edits(body.get('patches'),value)
+    if value.get('imported'):
+        from .video_import import interval_guide
+        for patch in patches:
+            scene=value['record']['timeline'][patch['clip']-1]
+            if patch.get('mode')=='i2v' and patch.get('start',0)>0 and patch['start_image']==scene['images'][0]['index']:
+                guide=interval_guide(app,value,scene,patch['start']);extra.append(guide);value['images'].append(guide)
+                index=len(value['images']);old=patch['start_image']
+                patch['prompt']=re.sub(r'<Picture\s+(\d+)>',lambda m:f'<Picture {index}>' if int(m[1])==old else m[0],patch['prompt'],flags=re.I)
+                patch.update(start_image=index,images=[index])
     assistant=body.get('assistant',True)
     if type(assistant) is not bool:raise ValueError('Assistant: scegli On oppure Off.')
     canvas=body.get('canvas',value['payload'].get('canvas',False))
@@ -134,6 +146,9 @@ def render(app,job,payload,settings,cancel,stage,log):
     from .video_timeline import validate_audio_interval
     info=probe(app.engine,app.data,value['audio'],cancel,stage,log)
     original=value['record'];audio_start=original.get('audio_start',0)
+    if value.get('imported'):
+        from .video_import import prepare
+        prepare(app,value,cancel,stage,log)
     for patch in patches:
         scene=original['timeline'][patch['clip']-1]
         first,last=interval(patch,scene)
@@ -195,6 +210,11 @@ def render(app,job,payload,settings,cancel,stage,log):
             item=app.engine.generate_video(model,settings,plan,chosen,job['id']+f'/scene-{number:03d}',cancel,report,prompt=plan['prompt'],scene=scoped)
             generated[str(number)]=item;save(folder,record)
         generated_path=safe_join(app.data,item['path'])
+        if value.get('source_size'):
+            fitted=folder/f'fitted-{number:03d}.mp4';shape=value['source_size']
+            app.engine.tool_call('video-remix-worker.py',{'op':'fit_video','runtime':{'backend':'cpu','threads':4},'folder':str(folder),
+                'source':str(generated_path),'output':str(fitted),'width':shape['width']//2*2,'height':shape['height']//2*2},cancel,report,log,timeout=600)
+            generated_path=fitted;item=copy.deepcopy(item);item['path']=fitted.relative_to(app.data).as_posix()
         with generated_path.open('rb') as stream:
             if stream.read(12)[4:8]!=b'ftyp':raise ValueError('Il tratto salvato non è un MP4 valido.')
         if 'start' in patch:
@@ -205,7 +225,7 @@ def render(app,job,payload,settings,cancel,stage,log):
             record['outputs'][number-1]=merged.relative_to(app.data).as_posix()
             record['parameters'][number-1]=p|{'duration':scene['duration'],'output_frames':scene['frames'],'post_edit_interval':{'start':first/24,'end':last/24,'generation':item['generation']}}
         else:
-            record['outputs'][number-1]=item['path'];record['parameters'][number-1]=item['generation']
+            record['outputs'][number-1]=item['path'];record['parameters'][number-1]=p|item['generation']
         def global_picture(match):return f"<Picture {patch['images'][int(match[1])-1]}>"
         description=re.sub(r'<Picture\s+(\d+)>',global_picture,plan['prompt'],flags=re.I)
         if 'start' in patch:description=original['prompts'][number-1]+f'\nUPDATED INTERVAL (clip-local {first/24:g}–{last/24:g} seconds; the following direction uses interval-local clocks):\n'+description

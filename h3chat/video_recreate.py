@@ -26,6 +26,7 @@ def load(app, chat_id, ident):
         if not safe_join(app.data,item['path']).is_file():raise ValueError('Un riferimento originale non è più disponibile.')
     if (folder/'scenes.json').is_file():
         record=checkpoint(app.data,ident)
+        if record.get('imported_size'):raise ValueError('Un video importato non contiene le istruzioni originali di tutte le scene. Usa Modifica clip per cambiare altri tratti.')
         if record['completed']!=len(record['timeline']):raise ValueError('Il video contiene clip incompleti.')
     else:
         try:value=json.loads((folder/'video-plan.json').read_text(encoding='utf-8'))

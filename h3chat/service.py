@@ -61,6 +61,8 @@ class Service:
         self.runtimes = json.loads((self.root / "runtimes.json").read_text(encoding="utf-8"))
         from .upscale_runtime import manifests as upscale_manifests
         self.runtimes.update(upscale_manifests(self.root))
+        remix_manifest=self.root/'remix-runtimes.json'
+        if remix_manifest.is_file():self.runtimes.update(json.loads(remix_manifest.read_text(encoding='utf-8')))
         self.downloads = Downloads(self.root, self.catalog, self.runtimes)
         self.engine = Engine(self.root, self.data, self.catalog)
         self.providers = Providers(self.store)
@@ -101,6 +103,10 @@ class Service:
             return list(fresh.values())
 
     def state(self):
+        from .remix_runtime import ready as remix_status
+        def remix_ready(root,key):
+            status=remix_status(root)
+            return status['media'] if key=='remix_media' else status['score'] if key=='remix_score' else (root/'runtime/remix'/key.removeprefix('remix_')/'audiocpp_cli.exe').is_file()
         from .document_limits import RAG_LIMITS
         models = self.refresh_models()
         return {"token": self.token, "version": __version__, "server_time":time.time(), "settings": self.store.settings(), "profiles": PROFILES,"project_limits":RAG_LIMITS,
@@ -113,7 +119,7 @@ class Service:
                 "video_options":{"defaults":VIDEO_DEFAULTS,"aspects":VIDEO_ASPECTS}, "veda_runtime":veda_status(self.root),
                 "tools_runtime":tools_status(self.root),"transcription_models":[m|{'ready':all(safe_join(self.root,f['path']).is_file() for f in m['files'])} for m in self.downloads.tool_models.values() if m['id'].startswith('whisper-')],
                 "embeddinggemma2_runtime":{"ready":gemma2_runtime_ready(self.root)}, "vision_runtime":vision_status(self.root), "models": models,"image_options":{"samplers":NATIVE_SAMPLERS,"schedulers":NATIVE_SCHEDULERS,"vision_samplers":VISION_SAMPLERS,"vision_schedulers":VISION_SCHEDULERS,"defaults":{k:DEFAULTS[k] for k in IMAGE_DEFAULT_KEYS}},"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
-                "runtimes": {key: {"ready": upscale_ready(self.root,key) if key.startswith('upscale_') else tools_status(self.root).get(key.removeprefix('tools_'),{}).get('ready',False) if key.startswith('tools_') else veda_status(self.root)["ready"] if key=="veda" else gemma2_runtime_ready(self.root) if key=="embeddinggemma2" else voice_ready(self.root,key.removeprefix("voice_")) if key.startswith("voice_") else voice_ready(self.root) if key=="voice" else vision_status(self.root)["ready"] if key=="vision" else music_status(self.root).get(key.removeprefix("music_"),{}).get("ready",False) if key.startswith("music_") else all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
+                "runtimes": {key: {"ready": remix_ready(self.root,key) if key.startswith('remix_') else upscale_ready(self.root,key) if key.startswith('upscale_') else tools_status(self.root).get(key.removeprefix('tools_'),{}).get('ready',False) if key.startswith('tools_') else veda_status(self.root)["ready"] if key=="veda" else gemma2_runtime_ready(self.root) if key=="embeddinggemma2" else voice_ready(self.root,key.removeprefix("voice_")) if key.startswith("voice_") else voice_ready(self.root) if key=="voice" else vision_status(self.root)["ready"] if key=="vision" else music_status(self.root).get(key.removeprefix("music_"),{}).get("ready",False) if key.startswith("music_") else all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
                                     "size": sum(f["size"] for f in r["files"])} for key, r in self.runtimes.items()},
                 "chats": self.store.all("SELECT * FROM chats ORDER BY pinned DESC,updated DESC"),
                 "collections": self.store.all("SELECT * FROM collections ORDER BY name"),
@@ -608,6 +614,10 @@ class Service:
                 meta={'intent':'video','canvas':bool(payload.get('canvas')),'execution_mode':'Standalone · GPU · post-produzione'}
                 self.store.update_answer(job,'',meta=meta)
                 edit_video(self,job,payload,settings,cancel,stage,log_path)
+                return
+            if settings.get('_video_remix'):
+                from .video_remix import render as remix_video
+                remix_video(self,job,payload,settings,cancel,stage,log_path)
                 return
             if settings.get('_slide_revision'):
                 from .slide_revision import build as revise_slide
