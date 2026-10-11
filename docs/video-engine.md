@@ -94,6 +94,16 @@ active allocator: PyTorch's reserved-memory statistics are allocator-specific
 and should not be compared across native and async backends as physical VRAM.
 Use the driver/Windows counters when comparing their actual memory footprint.
 
+With weight offload on GPUs up to 24 GiB, compatible INT8 H3 feed-forward
+blocks process token batches with a 512 MiB first-projection workspace budget.
+Each block transfers its two weights once and reuses them across those batches;
+the original fused SwiGLU and per-row activation quantization are preserved.
+This avoids allocating a multi-gigabyte intermediate for the entire video and
+all references at once. No frames, references, tokens or precision are removed.
+Other quantization layouts and patched/full-precision projections keep their
+original path. Logs report the number of eligible blocks; saved parameters
+include `mlp_chunk_mb` (zero when the optimization does not apply).
+
 ## One chat, automatic or explicit
 
 Use **Video** for an explicit request, or ask to create a video/animate an image.

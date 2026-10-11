@@ -265,6 +265,14 @@ class Worker:
         if self.model is None or type(self.model.model.model_config).__name__!='MiniMaxH3':raise ValueError('Scegli un diffusore MiniMax H3 standard, compatibile FL2VA / REF2VA.')
         head=self.model.model.diffusion_model.final_layer
         if head.video_out.weight.shape[0]!=96 or head.audio_out.weight.shape[0]!=32:raise ValueError('PDD/Turbo non supportato: scegli un modello H3 standard FL2VA / REF2VA.')
+        self.mlp_chunk_mb=0
+        if self.offload and self.torch.cuda.get_device_properties(0).total_memory<=24*1024**3:
+            from h3chat.video_mlp import install
+            import comfy.ops
+            blocks=install(self.model.model.diffusion_model,self.torch,comfy.ops)
+            if blocks:
+                self.mlp_chunk_mb=512
+                logging.info('H3 INT8 MLP workspace: %d blocks, %d MB per token batch, weights transferred once',blocks,self.mlp_chunk_mb)
 
     def load_conditioners(self):
         comfy,torch,files=self.comfy,self.torch,self.files
@@ -508,7 +516,7 @@ class Worker:
             write_video(request['output'],pixels,master,opts['frames'])
             timings['saving']=time.monotonic()-saving_started
         timings['sampling']=sampling_seconds;timings['generation']=time.monotonic()-generation_started
-        emit('done',parameters={'fps':24,'duration':opts['frames']/24,'model_frames':grid_frames,'output_frames':opts['frames'],'width':opts['output_width'],'height':opts['output_height'],'canvas_width':opts['width'],'canvas_height':opts['height'],'aspect':opts['aspect'],'aspect_source':opts['aspect_source'],'format_image':opts['format_image'],'engine':'minimax-h3','attention_backend':attention_backend,'attention_requested':opts.get('attention','auto'),'veda':veda_result,'attention_chunks':self.attention_chunks,'sampling_seconds':sampling_seconds,'step_seconds':step_seconds,'timings':timings,'memory':[x for x in memory if x is not None],'audio_sample_rate':master['sample_rate'],'audio_preserved':any(x['role'] in ('lipsync','reuse') for x in request['plan']['audios'])})
+        emit('done',parameters={'fps':24,'duration':opts['frames']/24,'model_frames':grid_frames,'output_frames':opts['frames'],'width':opts['output_width'],'height':opts['output_height'],'canvas_width':opts['width'],'canvas_height':opts['height'],'aspect':opts['aspect'],'aspect_source':opts['aspect_source'],'format_image':opts['format_image'],'engine':'minimax-h3','attention_backend':attention_backend,'attention_requested':opts.get('attention','auto'),'veda':veda_result,'attention_chunks':self.attention_chunks,'mlp_chunk_mb':getattr(self,'mlp_chunk_mb',0),'sampling_seconds':sampling_seconds,'step_seconds':step_seconds,'timings':timings,'memory':[x for x in memory if x is not None],'audio_sample_rate':master['sample_rate'],'audio_preserved':any(x['role'] in ('lipsync','reuse') for x in request['plan']['audios'])})
 
 def main():
     emit('hello');worker=Worker()
