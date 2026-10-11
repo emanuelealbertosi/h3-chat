@@ -29,6 +29,7 @@ from .tools_runtime import status as tools_status,validate as validate_tools,pur
 from .web_search import requested as web_requested,sources_markdown
 from .music_options import validate as validate_music_options, validate_fields as validate_music_fields, NUMBERS as MUSIC_NUMBERS, DEFAULTS as MUSIC_DEFAULTS, INTEGER as MUSIC_INTEGER
 from .music_runtime import status as music_status
+from .upscale_runtime import ready as upscale_ready
 from .vision_runtime import status as vision_status, SAMPLERS as VISION_SAMPLERS, SCHEDULERS as VISION_SCHEDULERS
 from .llm_options import KEYS as LLM_KEYS, MAX_OUTPUT_TOKENS, defaults as llm_defaults, merge as merge_llm_settings, validate_presets as validate_llm_presets
 from .store import DEFAULTS, PROFILES, Store, uid
@@ -58,6 +59,8 @@ class Service:
         self.knowledge = Knowledge(self.root,self.store)
         self.catalog = {m["id"]: m for m in json.loads((self.root / "catalog.json").read_text(encoding="utf-8"))}
         self.runtimes = json.loads((self.root / "runtimes.json").read_text(encoding="utf-8"))
+        from .upscale_runtime import manifests as upscale_manifests
+        self.runtimes.update(upscale_manifests(self.root))
         self.downloads = Downloads(self.root, self.catalog, self.runtimes)
         self.engine = Engine(self.root, self.data, self.catalog)
         self.providers = Providers(self.store)
@@ -110,7 +113,7 @@ class Service:
                 "video_options":{"defaults":VIDEO_DEFAULTS,"aspects":VIDEO_ASPECTS}, "veda_runtime":veda_status(self.root),
                 "tools_runtime":tools_status(self.root),"transcription_models":[m|{'ready':all(safe_join(self.root,f['path']).is_file() for f in m['files'])} for m in self.downloads.tool_models.values() if m['id'].startswith('whisper-')],
                 "embeddinggemma2_runtime":{"ready":gemma2_runtime_ready(self.root)}, "vision_runtime":vision_status(self.root), "models": models,"image_options":{"samplers":NATIVE_SAMPLERS,"schedulers":NATIVE_SCHEDULERS,"vision_samplers":VISION_SAMPLERS,"vision_schedulers":VISION_SCHEDULERS,"defaults":{k:DEFAULTS[k] for k in IMAGE_DEFAULT_KEYS}},"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
-                "runtimes": {key: {"ready": tools_status(self.root).get(key.removeprefix('tools_'),{}).get('ready',False) if key.startswith('tools_') else veda_status(self.root)["ready"] if key=="veda" else gemma2_runtime_ready(self.root) if key=="embeddinggemma2" else voice_ready(self.root,key.removeprefix("voice_")) if key.startswith("voice_") else voice_ready(self.root) if key=="voice" else vision_status(self.root)["ready"] if key=="vision" else music_status(self.root).get(key.removeprefix("music_"),{}).get("ready",False) if key.startswith("music_") else all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
+                "runtimes": {key: {"ready": upscale_ready(self.root,key) if key.startswith('upscale_') else tools_status(self.root).get(key.removeprefix('tools_'),{}).get('ready',False) if key.startswith('tools_') else veda_status(self.root)["ready"] if key=="veda" else gemma2_runtime_ready(self.root) if key=="embeddinggemma2" else voice_ready(self.root,key.removeprefix("voice_")) if key.startswith("voice_") else voice_ready(self.root) if key=="voice" else vision_status(self.root)["ready"] if key=="vision" else music_status(self.root).get(key.removeprefix("music_"),{}).get("ready",False) if key.startswith("music_") else all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
                                     "size": sum(f["size"] for f in r["files"])} for key, r in self.runtimes.items()},
                 "chats": self.store.all("SELECT * FROM chats ORDER BY pinned DESC,updated DESC"),
                 "collections": self.store.all("SELECT * FROM collections ORDER BY name"),
@@ -581,6 +584,11 @@ class Service:
             def stage(label):
                 LOG.info("Lavoro %s · %s", job["id"][:8], label)
                 self.store.execute("UPDATE jobs SET stage=? WHERE id=?", (label, job["id"]))
+            if settings.get('_upscale'):
+                meta={'intent':'video','canvas':bool(payload.get('canvas')),'execution_mode':'Standalone · GPU · upscale'}
+                from .upscale import render as upscale_video
+                upscale_video(self,job,payload,settings,cancel,stage,log_path)
+                return
             if settings.get('_video_edit'):
                 from .video_edit import render as edit_video
                 meta={'intent':'video','canvas':bool(payload.get('canvas')),'execution_mode':'Standalone · GPU · post-produzione'}

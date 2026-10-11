@@ -230,5 +230,25 @@
         "sha256": "17bd5d6e9364ca49a534e1502076593317c298d4a663623091ed45388f004874"
       }
     ]
+  },
+  "seedvr2-3b": {
+    "id": "seedvr2-3b",
+    "name": "SeedVR2 3B FP8 + VAE",
+    "revision": "09ced71023636e9bc8cdf9cdecfb2625d1e691e8",
+    "license": "Apache-2.0",
+    "files": [
+      {
+        "path": "models/seedvr2/seedvr2_ema_3b_fp8_e4m3fn.safetensors",
+        "url": "https://huggingface.co/numz/SeedVR2_comfyUI/resolve/09ced71023636e9bc8cdf9cdecfb2625d1e691e8/seedvr2_ema_3b_fp8_e4m3fn.safetensors",
+        "size": 3391544696,
+        "sha256": "3bf1e43ebedd570e7e7a0b1b60d6a02e105978f505c8128a241cde99a8240cff"
+      },
+      {
+        "path": "models/seedvr2/ema_vae_fp16.safetensors",
+        "url": "https://huggingface.co/numz/SeedVR2_comfyUI/resolve/09ced71023636e9bc8cdf9cdecfb2625d1e691e8/ema_vae_fp16.safetensors",
+        "size": 501324814,
+        "sha256": "20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1"
+      }
+    ]
   }
 }

@@ -149,6 +149,13 @@ class Handler(BaseHTTPRequestHandler):
                         value['token']=self.identity['csrf'];value['access']={k:self.identity[k] for k in ('id','name','role')}
                         if self.identity['role']=='guest':value=guest_state(value)
                     return self.json(value)
+                if path=='/api/upscale/settings':
+                    from h3chat.upscale_runtime import describe
+                    return self.json(describe(ROOT,admin=True))
+                if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='upscale':
+                    self.app.store.chat(parts[2])
+                    from h3chat.upscale_runtime import describe
+                    return self.json(describe(ROOT))
                 if path == "/api/hardware":
                     return self.json(self.app.hardware())
                 if len(parts) == 3 and parts[:2] == ["api", "chats"]:
@@ -280,6 +287,12 @@ class Handler(BaseHTTPRequestHandler):
             if len(parts)==4 and parts[:3]==['api','slides','images'] and method=='POST':
                 from h3chat.slide_images import request
                 return self.json(request(self.app,parts[3],body))
+            if path=='/api/upscale/settings' and method=='POST':
+                from h3chat.upscale_runtime import save_settings
+                return self.json(save_settings(ROOT,body))
+            if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='upscale' and method=='POST':
+                from h3chat.upscale import request
+                return self.json(request(self.app,parts[2],body),202)
             if path == "/api/uploads" and method == "POST":
                 return self.json(self.app.upload(body), 201)
             if path == "/api/chats" and method == "POST":

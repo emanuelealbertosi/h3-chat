@@ -26,6 +26,7 @@ import {initWorkspaceLayout} from './workspace-layout.js';
 import {initGallery} from './gallery.js';
 import {initInfographics} from './infographics.js';
 import {openVideoEdit} from './video-edit.js';
+import {openUpscale,renderUpscaleSettings} from './upscale.js';
 
 const $=s=>document.querySelector(s);
 let composerUI=null,manimPresentation=null,infographicsUI=null;
@@ -86,6 +87,7 @@ function localCard(model){
 function activeJob(){return state?.jobs.find(j=>j.chat_id===current&&['queued','running'].includes(j.status));}
 function userJob(){return state?.jobs.find(j=>['queued','running'].includes(j.status));}
 const editVideo=act(async media=>{await chatModels.wait();await openVideoEdit({api,chatId:current,source:media.id,busy:userJob,onQueued:async()=>{await refresh();toast('Modifiche video in coda.');}});});
+const upscaleVideo=act(async media=>{if(!current)await newChat();await openUpscale({api,chatId:current,media,busy:userJob,onQueued:async()=>{await refresh();toast('Upscale in coda.');}});});
 function modelName(id){return modelLabel(state?.models.find(m=>m.id===id));}
 
 async function refresh(){
@@ -191,7 +193,7 @@ async function renderChat(){
       activity.innerHTML=`<div class="thinking" aria-hidden="true"><i></i><i></i><i></i></div><div><strong>${esc(title)}</strong><span class="activity-stage">${esc(job?.stage||'Preparazione del motore…')}</span><small class="activity-elapsed">${esc(timing?.text||'Preparazione del cronometro…')}</small></div>`;
       content.append(activity);
     }
-    appendMedia(content,message.media,{api,onEditVideo:message.role==='assistant'&&message.status==='done'?editVideo:null});appendMusicDetails(content,message,state.settings.chat_advanced);appendVideoDetails(content,message,state.settings.chat_advanced);appendToolsDetails(content,message,state.settings.chat_advanced);
+    appendMedia(content,message.media,{api,onEditVideo:message.role==='assistant'&&message.status==='done'?editVideo:null,onUpscaleVideo:upscaleVideo});appendMusicDetails(content,message,state.settings.chat_advanced);appendVideoDetails(content,message,state.settings.chat_advanced);appendToolsDetails(content,message,state.settings.chat_advanced);
     if(message.role==='assistant')projects.append(content,message);
     if(message.meta.quote_warnings?.length){const warning=document.createElement('p');warning.className='render-error';warning.textContent='Citazione letterale da verificare: '+message.meta.quote_warnings.join(' ');content.append(warning);}
     if(message.meta.slide_warning){const warning=document.createElement('p');warning.className='small-note';warning.textContent=message.meta.slide_warning;content.append(warning);}
@@ -326,7 +328,7 @@ async function renderCanvas(){
       canvasFollow=false;canvasSelection++;canvas.content=content;if(media)canvas.media=media;canvasDirty=true;$('#canvas-source').value=content;
       await persistCanvas();await renderCanvas();
     }});}catch(e){$('#canvas-preview').textContent=e.message;}}
-    else{$('#canvas-preview').classList.remove('slides-preview');await renderRich($('#canvas-preview'),value.content,options);appendMedia($('#canvas-preview'),value.media,{api,onEditVideo:editVideo});}
+    else{$('#canvas-preview').classList.remove('slides-preview');await renderRich($('#canvas-preview'),value.content,options);appendMedia($('#canvas-preview'),value.media,{api,onEditVideo:editVideo,onUpscaleVideo:upscaleVideo});}
   });await renderQueue;}
 }
 async function persistCanvas(){clearTimeout(canvasSaveTimer);if(canvasSaving){await canvasSaving;if(canvasDirty)return persistCanvas();return;}if(!canvasDirty)return;
@@ -424,6 +426,7 @@ function renderSettings(){
     const workspace=document.createElement('section');workspace.className='card workspace-settings';body.append(workspace);renderWorkspaceSettings(workspace,{draft:settingsDraft,state,api,pickFile:localModels.pickFile,pickDirectory:localModels.pickDirectory,refresh,notify:toast,changed:scheduleAssessment});
     const tools=document.createElement('section');tools.className='card tools-settings';body.append(tools);renderToolsSettings(tools,{state,draft:settingsDraft,pickDirectory:localModels.pickDirectory,changed:scheduleAssessment,install:act(async kind=>{await api('/downloads',{id:'tools_'+kind,kind:'runtime'});await refresh();}),download:act(async id=>{await api('/downloads',{id,kind:'tool_model'});await refresh();})});
     const video=document.createElement('section');video.className='card video-settings';body.append(video);
+    const upscale=document.createElement('section');upscale.className='card upscale-settings';body.append(upscale);renderUpscaleSettings(upscale,{api,pickFile:localModels.pickFile,notify:toast});
     const voice=document.createElement('section');voice.className='card voice-settings';body.append(voice);renderVoiceSettings(voice,{state,draft:settingsDraft,pickDirectory:localModels.pickDirectory,pickFile:localModels.pickFile,changed:scheduleAssessment,install:act(async(id,kind='runtime')=>{await api('/downloads',{id,kind});await refresh();})});
     renderVideoSettings(video,{state,draft:settingsDraft,link:()=>localModels.open(null,'minimax-h3'),edit:localModels.open,pickFile:localModels.pickFile,changed:scheduleAssessment,install:act(async(id='vision')=>{await api('/downloads',{id,kind:'runtime'});await refresh();})});
     const music=document.createElement('section');music.className='card music-settings';body.append(music);
@@ -474,6 +477,7 @@ document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLower
 $('#mobile-nav').onclick=()=>$('#sidebar').classList.toggle('visible');
 $('#attach').onclick=()=>$('#file-input').click();$('#file-input').onchange=act(async e=>{await uploadFiles([...e.target.files]);e.target.value='';});
 initGallery({api,getAttachments:()=>attachments,setAttachments:items=>{attachments=items;renderAttachments();},notify:toast});
+const upscaleOpen=document.createElement('button');upscaleOpen.type='button';upscaleOpen.className='btn small';upscaleOpen.id='upscale-open';upscaleOpen.textContent='↗ Upscale';upscaleOpen.title='Migliora un video dalla galleria o dal PC';$('#gallery-open').after(upscaleOpen);upscaleOpen.onclick=()=>upscaleVideo();
 $('#attachments').onclick=e=>{const b=e.target.closest('[data-remove-attachment]');if(b){attachments.splice(Number(b.dataset.removeAttachment),1);renderAttachments();}};
 $('#composer').ondragover=e=>{e.preventDefault();$('#composer').classList.add('dragging');};$('#composer').ondragleave=()=>$('#composer').classList.remove('dragging');
 $('#composer').ondrop=act(async e=>{e.preventDefault();$('#composer').classList.remove('dragging');await uploadFiles([...e.dataTransfer.files]);});

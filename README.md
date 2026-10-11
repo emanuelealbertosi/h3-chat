@@ -410,3 +410,7 @@ Implementazione thinking verificata sulla [API llama.cpp b10809](https://github.
 L’avvio controlla tutte le istanze di questa installazione sulle porte locali dell’app. Se trova un motore precedente, lo riavvia con il codice installato quando non ci sono generazioni o download in corso. Una vecchia istanza attiva viene lasciata lavorare: termina il lavoro e riapri H3-Chat. **Ferma-H3-Chat.bat** chiude tutte le istanze della stessa installazione. Le altre installazioni non vengono toccate.
 
 Le impostazioni richiedono uno stato aggiornato dal motore prima di aprirsi; se la versione è incompatibile viene mostrata una spiegazione, senza perdere i valori salvati.
+
+## Upscale video
+
+RTX Video Super Resolution e SeedVR2 3B FP8 sono disponibili come motori opzionali e autonomi, per video generati o esterni. Premi **Upscale** sotto un video oppure accanto alla galleria; configura default, installazione e collegamenti ai pesi in **Impostazioni → Upscale video**. Prove brevi, proporzioni, tempi, audio originale e recupero dei blocchi interrotti: [guida](docs/upscale.md).

@@ -171,6 +171,9 @@ class Downloads:
                         extract_zip(target,destination)
                     from .native_runtime import install_redist
                     install_redist(self.root,destination)
+            if task['kind']=='runtime' and task['id'].startswith('upscale_'):
+                from .upscale_runtime import prepare
+                prepare(self.root,task['id'])
             # Marker is only written after every model component has been verified.
             if task['kind']=='runtime' and task['id']=='voice':
                 from .voice import mark_ready

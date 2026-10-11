@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import time
 import uuid
@@ -209,6 +210,11 @@ class Store:
             # history/canvas snapshot. A retry must not consume its own answer.
             payload = original['payload']
             value=json.loads(payload)
+            prior_upscale=value['settings'].pop('_upscale_resume',None)
+            if original['status'] in ('failed','cancelled') and value['settings'].get('_upscale'):
+                candidate=self.root/'outputs'/original['id']/'upscale'/'checkpoint.json'
+                if candidate.is_file():value['settings']['_upscale_resume']=original['id']
+                elif isinstance(prior_upscale,str) and re.fullmatch('[a-f0-9]{32}',prior_upscale) and (self.root/'outputs'/prior_upscale/'upscale/checkpoint.json').is_file():value['settings']['_upscale_resume']=prior_upscale
             value['settings'].pop('_video_resume',None)
             value['settings'].pop('_manim_voice_resume',None)
             if original['status'] in ('failed','cancelled'):

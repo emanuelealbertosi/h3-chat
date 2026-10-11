@@ -83,3 +83,7 @@ Model weights and voice reference recordings are not redistributed.
 
 
 Qwen Image 2.1 Turbo is an optional separately downloaded model under the Qwen Research License. The INT8 ConvRot transformer and compatible encoder/VAE are distributed by Comfy-Org/Qwen-Image-2.1; original model: Qwen/Qwen-Image-2.1-Turbo. Model weights are not included in the application package.
+
+Optional standalone video upscale:
+- NVIDIA Python VFX / RTX Video SDK is proprietary and downloaded from NVIDIA; no NVIDIA SDK binaries are redistributed in this repository. The downloaded package retains its license notices.
+- SeedVR2 standalone source and 3B model/VAE: Apache-2.0, downloaded from the pinned official/source manifests in upscale-runtimes.json and tools-models.json. Runtime dependencies retain their wheel license files.
