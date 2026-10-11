@@ -62,10 +62,19 @@ Turbo/LoRA models.
 | Inactive-weight offload | Enabled |
 
 **Avanzate** edits the selected video's preset; a different model retains its
-own values. Supported durations are 1–15 seconds and resolutions 0.2–1 MP. The
+own values. Supported durations are 1–15 seconds and resolutions 0.2–0.98 MP. The
 model uses a 17k+5 frame grid: a 15-second job samples 362 model frames and exports
 360 frames, with audio trimmed to the same exact duration. There is one sampling
 pass, followed by separate video/audio decode and MP4 encoding stages.
+
+The optional 0.98 MP setting follows the native H3 pixel budget (1344×768),
+as described in the [ComfyUI H3 guide](https://docs.comfy.org/tutorials/video/minimax/minimax-h3).
+For an exact 16:9 result H3-Chat uses that padded canvas and exports 1344×756,
+without stretching. Other ratios remain proportional, with the 32-pixel model
+grid kept within the same area budget. Old saved 1.0 MP presets stay valid and
+are capped at 0.98 MP when used; the saved values and 0.7 MP default are unchanged.
+This does not guarantee sufficient VRAM or faster generation, especially with
+many image references and lip-sync.
 
 ## One chat, automatic or explicit
 

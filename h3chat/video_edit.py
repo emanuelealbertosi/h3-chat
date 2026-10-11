@@ -43,6 +43,8 @@ def describe(app,chat_id,ident):
         'clips':[{'clip':i+1,'start':s['start'],'end':s['start']+s['duration'],
             'url':'/media/'+record['outputs'][i],'prompt':record['prompts'][i],
             'images':[x['index'] for x in s.get('images',record['plan']['images'])],
+            'mode':s.get('generation_mode','reference'),
+            'start_image':next((x['index'] for x in s.get('images',[]) if x['role']=='keyframe'),None),
             'lip_sync':s.get('lip_sync',any(a['role']=='lipsync' for a in record['plan']['audios']))}
             for i,s in enumerate(record['timeline'])]}
 
@@ -52,7 +54,7 @@ def validate_edits(patches,value):
         raise ValueError('Seleziona almeno un clip da modificare.')
     result=[];seen=set()
     for item in patches:
-        if not isinstance(item,dict) or set(item)-{'clip','prompt','images','lip_sync','start','end'}:
+        if not isinstance(item,dict) or set(item)-{'clip','prompt','images','lip_sync','start','end','mode','start_image'}:
             raise ValueError('Modifica clip non valida.')
         clip=item.get('clip');prompt=item.get('prompt');lip=item.get('lip_sync',False)
         if type(clip) is not int or not 1<=clip<=len(value['record']['timeline']) or clip in seen:
@@ -60,8 +62,18 @@ def validate_edits(patches,value):
         if not isinstance(prompt,str) or not prompt.strip() or len(prompt)>6000:
             raise ValueError('Scrivi le modifiche del clip, fino a 6.000 caratteri.')
         if type(lip) is not bool:raise ValueError('Lip-sync: scegli On oppure Off.')
+        mode=item.get('mode','reference')
+        if mode not in ('reference','i2v'):raise ValueError('Modalità clip: scegli Riferimenti oppure I2V.')
+        guide=item.get('start_image')
+        if mode=='i2v':
+            if type(guide) is not int or not 1<=guide<=len(value['images']):raise ValueError('I2V: scegli un’immagine iniziale per il tratto da generare.')
+            if 'images' in item and item['images'] not in ([],[guide]):raise ValueError('I2V usa soltanto l’immagine iniziale; gli altri riferimenti non sono selezionati.')
+            # In I2V there is one image; accept its intuitive local Picture 1
+            # label and store the canonical film-wide ordinal for replay.
+            if guide!=1:prompt=re.sub(r'<Picture\s+1>',f'<Picture {guide}>',prompt,flags=re.I)
+        elif guide is not None:raise ValueError('Il fotogramma iniziale richiede la modalità I2V.')
         scene=value['record']['timeline'][clip-1]
-        images=item.get('images',[x['index'] for x in scene.get('images',value['record']['plan']['images'])])
+        images=[guide] if mode=='i2v' else item.get('images',[x['index'] for x in scene.get('images',value['record']['plan']['images'])])
         if not isinstance(images,list) or len(images)>9 or any(type(n) is not int or not 1<=n<=len(value['images']) for n in images) or len(set(images))!=len(images):
             raise ValueError('Scegli fino a nove riferimenti validi per il clip.')
         if any(int(n) not in images for n in re.findall(r'<Picture\s+(\d+)>',prompt,re.I)):
@@ -75,7 +87,7 @@ def validate_edits(patches,value):
             if last-first<24 or last>scene['frames']:
                 raise ValueError('Seleziona un tratto di almeno un secondo.')
             if first or last!=scene['frames']:span={'start':first/24,'end':last/24}
-        seen.add(clip);result.append({'clip':clip,'prompt':prompt.strip(),'images':images,'lip_sync':lip}|span)
+        seen.add(clip);result.append({'clip':clip,'prompt':prompt.strip(),'images':images,'lip_sync':lip}|span|({'mode':'i2v','start_image':guide} if mode=='i2v' else {}))
     return sorted(result,key=lambda x:x['clip'])
 
 
@@ -143,7 +155,8 @@ def render(app,job,payload,settings,cancel,stage,log):
         first,last=interval(patch,scene);duration=(last-first)/24;start=scene['start']+first/24
         mapping={n:i for i,n in enumerate(patch['images'],1)}
         change=re.sub(r'<Picture\s+(\d+)>',lambda m:f'<Picture {mapping[int(m[1])]}>',patch['prompt'],flags=re.I)
-        inventory='\n'.join(f'<Picture {i}>: {r["name"]}, identity/environment reference.' for i,r in enumerate(chosen,1))
+        i2v=patch.get('mode')=='i2v'
+        inventory='\n'.join(f'<Picture {i}>: {r["name"]}, '+('EXACT INITIAL FRAME at local 00:00, animate forward from this composition.' if i2v else 'identity/environment reference.') for i,r in enumerate(chosen,1))
         prior=re.sub(r'<Picture\s+\d+>','the original visual reference',original['prompts'][number-1],flags=re.I)
         context=f'Original scene, for context only: {prior}\n' if settings.get('_assistant',True) else ''
         instruction=(f'Replace ONLY this {duration:g}-second generation interval, global film interval {start:g}–{start+duration:g} seconds. '
@@ -151,14 +164,15 @@ def render(app,job,payload,settings,cancel,stage,log):
             'The requested changes override the old framing and camera cuts. Do not repeat the film opening or add a finale.\n'
             +(f'This replaces only local seconds {first/24:g}–{last/24:g} of the original clip. The surrounding footage stays unchanged; avoid introductory or concluding transitions.\n' if 'start' in patch else '')
             +f'{context}REQUESTED CHANGES: {change}\n'
-            f'{inventory}\nUse <Audio 1> as the original continuous soundtrack, unchanged. '
+            +('I2V: Begin from <Picture 1> at the first frame of this generation interval. Preserve its composition, camera position, subjects and lighting, then animate according to the requested motion. Do not use it only as an identity reference. The older scene must not override this supplied first frame.\n' if i2v else '')
+            +f'{inventory}\nUse <Audio 1> as the original continuous soundtrack, unchanged. '
             +('Synchronize the visible singer mouth to the ORIGINAL supplied vocals. No new singing, dialogue or rewritten lyrics.' if patch['lip_sync'] else 'No additional voices, dialogue or replacement music.'))
         local_refs=chosen+[value['audio']]
         tuning=settings|{'_video_duration':duration,'_video_audio_start':audio_start+start}
         stage(f'Post-produzione · istruzioni clip {number}/{len(record["timeline"])}')
         plan,_=app.engine.refine_video([],instruction,local_refs,model,tuning,cancel,log,stage)
         # Reference identity, exact audio offset and lip-sync are explicit UI contracts.
-        plan['images']=[{'index':i,'role':'reference','seconds':0} for i in range(1,len(chosen)+1)]
+        plan['images']=[{'index':i,'role':'keyframe' if i2v else 'reference','seconds':0} for i in range(1,len(chosen)+1)]
         plan['audios']=[{'index':1,'role':'lipsync' if patch['lip_sync'] else 'reuse','start':audio_start+start}]
         plan=validate_plan(plan,local_refs,duration)
         record['revision_plans'][key]=plan
@@ -196,7 +210,9 @@ def render(app,job,payload,settings,cancel,stage,log):
         description=re.sub(r'<Picture\s+(\d+)>',global_picture,plan['prompt'],flags=re.I)
         if 'start' in patch:description=original['prompts'][number-1]+f'\nUPDATED INTERVAL (clip-local {first/24:g}–{last/24:g} seconds; the following direction uses interval-local clocks):\n'+description
         record['prompts'][number-1]=description
-        scene.update(prompt=description,images=[{'index':n,'role':'reference'} for n in patch['images']],lip_sync=patch['lip_sync'],continuity='cut')
+        scene.update(prompt=description,images=[{'index':n,'role':'keyframe' if patch.get('mode')=='i2v' else 'reference','seconds':first/24 if patch.get('mode')=='i2v' and 'start' in patch else 0} for n in patch['images']],lip_sync=patch['lip_sync'],continuity='cut',generation_mode=patch.get('mode','reference'))
+        # A changed clip must not retain a stale replay recipe from Ricrea video.
+        record.pop('recreate_recipes',None)
         if record.get('storyboard'):record['storyboard']['shots'][number-1]=copy.deepcopy(scene)
         record['revision_completed'].append(number);save(folder,record)
     stage('Post-produzione · montaggio della nuova versione')

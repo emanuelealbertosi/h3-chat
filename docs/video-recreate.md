@@ -14,6 +14,10 @@ scheduler, seed, attenzione e offload. Di default vengono conservati i seed
 originali di ogni clip. La scelta vale soltanto per questa richiesta: i preset
 del modello non cambiano. Il modello resta quello usato nel video originale.
 
+La risoluzione arriva a **0,98 MP**, entro l'area del canvas nativo MiniMax H3.
+Il formato visibile resta quello del filmato originale. I vecchi preset da
+1 MP vengono limitati a quest'area durante la generazione, senza cambiarli.
+
 **Ricrea tutto il video** genera una nuova versione con gli stessi clip, tempi
 e formato, senza richiedere un nuovo piano all'Assistant. La musica originale
 viene rimontata in modo continuo. La richiesta rispetta la coda condivisa;

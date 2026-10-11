@@ -10,6 +10,17 @@ class VideoAspectTests(unittest.TestCase):
     def resolve(self, images, sizes, prompt=''):
         return resolve_canvas(DEFAULTS, {'images':images},sizes,prompt)
 
+    def test_native_resolution_includes_padding_and_preserves_visible_ratio(self):
+        from h3chat.video_options import NATIVE_PIXELS
+        for aspect in ('16:9','9:16','1:1','4:3','3:4','2.35:1'):
+            result=resolve_canvas(DEFAULTS|{'megapixels':.98},{'images':[]},[],aspect)
+            self.assertLessEqual(result['width']*result['height'],NATIVE_PIXELS)
+            a,b=map(int,result['aspect'].split(':'))
+            self.assertAlmostEqual(result['output_width']/result['output_height'],a/b,delta=.005)
+        result=resolve_canvas(DEFAULTS|{'megapixels':1},{'images':[]},[],'16:9')
+        self.assertEqual((result['width'],result['height']),(1344,768))
+        self.assertEqual(result['output_width']*9,result['output_height']*16)
+
     def test_start_frame_overrides_preset_and_prompt_without_stretching(self):
         value=self.resolve([{'index':1,'role':'keyframe','seconds':0}],[(1024,768)],'Anima in 16:9')
         self.assertEqual((value['aspect'],value['aspect_source'],value['format_image']),('4:3','image',1))

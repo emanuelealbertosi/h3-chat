@@ -147,6 +147,44 @@ class VideoEditTests(unittest.TestCase):
                 request(self.app,chat,{'source':ident,'assistant':False,'patches':[{'clip':2,'prompt':'Close-up'}|span]})
         self.assertEqual(len(self.app.store.all('SELECT id FROM jobs')),1)
 
+    def test_i2v_requires_one_guide_and_does_not_queue_invalid_modes(self):
+        chat,ident,*_=self.original()
+        for item in ({'mode':'i2v'},{'mode':'i2v','start_image':True},
+                     {'mode':'i2v','start_image':3},{'mode':'i2v','start_image':1,'images':[1,2]},
+                     {'mode':'reference','start_image':1},{'mode':'other'}):
+            with self.subTest(item=item),self.assertRaises(ValueError):
+                request(self.app,chat,{'source':ident,'assistant':False,'patches':[{'clip':2,'prompt':'Animate'}|item]})
+        self.assertEqual(len(self.app.store.all('SELECT id FROM jobs')),1)
+
+    def test_i2v_fresh_upload_starts_selected_interval_at_frame_zero(self):
+        chat,ident,refs,outputs,params=self.original()
+        extra={'id':'4'*32,'name':'new-first-frame.png','path':'uploads/new-first-frame.png','mime':'image/png'}
+        path=self.app.data/extra['path'];path.write_bytes(b'synthetic');(path.parent/(extra['id']+'.json')).write_text(json.dumps(extra))
+        new=request(self.app,chat,{'source':ident,'assistant':False,'media':[{'id':extra['id']}],
+            'patches':[{'clip':2,'prompt':'Continue <Picture 1> with slow camera motion.','mode':'i2v','start_image':3,'start':4,'end':9,'lip_sync':True}]})['job_id']
+        def generate(model,settings,plan,selected,job,cancel,stage,**kw):
+            self.assertEqual([r['id'] for r in selected],[extra['id'],refs[-1]['id']])
+            self.assertEqual(plan['images'],[{'index':1,'role':'keyframe','seconds':0}])
+            self.assertEqual(plan['audios'],[{'index':1,'role':'lipsync','start':26}])
+            self.assertIn('EXACT INITIAL FRAME',plan['prompt']);self.assertIn('Begin from <Picture 1>',plan['prompt'])
+            self.assertEqual((kw['scene']['duration'],kw['scene']['frames'],kw['scene']['start']),(5,120,19))
+            self.assertEqual(kw['scene']['canvas']['aspect'],'16:9')
+            out=self.app.data/'outputs'/job/'video.mp4';out.parent.mkdir(parents=True);out.write_bytes(b'\0\0\0\x18ftypisom')
+            return {'path':out.relative_to(self.app.data).as_posix(),'generation':params|{'duration':5,'output_frames':120}}
+        def splice(worker,body,*args,**kw):
+            self.assertEqual((body['start_frame'],body['end_frame'],body['total_frames']),(96,216,360))
+            Path(body['output']).write_bytes(b'\0\0\0\x18ftypisom');return {'frames':360}
+        with patch.object(self.app.engine,'generate_video',side_effect=generate),patch.object(self.app.engine,'tool_call',side_effect=splice),patch('h3chat.soundtrack.probe',return_value={'duration':60}),patch('h3chat.soundtrack.compose',return_value={'duration':42}) as mux:
+            self.app.execute_job(self.app.store.one('SELECT * FROM jobs WHERE id=?',(new,)),threading.Event())
+        answer=self.app.store.chat(chat)['messages'][-1];self.assertEqual(answer['status'],'done',answer['meta'])
+        self.assertEqual(mux.call_args.kwargs['audio_start'],7)
+        saved=checkpoint(self.app.data,new)
+        self.assertEqual(saved['timeline'][1]['images'],[{'index':3,'role':'keyframe','seconds':4}])
+        manifest=describe(self.app,chat,new);self.assertEqual((manifest['clips'][1]['mode'],manifest['clips'][1]['start_image']),('i2v',3))
+        from h3chat.video_recreate import load
+        recipe=load(self.app,chat,new)['recipes'][1]
+        self.assertEqual(next(x for x in recipe['plan']['images'] if x['role']=='keyframe')['seconds'],4)
+
     def test_partial_interval_uses_correct_audio_and_preserves_clip_timeline(self):
         chat,ident,refs,outputs,params=self.original()
         original=(self.app.data/'outputs'/ident/'scenes.json').read_bytes()

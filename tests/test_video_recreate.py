@@ -55,9 +55,10 @@ class VideoRecreateTests(unittest.TestCase):
         self.assertEqual([c[0]['audios'][0]['role'] for c in calls],['reuse','lipsync','reuse'])
         self.assertEqual(calls[2][0]['images'][0]['role'],'keyframe')
         self.assertEqual([c[2]['seed'] for c in calls],[100,101,102])
-        self.assertTrue(all(c[2]['megapixels']==1 and c[2]['steps']==20 for c in calls))
+        self.assertTrue(all(c[2]['megapixels']==.98 and c[2]['steps']==20 for c in calls))
         self.assertEqual([c[3]['frames'] for c in calls],[360,360,288])
-        self.assertEqual((calls[0][3]['canvas']['output_width'],calls[0][3]['canvas']['output_height']),(1376,774))
+        self.assertEqual((calls[0][3]['canvas']['output_width'],calls[0][3]['canvas']['output_height']),(1344,756))
+        self.assertEqual((calls[0][3]['canvas']['width'],calls[0][3]['canvas']['height']),(1344,768))
         self.assertEqual(mux.call_args.kwargs,{'audio_start':7,'audio_duration':42})
         self.assertEqual(self.app.store.settings(),before);self.assertEqual((self.app.data/'outputs'/original/'scenes.json').read_bytes(),source_bytes)
         # New video retains a recipe even when no legacy per-clip plan is written by the mocked renderer.

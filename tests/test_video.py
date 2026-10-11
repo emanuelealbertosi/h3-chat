@@ -38,7 +38,8 @@ class VideoTests(unittest.TestCase):
         ident=self.app.send(chat,{'prompt':'Un video di 15 secondi','video':True,'assistant':False,'video_parameters':{'megapixels':1,'duration':15}})['job_id']
         saved=json.loads(self.app.store.one('SELECT payload FROM jobs WHERE id=?',(ident,))['payload'])['settings']
         parameters=options(self.model,saved,False)
-        self.assertEqual((parameters['megapixels'],parameters['duration'],parameters['steps']),(1,15,12))
+        self.assertEqual((parameters['megapixels'],parameters['duration'],parameters['steps']),(.98,15,12))
+        self.assertEqual(parameters['requested_megapixels'],1)
         self.assertEqual(self.app.store.settings()['video_overrides'],before)
         for value in ({'megapixels':1.1},{'duration':16},{'megapixels':True},{'veda_predictor':'F:/private.safetensors'}):
             with self.subTest(value=value),self.assertRaises(ValueError):self.app.send(chat,{'prompt':'Test','video':True,'assistant':False,'video_parameters':value})

@@ -9,6 +9,8 @@ DEFAULTS = {'duration':15, 'megapixels':.7, 'aspect':'16:9', 'steps':12, 'cfg':1
             'shift_video':12, 'shift_audio':3, 'offload':True, 'attention':'auto','attention_chunks':0,
             'veda_predictor':'', 'veda_sparsity':90, 'veda_reference_sparsity':90}
 ASPECTS = ('16:9','9:16','1:1','4:3','3:4')
+NATIVE_MEGAPIXELS = .98
+NATIVE_PIXELS = 1344 * 768
 
 def quality(value='high'):
     if not isinstance(value,str) or value not in ('high','medium'):
@@ -47,6 +49,9 @@ def validate(value):
 
 def options(model,settings,randomize=True):
     result=apply_quality(validate(settings.get('video_overrides',{}).get(model['id'],{})),settings.get('_video_quality','high'))
+    # Keep older 1.0 MP presets valid without exceeding the native H3 canvas.
+    if result['megapixels']>NATIVE_MEGAPIXELS:
+        result['requested_megapixels']=result['megapixels'];result['megapixels']=NATIVE_MEGAPIXELS
     if randomize and result['seed']==-1:result['seed']=secrets.randbelow(2**31)
     a,b=map(int,result['aspect'].split(':'));ratio=a/b
     result['width']=max(32,round(math.sqrt(result['megapixels']*1024**2*ratio)/32)*32)
@@ -88,7 +93,7 @@ def resolve_canvas(opts,plan,image_sizes,prompt=''):
         ratio=Fraction(width,height);source='image'
     elif explicit is not None:ratio=explicit;source='prompt'
     else:ratio=Fraction(opts['aspect'].replace(':','/'));source='preset'
-    area=opts['megapixels']*1024**2
+    area=min(opts['megapixels'],NATIVE_MEGAPIXELS)*1024**2
     a,b=ratio.numerator,ratio.denominator
     if max(a,b)<=32:
         step=2 if a%2 or b%2 else 1
@@ -98,6 +103,17 @@ def resolve_canvas(opts,plan,image_sizes,prompt=''):
         output_width=max(2,round(math.sqrt(area*float(ratio))/2)*2)
         output_height=max(2,round(output_width/float(ratio)/2)*2)
     width=math.ceil(output_width/32)*32;height=math.ceil(output_height/32)*32
+    # Padding must also fit the native pixel budget while the visible result
+    # retains the requested/image aspect ratio. In 16:9 this is 1344x756
+    # on the native 1344x768 canvas, rather than stretched 1344x768 pixels.
+    while width*height>NATIVE_PIXELS:
+        if max(a,b)<=32:
+            k-=step
+            if k<step:raise ValueError('Formato video fuori dal canvas nativo.')
+            output_width,output_height=a*k,b*k
+        else:
+            output_width=max(2,output_width-2);output_height=max(2,round(output_width/float(ratio)/2)*2)
+        width=math.ceil(output_width/32)*32;height=math.ceil(output_height/32)*32
     if max(width,height)>8192:raise ValueError('Formato troppo allungato per il video. Usa soli riferimenti e specifica un formato nel prompt.')
     return opts|{'aspect':f'{a}:{b}','aspect_source':source,'format_image':anchor['index'] if anchor else None,
         'width':width,'height':height,'output_width':output_width,'output_height':output_height}

@@ -5,6 +5,19 @@ premi **Modifica clip**. Seleziona i tratti, scrivi le modifiche e scegli i
 riferimenti. Le immagini e la canzone originali sono già disponibili; puoi
 aggiungere immagini dalla galleria o dal PC.
 
+Per animare un'immagine come primo fotogramma, scegli **I2V · immagine iniziale**
+nel clip selezionato. Premi **Carica immagine per questo clip** o **Scegli dalla
+galleria**, oppure seleziona una delle immagini già presenti. I2V usa una sola
+immagine guida, senza i riferimenti di identità; tornando a **Riferimenti**
+ritrovi la selezione precedente. Scrivi nel prompt il movimento desiderato.
+Con **Solo un tratto**, l'immagine avvia il tratto scelto, non l'intero filmato.
+Il motore riceve un vero fotogramma guida anche con Assistant Off.
+
+Il formato resta quello del filmato originale: un'immagine di proporzioni diverse
+viene adattata senza deformarla e può avere margini. Il raccordo con il materiale
+precedente e successivo dipende dal contenuto. L'audio e i suoi tempi restano
+invariati. I fotogrammi guida vengono conservati anche per **Ricrea video**.
+
 Attiva **Lip-sync** se nel tratto selezionato vuoi vedere cantare il personaggio.
 Il condizionamento usa esattamente l'intervallo corrispondente della canzone.
 Assistant On prepara le istruzioni con il modello chat corrente; Assistant Off

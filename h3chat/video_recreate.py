@@ -71,7 +71,8 @@ def load(app, chat_id, ident):
                     chosen=copy.deepcopy(scene['images'])
                     if is_partial:
                         used={x['index'] for x in chosen}|{int(x) for x in re.findall(r'<Picture\s+(\d+)>',text,re.I)}
-                        chosen=[{'index':n,'role':'reference'} for n in sorted(used)]
+                        current={x['index']:x for x in chosen}
+                        chosen=[copy.deepcopy(current.get(n,{'index':n,'role':'reference'})) for n in sorted(used)]
                         if len(chosen)>9:raise ValueError('La regia combinata contiene più di nove riferimenti nel clip.')
                         local_refs=[images[x['index']-1] for x in chosen]+audios
                     mapping={x['index']:n for n,x in enumerate(chosen,1)}
@@ -114,7 +115,7 @@ def describe(app,chat_id,ident):
     value=load(app,chat_id,ident);p=tuning(value)
     return {'source':ident,'model':value['model']['name'],'duration':value['duration'],
         'aspect':value['record']['parameters'][0].get('aspect','16:9'),
-        'parameters':{k:p[k] for k in EDITABLE},'clips':len(value['recipes']),
+        'parameters':{k:min(p[k],.98) if k=='megapixels' else p[k] for k in EDITABLE},'clips':len(value['recipes']),
         'references':[{'name':x['name'],'mime':x['mime']} for x in value['refs']],
         'audio':value['audio']['name'] if value['audio'] else None,
         'partial_edit':value['partial'],
