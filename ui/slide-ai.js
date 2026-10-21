@@ -1,4 +1,5 @@
 import {escape as esc} from './render.js';
+import {labImageDefault} from './lab-image-model.js';
 
 export function initSlideImages(){
  const holder=document.querySelector('#slides-options');
@@ -10,7 +11,7 @@ export function initSlideImages(){
  return {read:()=>({generate_images:enabled.checked,image_model:enabled.checked?select.value:''}),render(state){
   const models=state.models.filter(m=>m.ready&&m.capabilities.includes('create'));
   const next=JSON.stringify(models.map(m=>[m.id,m.name]));if(next===signature)return;signature=next;
-  const chosen=select.value;select.innerHTML='<option value="">Predefinito immagini</option>'+models.map(m=>`<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
+  const chosen=select.value,preferred=labImageDefault(state);select.innerHTML=`<option value="">Predefinito · ${esc(preferred?.name||'modello immagini')}</option>`+models.map(m=>`<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
   if(models.some(m=>m.id===chosen))select.value=chosen;
  }};
 }

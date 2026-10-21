@@ -69,10 +69,17 @@ test('failed or incomplete book blocks are cancelled without publishing a docume
  }
 });
 
-test('book size is checked before creating a transfer',async()=>{
- for(const size of [0,projectUploadLimits.file_bytes+1]){
+test('invalid book sizes are rejected before creating a transfer',async()=>{
+ for(const size of [-1,1.5,NaN,Number.MAX_SAFE_INTEGER+1]){
   let called=false;
   await assert.rejects(uploadProjectDocument({name:'book.pdf',size},{project:'project',api:()=>{called=true;},getToken:()=>''}));
   assert.equal(called,false);
  }
+});
+
+test('book uploads do not impose the removed fixed size limit',async()=>{
+ assert.equal(projectUploadLimits.file_bytes,null);
+ let received;
+ await assert.rejects(uploadProjectDocument({name:'book.pdf',size:2*1024**3},{project:'project',api:async(path,body)=>{received=body;throw Error('Stop after validating the request');},getToken:()=>''}),/Stop after validating/);
+ assert.equal(received.size,2*1024**3);
 });

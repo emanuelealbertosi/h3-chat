@@ -245,7 +245,13 @@ class Worker:
                 emit('stage',message='Video · caricamento / trasferimento GPU · '+names)
             result=original_load(models,*args,**kwargs)
             self.last_load=ids
-            if changed:emit('stage',message=self.phase)
+            if changed:
+                from h3chat.video_memory import diffuser_placement
+                placement=diffuser_placement(models)
+                if placement:
+                    self.diffuser_placement=placement;logging.info('H3 diffuser placement: %s',json.dumps(placement))
+                note=' · pesi in streaming dalla RAM; il primo passo può essere molto lento' if placement and placement['streaming_from_ram'] else ''
+                emit('stage',message=self.phase+note)
             return result
         comfy.model_management.load_models_gpu=load_gpu
         comfy.utils.PROGRESS_BAR_ENABLED=False
@@ -263,6 +269,11 @@ class Worker:
         emit('stage',message='Video · lettura diffusore MiniMax H3')
         self.model=comfy.sd.load_diffusion_model(files['diffusion'])
         if self.model is None or type(self.model.model.model_config).__name__!='MiniMaxH3':raise ValueError('Scegli un diffusore MiniMax H3 standard, compatibile FL2VA / REF2VA.')
+        from h3chat.video_mlp import require_supported_weights
+        require_supported_weights(self.model.model.diffusion_model)
+        from h3chat.video_activation_memory import install as install_activation_memory
+        self.activation_memory_report=install_activation_memory(self.model.model.diffusion_model)
+        logging.info('H3 packed activation lifetime: %s',self.activation_memory_report)
         head=self.model.model.diffusion_model.final_layer
         if head.video_out.weight.shape[0]!=96 or head.audio_out.weight.shape[0]!=32:raise ValueError('PDD/Turbo non supportato: scegli un modello H3 standard FL2VA / REF2VA.')
         self.mlp_chunk_mb=0
@@ -272,7 +283,7 @@ class Worker:
             blocks=install(self.model.model.diffusion_model,self.torch,comfy.ops)
             if blocks:
                 self.mlp_chunk_mb=512
-                logging.info('H3 INT8 MLP workspace: %d blocks, %d MB per token batch, weights transferred once',blocks,self.mlp_chunk_mb)
+                logging.info('H3 quantized MLP workspace: %d blocks, %d MB per token batch, weights transferred once',blocks,self.mlp_chunk_mb)
 
     def load_conditioners(self):
         comfy,torch,files=self.comfy,self.torch,self.files
@@ -296,6 +307,17 @@ class Worker:
             from h3chat.veda import release
             release(getattr(self,'veda_patch',None))
         self.veda_base_model=None;self.veda_patch=None
+        if preference=='comfy_kitchen':
+            function=getattr(attention,'attention_comfy_kitchen_int8',None)
+            if not getattr(attention,'COMFY_KITCHEN_INT8_ATTENTION_IS_AVAILABLE',False) or not callable(function):
+                raise ValueError('ComfyKitchen INT8 attention non disponibile nel runtime o sulla GPU. Scegli VEDA, Sage o PyTorch; nessun backend alternativo è stato attivato.')
+            # Use the native implementation, including its container path that
+            # releases floating-point Q/K/V after prequantization. No Sage wrapper.
+            self.attention_chunks=1
+            self.model.set_model_optimized_attention(function)
+            logging.info('Video attention backend: comfy_kitchen (requested: %s, head chunks: 1)',preference)
+            emit('stage',message='Video · attenzione ComfyKitchen INT8')
+            return 'comfy_kitchen'
         available=attention.SAGE_ATTENTION_IS_AVAILABLE
         if preference=='sage' and not available:
             raise ValueError('SageAttention non installato. Installa l’acceleratore dal Setup video, oppure scegli Auto / PyTorch.')
@@ -387,21 +409,74 @@ class Worker:
                 image=self.fit_frame(image,{'width':w,'height':h,'output_width':w,'output_height':h});z=self.vae.encode(image)
                 blocks.append({'kind':'image','latent_h':h//16,'latent_w':w//16,'latent':z})
             items.append({'type':'image','data':image})
+        self.source_info=None
+        if request.get('extension_context'):
+            from h3chat.video_extension import window
+            context=request['extension_context'];spec=window(opts['frames']-5,context['side'])
+            frames=torch.cat([self.fit_frame(image,opts) for image in self.images(context['paths'])],dim=0)
+            guides.append({'resolved_frame_index':spec['guide_start'],'latent':self.vae.encode(frames)})
+            emit('stage',message='Estensione video · contesto temporale nativo di 5 fotogrammi al raccordo')
+        if request.get('source_video'):
+            from h3chat.video_reference import decode_source,video_block,anchor_positions,source_still
+            emit('stage',message='Modifica video · lettura della clip sorgente e dei suoi movimenti')
+            aligned=opts.get('source_conditioning')=='aligned'
+            source_frames,qwen_frames,self.source_info=decode_source(request['source_video'],opts if aligned else None)
+            emit('stage',message=f"Modifica video · codifica {self.source_info['frames']} fotogrammi sorgente")
+            z=self.vae.encode(source_frames)
+            if aligned:
+                guides.insert(0,{'resolved_frame_index':0,'latent':z})
+                emit('stage',message='Modifica video · guida allineata sul canvas di uscita')
+            else:blocks.append(video_block(z))
+            source_anchors=[]
+            for frame in ([] if aligned else anchor_positions(request['source_video'])):
+                # A supplied edited keyframe overrides the original at this time.
+                if any(g['resolved_frame_index']==frame for g in guides):continue
+                image=self.fit_frame(source_still(source_frames,self.source_info,frame),opts)
+                guides.append({'resolved_frame_index':frame,'latent':self.vae.encode(image)})
+                source_anchors.append(frame)
+            self.source_info['anchored_frames']=sorted({g['resolved_frame_index'] for g in guides})
+            logging.info('H3 source video: start=%.6f s, frames=%d, guide=%.2f MP, size=%dx%d, keyframes=%s',
+                self.source_info['start'],self.source_info['frames'],self.source_info['megapixels'],
+                self.source_info['content_width'],self.source_info['content_height'],self.source_info['anchored_frames'])
+            emit('stage',message=f"Modifica video · sorgente {self.source_info['megapixels']:g} MP · {len(guides)} fotogrammi guida · uscita {opts['megapixels']:g} MP")
+            if source_anchors:emit('stage',message='Modifica video · ancoraggio sorgente · fotogrammi '+', '.join(map(str,source_anchors)))
+            if not aligned:
+                items.append({'type':'video','data':qwen_frames,
+                              'timestamps':[i/2 for i in range(qwen_frames.shape[0])]})
+            del source_frames,qwen_frames
         master=None;master_z=None
         for entry in plan['audios']:
-            audio=read_audio(request['audios'][entry['index']-1],entry['start'],opts['frames']/24,entry['role'] in ('lipsync','reuse'),request.get('audio_tail_padding',False))
+            audio_frames=opts['frames']-5 if request.get('extension_context') else opts['frames']
+            audio=read_audio(request['audios'][entry['index']-1],entry['start'],audio_frames/24,entry['role'] in ('lipsync','reuse'),request.get('audio_tail_padding',False))
+            if request.get('extension_context'):
+                from h3chat.video_extension import window,pad_audio
+                audio=pad_audio(audio,window(audio_frames,request['extension_context']['side']))
             z,t=h3._encode_ref_audio(self.audio_vae,audio)
             blocks.append({'kind':'audio','ref_audio_t':t,'audio_latent':z});items.append({'type':'audio'})
             if entry['role'] in ('lipsync','reuse'):master,master_z=audio,z
         # Internal memory follows explicit references, preserving Picture ordinals.
         # Opening anchor and two recent endings are visible to the text encoder.
-        if request.get('scene_index',0)>0 and request.get('continuity')!='cut':
+        if request.get('scene_index',0)>0 and request.get('continuity')!='cut' and not opts.get('longtake_enabled'):
             memory=[self.anchor,*self.recent]
             for image in memory:
                 if image is not None:items.append({'type':'image','data':image})
             if self.recent and not any(g['resolved_frame_index']==0 for g in guides):
                 z=self.vae.encode(self.fit_frame(self.recent[-1],opts))
                 guides.append({'resolved_frame_index':0,'latent':z})
+        if opts.get('longtake_enabled'):
+            from h3chat.video_longtake import load_context,signature
+            self.longtake_report={'enabled':True,'context_frames':0,'context_saved':False,
+                'refine_steps':5,'denoise':.55,'blend_frames':[22,44],'mask':None,
+                'audio_source':'base','context_origin':'before_clip','context_source':None}
+            if request.get('longtake_context'):
+                try:
+                    guides=load_context(request['longtake_context'],signature(self.files,opts),torch)+guides
+                    self.longtake_report.update(context_frames=22,context_source=request['longtake_context'])
+                    emit('stage',message='LongTakeNoCuts · contesto movimento · 22 fotogrammi prima della clip')
+                except (ValueError,OSError,KeyError) as exc:
+                    self.longtake_report['context_reset_reason']=str(exc)
+                    emit('stage',message='LongTakeNoCuts · nuovo tratto · contesto precedente incompatibile o non disponibile')
+            else:emit('stage',message='LongTakeNoCuts · inizio tratto · nessun contesto precedente')
         tokens=self.clip.tokenize(plan['prompt'],minimax_ref_items=items) if items else self.clip.tokenize(plan['prompt'])
         positive=self.clip.encode_from_tokens_scheduled(tokens)
         import node_helpers
@@ -426,11 +501,18 @@ class Worker:
         if request.get('sequence')!=getattr(self,'sequence',None) or request.get('scene_index',0)==0 or request.get('continuity')=='cut':
             self.sequence=request.get('sequence');self.anchor=None;self.recent=[]
         if request.get('resume_memory'):self.restore_memory(request['resume_memory'])
-        opts=resolve_canvas(request['options'],request['plan'],[(im.shape[2],im.shape[1]) for im in images],request.get('format_prompt',request['plan'].get('prompt','')))
+        opts=resolve_canvas(request['options'],request['plan'],[(im.shape[2],im.shape[1]) for im in images],request.get('format_prompt',request['plan'].get('prompt','')),force_aspect=request.get('forced_aspect'))
         if request.get('canvas'):opts.update(request['canvas'])
+        extension=None
+        if request.get('extension_context'):
+            from h3chat.video_extension import window
+            extension=window(opts['frames'],request['extension_context']['side'])
+            opts=opts|{'frames':extension['frames']}
         request=request|{'options':opts}
-        emit('stage',message=f"Video · formato {opts['aspect']} · {opts['output_width']}×{opts['output_height']} · "+('dall’immagine guida' if opts['aspect_source']=='image' else 'dal prompt' if opts['aspect_source']=='prompt' else 'dal preset'))
+        emit('stage',message=f"Video · formato {opts['aspect']} · {opts['output_width']}×{opts['output_height']} · "+('dall’immagine guida' if opts['aspect_source']=='image' else 'dal prompt' if opts['aspect_source']=='prompt' else 'dalle impostazioni della richiesta' if opts['aspect_source']=='request' else 'dal preset'))
         preparation_started=time.monotonic()
+        if any(x['weight'] for x in opts.get('loras',[])) and self.model is not None:
+            self.discard('model')
         if self.model is None and not self.offload:self.load_diffuser()
         if self.clip is None:self.load_conditioners()
         timings['conditioner_reload']=time.monotonic()-preparation_started
@@ -451,26 +533,117 @@ class Worker:
                 memory.append(self.memory_snapshot('conditioners_released'))
             if self.model is None:self.load_diffuser()
             if opts.get('attention')=='veda':
-                attention_backend=self.configure_attention('veda',opts.get('attention_chunks',0),opts)
+                from h3chat.veda_memory import head_chunks_for_edit
+                marker=Path(request['output']).with_name('sampling-diagnostics.json')
+                diagnostic=marker.is_file() and json.loads(marker.read_text(encoding='utf-8')).get('first_block_probe') is True
+                requested_chunks=opts.get('attention_chunks',0)
+                effective_chunks=head_chunks_for_edit(requested_chunks,aligned=bool(request.get('source_video')) and opts.get('source_conditioning')=='aligned',
+                    width=opts['width'],height=opts['height'],frames=opts['frames'],total_bytes=torch.cuda.get_device_properties(0).total_memory,diagnostic=diagnostic,
+                    source_shape=(self.source_info['width'],self.source_info['height'],self.source_info['frames']) if self.source_info else None,
+                    manual=opts.get('attention_chunks_mode')=='manual')
+                if effective_chunks!=requested_chunks:emit('stage',message=f'Video · VEDA · suddivisione memoria automatica: {effective_chunks} gruppi di teste')
+                attention_backend=self.configure_attention('veda',effective_chunks,opts)
             else:attention_backend=self.configure_attention(opts.get('attention','auto'),opts.get('attention_chunks',0))
             timings['diffuser_load']=time.monotonic()-diffuser_started
             memory.append(self.memory_snapshot('before_sampling'))
             negative=[[torch.zeros_like(value),info.copy()] for value,info in positive]
+            lora_result=[]
+            if any(x['weight'] for x in opts.get('loras',[])):
+                emit('stage',message='Video · preparazione LoRA di editing una sola volta')
+                from h3chat.video_loras import apply as apply_loras
+                started=time.monotonic()
+                self.model,lora_result=apply_loras(self.model,opts['loras'],progress=lambda done,total:emit('stage',message=f'Video · preparazione LoRA · {done}/{total} parametri'),merge=not opts.get('pdd_enabled'))
+                timings['lora_load']=time.monotonic()-started
             model=self.h3.MiniMaxH3SigmaShift.execute(self.model,opts['shift_video'],opts['shift_audio'])[0]
+            pdd_sigmas=None;pdd_result={}
+            if opts.get('pdd_enabled'):
+                emit('stage',message='Video · PDD 8 passi · caricamento adattatore e proiezioni')
+                pdd_started=time.monotonic()
+                from h3chat.video_pdd import apply as apply_pdd
+                def pdd_progress(done,total):
+                    emit('stage',message=f'Video · preparazione PDD una sola volta · {done}/{total} parametri')
+                model,pdd_sigmas,pdd_result=apply_pdd(model,opts,progress=pdd_progress)
+                if lora_result:
+                    pdd_result['editing_loras_merged_together']=True
+                    for item in lora_result:
+                        item['merged_patch_keys']=item['prepared_patch_keys']
+                        item['merge_deferred_to_pdd']=False
+                        item['merged_with_pdd']=True
+                logging.info('H3 PDD: %s',pdd_result['info'])
+                timings['pdd_load']=time.monotonic()-pdd_started
+                Path(request['output']).with_name('pdd-info.json').write_text(json.dumps(pdd_result,ensure_ascii=False,indent=2),encoding='utf-8')
             noise=comfy.sample.prepare_noise(latent['samples'],opts['seed'])
             emit('stage',message='Video · generazione MiniMax H3')
             self.phase='Video · generazione MiniMax H3'
             sampling_started=time.monotonic();last_step=sampling_started;step_seconds=[]
+            sampling_memory=Path(request['output']).with_name('sampling-memory.jsonl')
+            diagnostic_file=Path(request['output']).with_name('sampling-diagnostics.json')
+            diagnostics={}
+            if diagnostic_file.is_file():
+                value=json.loads(diagnostic_file.read_text(encoding='utf-8'))
+                if isinstance(value,dict):diagnostics={k:value.get(k) is True for k in ('synchronize_steps','trim_unused_cache','first_block_probe')}
+            def record_sampling_memory(value):
+                with sampling_memory.open('a',encoding='utf-8') as stream:
+                    stream.write(json.dumps(value,ensure_ascii=False)+'\n')
             def progress(step,x0,x,total):
                 nonlocal last_step
+                sync_seconds=0
+                if diagnostics.get('synchronize_steps'):
+                    started=time.monotonic();torch.cuda.synchronize();sync_seconds=time.monotonic()-started
                 now=time.monotonic();seconds=now-last_step;last_step=now
                 step_seconds.append(seconds)
-                if step in (0,total-1):memory.append(self.memory_snapshot('step_'+str(step+1)))
+                snapshot=self.memory_snapshot('step_'+str(step+1))
+                if step in (0,total-1):memory.append(snapshot)
                 logging.info('H3 sampling step %d/%d: %.2f s',step+1,total,seconds)
+                record_sampling_memory({'step':step+1,'seconds':seconds,'completion_sync_seconds':sync_seconds,'memory':snapshot})
                 emit('progress',step=step+1,steps=total,step_seconds=seconds)
-            samples=comfy.sample.sample(model,noise,opts['steps'],opts['cfg'],opts['sampler'],opts['scheduler'],positive,negative,latent['samples'],noise_mask=latent.get('noise_mask'),disable_pbar=True,seed=opts['seed'],
-                callback=progress)
+                from h3chat.video_memory import should_trim_sampling_cache
+                if diagnostics.get('trim_unused_cache') and step+1<total and should_trim_sampling_cache(snapshot,self.offload):
+                    emit('stage',message='Video · rilascio cache GPU inutilizzata fra i passi')
+                    started=time.monotonic()
+                    comfy.model_management.soft_empty_cache(force=True)
+                    after=self.memory_snapshot('cache_released_after_step_'+str(step+1))
+                    record_sampling_memory({'after_step':step+1,'cache_trim_seconds':time.monotonic()-started,'memory':after})
+            # A private opt-in diagnostic, consumed by a dedicated native
+            # process. Normal render requests never synchronize individual
+            # phases or stop at this boundary, and no user preset changes.
+            probe=None
+            if diagnostics.get('first_block_probe'):
+                from h3chat.video_phase_diagnostics import FirstBlockProbe,ProbeComplete
+                probe=FirstBlockProbe(torch,Path(request['output']).parent,
+                    head_chunks=self.attention_chunks).install(model.model.diffusion_model,getattr(self,'veda_patch',None))
+                emit('stage',message='Video · diagnosi primo blocco · nessun rendering completo')
+            try:
+                samples=comfy.sample.sample(model,noise,opts['steps'],opts['cfg'],opts['sampler'],opts['scheduler'],positive,negative,latent['samples'],noise_mask=latent.get('noise_mask'),disable_pbar=True,seed=opts['seed'],
+                    callback=progress,sigmas=pdd_sigmas)
+            except BaseException as error:
+                if probe is not None and isinstance(error,ProbeComplete):
+                    probe.close('done')
+                    emit('diagnostic_done',parameters={'completed_blocks':probe.completed_blocks,
+                        'report':str(probe.result),'events':str(probe.events),
+                        'head_chunks':self.attention_chunks,'activation_memory':getattr(self,'activation_memory_report',{}),
+                        'timings':timings,'sampling_seconds':time.monotonic()-sampling_started})
+                    return
+                if probe is not None:probe.close('error')
+                raise
+            finally:
+                if probe is not None and not probe.closed:probe.close('boundary_not_reached')
             sampling_seconds=time.monotonic()-sampling_started
+            if opts.get('longtake_enabled'):
+                from h3chat.video_longtake import refine
+                emit('stage',message='LongTakeNoCuts · rifinitura sperimentale · 5 passi aggiuntivi')
+                self.phase='LongTakeNoCuts · rifinitura'
+                refine_started=time.monotonic();refine_last=refine_started;refine_seconds=[]
+                def refine_progress(step,x0,x,total):
+                    nonlocal refine_last
+                    now=time.monotonic();seconds=now-refine_last;refine_last=now;refine_seconds.append(seconds)
+                    emit('stage',message=f'LongTakeNoCuts · rifinitura · passo {step+1}/{total}')
+                samples=refine(comfy.sample.sample,comfy.sample.prepare_noise,comfy.nested_tensor.NestedTensor,
+                    torch,model,samples,positive,negative,opts,refine_progress)
+                self.longtake_report.update(refine_seconds=time.monotonic()-refine_started,
+                    step_seconds=refine_seconds,base_sampling_seconds=sampling_seconds)
+                timings['longtake_refine']=self.longtake_report['refine_seconds']
+                sampling_seconds=time.monotonic()-sampling_started
             veda_result={}
             if getattr(self,'veda_patch',None) is not None:
                 from h3chat.veda import report
@@ -480,7 +653,7 @@ class Worker:
                     attention_backend='sage' if attention.SAGE_ATTENTION_IS_AVAILABLE else 'pytorch'
                     emit('stage',message='Video · VEDA non utilizzata · '+veda_result['fallback_reason'])
             decoder_started=time.monotonic()
-            if self.offload:
+            if self.offload or opts.get('pdd_enabled') or lora_result:
                 emit('stage',message='Video · rilascio diffusore prima della decodifica')
                 model=None
                 if getattr(self,'veda_patch',None) is not None:
@@ -497,6 +670,12 @@ class Worker:
             pixels=self.vae.decode(samples.unbind()[0])
             if pixels.ndim==5:pixels=pixels.reshape(-1,*pixels.shape[-3:])
             if len(pixels)<opts['frames']:raise RuntimeError('Il VAE non ha decodificato tutti i fotogrammi.')
+            longtake_tail=None
+            if opts.get('longtake_enabled') and not extension:
+                from h3chat.video_longtake import CONTEXT_FRAMES
+                # Only actual delivered frames, before spatial crop; no padded tail.
+                emit('stage',message='LongTakeNoCuts · salvataggio contesto delle clip modificabili')
+                longtake_tail=self.vae.encode(pixels[opts['frames']-CONTEXT_FRAMES:opts['frames']]).detach().cpu()
             left=(opts['width']-opts['output_width'])//2;top=(opts['height']-opts['output_height'])//2
             pixels=pixels[:,top:top+opts['output_height'],left:left+opts['output_width'],:]
             if request.get('sequence'):
@@ -513,10 +692,22 @@ class Worker:
                 master=vae_decode_audio(self.audio_vae,{'samples':samples})
             timings['audio_decode']=time.monotonic()-audio_started
             saving_started=time.monotonic()
+            if extension:
+                from h3chat.video_extension import trim_audio
+                pixels=pixels[extension['trim_start']:extension['trim_start']+extension['output_frames']]
+                master=trim_audio(master,extension)
+                opts=opts|{'frames':extension['output_frames']}
             write_video(request['output'],pixels,master,opts['frames'])
+            if longtake_tail is not None:
+                from h3chat.video_longtake import save_context,signature
+                save_context(Path(request['output']).with_name('longtake-tail.safetensors'),longtake_tail,
+                    signature(self.files,opts),request['output'])
+                self.longtake_report['context_saved']=True
             timings['saving']=time.monotonic()-saving_started
         timings['sampling']=sampling_seconds;timings['generation']=time.monotonic()-generation_started
-        emit('done',parameters={'fps':24,'duration':opts['frames']/24,'model_frames':grid_frames,'output_frames':opts['frames'],'width':opts['output_width'],'height':opts['output_height'],'canvas_width':opts['width'],'canvas_height':opts['height'],'aspect':opts['aspect'],'aspect_source':opts['aspect_source'],'format_image':opts['format_image'],'engine':'minimax-h3','attention_backend':attention_backend,'attention_requested':opts.get('attention','auto'),'veda':veda_result,'attention_chunks':self.attention_chunks,'mlp_chunk_mb':getattr(self,'mlp_chunk_mb',0),'sampling_seconds':sampling_seconds,'step_seconds':step_seconds,'timings':timings,'memory':[x for x in memory if x is not None],'audio_sample_rate':master['sample_rate'],'audio_preserved':any(x['role'] in ('lipsync','reuse') for x in request['plan']['audios'])})
+        if opts.get('longtake_enabled'):
+            Path(request['output']).with_name('longtake-result.json').write_text(json.dumps(self.longtake_report,ensure_ascii=False,indent=2),encoding='utf-8')
+        emit('done',parameters={**({'longtake':self.longtake_report} if opts.get('longtake_enabled') else {}),'fps':24,'duration':opts['frames']/24,'model_frames':grid_frames,'output_frames':opts['frames'],'width':opts['output_width'],'height':opts['output_height'],'canvas_width':opts['width'],'canvas_height':opts['height'],'aspect':opts['aspect'],'aspect_source':opts['aspect_source'],'format_image':opts['format_image'],'engine':'minimax-h3','attention_backend':attention_backend,'attention_requested':opts.get('attention','auto'),'veda':veda_result,'attention_chunks':self.attention_chunks,'attention_chunks_requested':opts.get('attention_chunks',0),'mlp_chunk_mb':getattr(self,'mlp_chunk_mb',0),'activation_memory':getattr(self,'activation_memory_report',{'active':False,'temporaries_released':[],'source_guard':'not_loaded'}),'sampling_seconds':sampling_seconds,'step_seconds':step_seconds,'timings':timings,'loras_applied':lora_result,'memory':[x for x in memory if x is not None],'audio_sample_rate':master['sample_rate'],'audio_preserved':any(x['role'] in ('lipsync','reuse') for x in request['plan']['audios']),**({'video_edit_mode':'source','source_video':self.source_info} if self.source_info else {})})
 
 def main():
     emit('hello');worker=Worker()

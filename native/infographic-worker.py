@@ -145,6 +145,11 @@ def run(request):
     from h3chat.engine import CREATE_NO_WINDOW
     deck=request['deck'];validate_motion(deck);width,height=FORMATS[deck['format']];height=round(height);duration=sum(deck['infographic']['durations']);fps=30
     size={'9:16':(1080,1920),'16:9':(1920,1080),'1:1':(1080,1080),'4:3':(1440,1080),'16:10':(1728,1080)}[deck['format']]
+    if 'output_size' in request:
+        size=request['output_size'];fps=request.get('fps',24)
+        if not isinstance(size,list) or len(size)!=2 or any(type(n) is not int or not 2<=n<=16384 or n%2 for n in size) or fps!=24:
+            raise ValueError('Formato della timeline non valido.')
+        size=tuple(size)
     if 'test_size' in request:size=tuple(request['test_size']);fps=10
     folder=Path(request['output']).parent;folder.mkdir(parents=True,exist_ok=True);source=folder/'infographic-render.html';source.write_text(document(ROOT,request['data'],deck,request['media']),encoding='utf-8')
     profile=folder/'renderer-profile';profile.mkdir(exist_ok=True)

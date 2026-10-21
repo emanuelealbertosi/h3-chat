@@ -16,6 +16,26 @@ from .image_options import compatible
 MAX_SELECTED=8
 
 
+def _krea2_tensors(header, names):
+    """Recognize unlabelled Krea 2 adapters from paired attention shapes.
+
+    Krea 2 is a separate architecture from FLUX.1 Krea. A filename containing
+    Krea is therefore not sufficient evidence to assign an adapter to it.
+    """
+    projections=set()
+    for name in names:
+        match=re.search(r'(?:^|\.)blocks\.\d+\.attn\.(gate|wq|wk)\.(lora_A|lora_down)(\.default)?\.weight$',name)
+        if not match:continue
+        kind=match[1];up=name[:match.start(2)]+('lora_B' if match[2]=='lora_A' else 'lora_up')+name[match.end(2):]
+        if up not in names:continue
+        down_shape=header[name].get('shape',[]);up_shape=header[up].get('shape',[])
+        output=1536 if kind=='wk' else 6144
+        if (len(down_shape)==len(up_shape)==2 and down_shape[1]==6144 and up_shape[0]==output
+                and type(down_shape[0]) is int and down_shape[0]>0 and down_shape[0]==up_shape[1]):
+            projections.add(kind)
+    return 'gate' in projections and ('wq' in projections or 'wk' in projections)
+
+
 def validate_directories(value):
     if not isinstance(value,list) or len(value)>20:raise ValueError('Puoi collegare fino a 20 cartelle LoRA.')
     paths=[]
@@ -41,25 +61,42 @@ def _inspect(path,size,stamp):
         for name in names:
             for down,up in (('.lora_down.weight','.lora_up.weight'),('.lora_A.weight','.lora_B.weight'),('.lora_A.default.weight','.lora_B.default.weight')):
                 if name.endswith(down) and name[:-len(down)]+up in names:pairs+=1
-        if not pairs:return None
+        from .lora_families import targets,tensor_family
+        detected_targets=targets(header)
+        if not detected_targets:return None
         for name in names:
             tensor=header[name];offsets=tensor.get('data_offsets') if isinstance(tensor,dict) else None
             if not isinstance(offsets,list) or len(offsets)!=2 or any(type(x) is not int for x in offsets) or not 0<=offsets[0]<offsets[1]<=size-length-8:return None
         meta=header.get('__metadata__',{})
         if not isinstance(meta,dict):meta={}
         evidence=' '.join(str(meta.get(k,'')) for k in ('ss_base_model_version','modelspec.architecture','base_model','ss_model_type')).lower()
-        family=''
-        if 'ming' in evidence:family='ming'
+        family='';family_source='metadata'
+        if 'minimax' in evidence or ('minimax' in Path(path).name.lower() and any(5376 in header[n].get('shape',[]) for n in names)):family='minimax-h3'
+        elif 'ming' in evidence:family='ming'
+        elif 'moss' in evidence:family='moss'
         elif re.search(r'qwen[ _-]?image[ _-]?2[._ -]?1',evidence):family='qwen21'
         elif 'anima' in evidence:family='anima'
         elif 'qwen' in evidence and 'image' in evidence:family='qwen-image'
+        elif re.search(r'\bkrea[._ -]?2\b',evidence):family='krea2'
         elif re.search(r'flux[._ -]?2',evidence):family='flux2'
         elif 'flux' in evidence:family='flux1'
         elif 'sdxl' in evidence or 'stable-diffusion-xl' in evidence:family='sdxl'
         elif any(k in evidence for k in ('sd_v1','sd1.5','sd_1.5','sd15','stable-diffusion-v1')):family='sd15'
         elif any(k in evidence for k in ('sd_v2','sd2.1','stable-diffusion-v2')):family='sd2'
+        elif re.search(r'z[ _-]?image',evidence):family='zimage'
+        elif 'wan' in evidence:family='wan'
+        elif 'ltx' in evidence:family='ltx2'
+        if not family and _krea2_tensors(header,names):family='krea2';family_source='tensors'
+        if not family:
+            family=tensor_family(header)
+            if family:family_source='tensors'
+        pairs=len(detected_targets)
         title=str(meta.get('modelspec.title',''))[:150]
-        return {'family':family,'title':title,'pairs':pairs}
+        if not title and family=='minimax-h3':
+            name=Path(path).name.lower()
+            if 'character_swap' in name:title='H3 Character Swap · sostituzione personaggio'
+            elif 'vfx_edit' in name:title='H3 VFX Edit'+(' FFP' if 'ffp' in name else '')+' · abiti, oggetti e sfondo'
+        return {'family':family,'title':title,'pairs':pairs,'family_source':family_source,'adapter_formats':sorted({v[2] for v in detected_targets.values()})}
     except (OSError,ValueError,TypeError,struct.error):return None
 
 
@@ -111,7 +148,7 @@ class LoraLibrary:
                                 ident=hashlib.sha256(os.path.normcase(str(path)).encode()).hexdigest()[:24]
                                 items[ident]={'id':ident,'name':traits['title'] or path.stem,'filename':path.name,'path':str(path),
                                               'relative':str(path.relative_to(root)),'directory':str(root),'size':size,'mtime_ns':stamp,
-                                              'family':traits['family'],'note':'Famiglia rilevata dai metadati.' if traits['family'] else 'Famiglia non dichiarata: scegli il modello per cui è stato addestrato.'}
+                                              'family':traits['family'],'adapter_formats':traits.get('adapter_formats',['lora']),'note':('Famiglia rilevata dalla struttura dei tensori.' if traits.get('family_source')=='tensors' else 'Famiglia rilevata dai metadati.') if traits['family'] else 'Famiglia non riconosciuta: non viene proposta per evitare abbinamenti incompatibili.'}
                     except OSError:warnings.append('Impossibile leggere: '+str(folder))
                 if truncated:break
             if truncated:warnings.append('Scansione limitata: collega sottocartelle più precise per vedere gli altri LoRA.')
@@ -121,7 +158,13 @@ class LoraLibrary:
     def capture(self, selections, directories, models):
         if not isinstance(selections,list) or len(selections)>MAX_SELECTED:raise ValueError('Seleziona al massimo 8 LoRA per messaggio.')
         if not selections:return []
-        library={item['id']:item for item in self.scan(directories)['items']};result=[];seen=set()
+        scanned=self.scan(directories)
+        # A cold filesystem scan can reach its UI deadline before a previously
+        # selected adapter. Warm header cache makes one bounded second pass
+        # cheap; never report a known selection missing from a partial index.
+        if scanned['truncated'] and any(isinstance(c,dict) and c.get('id') not in {x['id'] for x in scanned['items']} for c in selections):
+            scanned=self.scan(directories,refresh=True)
+        library={item['id']:item for item in scanned['items']};result=[];seen=set()
         for choice in selections:
             if not isinstance(choice,dict) or set(choice)-{'id','weight','model_id'}:raise ValueError('Selezione LoRA non valida.')
             ident=choice.get('id');target=choice.get('model_id');weight=choice.get('weight',1)
@@ -131,7 +174,8 @@ class LoraLibrary:
             if type(weight) not in (int,float) or not math.isfinite(weight) or not -2<=weight<=2:raise ValueError('Peso LoRA: usa un valore tra -2 e 2.')
             item=library.get(ident);model=models.get(target)
             if not item:raise ValueError('LoRA non trovato nelle cartelle configurate: aggiorna l’elenco.')
-            if not model or not any(c in model['capabilities'] for c in ('create','edit')):raise ValueError('Scegli un modello immagini per il LoRA.')
+            if not model or not any(c in model['capabilities'] for c in ('create','edit','video')):raise ValueError('Scegli un modello immagini o video per il LoRA.')
+            if 'video' in model['capabilities'] and item['family']!='minimax-h3':raise ValueError('Per il video seleziona un LoRA MiniMax H3.')
             if not compatible(item['family'],model):raise ValueError(f"{item['name']}: famiglia {item['family']} incompatibile con {model['name']}.")
             try:unchanged=fingerprint(item['path'])==(item['size'],item['mtime_ns'])
             except OSError:unchanged=False

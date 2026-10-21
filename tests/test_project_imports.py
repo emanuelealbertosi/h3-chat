@@ -33,15 +33,27 @@ class ImportTests(unittest.TestCase):
     def test_relative_folder_labels_and_no_path_injection(self):
         self.upload(relative_path='Lezioni/Capitolo1/Ricavi.md')
         self.assertEqual(self.app.knowledge.project(self.project['id'])['sources'][0]['name'],'Lezioni/Capitolo1/Ricavi.md')
-        for name in ('../private.md','F:\\private.md','/private.md','file.exe'):
+        for name in ('../private.md','F:\\private.md','/private.md'):
             with self.assertRaises(ValueError):self.upload(name=name)
         for relative in ('../Ricavi.md','C:/Ricavi.md','/Ricavi.md','Folder/./Ricavi.md'):
             with self.assertRaises(ValueError):self.upload(relative_path=relative)
 
-    def test_invalid_empty_oversized_and_fake_documents_are_rejected(self):
-        for change in ({'data':'bad!'}, {'data':''}, {'name':'fake.pdf'}, {'name':'fake.docx'}, {'data':'a'*(35*1024**2+1)}):
+    def test_invalid_legacy_transport_is_rejected(self):
+        for change in ({'data':'bad!'}, {'data':''}, {'data':'a'*(35*1024**2+1)}):
             with self.subTest(change=list(change)),self.assertRaises(ValueError):self.upload(**change)
         self.assertEqual(self.app.knowledge.project(self.project['id'])['sources'],[])
+
+    def test_arbitrary_files_are_stored_and_indexer_reports_unsupported(self):
+        result=self.upload(name='file.custom')
+        source=self.app.knowledge.project(self.project['id'])['sources'][0]
+        self.assertTrue(Path(source['path']).is_file())
+        self.assertEqual(self.app.store.gallery.get(result['id'])['name'],'file.custom')
+        with self.assertRaisesRegex(ValueError,'non è indicizzabile'):self.app.knowledge.read(source,threading.Event(),lambda _:None)
+        transfer=self.app.knowledge.uploads.start(self.project['id'],{'name':'book.pdf','size':2*1024**3,'defer':True})
+        self.app.knowledge.uploads.cancel(self.project['id'],transfer['id'])
+        # Malformed documents are uploaded too; validation happens when used.
+        self.upload(name='fake.pdf');self.upload(name='fake.docx')
+        self.assertEqual(len(self.app.knowledge.project(self.project['id'])['sources']),3)
 
     def test_import_while_project_busy_is_rejected(self):
         chat=self.app.store.create_chat(project_id=self.project['id']);self.app.store.enqueue(chat['id'],'Fixture',[],DEFAULTS)
@@ -66,6 +78,9 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(denied.exception.code,403)
         result=json.load(urllib.request.urlopen(request(self.app.token)));self.assertTrue(result['id'])
         path=Path(self.app.knowledge.project(self.project['id'])['sources'][0]['path']).relative_to(Path(self.temp.name).resolve()).as_posix()
-        with self.assertRaises(urllib.error.HTTPError):urllib.request.urlopen(url+'/media/'+path)
+        with urllib.request.urlopen(url+'/media/'+path) as response:
+            self.assertIn("script-src 'none'",response.headers['Content-Security-Policy'])
+            self.assertEqual(response.headers['X-Content-Type-Options'],'nosniff')
+            self.assertEqual(response.headers['Content-Disposition'],'attachment')
 
 if __name__=='__main__':unittest.main()

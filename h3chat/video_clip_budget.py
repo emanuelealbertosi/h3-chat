@@ -40,15 +40,21 @@ def requested(prompt):
         raise ValueError(f'Richiesti {count} clip, ma sono elencati {listed} blocchi: correggi il numero o l’elenco.')
     return count,headers
 
-def contract(prompt,duration,*,audio_start=0):
+def contract(prompt,duration,*,audio_start=0,segment_seconds=15):
     if type(duration) not in (int,float) or not math.isfinite(duration) or not 0<duration<=600:
         raise ValueError('Durata storyboard non valida.')
-    frames=math.ceil(duration*24);minimum=math.ceil(frames/360)
+    from .video_options import validate_segment_seconds
+    validate_segment_seconds(segment_seconds)
+    if segment_seconds is None:segment_seconds=15
+    size=segment_seconds*24
+    frames=math.ceil(duration*24);minimum=math.ceil(frames/size)
     count,headers=requested(prompt);explicit=count is not None
     if count is None:count=minimum
     maximum=min(160,(frames-1)//24+1)
     if not minimum<=count<=maximum:
-        raise ValueError(f'Per {duration:g} secondi servono da {minimum} a {maximum} clip (massimo 15 secondi ciascuno); richiesti {count}. Nessuna generazione video è stata avviata.')
+        if count<minimum and len(headers)==count:
+            raise ValueError(f'Lo storyboard contiene solo {count} clip descritti. Per coprire {duration:g} secondi di audio servono almeno {minimum} clip, da massimo {segment_seconds} secondi. Completa l’elenco oppure seleziona una porzione più corta di audio. Nessuna generazione video è stata avviata.')
+        raise ValueError(f'Per {duration:g} secondi servono da {minimum} a {maximum} clip (massimo {segment_seconds} secondi ciascuno); richiesti {count}. Nessuna generazione video è stata avviata.')
     boundaries=[]
     if len(headers)==count and [int(m[1]) for m in headers]==list(range(1,count+1)):
         intervals=[]
@@ -71,7 +77,7 @@ def contract(prompt,duration,*,audio_start=0):
                 if a!=cursor or b<=a:raise ValueError('Gli intervalli dei clip devono essere consecutivi, senza buchi o sovrapposizioni.')
                 # The last nominal 15-second clip can end at the audio tail.
                 if index==count-1 and b>=frames and b-frames<=24:b=frames
-                if b-a>360 or (b-a<24 and index!=count-1):raise ValueError('Ogni clip deve durare da 1 a 15 secondi, salvo la coda finale.')
+                if b-a>size or (b-a<24 and index!=count-1):raise ValueError(f'Ogni clip deve durare da 1 a {segment_seconds} secondi, salvo la coda finale.')
                 boundaries.append(b);cursor=b
             if cursor!=frames:raise ValueError('Gli intervalli dei clip devono coprire tutta la durata della traccia selezionata.')
-    return {'count':count,'minimum':minimum,'explicit':explicit,'end_frames':boundaries}
+    return {'count':count,'minimum':minimum,'explicit':explicit,'end_frames':boundaries,'segment_seconds':segment_seconds}

@@ -43,8 +43,9 @@ non necessariamente tutto il progetto. Ovis con immagini RAG attive può cercare
 anche le pagine scansionate visivamente; non esegue una trascrizione OCR completa.
 Gli embedding solo testo richiedono un PDF con testo OCR.
 
-Limiti: 500 documenti per progetto, **512 MB per documento**, **3.000 pagine per
-PDF**, dieci milioni di caratteri estratti e 20.000 estratti per documento.
+Il caricamento accetta qualsiasi formato e dimensione. Limiti di indicizzazione:
+500 documenti per progetto, **3.000 pagine per PDF**, dieci milioni di caratteri
+estratti e 20.000 estratti per documento. I formati non indicizzabili restano salvati con un avviso.
 Il caricamento trasferisce blocchi da 2 MB con percentuale visibile; gli embedding
 sono preparati in piccoli gruppi e conservati temporaneamente su disco prima di
 pubblicare l'indice completo. La prima indicizzazione di un libro può richiedere
@@ -52,7 +53,7 @@ tempo, soprattutto con embedding grandi su CPU. Se il file e il modello non
 cambiano, le richieste successive riutilizzano l'indice.
 
 Cartelle fino a quattro livelli, massimo 12 estratti per risposta.
-Gli allegati diretti alla chat mantengono il limite separato di 25 MB e 300 pagine.
+Gli allegati diretti alla chat non hanno un limite di caricamento; l'analisi PDF usa fino a 300 pagine.
 Per ricerca lessicale o embedding solo testo, prepara un PDF scansionato con OCR.
 Indicizzazione fallita o file cancellati
 non restituiscono vecchi contenuti. Percorsi mancanti/errori sono visibili nella

@@ -1,10 +1,11 @@
 import {escape as esc} from './render.js';
 import {modelLabel,modelIdentityHtml} from './model-identity.js';
+import {acceleratedPreset,acceleratorAvailable} from './llm-acceleration.js';
 let selected=null;
 export const selectLlmPreferencesModel=id=>{selected=id;};
 export function llmOptions(state){
  const options=state?.llm_options;
- if(!Array.isArray(options?.keys)||!options.defaults||!options.max_context)throw Error('È ancora attivo un motore precedente all’aggiornamento. Esegui Ferma-H3-Chat.bat e poi Avvia-H3-Chat.bat; le impostazioni salvate restano disponibili.');
+ if(!Array.isArray(options?.keys)||!options.keys.includes('llm_acceleration')||!options.defaults||!options.max_context)throw Error('È ancora attivo un motore precedente all’aggiornamento. Termina i lavori, poi esegui Ferma-H3-Chat.bat e Avvia-H3-Chat.bat; le impostazioni salvate restano disponibili.');
  return options;
 }
 const pick=(draft,state)=>Object.fromEntries(llmOptions(state).keys.map(k=>[k,draft[k]]));
@@ -24,6 +25,8 @@ export function renderLlmPreferences(container,draft,state,onChange){
  container.querySelector('.settings-grid').insertAdjacentHTML('beforeend',num('llm_timeout','Tempo massimo risposta LLM · secondi',60,14400));
  container.querySelector('.settings-grid').insertAdjacentHTML('beforeend',num('vision_max_refs','Immagini Vision per richiesta',1,12));
  container.querySelector('.settings-grid').insertAdjacentHTML('afterend','<p class="small-note">Vision: 4 immagini come valore iniziale, da 1 a 12 per LLM. Più immagini richiedono più contesto, memoria e tempo. Per i provider API vale anche il limite del servizio.</p>');
+ const acceleration=acceleratorAvailable(model,draft);
+ container.querySelector('.settings-grid').insertAdjacentHTML('afterend',`<div class="mtp-settings"><label class="field"><span>Motore per questo modello</span><select data-setting="llm_acceleration" data-llm-setting="llm_acceleration"><option value="standard" ${values.llm_acceleration==='standard'?'selected':''}>Standard</option><option value="qwen27" ${values.llm_acceleration==='qwen27'?'selected':''} ${acceleration?'':'disabled'}>${esc(model.acceleration?.label||'Qwen27B ottimizzato')}</option></select></label><p class="small-note">${esc(model.acceleration?.note||'Motore standard.')} Il processo resta nella gestione memoria della catena: A richiesta lo chiude prima del modello successivo.</p>${model.acceleration?.supported?`<button type="button" id="llm-accelerated-preset" class="text-button" ${acceleration?'':'disabled'}>Applica 128K + MTP${Number(model.acceleration.draft_tokens)||2} · Vision CPU</button><p class="small-note">Richiede runtime installato, CUDA RTX 50 e GPU libera. Standard resta disponibile. Nessuna promessa di velocità costante a contesto pieno.</p>`:''}</div>`);
  const context=container.querySelector('[data-llm-setting="context"]'),list=document.createElement('datalist');list.id='context-presets';
  for(const v of [4096,8192,16384,32768,65536,131072,262144,524288,1048576]){const option=document.createElement('option');option.value=v;option.label=(v/1024)+'k';list.append(option);}context.after(list);context.setAttribute('list',list.id);context.setAttribute('aria-describedby','context-model-note');
  const details=()=>{
@@ -38,6 +41,8 @@ export function renderLlmPreferences(container,draft,state,onChange){
   let apiNote=container.querySelector('[data-api-thinking-note]');if(model.api&&!apiNote){apiNote=document.createElement('p');apiNote.dataset.apiThinkingNote='';apiNote.className='small-note';apiNote.textContent=model.thinking?.note||'';container.querySelector('#context-model-note').after(apiNote);}
  };
  const persist=()=>{draft.llm_overrides??={};draft.llm_overrides[selected]={...values};if(selected===draft.chat_model)Object.assign(draft,values);details();onChange?.();};
+ const acceleratedButton=container.querySelector('#llm-accelerated-preset');
+ if(acceleratedButton)acceleratedButton.onclick=()=>{Object.assign(values,acceleratedPreset(values,model));draft.vision_device='cpu';persist();renderLlmPreferences(container,draft,state,onChange);};
  for(const input of container.querySelectorAll('[data-llm-setting]'))input.oninput=()=>{values[input.dataset.llmSetting]=input.type==='checkbox'?input.checked:input.type==='number'?Number(input.value):input.value;persist();};
  container.querySelector('#llm-settings-model').onchange=e=>{selected=e.target.value;renderLlmPreferences(container,draft,state,onChange);};
  container.querySelector('#llm-reset').onclick=()=>{Object.assign(values,llmOptions(state).defaults[draft.profile]);persist();renderLlmPreferences(container,draft,state,onChange);};

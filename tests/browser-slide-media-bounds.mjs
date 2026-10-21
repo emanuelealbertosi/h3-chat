@@ -21,6 +21,14 @@ try{
  await page.screenshot({path:'work/slide-bounds-qa/image.png',fullPage:true});
  await page.selectOption('.slides-navigation select','2');await iframe().locator('.ok').waitFor();assert.equal(await fits(),true);assert.equal(await page.locator('.h3-html-page').getAttribute('data-layout-adjusted'),null);
  assert.equal(await iframe().locator('.ok').getAttribute('style'),null);assert.equal(await iframe().locator('[data-h3-layout]').count(),0);
+ await page.selectOption('.slides-navigation select','3');await iframe().locator('img').waitFor();assert.equal(await fits(),true);
+ assert.equal(await iframe().locator('img').evaluate(e=>getComputedStyle(e).objectFit),'contain');
+ assert.deepEqual(await iframe().locator('.strip').evaluate(e=>{const r=e.getBoundingClientRect();return [r.x,r.y,r.width,r.height];}),[100,100,600,120]);
+ await page.screenshot({path:'work/slide-bounds-qa/uncropped.png',fullPage:true});
+ await page.selectOption('.slides-navigation select','4');await iframe().locator('.subtitle').waitFor();assert.equal(await fits(),true);
+ const heading=await iframe().locator('body').evaluate(body=>{const s=body.querySelector('.subtitle').getBoundingClientRect(),m=body.querySelector('.main').getBoundingClientRect();return {subtitleBottom:s.bottom,mainTop:m.top,mainBottom:m.bottom,text:body.querySelector('.subtitle').textContent};});
+ assert(heading.mainTop>=heading.subtitleBottom+15);assert.equal(heading.mainBottom,656);assert.match(heading.text,/senza coprirla/);
+ await page.screenshot({path:'work/slide-bounds-qa/subtitle-visible.png',fullPage:true});
  const download=page.waitForEvent('download',{timeout:120000});await page.click('[data-export=html]');const file=await download;await file.saveAs('work/slide-bounds-qa/slides.html');const exported=await readFile('work/slide-bounds-qa/slides.html','utf8');assert.ok(/preserveAspectRatio="xMidYMid meet"/i.test(exported),"SVG fitting must survive export");assert.ok(exported.includes("object-fit: contain"),"Image proportions must survive export");
  await page.selectOption('.slides-navigation select','0');await iframe().locator('svg').waitFor();await page.click('#slide-edit');await page.click('#slide-html-save');await page.waitForFunction(()=>document.querySelector('#canvas-save-status')?.textContent.includes('Salvato'));await page.reload();await page.click(`[data-chat="${fixture.chat}"]`);await page.click('#canvas-toggle');await iframe().locator('svg').waitFor();assert.equal(await fits(),true);
  await page.setViewportSize({width:390,height:844});await page.waitForTimeout(150);assert.equal(await fits(),true);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);assert.deepEqual(errors,[]);

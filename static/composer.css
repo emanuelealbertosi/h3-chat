@@ -22,6 +22,7 @@
 .prompt-mode-dialog[open]{display:flex;flex-direction:column;box-sizing:border-box}
 .prompt-mode-dialog>header,.prompt-mode-dialog>footer,.prompt-mode-dialog>nav{flex-shrink:0}
 .prompt-mode-dialog .prompt-options-body{min-height:0}
+.video-draft-toolbar button:disabled{cursor:not-allowed}.video-draft-toolbar[aria-busy=true] button:disabled{cursor:wait}
 
 /* Align messages and composer to the space left by the sidebar and canvas. */
 .conversation{container-type:inline-size;--chat-gutter:clamp(12px,3cqw,47px);--chat-frame-width:min(max(906px,78vw),calc(100cqw - 2 * var(--chat-gutter)))}
@@ -29,3 +30,11 @@
 .conversation .scroll-area{padding-inline:0}
 .conversation #messages{width:var(--chat-frame-width);max-width:none}
 .conversation .composer-area{width:calc(var(--chat-frame-width) + 2 * var(--chat-gutter));max-width:none;padding-left:var(--chat-gutter);padding-right:var(--chat-gutter)}
+.video-chat-request{width:100%;min-width:0;margin-top:12px}.video-chat-request>#video-request-toggle{margin-bottom:10px}.video-request-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.video-chat-request .field{display:flex;flex-direction:column;gap:5px;min-width:0}.video-chat-request select{width:100%;max-width:100%;padding:10px;border:1px solid var(--line);border-radius:7px;background:var(--white);color:var(--ink)}.video-chat-request [data-pdd-adapter]{margin-top:12px}.video-chat-request [data-pdd-adapter] .btn{margin-top:8px}@media(max-width:600px){.video-request-grid{grid-template-columns:1fr}}
+.video-seed-options{margin:14px 0;min-width:0}.video-seed-options>.prompt-field-label{display:block;margin-bottom:7px}.video-seed-options .field{margin-top:10px}.video-seed-options [data-seed-fixed][hidden]{display:none!important}.video-seed-options input[aria-invalid=true]{border-color:#b15541}
+
+.video-conversion-progress{display:grid;gap:.45rem;padding:.8rem;margin:.6rem 0;border:1px solid var(--line,#ccd7d0);border-radius:.65rem;background:var(--panel,#f6f5ef)}.video-conversion-progress progress{width:100%;height:1rem;accent-color:#214f49}.video-conversion-progress span{font-size:.85rem}
+
+.image-format-controls{padding:14px;border:1px solid var(--line);border-radius:10px;background:#f5f7f0;min-width:0}.image-format-controls h3{margin:0 0 12px}.image-format-controls .field{min-width:0}.image-format-controls select,.image-format-controls input{width:100%;max-width:100%;box-sizing:border-box}.image-format-controls[hidden]{display:none!important}
+
+.video-activity-dialog{width:min(900px,95vw);max-height:90vh;padding:0;border:1px solid #cbd5ce;border-radius:14px;background:#f7f6ef;color:#203e39}.video-activity-dialog header{display:flex;justify-content:space-between;align-items:center;padding:1rem 1.5rem;border-bottom:1px solid #d4ddd4}.video-activity-body{padding:1rem 1.5rem;overflow:auto;max-height:74vh}.video-activity-body progress{width:100%;accent-color:#21554c}.video-activity-body ol{padding:0;list-style:none;max-height:38vh;overflow:auto}.video-activity-body li{display:flex;gap:1rem;padding:.5rem 0;border-bottom:1px solid #e0e5dd;font-size:.88rem}.video-activity-body time{font-variant-numeric:tabular-nums;flex-shrink:0;color:#607b71}

@@ -1,5 +1,14 @@
 H3-Chat includes open-source components with their own licenses.
 
+The optional local Qwen27B accelerator is a separate llama.cpp build at commit
+555d1ec9daa4564cb06adb39c469acfdcd1d1e93, with a bounded MTP drafter cache patch
+in llama-common. It is installed from the verified local Qwen27B engine, not
+downloaded or included in the default portable release. Its private folder
+retains the upstream MIT license, NVIDIA CUDA 12.8 EULA/license and Microsoft
+CRT notice, together with source paths and SHA-256 checksums in manifest.json.
+NVIDIA and Microsoft components retain their respective vendor licenses.
+See docs/llm-acceleration.md; model weights are never copied by this installer.
+
 Document import includes pinned pypdf, python-docx, lxml, pypdfium2/PDFium,
 Pillow, NumPy and typing-extensions wheels. Infographic rendering uses the
 private PyAV (BSD-3-Clause), NumPy (BSD-3-Clause) and Pillow (MIT-CMU) packages;
@@ -88,3 +97,19 @@ Optional standalone video upscale:
 - NVIDIA Python VFX / RTX Video SDK is proprietary and downloaded from NVIDIA; no NVIDIA SDK binaries are redistributed in this repository. The downloaded package retains its license notices.
 
 Remix audio/video: standalone audio.cpp CLI (Apache-2.0), HTDemucs/SeedVC adapters and vocal alignment helpers adapted from the user-owned H3-Music project. No H3-Music runtime dependency. Optional FFmpeg 7.1.1 full build is GPL-3.0-or-later; retained build configuration, source links and license in licenses/remix-FFmpeg-build-license.txt and licenses/remix-NOTICE.txt. Model weights are selected separately and are not redistributed.
+
+Optional MiniMax H3 PDD inference: ComfyUI-MiniMax-H3-PDD-Acc by Jalen-Brunson,
+Apache-2.0, revision 311a65dd53832d8a5f8177a9d5fb923c09e35a90.
+Source, basis assets, fingerprints and license retained in h3chat/vendor_pdd.
+https://github.com/Jalen-Brunson/ComfyUI-MiniMax-H3-PDD-Acc
+Alibaba PAI PDD adapter weights are downloaded separately, never redistributed.
+
+LongTakeNoCuts experimental latent frame blend adapted from xyzDist/H3-LongTakeNoCuts
+(commit 0cad00ab92e4ad8de3d54ddd5254142bccb702d9), Copyright (c) 2026 xyzDist, MIT.
+License and provenance: h3chat/vendor_longtake/LICENSE and provenance.json.
+
+Optional MOSS-Image integration: OpenMOSS code revision c1355e6b1986dfe8fba3c0455783a05899212342, Apache-2.0.
+Downloaded separately by scripts/install-moss.py; original license retained in
+runtime/vision/moss_image/LICENSE. No optional weights are redistributed.
+Negative-branch skip guidance is adapted from ComfyUI nodes_slg.py (GPL-3.0).
+https://github.com/OpenMOSS/MOSS-Image

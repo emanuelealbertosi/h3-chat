@@ -1,7 +1,7 @@
-export const projectUploadLimits={file_bytes:512*1024**2,upload_chunk_bytes:2*1024**2};
+export const projectUploadLimits={file_bytes:null,upload_chunk_bytes:2*1024**2};
 
 export async function uploadProjectDocument(file,{project,relativePath=file.name,api,getToken,limits=projectUploadLimits,onProgress=()=>{},fetcher=fetch}){
- if(!Number.isSafeInteger(file.size)||file.size<=0||file.size>limits.file_bytes)throw Error(file.name+': il documento è vuoto o supera '+Math.round(limits.file_bytes/1024**2)+' MB.');
+ if(!Number.isSafeInteger(file.size)||file.size<0)throw Error(file.name+': dimensione file non valida.');
  const base='/projects/'+encodeURIComponent(project)+'/import';let upload;
  try{
   upload=await api(base+'/start',{name:file.name,relative_path:relativePath,size:file.size,defer:true});

@@ -69,10 +69,27 @@ def repeated_scene(scripts,candidates,prompt):
     return None
 
 
-def spoken_lines(prompt):
-    """Verbatim quoted speech following explicit vocal/dialogue directions."""
+def lyric_cue_sections(prompt):
+    """Explicit lyric-reference sections, bounded by Markdown heading levels."""
+    headings=list(re.finditer(r'^\s{0,3}(#{1,6})[ \t]+([^\n]+)$',prompt,re.M))
+    sections=[]
+    for index,heading in enumerate(headings):
+        if not re.search(r'\b(?:lyrics?|vocals?|canto|versi|strofe)\b',heading[2],re.I):continue
+        end=next((other.start() for other in headings[index+1:] if len(other[1])<=len(heading[1])),len(prompt))
+        section=prompt[heading.start():end]
+        # The existence of a soundtrack alone does not exempt requested speech.
+        # Only lyrics explicitly labelled as alignment/reference cues qualify.
+        if re.search(r'\b(?:lyric|vocal|lyrics|vocals)\s+(?:alignment\s+|reference\s+)?cues\b|\b(?:versi|testo|strofe)\b[^\n.]{0,80}\b(?:riferiment\w*|sincronizz\w*)\b',section,re.I):
+            sections.append((heading.start(),end))
+    return sections
+
+
+def spoken_lines(prompt,*,preserved_audio=False):
+    """Quoted new speech; existing-track lyric cues are not new dialogue."""
     result=[]
+    cues=lyric_cue_sections(prompt) if preserved_audio else []
     for match in re.finditer(r'["“]([^"”\n]{2,400})["”]',prompt):
+        if any(start<=match.start()<end for start,end in cues):continue
         context=prompt[max(0,match.start()-220):match.start()]
         if re.search(r'\b(?:vocal|vocals|lyric|lyrics|dialogue|dialogo|battuta|canta|canto|dice|sings|says)\b',context,re.I):
             result.append(match[1])

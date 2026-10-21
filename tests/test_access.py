@@ -73,6 +73,30 @@ class AccessTests(unittest.TestCase):
 
 
 class AccessHttpTests(unittest.TestCase):
+    def test_removed_3d_endpoints_are_unavailable(self):
+        csrf=self.setup_owner()
+        self.assertEqual(self.request('/api/mesh3d/options',client=self.owner)[0],404)
+        self.assertEqual(self.request('/api/mesh3d/runtime',{},client=self.owner,csrf=csrf)[0],404)
+        chat=self.request('/api/chats',{},client=self.owner,csrf=csrf)[1]['id']
+        self.assertEqual(self.request('/api/chats/'+chat+'/mesh3d',{},client=self.owner,csrf=csrf)[0],404)
+        self.assertEqual(self.app.store.all('SELECT * FROM jobs'),[])
+
+    def test_chunk_uploads_are_available_to_guests_and_private(self):
+        import base64
+        csrf=self.setup_owner()
+        self.request('/api/auth/users',{'name':'amico','password':PASSWORD},client=self.owner,csrf=csrf)
+        self.request('/api/auth/login',{'name':'amico','password':PASSWORD},client=self.guest)
+        gcsrf=self.request('/api/auth/me',client=self.guest)[1]['csrf']
+        status,upload,_=self.request('/api/uploads/start',{'name':'guest.custom','size':3},client=self.guest,csrf=gcsrf)
+        self.assertEqual(status,201)
+        self.assertEqual(self.request('/api/uploads/'+upload['id']+'/chunk',{'offset':0,'data':base64.b64encode(b'abc').decode()},client=self.owner,csrf=csrf)[0],400)
+        self.assertEqual(self.request('/api/uploads/'+upload['id']+'/chunk',{'offset':0,'data':base64.b64encode(b'abc').decode()},client=self.guest,csrf=gcsrf)[0],200)
+        status,media,_=self.request('/api/uploads/'+upload['id']+'/finish',{},client=self.guest,csrf=gcsrf)
+        self.assertEqual(status,201)
+        self.assertEqual(self.request('/api/gallery',client=self.guest)[1]['total'],1)
+        self.assertEqual(self.request('/api/gallery',client=self.owner)[1]['total'],0)
+        self.assertEqual(self.request('/media/'+media['path'],client=self.owner)[0],403)
+
     def test_gallery_requires_login_and_stays_in_own_workspace(self):
         private=self.app.data/'outputs/owner.txt';private.parent.mkdir(exist_ok=True);private.write_text('Only synthetic test content')
         self.app.store.gallery.register([{'id':'a'*32,'path':'outputs/owner.txt','name':'Owner.txt','mime':'text/plain'}])
@@ -86,6 +110,15 @@ class AccessHttpTests(unittest.TestCase):
         self.assertEqual(self.request('/api/gallery',client=self.guest)[1]['total'],0)
         self.assertEqual(self.request('/gallery-file/'+'a'*32,client=self.guest)[0],400)
         self.assertEqual(self.request('/api/gallery/select',{'ids':['a'*32]},client=self.guest,csrf=gcsrf)[0],400)
+        for endpoint in ('delete-plan','delete'):
+            self.assertEqual(self.request('/api/gallery/'+endpoint,{'ids':['a'*32]},client=self.guest,csrf=gcsrf)[0],400)
+        self.assertTrue(private.is_file())
+        status,preview,_=self.request('/api/gallery/delete-plan',{'ids':['a'*32]},client=self.owner,csrf=csrf)
+        self.assertEqual(status,200);self.assertTrue(preview['can_delete_files'])
+        body={'ids':['a'*32],'delete_files':True,'confirmed':True,'snapshot':preview['snapshot']}
+        self.assertEqual(self.request('/api/gallery/delete',body,client=self.owner)[0],403)
+        status,result,_=self.request('/api/gallery/delete',body,client=self.owner,csrf=csrf)
+        self.assertEqual(status,200);self.assertEqual(result['files_deleted'],1);self.assertFalse(private.exists())
 
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.app=Service(ROOT,Path(self.temp.name),start_worker=False)
@@ -115,6 +148,31 @@ class AccessHttpTests(unittest.TestCase):
         self.assertEqual(status,201);self.assertIn('HttpOnly',headers['Set-Cookie']);self.assertIn('SameSite=Strict',headers['Set-Cookie'])
         return self.request('/api/auth/me',client=self.owner)[1]['csrf']
 
+    def test_exact_video_resume_endpoint_and_shared_queue_are_idempotent(self):
+        from h3chat.store import DEFAULTS
+        from h3chat.video_resume import save
+        from h3chat.video_timeline import timeline
+        csrf=self.setup_owner();chat=self.app.store.create_chat()['id']
+        original=self.app.store.enqueue(chat,'Original film',[],DEFAULTS|{'video_model':'fixture'})
+        folder=self.app.data/'outputs'/original;folder.mkdir(parents=True)
+        clip=folder/'first.mp4';clip.write_bytes(b'\x00\x00\x00\x18ftypisom')
+        save(folder,{'timeline':timeline(42),'completed':1,'outputs':[clip.relative_to(self.app.data).as_posix()],
+            'parameters':[{'seed':734}],'prompts':['one','two','three'],
+            'plan':{'prompt':'Film','images':[],'audios':[]},'model':'fixture'})
+        self.app.store.execute("UPDATE jobs SET status='interrupted' WHERE id=?",(original,))
+        message=self.app.store.one('SELECT message_id FROM jobs WHERE id=?',(original,))['message_id']
+        self.app.store.execute("UPDATE messages SET status='interrupted',meta=? WHERE id=?",(json.dumps({'intent':'video'}),message))
+        self.server.workspaces.pending.clear()
+        url='/api/chats/'+chat+'/video-resume'
+        status,description,_=self.request(url+'/'+message,client=self.owner)
+        self.assertEqual(status,200);self.assertEqual(description['missing_clips'],[2,3])
+        first=self.request(url,{'job_id':original},client=self.owner,csrf=csrf)
+        second=self.request(url,{'job_id':original},client=self.owner,csrf=csrf)
+        self.assertEqual(first[0],202);self.assertEqual(first[1],second[1])
+        self.assertEqual(self.server.workspaces.pending,[(self.app,first[1]['job_id'])])
+        other=self.app.store.create_chat()['id']
+        self.assertEqual(self.request('/api/chats/'+other+'/video-resume/'+message,client=self.owner)[0],400)
+
     def test_bootstrap_and_maintenance_require_true_local_requests(self):
         _,me,_=self.request('/api/auth/me',headers={'Tailscale-User-Login':'external@example.com'})
         self.assertIsNone(me['user']);self.assertEqual(me['csrf'],'')
@@ -137,7 +195,7 @@ class AccessHttpTests(unittest.TestCase):
         self.assertEqual(state['chats'],[]);self.assertEqual(state['projects'],[])
         self.assertNotEqual(state['token'],self.app.token)
         self.assertEqual(self.request('/api/chats/'+secret['id'],client=self.guest)[0],400)
-        self.assertEqual(self.request('/media/uploads/private.txt',client=self.guest)[0],404)
+        self.assertEqual(self.request('/media/uploads/private.txt',client=self.guest)[0],403)
         self.assertEqual(self.request('/api/model-files/browse',{},client=self.guest,csrf=gcsrf)[0],403)
         self.assertEqual(self.request('/api/providers',{},client=self.guest,csrf=gcsrf)[0],403)
         self.assertEqual(self.request('/api/chats',{},client=self.guest)[0],403)

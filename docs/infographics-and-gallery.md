@@ -77,7 +77,7 @@ prosegue fra le scene dalla prima comparsa dello stesso abbinamento video-pannel
 ## Usare un video già pronto
 
 In **Infografica → Video di sfondo**, premi **Allega video** oppure scegli un
-MP4 dalla **Galleria** e aggiungilo al messaggio. Il limite è 64 MB. Se alleghi
+MP4 dalla **Galleria** e aggiungilo al messaggio. Il caricamento non ha limiti di dimensione. Se alleghi
 più filmati, seleziona quello da usare: non viene scelto un file arbitrario.
 Il video diventa lo sfondo continuo delle scene, con testi e grafiche HTML sopra.
 Non richiede MiniMax o un nuovo modello video. Vision può descrivere il primo
@@ -172,11 +172,31 @@ modalità. Le immagini sono disponibili anche da **Modifica grafica → Immagini
 della slide → Galleria**. Le gallerie degli account rimangono separate.
 
 I file esistenti sono referenziati senza copie. Le esportazioni create dal browser
-vengono archiviate nella galleria fino a 64 MB; sopra questo limite il download
-rimane disponibile, con un avviso che il file non è stato archiviato. Libri più
-grandi si importano dalla sezione RAG, che ha limiti separati. Le sorgenti RAG
+vengono archiviate nella galleria senza limiti di dimensione, mediante trasferimenti
+in blocchi. Per indicizzare libri usa la sezione RAG. Le sorgenti RAG
 collegate direttamente a percorsi esterni del server non vengono esposte nella galleria.
 Eliminare una chat non cancella i file conservati in galleria.
+
+Le schede dei video indicano **Timeline · N clip**, **Spezzone · timeline
+collegata** oppure **Video**. La data di **ultima modifica** considera il file,
+il montaggio salvato e le rinomine in galleria; non cambia semplicemente aprendo
+un’anteprima. È visibile anche nell’anteprima del file.
+
+Anche una modifica interrotta compare nella galleria, senza dover prima esportare
+un MP4: la scheda **Timeline interrotta · N clip** mostra quante modifiche sono
+completate e permette di **Aprire la timeline salvata** nella sua chat. La data
+considera anche lo Stop e il salvataggio della bozza. Questa scheda è un montaggio
+da modificare: non viene allegata al prompt o scaricata come se fosse un filmato.
+Le clip riuscite e l’originale restano al loro posto; aprirla non rilancia nulla.
+
+Il menu **Ordina la galleria** ordina l’intera raccolta, prima della paginazione:
+ultima modifica, aggiunta/caricamento, nome oppure tipo, in entrambe le direzioni.
+La data di aggiunta è quella di registrazione nella raccolta, anche per i risultati
+generati. Ricerca, filtri e **Altri file** mantengono l’ordine scelto.
+
+L’indice della galleria recupera i file precedenti una volta e registra poi soltanto
+i messaggi, i canvas e gli import aggiornati. Aprire una pagina o cambiare filtro
+non rilegge tutta la cronologia, non decodifica video e non avvia modelli.
 
 ## Scritte sopra tutti i pannelli
 

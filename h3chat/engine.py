@@ -159,12 +159,18 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                 fingerprint.append((role, path, None, None))
         keys = ('profile', 'backend', 'threads', 'memory_policy')
         if kind == 'chat':
-            keys += ('context', 'gpu_layers', 'vision_enabled', 'vision_device')
-        runtime_options=tuple((k,settings.get(k, 'on_demand' if k=='memory_policy' else None)) for k in keys)
+            keys += ('context', 'gpu_layers', 'vision_enabled', 'vision_device', 'llm_acceleration')
+        runtime_options=tuple((k,settings.get(k, 'on_demand' if k=='memory_policy' else 'standard' if k=='llm_acceleration' else None)) for k in keys)
         if kind=='image':runtime_options+=(('image_engine',model.get('engine','native')),('architecture',model.get('architecture')))
+        if kind=='image' and model.get('engine')=='fibo2':
+            opts=settings.get('_image_options') or image_options(model,settings)
+            runtime_options+=(('fibo_offload',opts.get('fibo_offload','sequential')),)
         if kind=='music':runtime_options=(('music_backend',music_backend(settings)),('music_threads',settings['music_threads']),('memory_policy',settings.get('memory_policy','on_demand')))
         if kind=='video':runtime_options=(('offload',video_options(model,settings,False)['offload']),('threads',settings['threads']),('memory_policy',settings.get('memory_policy','on_demand')))
         if kind=='chat': runtime_options+=(('mtp_tokens',mtp_tokens(model,settings)),)
+        if kind=='chat' and settings.get('llm_acceleration')=='qwen27':
+            from .llm_acceleration import stamp
+            runtime_options+=(('accelerator_files',stamp(self.root)),)
         return (kind, tuple(fingerprint), runtime_options)
 
     def configure(self, settings):
@@ -221,16 +227,17 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                 raise Cancelled()
             self.configure(settings)
             key = self.session_key(kind, model, settings)
+            large_host_weights = kind == 'video' or (kind == 'image' and model.get('engine') == 'fibo2')
             if self.policy == 'on_demand':
                 for old in list(self.sessions):
                     if old != key:
                         if stage:stage('Rilascio memoria · '+model_label(self.sessions[old].model))
-                        self._drop(old, keep_warm=kind != 'video')
+                        self._drop(old, keep_warm=not large_host_weights)
                 # H3's large CPU weights and pinned transfer buffers need the
                 # RAM held by idle Torch image workers. A warm image process
                 # helps chat/image switching but competes with video offload.
-                if kind == 'video' and self.warm_image:
-                    if stage:stage('Rilascio memoria · motore immagini inattivo prima del video')
+                if large_host_weights and self.warm_image:
+                    if stage:stage('Rilascio memoria · motore immagini inattivo '+('prima di FIBO' if kind=='image' else 'prima del video'))
                     self.warm_image.stop()
                     self.warm_image = None
             session = self.sessions.get(key)
@@ -316,6 +323,10 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
             if stage:stage('Connessione API · '+model_label(model))
             return
         self.remote_config = None
+        from .llm_acceleration import plan, child_environment, check_hardware
+        if cancel.is_set():raise Cancelled()
+        files = self.model_files(model,settings)
+        optimized=plan(self.root,model,settings,files)
         session = self._activate("chat", model, settings, log_path, cancel, stage=stage)
         self.active_model = model
         if session.ready and session.alive():
@@ -326,7 +337,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         vision_gpu='mmproj' in files and settings.get('vision_device','cpu')=='gpu'
         if vision_gpu and backend=='cpu':
             raise ValueError('Per Vision GPU scegli un motore LLM CUDA o Vulkan nelle Preferenze. Puoi mantenere i layer LLM a zero.')
-        exe = runtime_executable(self.root, backend, "llama")
+        exe = optimized['exe'] if optimized else runtime_executable(self.root, backend, "llama")
         if not exe:
             raise ValueError(f"Installa il motore {backend.upper()} dal setup.")
         with socket.socket() as sock:
@@ -336,11 +347,19 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         args = [exe, "--model", files["model"], "--host", "127.0.0.1", "--port", self.port,
                 "--api-key", self.key, "--ctx-size", settings["context"], "--parallel", 1,
                 "--n-gpu-layers", 0 if backend == "cpu" else 999 if settings.get("memory_policy") == "resident" else settings["gpu_layers"],
-                "--threads", settings["threads"], "--batch-size", 128, "--ubatch-size", 64,
+                "--threads", settings["threads"], "--batch-size", optimized['batch'] if optimized else 128, "--ubatch-size", optimized['ubatch'] if optimized else 64,
                 "--jinja", "--no-webui", "--reasoning-format", "deepseek"]
         draft=mtp_tokens(model,settings)
         args += ["--spec-type", "draft-mtp" if draft else "none"]
         if draft: args += ["--spec-draft-n-max", draft, "--slots"]
+        if optimized:
+            check_hardware(settings['context'],optimized['profile'],stage=stage)
+            args += ['--fit','off','--flash-attn','on','--cache-type-k','q4_0','--cache-type-v','q4_0',
+                     '--spec-draft-ngl','all','--spec-draft-p-min',0,'-ctkd','q4_0','-ctvd','q4_0',
+                     '--backend-sampling','--ctx-checkpoints',4,'--cache-ram',1024,'--no-context-shift']
+            session.acceleration=optimized['label']
+            if stage:stage('Motore ottimizzato · contesto '+str(settings['context'])+' · MTP'+str(optimized['draft'])+', sola bozza 8K')
+        session.child_env=child_environment(optimized)
         if "mmproj" in files:
             args += ["--mmproj", files["mmproj"], "--image-max-tokens", 512 if settings["context"] <= 4096 else 1024]
         if "mmproj" in files:
@@ -382,6 +401,11 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         body = {"messages": messages, "temperature": settings["temperature"], "max_tokens": settings["max_tokens"],
                 "stream": on_text is not None}
         body.update(thinking_parameters(getattr(self, "active_model", {}), settings, router=on_text is None))
+        if (getattr(self.active,'acceleration',None) and body.get('reasoning_budget_tokens')==0
+                and not body.get('chat_template_kwargs',{}).get('enable_thinking')):
+            # Thinking is already explicitly off. A redundant budget=0 makes
+            # this native runtime disable GPU sampling; retain nonzero budgets.
+            body.pop('reasoning_budget_tokens')
         if schema:
             body.update(temperature=0 if on_text is None else settings['temperature'], max_tokens=settings["max_tokens"] if on_text else 768, response_format={"type": "json_schema", "json_schema": {"name": "route", "strict": True, "schema": schema}})
         req = urllib.request.Request(f"http://127.0.0.1:{self.port}/v1/chat/completions", data=json.dumps(body).encode(),
@@ -524,6 +548,9 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         session = self._activate('image',model,settings,log_path,cancel,stage=stage)
         if session.ready and session.alive():
             return session
+        if model.get('engine')=='fibo2':
+            from .fibo2_engine import start as start_fibo
+            return start_fibo(self,session,model,settings,log_path,cancel,stage)
         if model.get('engine') == 'vision':
             return self.start_vision(session,model,settings,log_path,cancel,stage=stage)
         backend = 'cpu' if settings['profile']=='cpu' else settings['backend']
@@ -554,10 +581,10 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
 
     def start_vision(self, session, model, settings, log_path, cancel, stage=None):
         if not vision_status(self.root)['ready']:
-            raise ValueError('Installa il motore Ming / Qwen Image 2.1 dal Setup.')
+            raise ValueError('Installa il motore immagini Ming / Qwen Image 2.1 / Krea 2 dal Setup.')
         backend = 'cpu' if settings['profile']=='cpu' else settings['backend']
         if backend not in ('cpu','cuda'):
-            raise ValueError('Ming e Qwen Image 2.1 usano CPU oppure CUDA NVIDIA. Scegli il motore adatto nel Setup.')
+            raise ValueError('Ming, Qwen Image 2.1 e Krea 2 usano CPU oppure CUDA NVIDIA. Scegli il motore adatto nel Setup.')
         python = self.root / 'runtime/python/python.exe'
         worker = self.root / 'native/vision-worker.py'
         started = time.monotonic()
@@ -585,10 +612,16 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         return session
 
     def refine_image_prompt(self, history, prompt, refs, settings, cancel, log_path, stage, *, image_model):
+        layout=False
+        if image_model.get('architecture')=='moss':
+            from .moss_layout import explicit,requested,brief as layout_brief,compile_layout
+            authored=explicit(prompt)
+            if authored:return authored,{'model':'Layout esplicito','vision':False,'prompt_format':'layout','image_model':image_model['name']}
+            layout=requested(prompt)
         model = self.require_model(settings['chat_model'], 'chat')
-        prompt_format = assistant_format(image_model)
+        prompt_format = 'layout' if layout else assistant_format(image_model)
         self.start_llama(model, settings, log_path, cancel, stage=stage)
-        stage('Assistant · tag in inglese' if prompt_format == 'tags' else 'Assistant · preparazione delle istruzioni')
+        stage('Assistant · MOSS · traduzione delle posizioni' if layout else 'Assistant · tag in inglese' if prompt_format == 'tags' else 'Assistant · preparazione delle istruzioni')
         visual = settings.get('vision_enabled',True) and model.get('vision',{}).get('enabled',False)
         context = [{'role':m['role'],'text':m['content'][-4000:]} for m in history[-6:] if m['status']=='done']
         brief = json.dumps({'conversation':context,'request':prompt,'reference_count':len(refs),
@@ -599,6 +632,9 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                 raw = safe_join(self.data,ref['path']).read_bytes()
                 content.append({'type':'image_url','image_url':{'url':f"data:{ref['mime']};base64,"+base64.b64encode(raw).decode()}})
         instructions, schema = image_brief(image_model)
+        if layout:
+            dimensions=image_options(image_model,settings,prompt)
+            instructions,schema=layout_brief(dimensions['width'],dimensions['height'])
         tuning = settings | {'temperature':0.2,'think_level':'off','max_tokens':min(settings['prompt_max_tokens'],settings['context']//2)}
         raw, finish = self.completion([{'role':'system','content':instructions},{'role':'user','content':content if visual and refs else brief}],
                                       tuning,cancel,on_text=lambda text:None,schema=schema)
@@ -610,6 +646,8 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                 tags = value['tags']
                 if not isinstance(tags,list) or not tags or any(not isinstance(tag,str) or not tag.strip() or '\n' in tag or '\r' in tag for tag in tags):raise ValueError()
                 result = ', '.join(tag.strip() for tag in tags)
+            elif layout:
+                result=compile_layout(value,dimensions['width'],dimensions['height'])
             else:
                 result = value['prompt']
             if not isinstance(result,str) or not result.strip():raise ValueError()

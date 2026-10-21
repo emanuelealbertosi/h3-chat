@@ -16,13 +16,15 @@ def plan_images(engine,outline,history,settings,image_model,cancel,stage):
     opts=settings['_slides'];count=len(outline['slides']);form=assistant_format(image_model)
     style='tag descrittivi in inglese separati da virgole, nessuna frase narrativa' if form=='tags' else 'istruzioni visive precise in inglese, in linguaggio naturale'
     limit=min(settings['context']//2,settings['prompt_max_tokens'])
-    size=max(1,min(count,limit//320));plan=[]
+    # Editorial descriptions also consume context; use smaller groups while
+    # preserving the existing short-outline budget for legacy callers.
+    size=max(1,min(count,limit//(1000 if any('editorial' in row for row in outline['slides']) else 320)));plan=[]
     common='Prepara le immagini della presentazione. Massimo una per slide. Se l’utente chiede una immagine per ogni slide, pianificale per tutte; altrimenti ometti quelle dove non aiutano.\n'+\
-        'Scaletta completa: '+json.dumps(outline,ensure_ascii=False)+'\nStile: '+opts.get('design','professional')+'\n'+\
+        'Scaletta completa: '+json.dumps({k:v for k,v in outline.items() if k!='slides'}|{'slides':[{k:row[k] for k in ('title','purpose')} for row in outline['slides']]},ensure_ascii=False)+'\nStile: '+opts.get('design','professional')+'\n'+\
         style_brief(opts.get('design','professional'))+(color_brief(opts) if opts.get('engine','llm')=='llm' else '')+'\n'+\
         'Il campo prompt deve contenere '+style+'. description è una breve descrizione italiana dell’illustrazione.\n'+\
         'Ogni prompt deve essere autosufficiente: traduci in inglese lo stile visivo e la direzione artistica della scaletta, includendo palette, trattamento e composizione coerenti. Il motore immagini non vede questa conversazione: non scrivere soltanto «come le slide» o un soggetto senza stile. Mantieni una stessa famiglia visiva per tutte le illustrazioni, variando soggetti e composizione.\n'+\
-        'Genera illustrazioni, scene o metafore pertinenti. Nessun testo piccolo, grafico numerico, formula o citazione dentro immagini: questi saranno HTML/SVG precisi. Non attribuire valore documentale alle illustrazioni generate.'
+        'Genera soltanto illustrazioni, scene o metafore pertinenti, MAI slide o infografiche con scritte. Nessun testo, neppure grande: vietati titoli, sottotitoli, parole, lettere, numeri, etichette, formule, citazioni, loghi e watermark dentro immagini. Mantieni cartelli e schermi vuoti. Tutte le scritte saranno HTML/SVG precisi separati. Non attribuire valore documentale alle illustrazioni generate.'
     def produce(numbers):
         schema={'type':'object','properties':{'images':{'type':'array','minItems':0,'maxItems':len(numbers),
             'items':{'type':'object','properties':{'slide':{'type':'integer','enum':numbers},
@@ -39,6 +41,8 @@ def plan_images(engine,outline,history,settings,image_model,cancel,stage):
             stage(label+(' · nuovo tentativo conciso' if attempt else ''))
             instruction=common+'\nRestituisci SOLO JSON images per queste pagine: '+json.dumps(numbers)+'. Usa i numeri globali della scaletta, senza rinumerarli. Gli altri gruppi verranno pianificati separatamente, prima di generare tutte le immagini insieme. Non omettere una pagina per risparmiare token se è richiesta una immagine per ogni pagina.\n'+\
                 f'Budget di output: {tuning["max_tokens"]} token. Prompt concisi: circa {max(20,min(100,tuning["max_tokens"]//(4*len(numbers))))} parole per immagine, descrizioni di una frase. Nessun commento o campo extra.'
+            instruction+='\nContenuti e proposta grafica delle sole pagine di questo gruppo:\n'+json.dumps([
+                {'slide':n,**{k:v[:1200] for k,v in outline['slides'][n-1].get('editorial',{}).items() if k in ('content','visual_plan')}} for n in numbers],ensure_ascii=False)
             if attempt:instruction+=' Il risultato precedente era incompleto: restituisci subito un JSON completo e più conciso.'
             try:
                 raw,finish=engine.completion(history+[{'role':'user','content':instruction}],tuning,cancel,on_text=progress,schema=schema)
@@ -66,7 +70,8 @@ def plan_images(engine,outline,history,settings,image_model,cancel,stage):
 
 
 def create(app,job,outline,history,settings,model,cancel,stage,log_path,meta):
-    opts=settings['_slides'];selected=opts.get('image_model') or settings.get('create_model')
+    from .lab_image_model import select
+    opts=settings['_slides'];selected=select(app.engine,settings,opts.get('image_model'))
     image_model=app.engine.require_model(selected,'create')
     plan=plan_images(app.engine,outline,history,settings,image_model,cancel,stage)
     meta['slide_image_plan']=plan

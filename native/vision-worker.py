@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # H3-Chat headless image worker. Conditioning adapted from ComfyUI's
-# nodes_ming.py, nodes_qwen.py and nodes.py (ComfyUI contributors, GPL-3.0).
+# nodes_ming.py, nodes_qwen.py, nodes.py and the Krea-2 Turbo blueprint
+# (ComfyUI contributors, GPL-3.0).
 # This process imports the bundled inference library only, never the server,
 # custom nodes, user's workflows, or any external Python installation.
 import json
@@ -42,7 +43,7 @@ class Worker:
         args = comfy.cli_args.args
         args.cpu = backend == 'cpu'
         if backend not in ('cpu', 'cuda'):
-            raise ValueError('Ming e Qwen Image 2.1 richiedono il motore CPU oppure NVIDIA CUDA.')
+            raise ValueError('Ming, Qwen Image 2.1 e Krea 2 richiedono il motore CPU oppure NVIDIA CUDA.')
         # HIGH_VRAM also makes the diffusor's *offload* device CUDA. Unloading
         # it then cannot reliably reclaim dedicated VRAM on Windows. Use the
         # standard patcher with CPU storage and CUDA computation, with room
@@ -104,7 +105,7 @@ class Worker:
 
     def load(self, request):
         self.architecture = request['architecture']
-        if self.architecture not in ('ming', 'qwen21'):
+        if self.architecture not in ('ming', 'qwen21', 'krea2','moss'):
             raise ValueError('Architettura non supportata dal motore vision.')
         self.initialize(request)
         torch, comfy = self.torch, self.comfy
@@ -112,18 +113,26 @@ class Worker:
         comfy.utils.PROGRESS_BAR_ENABLED = False
         files = request['files']
         emit('stage', message='Caricamento diffusore')
-        self.base_model = comfy.sd.load_diffusion_model(files['diffusion'])
+        if self.architecture=='moss':
+            from h3chat.moss_image import loaders,load_diffuser
+            plugin=loaders(ROOT)
+            self.base_model=load_diffuser(ROOT,files['diffusion'])
+        else:self.base_model = comfy.sd.load_diffusion_model(files['diffusion'])
         if self.base_model is None:
             raise ValueError('Diffusore non riconosciuto.')
         actual = type(self.base_model.model.model_config).__name__
-        if (self.architecture == 'ming' and actual != 'MingImage') or (self.architecture == 'qwen21' and actual != 'QwenImage21'):
+        expected_model = {'ming':'MingImage', 'qwen21':'QwenImage21', 'krea2':'Krea2','moss':'MOSSImageConfig'}[self.architecture]
+        if actual != expected_model:
             raise ValueError(f'Diffusore {actual} incompatibile con il profilo {self.architecture}.')
         emit('stage', message='Caricamento encoder testo e immagini')
-        clip_type = comfy.sd.CLIPType.LUMINA2 if self.architecture == 'ming' else comfy.sd.CLIPType.QWEN_IMAGE
-        self.base_clip = comfy.sd.load_clip([files['llm']], clip_type=clip_type)
-        self.vae = comfy.sd.VAE(sd=comfy.utils.load_torch_file(files['vae'], safe_load=True))
+        if self.architecture=='moss':self.base_clip=plugin.load_clip(files['llm'],'default',disable_dynamic=True)
+        else:
+            clip_type = {'ming':comfy.sd.CLIPType.LUMINA2, 'qwen21':comfy.sd.CLIPType.QWEN_IMAGE,
+                         'krea2':comfy.sd.CLIPType.KREA2}[self.architecture]
+            self.base_clip = comfy.sd.load_clip([files['llm']], clip_type=clip_type)
+        self.vae = comfy.sd.VAE(sd=comfy.utils.load_torch_file(files['vae'], safe_load=True),**({'dtype':torch.float32} if self.architecture=='moss' else {}))
         # Validate the VAE channels, so choosing an old Qwen VAE fails before inference.
-        expected = 16 if self.architecture == 'ming' else 64
+        expected = 128 if self.architecture=='moss' else 64 if self.architecture == 'qwen21' else 16
         if self.vae.latent_channels != expected:
             raise ValueError(f'VAE incompatibile: servono {expected} canali per {self.architecture}.')
         emit('ready')
@@ -149,14 +158,44 @@ class Worker:
         torch, comfy = self.torch, self.comfy
         width, height = request['width'], request['height']
         prompt, negative = request['prompt'], request.get('negative_prompt', '')
-        if self.architecture == 'ming':
+        if self.architecture=='moss':
+            if len(images)>1:raise ValueError('MOSS img2img accetta una sola immagine di partenza.')
+            if images:
+                from h3chat.moss_img2img import canvas,encode
+                width,height=canvas(width,height,images[0].shape[2],images[0].shape[1],request.get('preserve_reference_aspect',True))
+                self.canvas_size=(width,height)
+            positive=clip.encode_from_tokens_scheduled(clip.tokenize(prompt))
+            neg=clip.encode_from_tokens_scheduled(clip.tokenize(negative))
+            if images:latent=encode(self.vae,images[0],width,height,upscale=comfy.utils.common_upscale,torch=torch)
+            else:latent=torch.zeros([1,128,math.ceil(height/16),math.ceil(width/16)],device=comfy.model_management.intermediate_device())
+        elif self.architecture == 'krea2':
+            if images:
+                raise ValueError('Krea 2 è configurato per creare immagini da testo. Per modificare immagini scegli un modello con supporto Edit.')
+            # Krea's 12-layer Qwen3-VL conditioning is specific to CLIPType.KREA2.
+            # Match the official Turbo blueprint's text encode + zero negative.
+            positive = clip.encode_from_tokens_scheduled(clip.tokenize(prompt))
+            if request.get('cfg') == 1:
+                neg = []
+                for value, info in positive:
+                    data = info.copy()
+                    if data.get('pooled_output') is not None:
+                        data['pooled_output'] = torch.zeros_like(data['pooled_output'])
+                    neg.append([torch.zeros_like(value), data])
+            else:
+                neg = clip.encode_from_tokens_scheduled(clip.tokenize(negative))
+            # Comfy's KSampler promotes the blueprint's empty latent to the
+            # model's Wan21 format. We call sample directly, so supply the final
+            # 16-channel, one-frame layout (including its temporal axis).
+            latent = torch.zeros([1, 16, 1, height // 8, width // 8], device=comfy.model_management.intermediate_device())
+        elif self.architecture == 'ming':
             # Match the source workflow: reference canvas is resized to the chosen
             # area, preserving its aspect; subsequent references share that size.
             if images:
                 ratio = images[0].shape[2] / images[0].shape[1]
-                width = max(64, round(math.sqrt(width * height * ratio) / 64) * 64)
-                height = max(64, round(width / ratio / 64) * 64)
-                images = [comfy.utils.common_upscale(x.movedim(-1, 1), width, height, 'bilinear', 'disabled').movedim(1, -1) for x in images]
+                ref_width = max(64, round(math.sqrt(width * height * ratio) / 64) * 64)
+                ref_height = max(64, round(ref_width / ratio / 64) * 64)
+                if request.get('preserve_reference_aspect',True):width,height=ref_width,ref_height
+                images = [comfy.utils.common_upscale(x.movedim(-1, 1), ref_width, ref_height, 'bilinear', 'disabled').movedim(1, -1) for x in images]
             tokens = clip.tokenize(prompt, images=[x[:, :, :, :3] for x in images])
             positive = clip.encode_from_tokens_scheduled(tokens)
             if images:
@@ -182,7 +221,7 @@ class Worker:
                 w = max(32, round(math.sqrt(area * ratio) / 32) * 32)
                 h = max(32, round(math.sqrt(area / ratio) / 32) * 32)
                 resized = comfy.utils.common_upscale(image.movedim(-1, 1), w, h, 'lanczos', 'disabled').movedim(1, -1)
-                if not vision:
+                if not vision and request.get('preserve_reference_aspect',True):
                     width, height = w, h
                 rgb = resized[:, :, :, :3]
                 if resized.shape[-1] > 3:
@@ -199,10 +238,15 @@ class Worker:
         return positive, neg, latent
 
     def generate(self, request):
+        if self.architecture == 'krea2' and request.get('references'):
+            raise ValueError('Krea 2 è configurato per creare immagini da testo. Per modificare immagini scegli un modello con supporto Edit.')
         from PIL import Image
         import numpy as np
         torch, comfy = self.torch, self.comfy
         model, clip = self.base_model, self.base_clip
+        if self.architecture=='moss':
+            from h3chat.moss_image import sampling
+            model=sampling(model)
         # Each request starts from the base patchers: a removed LoRA cannot leak
         # into the following image or alter the on-disk model.
         for lora in request.get('loras', []):
@@ -226,7 +270,12 @@ class Worker:
         if len(images) > 4:
             raise ValueError('Sono supportati fino a quattro riferimenti.')
         reference_count = len(images)
-        with torch.inference_mode():
+        self.canvas_size=(request['width'],request['height'])
+        denoise=request.get('strength',.65) if self.architecture=='moss' and images else 1.0
+        if type(denoise) not in (int,float) or not .05<=denoise<=1:raise ValueError('Intensità img2img non valida.')
+        # LoRA patchers restore quantized Parameters between phases. Creating
+        # their backups as inference tensors prevents that restoration.
+        with torch.no_grad():
             self.phase = 'Lettura delle istruzioni e dei riferimenti'
             emit('stage', message='Lettura delle istruzioni e dei riferimenti')
             try:
@@ -250,7 +299,7 @@ class Worker:
                 # passing sigmas overrides it without another time shift.
                 sampling={'sigmas':torch.tensor(TURBO_SIGMAS,dtype=torch.float32)} if turbo else {}
                 samples = comfy.sample.sample(model, noise, request['steps'], request['cfg'], sampler, 'simple' if turbo else scheduler,
-                    positive, negative, latent, denoise=1.0, disable_pbar=True, seed=request['seed'],
+                    positive, negative, latent, denoise=denoise, disable_pbar=True, seed=request['seed'],
                     callback=progress,**sampling)
             finally:
                 self.release_gpu(model)
@@ -262,6 +311,9 @@ class Worker:
                 if pixels.ndim == 5:
                     pixels = pixels.reshape(-1, *pixels.shape[-3:])
                 array = (pixels[0].clamp(0, 1).cpu().numpy() * 255).round().astype(np.uint8)
+                if self.architecture=='moss':
+                    from h3chat.image_canvas import crop_canvas
+                    array=crop_canvas(array,*self.canvas_size)
                 Image.fromarray(array).save(request['output'], format='PNG')
             finally:
                 self.release_gpu(self.vae.patcher)
@@ -271,7 +323,9 @@ class Worker:
         if self.backend == 'cuda':comfy.model_management.soft_empty_cache(force=True)
         emit('done', parameters={'width':int(array.shape[1]), 'height':int(array.shape[0]),
              'steps':request['steps'], 'cfg':request['cfg'], 'sampler':sampler, 'scheduler':scheduler,
-             'seed':request['seed'], 'strength':1.0, 'engine':'vision', 'reference_count':reference_count,
+             'seed':request['seed'], 'strength':denoise, 'engine':'vision', 'reference_count':reference_count,
+             **({'reference_mode':'img2img-experimental' if reference_count else 'text-to-image'} if self.architecture=='moss' else {}),
+             **({'flow_shift':5,'slg_negative_skip_layers':[22],'vae_dtype':'float32'} if self.architecture=='moss' else {}),
              **({'sigmas':list(TURBO_SIGMAS)} if turbo else {})})
 
 

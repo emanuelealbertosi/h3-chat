@@ -24,12 +24,15 @@ def assistant_format(model):
 
 def image_brief(model):
     """Choose the contract from the actual generation target, not chat defaults."""
+    if model.get('architecture')=='fibo2':
+        from .fibo2 import ASSISTANT_BRIEF
+        return ASSISTANT_BRIEF,{'type':'object','properties':{'prompt':{'type':'string'}},'required':['prompt'],'additionalProperties':False}
     if assistant_format(model) == 'tags':
         family = 'Anima' if model.get('architecture') == 'anima' else 'Stable Diffusion / SDXL'
         schema = {'type':'object','properties':{'tags':{'type':'array','items':{'type':'string'},'minItems':1}},
                   'required':['tags'],'additionalProperties':False}
         return f'Target image model family: {family}.\n' + TAG_BRIEF, schema
-    target = {'ming':'Ming Image','qwen21':'Qwen Image 2.1','qwen-edit':'Qwen Image Edit','flux2':'FLUX.2'}.get(model.get('architecture'),'the selected image model')
+    target = {'ming':'Ming Image','qwen21':'Qwen Image 2.1','krea2':'Krea 2','qwen-edit':'Qwen Image Edit','flux2':'FLUX.2','moss':'MOSS-Image'}.get(model.get('architecture'),'the selected image model')
     schema = {'type':'object','properties':{'prompt':{'type':'string'}},'required':['prompt'],'additionalProperties':False}
     return VISUAL_BRIEF.replace('Ming Image or Qwen Image 2.1', target), schema
 

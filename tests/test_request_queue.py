@@ -56,5 +56,18 @@ class QueueTests(unittest.TestCase):
         thread=threading.Thread(target=guest.execute_job,args=({'id':'b'},threading.Event()));thread.start();thread.join(3)
         self.assertFalse(thread.is_alive());self.assertEqual(order,['b']);self.assertEqual(spaces.pending,[])
 
+    def test_resume_registers_one_shared_ticket_and_never_requeues_terminal_result(self):
+        app=self.app(threading.RLock(),'a',lambda *args:None)
+        app.store.resume_video=lambda *args:'resume'
+        status={'value':'queued'}
+        app.store.one=lambda *args:{'status':status['value']}
+        spaces=Workspaces(app,start_workers=False)
+        app.store.resume_video('chat','original')
+        app.store.resume_video('chat','original')
+        self.assertEqual(spaces.pending,[(app,'resume')])
+        spaces.pending.clear();status['value']='cancelled'
+        app.store.resume_video('chat','original')
+        self.assertEqual(spaces.pending,[])
+
 
 if __name__=='__main__':unittest.main()

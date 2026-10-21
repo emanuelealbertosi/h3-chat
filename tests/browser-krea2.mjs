@@ -1,0 +1,41 @@
+import {createServer} from 'node:http';
+import {createRequire} from 'node:module';
+import {once} from 'node:events';
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
+const bundle=await build({stdin:{contents:"import {renderVisualSetup} from './ui/visual-controls.js'; import {initLoras} from './ui/loras.js'; window.fixture={renderVisualSetup,initLoras};",resolveDir:process.cwd()},bundle:true,write:false,format:'iife',platform:'browser',target:'es2022'});
+const server=createServer((req,res)=>{res.setHeader('Content-Type',req.url==='/fixture.js'?'application/javascript':'text/html');res.end(req.url==='/fixture.js'?bundle.outputFiles[0].text:'<!doctype html><meta charset="utf-8"><div id="setup"></div><button id="lora-open">LoRA</button><div id="lora-attachments"></div><script src="/fixture.js"></script>');});
+server.listen(0,'127.0.0.1');await once(server,'listening');
+const browser=await chromium.launch({channel:'msedge',headless:true,args:['--disable-gpu','--mute-audio']});
+const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+try{
+ await page.goto('http://127.0.0.1:'+server.address().port);
+ await page.evaluate(()=>{
+  const krea={id:'krea',name:'RedCraft Krea 2',architecture:'krea2',engine:'vision',ready:true,capabilities:['create']};
+  const state={models:[krea,{id:'anima',name:'Anima',architecture:'anima',ready:true,capabilities:['create']}],settings:{create_model:'krea',edit_model:''}};
+  const draft={...state.settings};window.actions=[];
+  window.fixture.renderVisualSetup(document.querySelector('#setup'),{state,draft,link:k=>window.actions.push(['link',k]),edit:m=>window.actions.push(['edit',m.id]),preferences:id=>window.actions.push(['preferences',id]),changed:()=>window.actions.push(['default',draft.create_model]),install:()=>{}});
+  window.fixture.initLoras({getState:()=>state,getChatId:()=>null,pickDirectory:()=>{},openPreferences:()=>{},notify:t=>window.actions.push(['notice',t]),onChange:()=>{},api:async()=>({warnings:[],items:[{id:'compatible',name:'Realism Krea 2',family:'krea2',path:'Krea.safetensors',relative:'Krea.safetensors',size:1000},{id:'unknown',name:'Unknown adapter',family:'',path:'Unknown.safetensors',relative:'Unknown.safetensors',size:1000},{id:'incompatible',name:'Anima character',family:'anima',path:'Anima.safetensors',relative:'Anima.safetensors',size:1000}]})});
+ });
+ assert.equal(await page.locator('#visual-krea2').inputValue(),'krea');
+ assert.equal(await page.locator('[data-visual-default="krea2:edit_model"]').count(),0);
+ await page.locator('[data-visual-preferences="krea2"]').click();
+ await page.locator('[data-visual-link="krea2"]').click();
+ assert.deepEqual(await page.evaluate(()=>window.actions),[['preferences','krea'],['link','krea2']]);
+ await page.getByRole('button',{name:'LoRA',exact:true}).click();
+ await page.locator('[data-lora-id="compatible"]').waitFor();
+ assert.equal(await page.locator('#lora-target').inputValue(),'krea');
+ assert.equal(await page.locator('[data-lora-id="compatible"]').isDisabled(),false);
+ assert.equal(await page.locator('[data-lora-id="incompatible"]').count(),0);assert.equal(await page.locator('[data-lora-id="unknown"]').count(),0);
+ await page.locator('#lora-target').selectOption('anima');
+ assert.equal(await page.locator('[data-lora-id="incompatible"]').count(),1);
+ assert.equal(await page.locator('[data-lora-id="compatible"]').count(),0);
+ assert.equal(await page.locator('[data-lora-id="unknown"]').count(),0);
+ await page.locator('#lora-target').selectOption('krea');
+ assert.equal(await page.locator('[data-lora-id="compatible"]').isChecked(),false);
+ await page.locator('[data-lora-id="compatible"]').check();
+ assert.match(await page.locator('#lora-attachments').textContent(),/Realism Krea 2/);
+ assert.deepEqual(errors,[]);
+ console.log('PASS: Krea setup, per-model actions, create-only defaults and compatible optional LoRA selection.');
+}finally{await browser.close();server.close();}

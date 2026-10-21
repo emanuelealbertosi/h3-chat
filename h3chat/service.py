@@ -45,7 +45,8 @@ from .models import MAX_CONTEXT, discover_local, inspect_model, THINK_LEVELS, th
 from .external_models import PROFILES as EXTERNAL_PROFILES, ROLE_LABELS, build_model, validate_config
 from .hardware import detect_hardware, assess_model, assess_selection
 from .loras import LoraLibrary, validate_directories, for_model as loras_for_model, public as public_loras
-from .image_options import SAMPLERS, SCHEDULERS, NATIVE_SAMPLERS, NATIVE_SCHEDULERS, IMAGE_DEFAULT_KEYS, validate_overrides, options as image_options
+from .image_options import SAMPLERS, SCHEDULERS, NATIVE_SAMPLERS, NATIVE_SCHEDULERS, IMAGE_DEFAULT_KEYS, MOSS_NEGATIVE_PROMPT, validate_overrides, options as image_options
+from .image_presets import MOSS_RECIPES, validate_presets as validate_moss_presets
 
 
 LOG = logging.getLogger("h3chat.jobs")
@@ -74,6 +75,8 @@ class Service:
         self.token = secrets.token_hex(32)
         self.wake, self.closed = threading.Event(), threading.Event()
         self.lock = threading.RLock()
+        from .file_uploads import FileUploads
+        self.uploads = FileUploads(self)
         self.compute_lock=threading.RLock();self.knowledge.compute_lock=self.compute_lock;self.knowledge.release_gpu=self.engine.stop
         self.current_id, self.cancel_event = None, None
         self.worker = threading.Thread(target=self.run, daemon=True)
@@ -116,9 +119,9 @@ class Service:
                 "media_server":self.media_server.status(),
                 "llm_options":{"keys":LLM_KEYS,"defaults":{profile:llm_defaults(profile) for profile in PROFILES},"max_context":MAX_CONTEXT,"max_output_tokens":MAX_OUTPUT_TOKENS},
                 "music_runtime":music_status(self.root), "music_options":{"defaults":MUSIC_DEFAULTS,"numbers":MUSIC_NUMBERS,"integers":sorted(MUSIC_INTEGER)},
-                "video_options":{"defaults":VIDEO_DEFAULTS,"aspects":VIDEO_ASPECTS}, "veda_runtime":veda_status(self.root),
+                "video_options":{"defaults":VIDEO_DEFAULTS,"aspects":VIDEO_ASPECTS,"request_controls":True,"segment_controls":True,"format_control":True,"request_draft":True,"seed_control":True,"longtake_experimental":True,"attention_choices":True}, "veda_runtime":veda_status(self.root),
                 "tools_runtime":tools_status(self.root),"transcription_models":[m|{'ready':all(safe_join(self.root,f['path']).is_file() for f in m['files'])} for m in self.downloads.tool_models.values() if m['id'].startswith('whisper-')],
-                "embeddinggemma2_runtime":{"ready":gemma2_runtime_ready(self.root)}, "vision_runtime":vision_status(self.root), "models": models,"image_options":{"samplers":NATIVE_SAMPLERS,"schedulers":NATIVE_SCHEDULERS,"vision_samplers":VISION_SAMPLERS,"vision_schedulers":VISION_SCHEDULERS,"defaults":{k:DEFAULTS[k] for k in IMAGE_DEFAULT_KEYS}},"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
+                "embeddinggemma2_runtime":{"ready":gemma2_runtime_ready(self.root)}, "vision_runtime":vision_status(self.root), "models": models,"image_options":{"request_controls":True,"last_seed":True,"moss_presets":MOSS_RECIPES,"moss_negative_prompt":MOSS_NEGATIVE_PROMPT,"samplers":NATIVE_SAMPLERS,"schedulers":NATIVE_SCHEDULERS,"vision_samplers":VISION_SAMPLERS,"vision_schedulers":VISION_SCHEDULERS,"defaults":{k:DEFAULTS[k] for k in IMAGE_DEFAULT_KEYS}},"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
                 "runtimes": {key: {"ready": remix_ready(self.root,key) if key.startswith('remix_') else upscale_ready(self.root,key) if key.startswith('upscale_') else tools_status(self.root).get(key.removeprefix('tools_'),{}).get('ready',False) if key.startswith('tools_') else veda_status(self.root)["ready"] if key=="veda" else gemma2_runtime_ready(self.root) if key=="embeddinggemma2" else voice_ready(self.root,key.removeprefix("voice_")) if key.startswith("voice_") else voice_ready(self.root) if key=="voice" else vision_status(self.root)["ready"] if key=="vision" else music_status(self.root).get(key.removeprefix("music_"),{}).get("ready",False) if key.startswith("music_") else all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
                                     "size": sum(f["size"] for f in r["files"])} for key, r in self.runtimes.items()},
                 "chats": self.store.all("SELECT * FROM chats ORDER BY pinned DESC,updated DESC"),
@@ -175,6 +178,10 @@ class Service:
             model=self.catalog[config['id']]
             settings=self.store.settings()
             self.store.save_settings({key:'' for key,cap in (('chat_model','chat'),('create_model','create'),('edit_model','edit'),('diagram_model','create'),('music_model','music'),('video_model','video')) if settings[key]==config['id'] and (cap not in model['capabilities'] or (key=='diagram_model' and model.get('architecture')!='ming'))})
+            if config['profile']=='minimax-h3':
+                from .video_options import inherited_acceleration
+                acceleration=inherited_acceleration(settings,model['id'])
+                if acceleration:self.store.save_settings({'video_overrides':settings.get('video_overrides',{})|{model['id']:acceleration}})
             if not settings['video_model'] and config['profile']=='minimax-h3' and Path(config['files']['diffusion']).name.casefold()==EXTERNAL_PROFILES['minimax-h3']['default_files']['diffusion'].casefold():
                 self.store.save_settings({'video_model':model['id']})
             self.engine.configure(self.store.settings())
@@ -203,6 +210,7 @@ class Service:
         current=self.store.settings()
         if 'llm_overrides' in patch:validate_llm_presets(patch['llm_overrides'],patch.get('profile',current['profile']))
         s = merge_llm_settings(current,patch)
+        if s['llm_acceleration'] not in ('standard','qwen27'):raise ValueError('Ottimizzazione LLM non valida.')
         if type(s['llm_timeout']) is not int or not 60<=s['llm_timeout']<=14400:raise ValueError('Tempo massimo LLM: da 60 a 14400 secondi.')
         validate_tools(s)
         validate_voice(s)
@@ -219,7 +227,10 @@ class Service:
             if type(s[key]) is not int or not lo <= s[key] <= hi:
                 raise ValueError(f"{key}: inserisci un intero tra {lo} e {hi}.")
         s['lora_dirs']=validate_directories(s['lora_dirs'])
-        validate_overrides(s['image_overrides'])
+        validate_overrides(s['image_overrides'],self.catalog)
+        validate_moss_presets(s['moss_presets'],s)
+        from .image_options import ASPECTS
+        if s['image_aspect'] not in ASPECTS:raise ValueError('Formato immagine non valido.')
         if type(s['image_advanced']) is not bool or type(s['chat_advanced']) is not bool:raise ValueError('Avanzate: usa un valore booleano.')
         if type(s['image_cfg']) not in (int,float) or not 0<=s['image_cfg']<=30:raise ValueError('CFG fuori intervallo.')
         if s['image_sampler'] not in NATIVE_SAMPLERS or s['image_scheduler'] not in NATIVE_SCHEDULERS:
@@ -321,56 +332,14 @@ class Service:
                 "overall":assess_selection(selected_models,settings,hardware,refs),"memory":self.engine.snapshot()}
 
     def upload(self, body):
+        # Compatibility for existing clients. The UI uses bounded chunk transfers.
+        try: raw=base64.b64decode(body["data"],validate=True)
+        except Exception as exc: raise ValueError("Allegato non valido.") from exc
+        ident=uid();path=self.uploads.folder/(ident+'.partial')
         try:
-            raw = base64.b64decode(body["data"], validate=True)
-        except Exception as exc:
-            raise ValueError("Allegato non valido.") from exc
-        if len(raw) > 64 * 1024 * 1024:
-            raise ValueError("Ogni allegato può occupare al massimo 64 MB (immagini: 12 MB).")
-        if raw.startswith(b"\x89PNG\r\n\x1a\n"):
-            ext, mime = "png", "image/png"
-            if len(raw) < 24 or max(int.from_bytes(raw[16:20], "big"), int.from_bytes(raw[20:24], "big")) > 8192:
-                raise ValueError("PNG troppo grande o non valido (massimo 8192 px).")
-        elif raw.startswith(b"\xff\xd8\xff"):
-            ext, mime = "jpg", "image/jpeg"
-        elif raw.startswith(b'RIFF') and raw[8:12]==b'WAVE':ext,mime='wav','audio/wav'
-        elif raw.startswith(b'fLaC'):ext,mime='flac','audio/flac'
-        elif raw.startswith(b'ID3') or len(raw)>2 and raw[0]==255 and raw[1]&224==224:ext,mime='mp3','audio/mpeg'
-        elif raw.startswith(b'OggS'):ext,mime='ogg','audio/ogg'
-        elif raw.startswith(b'%PDF-'):ext,mime='pdf','application/pdf'
-        elif len(raw)>12 and raw[4:8]==b'ftyp':ext,mime='mp4','video/mp4'
-        elif raw.startswith(b'PK\x03\x04') and str(body.get('name','')).lower().endswith('.pptx'):
-            try:
-                from .manim_presentation import PPTX
-                with zipfile.ZipFile(io.BytesIO(raw)) as z:
-                    names=z.namelist()
-                    if '[Content_Types].xml' not in names or 'ppt/presentation.xml' not in names or any('vbaproject' in x.lower() for x in names):raise ValueError('Usa un PPTX senza macro.')
-                    if len(names)>10000 or sum(x.file_size for x in z.infolist())>100*1024**2:raise ValueError('Presentazione decompressa troppo grande.')
-            except zipfile.BadZipFile:raise ValueError('PPTX non valido.')
-            ext,mime='pptx',PPTX
-        elif raw.startswith(b'PK\x03\x04') and str(body.get('name','')).lower().endswith('.docx'):
-            try:
-                with zipfile.ZipFile(io.BytesIO(raw)) as z:
-                    names=z.namelist()
-                    if '[Content_Types].xml' not in names or 'word/document.xml' not in names or any('vbaproject' in x.lower() for x in names):raise ValueError('Usa un file Word .docx senza macro.')
-                    if len(names)>10000 or sum(x.file_size for x in z.infolist())>100*1024**2:raise ValueError('Documento Word decompresso troppo grande.')
-            except zipfile.BadZipFile:raise ValueError('Documento Word non valido.')
-            ext,mime='docx','application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        else:
-            if body.get('_gallery_export') and Path(str(body.get('name',''))).suffix.lower() in ('.txt','.md','.py','.json','.tex','.srt','.html','.svg'):
-                raw.decode('utf-8');ext=Path(str(body['name'])).suffix.lower()[1:];mime='application/json' if ext=='json' else 'text/html' if ext=='html' else 'text/plain'
-            else:raise ValueError("Usa immagini PNG/JPEG, audio WAV/MP3/FLAC/OGG, video MP4, PDF, Word .docx oppure PowerPoint .pptx.")
-        if mime.startswith('image/') and len(raw)>12*1024**2:raise ValueError('Ogni immagine può occupare al massimo 12 MB.')
-        if ext in ('pdf','docx','pptx') and len(raw)>(64 if body.get('_gallery_export') else 25)*1024**2:raise ValueError('Documenti: massimo 25 MB per file.')
-        image_id = uid()
-        relative = f"uploads/{image_id}.{ext}"
-        target = safe_join(self.data, relative)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(raw)
-        result = {"id": image_id, "name": str(body.get("name", "Immagine"))[:150], "path": relative, "mime": mime}
-        target.with_suffix(".json").write_text(json.dumps(result), encoding="utf-8")
-        self.store.gallery.register([result],'generated' if body.get('_gallery_export') else 'uploaded')
-        return result
+            path.write_bytes(raw)
+            return self.uploads.publish(ident,path,str(body.get('name','File')),'generated' if body.get('_gallery_export') else 'uploaded')
+        finally: path.unlink(missing_ok=True)
 
     def validate_media(self, media, *, canvas=False):
         if not isinstance(media, list) or len(media) > (64 if canvas else 12):
@@ -387,6 +356,7 @@ class Service:
                 registered=self.store.one('SELECT id FROM gallery WHERE id=?',(image_id,))
                 if registered:
                     found=self.store.gallery.get(image_id)
+                    if found.get('timeline_only'):raise ValueError('Questa è una timeline salvata: aprila dalla galleria per modificarla o riprenderla, non allegarla come filmato.')
                     resolved.append({k:found[k] for k in ('id','name','path','mime')});continue
                 matches = self.store.all("SELECT media FROM messages WHERE role='assistant' AND status='done' UNION ALL SELECT media FROM canvases UNION ALL SELECT media FROM canvas_artifacts")
                 found = next((m for row in matches for m in json.loads(row["media"]) if m["id"] == image_id), None)
@@ -404,11 +374,25 @@ class Service:
         if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 24000:
             raise ValueError("Scrivi una richiesta tra 1 e 24.000 caratteri.")
         media = self.validate_media(body.get("media", []))
+        from .image_batch import requested as batch_requested, requested_count, MAX_IMAGES
+        image_batch=batch_requested(prompt) and not any(body.get(k) for k in ('video','music','voice','transcribe')) and body.get('lab','auto')=='auto'
+        if image_batch and requested_count(prompt)>MAX_IMAGES:raise ValueError(f'Un lotto può contenere al massimo {MAX_IMAGES} immagini.')
+        if image_batch and not body.get('assistant',True):raise ValueError('Attiva Assistant per pianificare il lotto immagini una sola volta.')
+        attached_image_loras=[]
+        if image_batch:
+            from .image_batch_loras import uploaded
+            attached_image_loras=uploaded(self,media)
         settings = self.validate_settings({"think_level":body.get("think_level", self.store.settings()["think_level"])})
         selection = body.get('image_model','')
         if not isinstance(selection,str):raise ValueError('Selezione modello immagini non valida.')
         if selection:
-            self.engine.require_model(selection,'edit' if media else 'create')
+            selected_image=self.engine.require_model(selection,'edit' if media and not image_batch else 'create')
+            if 'image_parameters' in body:
+                from .image_options import capture_request as capture_image_request
+                settings=capture_image_request(selected_image,settings,body['image_parameters'])
+            image_options(selected_image,settings,'' if image_batch else prompt)
+        elif body.get('image_parameters'):
+            raise ValueError('Scegli il modello immagini prima di personalizzare i parametri in chat.')
         assistant = body.get('assistant',True)
         if type(assistant) is not bool:raise ValueError('Assistant: scegli On oppure Off.')
         music=body.get('music',False)
@@ -419,16 +403,14 @@ class Service:
         if type(web) is not bool or type(transcribe) is not bool:raise ValueError('Web/Trascrivi: scegli attivo o disattivo.')
         if transcribe and not any(x['mime'].startswith('audio/') for x in media):raise ValueError('Allega un audio per trascriverlo.')
         if type(video) is not bool:raise ValueError('Video: scegli attivo o disattivo.')
-        if 'video_parameters' in body:
-            value=body['video_parameters']
-            if not video or not isinstance(value,dict) or set(value)-{'megapixels','duration'}:
-                raise ValueError('Parametri della richiesta video non validi.')
-            video_id=settings['video_model']
-            self.engine.require_model(video_id,'video')
-            preset=validate_video_options(settings.get('video_overrides',{}).get(video_id,{})|value)
-            settings['video_overrides']=settings.get('video_overrides',{})|{video_id:preset}
-        from .video_options import quality as video_quality
+        from .video_options import capture_request
+        settings=capture_request(settings,body,self.engine.require_model)
+        from .video_options import quality as video_quality, validate_steps
         settings['_video_quality']=video_quality(body.get('video_quality','high'))
+        settings['_video_steps']=validate_steps(body.get('video_steps'))
+        if settings.get('_video_request') and not self.engine.require_model(settings['video_model'],'video').get('remote_media'):
+            from .video_options import options as request_video_options
+            request_video_options({'id':settings['video_model']},settings,False)
         editing=body.get('video_editing','continuous')
         if not isinstance(editing,str) or editing not in ('continuous','storyboard'):raise ValueError('Regia video: scegli Continuazione oppure Storyboard.')
         if editing=='storyboard' and video and not assistant:raise ValueError('Storyboard richiede Assistant On per trasformare le scene descritte in una regia.')
@@ -440,7 +422,7 @@ class Service:
         settings=capture_music_quality(settings,body.get('music_quality'))
         from .music_options import capture_duration
         settings=capture_duration(settings,body.get('music_max_duration'))
-        settings = settings | {'_image_model':selection,'_assistant':assistant,'_music':music,'_music_fields':fields,'_video':video,'_web':web,'_transcribe':transcribe}
+        settings = settings | {'_image_model':selection,'_assistant':assistant,'_music':music,'_music_fields':fields,'_video':video,'_web':web,'_transcribe':transcribe,'_image_batch':image_batch}
         settings.update(_voice=voice,_voice_fields=validate_voice_fields(body.get('voice_fields',{})))
         rag=body.get('rag',settings['rag_enabled'])
         if type(rag) is not bool:raise ValueError('RAG: scegli On oppure Off.')
@@ -496,11 +478,14 @@ class Service:
         canvas = body.get("canvas", False)
         if type(canvas) is not bool:
             raise ValueError("Destinazione canvas non valida.")
-        if slide_request or infographic_request:canvas=True
+        if slide_request or infographic_request or image_batch:canvas=True
         loras=self.loras.capture(body.get('loras',[]),settings['lora_dirs'],self.catalog)
+        if image_batch:
+            loras+=attached_image_loras
+            if len(loras)>8:raise ValueError('Massimo 8 LoRA fra pannello e allegati del lotto.')
         job_id = self.store.enqueue(chat_id, prompt.strip(), media, settings, canvas, loras)
         self.wake.set()
-        return {"job_id": job_id, "canvas": canvas, "intent": 'infographic' if infographic_request else 'slides' if slide_request else None}
+        return {"job_id": job_id, "canvas": canvas, "intent": 'image_batch' if image_batch else 'infographic' if infographic_request else 'slides' if slide_request else None}
 
     def regenerate(self, chat_id):
         with self.lock:
@@ -598,6 +583,12 @@ class Service:
             def stage(label):
                 LOG.info("Lavoro %s · %s", job["id"][:8], label)
                 self.store.execute("UPDATE jobs SET stage=? WHERE id=?", (label, job["id"]))
+            if settings.get('_mesh3d'):
+                raise ValueError('La funzionalità di generazione 3D è stata rimossa. I file già creati restano disponibili per il download.')
+            if settings.get('_video_probe'):
+                from .video_probe import render as probe_video
+                probe_video(self,job,payload,settings,cancel,stage,log_path)
+                return
             if settings.get('_upscale'):
                 meta={'intent':'video','canvas':bool(payload.get('canvas')),'execution_mode':'Standalone · GPU · upscale'}
                 from .upscale import render as upscale_video
@@ -609,6 +600,23 @@ class Service:
                 self.store.update_answer(job,'',meta=meta)
                 recreate_video(self,job,payload,settings,cancel,stage,log_path)
                 return
+            if settings.get('_video_timeline_recover'):
+                from .video_timeline_recover import render as recover_video_timeline
+                recover_video_timeline(self,job,payload,settings,cancel,stage,log_path)
+                return
+            if settings.get('_video_assemble'):
+                from .video_assemble import render as assemble_video
+                assemble_video(self,job,payload,settings,cancel,stage,log_path)
+                return
+            if settings.get('_video_clip'):
+                from .video_clip_tools import render as render_clip
+                render_clip(self,job,payload,settings,cancel,stage,log_path)
+                return
+            if settings.get('_video_extend'):
+                from .video_extend import render as extend_video
+                self.store.update_answer(job,'',meta={'intent':'video','execution_mode':'Standalone · GPU · inserimento clip'})
+                extend_video(self,job,payload,settings,cancel,stage,log_path)
+                return
             if settings.get('_video_edit'):
                 from .video_edit import render as edit_video
                 meta={'intent':'video','canvas':bool(payload.get('canvas')),'execution_mode':'Standalone · GPU · post-produzione'}
@@ -618,6 +626,10 @@ class Service:
             if settings.get('_video_remix'):
                 from .video_remix import render as remix_video
                 remix_video(self,job,payload,settings,cancel,stage,log_path)
+                return
+            if settings.get('_video_resume'):
+                from .video_job_resume_render import render as resume_video
+                resume_video(self,job,payload,settings,cancel,stage,log_path)
                 return
             if settings.get('_slide_revision'):
                 from .slide_revision import build as revise_slide
@@ -642,6 +654,11 @@ class Service:
                     self.store.update_answer(job,value,meta=meta)
                 text,finish=self.engine.completion(settings['_api_messages'],settings,cancel,on_text=api_update,schema=settings.get('_api_schema'))
                 meta['finish_reason']=finish;self.store.update_answer(job,text,'done',meta=meta);self.store.execute("UPDATE jobs SET status='done',stage='Risposta completata' WHERE id=?",(job['id'],));return
+            if settings.get('_video_clip_infographic'):
+                from .video_clip_tools import prepare_infographic
+                excerpt=prepare_infographic(self,job,settings,cancel,stage,log_path)
+                payload['media']=[excerpt]
+                history[-1]['media']=[excerpt]
             project_id=payload.get('project_id');rag_sources=[];rag_mode=''
             if project_id:
                 project=self.knowledge.project(project_id)
@@ -663,6 +680,7 @@ class Service:
                     settings['_context_reserved']=sum(len(s['text'])+180 for s in rag_sources)
             visual_history=[m|{"media":[x for x in m["media"] if x.get("mime", "").startswith("image/")]} for m in history]
             selected_route = voice_route(history,settings) or video_route(history,settings) or music_route(history,settings) or visual_route(visual_history,settings)
+            if settings.get('_image_batch'):selected_route={'intent':'image_batch'}
             lab=settings.get('_lab','auto')
             from .narrated_manim import requested as narrated_requested
             if narrated_requested(payload['prompt'],settings):settings['_manim_voice']=True;lab='manim'
@@ -672,7 +690,7 @@ class Service:
             direct = explicit_route(visual_history)
             pure=settings.get('_transcribe') or (not selected_route and direct not in ('create','edit') and pure_transcription(payload['prompt'],[x for x in payload['media'] if x['mime'].startswith('audio/')]))
             tool_meta={};transcripts=[];sources=[];transcript_media=[]
-            if not selected_route or selected_route['intent']!='video':
+            if not selected_route or selected_route['intent'] not in ('video','image_batch'):
                 slide_documents=[]
                 if selected_route and selected_route['intent'] in ('slides','infographic'):
                     slide_documents=next(([x for x in m['media'] if x['mime'] in ('application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document')] for m in reversed(history) if any(x['mime'] in ('application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document') for x in m['media'])),[])
@@ -719,7 +737,7 @@ class Service:
                 meta['model_identity'] = model['identity']
             if model.get('api'):meta['api']=True
             meta.update(tool_meta)
-            role='llm' if intent in ('chat','slides','infographic') else 'image' if intent in ('create','edit') else 'asr' if intent=='transcribe' else intent
+            role='llm' if intent in ('chat','slides','infographic') else 'image' if intent in ('create','edit','image_batch') else 'asr' if intent=='transcribe' else intent
             meta['execution_mode']='Server esterno · LLM' if model.get('api') and intent in ('chat','slides','infographic') else 'Standalone · '+device_label(settings,role)
             if intent in ('calculate','manim'):meta['execution_mode']='Standalone · '+('CPU · Interprete numerico' if intent=='calculate' else ('GPU · OpenGL' if settings['manim_device']=='gpu' else 'CPU · Cairo')+' · Manim')
             if role in ('image','music') and device_label(settings,role)=='CPU':meta['device_warning']=CPU_WARNING
@@ -739,7 +757,10 @@ class Service:
             if intent!='chat':
                 for key in ('think_level','think_budget','model_warning'):meta.pop(key,None)
             self.store.update_answer(job,text,meta=meta)
-            if intent=='voice':
+            if intent=='image_batch':
+                from .image_batch import build as build_image_batch
+                build_image_batch(self,job,payload,history,settings,cancel,stage,log_path,meta)
+            elif intent=='voice':
                 from .voice import build as build_voice
                 media=build_voice(self,job,payload,history,settings,model,cancel,stage,log_path,meta)
                 if payload.get('canvas'):
@@ -847,6 +868,8 @@ class Service:
             elif intent == "video":
                 from .video_options import with_prompt_duration
                 video_model=self.engine.require_model(settings['video_model'],'video')
+                selected_video_loras=loras_for_model(payload.get('loras',[]),video_model)
+                settings=settings|{'_video_loras':[{'path':x['path'],'weight':x['weight']} for x in selected_video_loras]}
                 if settings.get('_video_editing')=='storyboard' and not settings.get('_assistant',True):raise ValueError('Storyboard richiede Assistant On per pianificare le inquadrature.')
                 if settings.get('_video_editing')=='storyboard' and video_model.get('remote_media'):raise ValueError('Storyboard richiede MiniMax H3 standalone: il server remoto non supporta questa regia.')
                 refs=payload['media']
@@ -879,7 +902,8 @@ class Service:
                 else:plan,assistant_info=self.engine.refine_video(history,payload['prompt'],refs,video_model,settings,cancel,log_path,stage)
                 media=self.engine.generate_long_video(video_model,settings,plan,refs,job['id'],cancel,stage,prompt=payload['prompt']) if soundtrack else self.engine.generate_video(video_model,settings,plan,refs,job['id'],cancel,stage,prompt=payload['prompt'])
                 meta.update(assistant_on=settings.get('_assistant',True),assistant=assistant_info,video_plan=plan,video_parameters=media['generation'],references=refs,video_selection=route.get('selection','auto'))
-                meta['loras_skipped']=public_loras(payload.get('loras',[]))
+                meta['loras']=public_loras(selected_video_loras)
+                meta['loras_skipped']=public_loras([x for x in payload.get('loras',[]) if x not in selected_video_loras])
                 if payload.get('canvas'):
                     self.save_artifact(job['chat_id'],'Video MiniMax H3','',[media])
                     meta['artifact']={'title':'Video MiniMax H3','content':'','media':[media]}
@@ -915,7 +939,7 @@ class Service:
                     intent = "edit"
                 if len(refs) > image_model.get("max_refs", 1):
                     raise ValueError(f"Il modello accetta fino a {image_model.get('max_refs', 1)} riferimenti. Seleziona un modello compatibile nelle impostazioni.")
-                meta.update(intent=intent, model=image_model["name"], image_prompt=payload["prompt"], references=refs)
+                meta.update(intent=intent, model=image_model["name"], image_model_id=image_model['id'], image_prompt=payload["prompt"], references=refs)
                 meta['model']=image_model['name'];self.store.update_answer(job,text,meta=meta)
                 meta['image_selection'] = route.get('selection','auto')
                 meta['assistant_on'] = bool(settings.get('_assistant',True))
@@ -925,7 +949,7 @@ class Service:
                         history,meta['image_prompt'],refs,settings,cancel,log_path,stage,image_model=image_model)
                 selected_loras=loras_for_model(payload.get('loras',[]),image_model)
                 if image_model.get('remote_media'):selected_loras=[]
-                generation_settings=settings|{'_image_model':image_model['id'],'_loras':selected_loras,'_image_options':image_options(image_model,settings)}
+                generation_settings=settings|{'_image_model':image_model['id'],'_loras':selected_loras,'_image_options':image_options(image_model,settings,payload['prompt'])}
                 meta['loras']=public_loras(selected_loras)
                 meta['image_parameters']=generation_settings['_image_options']
                 meta['loras_skipped']=public_loras([l for l in payload.get('loras',[]) if l not in selected_loras])
@@ -947,7 +971,19 @@ class Service:
             status = "cancelled" if isinstance(exc, Cancelled) or cancel.is_set() else "failed"
             error = "Generazione interrotta." if status == "cancelled" else str(exc)
             LOG.log(logging.INFO if status == "cancelled" else logging.ERROR, "Lavoro %s · %s", job["id"][:8], error)
-            self.store.update_answer(job, text, status, meta=meta | {"error": error})
+            completed_media=[]
+            if meta.get('image_batch'):
+                completed_media=meta.get('artifact',{}).get('media',[])
+                text=f'{error} Immagini completate e conservate: {len(completed_media)}/{meta.get("batch_total",0)}.'
+            if 'settings' in locals() and settings.get('_video_edit'):
+                try:
+                    from .video_edit import interrupted_exports
+                    completed_media,partial_meta=interrupted_exports(self,job)
+                    if completed_media:
+                        meta.update(partial_meta,references=payload.get('media',[]))
+                        text=f"{error} {len(completed_media)} spezzoni completati sono salvati nella galleria e nella timeline."
+                except (ValueError,OSError,KeyError,TypeError):pass
+            self.store.update_answer(job, text, status, media=completed_media,meta=meta | {"error": error})
             self.store.execute("UPDATE jobs SET status=?,error=?,stage=? WHERE id=?", (status, error, error, job["id"]))
         finally:
             try:
@@ -965,6 +1001,7 @@ class Service:
         self.media_server.close()
         self.media_providers.client.abort()
         self.closed.set()
+        self.uploads.close()
         self.wake.set()
         if self.cancel_event:
             self.cancel_event.set()

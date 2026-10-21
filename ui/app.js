@@ -1,11 +1,16 @@
+import {uploadFile} from './file-upload.js';
 import {renderToolsSettings,appendToolsDetails} from './tools-settings.js';
 import {renderProviders} from './api-providers.js';
 import {renderLlmPreferences,selectLlmPreferencesModel,syncLlmDraft,llmOptions} from './llm-settings.js';
 import {renderVideoSettings,appendVideoDetails,selectVideoPreferencesModel} from './video-settings.js';
 import {chatActivities,chatActivityIcon} from './chat-activity.js';
+import {initChatScroll} from './chat-scroll.js';
 import {requestTiming} from './request-timing.js';
+import {collapseInput,inputMedia} from './message-input.js';
+import {resolveVideoEditInputs} from './video-edit-inputs.js';
 import {renderMusicSettings,appendMusicDetails,selectMusicPreferencesModel} from './music-settings.js';
 import {renderRich,appendMedia,escape as esc,saveBlob} from './render.js';
+import {appendVideoResume} from './video-resume.js';
 import {exportPdf,exportDocx,exportPng} from './exports.js';
 import {initLocalModels} from './local-models.js';
 import {initLoras} from './loras.js';
@@ -24,6 +29,8 @@ import {initComposerPanel} from './composer-panel.js';
 import {initManimPresentation} from './manim-presentation.js';
 import {initWorkspaceLayout} from './workspace-layout.js';
 import {initGallery} from './gallery.js';
+import {appendVideoProgress,clearUnusedVideoProgress} from './video-progress.js';
+import {appendVideoActivity} from './video-activity.js';
 import {initInfographics} from './infographics.js';
 import {openVideoEdit,chooseVideoForEdit} from './video-edit.js';
 import {openVideoRecreate} from './video-recreate.js';
@@ -31,6 +38,7 @@ import {openUpscale,renderUpscaleSettings} from './upscale.js';
 import {openVideoRemix,renderRemixSettings} from './video-remix.js';
 
 const $=s=>document.querySelector(s);
+const chatScroll=initChatScroll($('#scroll-area'),$('#messages'));
 let composerUI=null,manimPresentation=null,infographicsUI=null;
 let state=null,current=null,chat=null,filter='all',collection=null,project=null,attachments=[],settingsTab='setup',settingsDraft=null;
 let canvasOpen=false,canvas={title:'Canvas',content:'',media:[]},canvasEditing=false,canvasSaveTimer,canvasDirty=false;
@@ -61,7 +69,7 @@ function settingsError(message=''){
 const act=fn=>(...args)=>{try{return Promise.resolve(fn(...args)).catch(e=>toast(e.message,true));}catch(e){toast(e.message,true);}};
 initModelIdentity({getModel:()=>state?.models.find(m=>m.id===state.settings.chat_model),act,notify:toast});
 const gb=n=>(n/1e9).toLocaleString('it-IT',{maximumFractionDigits:2})+' GB';
-const visualControls=initVisualControls({getState:()=>state,getChatId:()=>current});
+const visualControls=initVisualControls({getState:()=>state,getChatId:()=>current,pickFile:(path,callback)=>localModels.pickFile(path,callback)});
 const localModels=initLocalModels({api,getState:()=>state,notify:toast,onChange:async(model,removed)=>{
   collectSettings();state=await api('/state');
   if(model)for(const [key,cap] of [['chat_model','chat'],['create_model','create'],['edit_model','edit'],['diagram_model','create'],['music_model','music'],['video_model','video']])if(settingsDraft[key]===model.id&&!model.capabilities.includes(cap))settingsDraft[key]='';
@@ -79,6 +87,9 @@ $('#rag-enabled').closest('label').insertAdjacentHTML('afterend','<label class="
 $('#lab-tool').onchange=()=>{manimPresentation?.render();infographicsUI?.render();$('#slides-options').hidden=$('#lab-tool').value!=='slides';visualControls.render();};
 $('#slides-options').insertAdjacentHTML('beforeend',' <label>Motore <select id="slides-engine" aria-label="Motore slide"><option value="llm">LLM · HTML libero</option><option value="deterministic">Deterministico</option></select></label> <label>Stile <select id="slides-design"><option value="professional">Serio / professionale</option><option value="playful">Giocoso / colorato</option><option value="comic">Fumettoso</option></select></label> <label>Contenuto <select id="slides-detail"><option value="concise">Sintesi</option><option value="full">Testi completi</option></select></label>');
 $('#slides-options').insertAdjacentHTML('beforeend',' <label title="Rapida analizza fino a 8 figure nuove, dando precedenza alle fonti della richiesta. Le descrizioni già disponibili vengono riutilizzate; tutte le figure restano inseribili.">Figure Vision <select id="slides-vision" aria-label="Analisi figure slide"><option value="relevant">Rapida · max 8 nuove</option><option value="all">Completa · tutte</option></select></label>');
+$('#slides-options').insertAdjacentHTML('beforeend',' <label>Composizione <select id="slides-composition" aria-label="Composizione slide"><option value="standard">Classica</option><option value="rich">Ricca · stile infografica</option></select></label><p class="small-note">La composizione ricca usa HTML libero, figure e diagrammi. Le nuove illustrazioni vengono generate solo attivando Illustrazioni AI.</p>');
+$('#slides-composition').addEventListener('change',()=>{if($('#slides-composition').value==='rich'&&$('#slides-engine').value!=='llm'){$('#slides-engine').value='llm';$('#slides-engine').dispatchEvent(new Event('change',{bubbles:true}));}});
+$('#slides-engine').addEventListener('change',()=>{if($('#slides-engine').value==='deterministic'&&$('#slides-composition').value==='rich'){$('#slides-composition').value='standard';$('#slides-composition').dispatchEvent(new Event('change',{bubbles:true}));}});
 const slideImages=initSlideImages();
 const slideColors=initSlideColors();
 async function executeArtifact(lang,source){if(activeJob())throw Error('Attendi o interrompi il lavoro corrente.');if(!current)await newChat();await api('/chats/'+current+'/messages',{prompt:lang.startsWith('manim')?'Renderizza questa scena Manim':'Esegui questo calcolo con l’interprete',lab:lang.startsWith('manim')?'manim':'calculate',lab_source:source,canvas:canvasOpen,...projects.read()});await refresh();}
@@ -88,8 +99,18 @@ function localCard(model){
 }
 function activeJob(){return state?.jobs.find(j=>j.chat_id===current&&['queued','running'].includes(j.status));}
 function userJob(){return state?.jobs.find(j=>['queued','running'].includes(j.status));}
-const editVideo=act(async media=>{await chatModels.wait();if(!current)await newChat();if(!media){chooseVideoForEdit({api,onSelect:editVideo});return;}await openVideoEdit({api,chatId:current,source:media.id,busy:userJob,onQueued:async()=>{await refresh();toast('Modifiche video in coda.');}});});
-const recreateVideo=act(async media=>{await chatModels.wait();if(!current)await newChat();await openVideoRecreate({api,chatId:current,source:media?.id,busy:userJob,onQueued:async()=>{await refresh();toast('Ricreazione video in coda.');}});});
+const editVideo=act(async(media,options={})=>{
+  await chatModels.wait();if(!current)await newChat();
+  if(!media){chooseVideoForEdit({api,onSelect:(chosen,importOptions)=>editVideo(chosen,{...options,...importOptions})});return;}
+  if(media.timeline_recovery){
+    if(userJob())throw Error('Attendi o interrompi la tua richiesta in corso.');
+    const result=await api('/chats/'+current+'/video-timeline-recover',{source:media.id});
+    if(!result.timeline_id){await refresh();toast('Recupero timeline in coda, senza rigenerare gli spezzoni.');return;}
+    media={...media,id:result.timeline_id,timeline_recovery:false};
+  }
+  await openVideoEdit({api,pickFile:localModels.pickFile,chatId:current,source:media.id,busy:userJob,initialLoras:loraUI.getSelections(),...options,onQueued:async result=>{await options.onQueued?.(result);if(result?.intent==='infographic'){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}await refresh();toast(result?.intent==='infographic'?'Infografica dello spezzone in coda: comparirà nel canvas.':'Operazione sul video in coda.');}});
+});
+const recreateVideo=act(async media=>{await chatModels.wait();if(!current)await newChat();await openVideoRecreate({api,pickFile:localModels.pickFile,chatId:current,source:media?.id,busy:userJob,onQueued:async()=>{await refresh();toast('Ricreazione video in coda.');}});});
 const upscaleVideo=act(async media=>{if(!current)await newChat();await openUpscale({api,chatId:current,media,busy:userJob,onQueued:async()=>{await refresh();toast('Upscale in coda.');}});});
 const remixVideo=act(async media=>{if(!current)await newChat();await openVideoRemix({api,chatId:current,media,busy:userJob,onQueued:async()=>{await refresh();toast('Remix in coda.');}});});
 function modelName(id){return modelLabel(state?.models.find(m=>m.id===id));}
@@ -110,7 +131,7 @@ async function refresh(){
 function renderSidebar(){
   const search=$('#search').value.toLocaleLowerCase();
   const activities=chatActivities(state.jobs);
-  const signature=JSON.stringify([state.chats,state.collections,state.projects,[...activities],filter,collection,project,current,search]);if(signature===lastSidebar)return;lastSidebar=signature;
+  const signature=JSON.stringify([state.chats,state.collections,state.projects,[...activities],filter,collection,project,current,chat?.project_id,search]);if(signature===lastSidebar)return;lastSidebar=signature;
   projects.sidebar(project);
   $('#chat-count').textContent=state.chats.filter(c=>!c.archived).length;
   document.querySelectorAll('[data-filter]').forEach(b=>b.classList.toggle('active',b.dataset.filter===filter&&!collection&&!project));
@@ -168,23 +189,61 @@ function renderStatus(){
 async function newChat(){if(current)await persistCanvas();const fresh=await api('/chats',{collection_id:collection,project_id:project});await openChat(fresh.id);await refresh();$('#prompt').focus();}
 async function openChat(id){
   if(current){drafts.set(current,{prompt:$('#prompt').value,attachments:[...attachments]});await persistCanvas();}
-  current=id;chat=await api('/chats/'+id);$('#messages').innerHTML='';
+  current=id;chat=await api('/chats/'+id);chatScroll.begin();$('#messages').innerHTML='';
+  clearUnusedVideoProgress();
   const draft=drafts.get(id)||{prompt:'',attachments:[]};$('#prompt').value=draft.prompt;attachments=draft.attachments;renderAttachments();
   canvasSelection++;canvasHistory={items:[],active_id:null};canvasFollow=true;canvasDirty=false;lastCanvas='';canvasEditing=false;
   await loadCanvasHistory(id);await setCanvas(await api('/canvas/'+id));
   renderSidebar();renderStatus();await renderChat();$('#sidebar').classList.remove('visible');
-  $('#scroll-area').scrollTop=$('#scroll-area').scrollHeight;
+  chatScroll.update();
 }
+async function reloadRequest(message){
+  let draft;
+  if(state.video_options?.request_draft){
+    try{draft=await api('/chats/'+current+'/request-draft/'+message.id);}
+    catch(error){if(message.role!=='user')throw error;}
+  }
+  if(!draft){
+    const meta=message.meta||{};
+    draft={prompt:message.content,media:inputMedia(message),lab:meta.manim_presentation?'manim':'auto',
+      manim_presentation:meta.manim_presentation,loras:meta.loras||[],controls:{
+        voice:meta.voice||false,voice_fields:meta.voice_fields||{},image_model:meta.image_model||'',assistant:meta.assistant??true,
+        video:meta.video||false,video_quality:meta.video_quality||'high',video_steps:meta.video_steps??null,
+        video_model:meta.video_model||'',video_parameters:meta.video_request_parameters||{},video_segment_seconds:meta.video_segment_seconds??null,
+        video_editing:meta.video_editing||'continuous',web:meta.web||false,transcribe:meta.transcribe||false,
+        music:meta.music||false,music_fields:meta.music_fields||{},music_quality:meta.music_quality||'',music_max_duration:meta.music_max_duration??null}};
+  }
+  if(draft.video_edit){
+    await openVideoEdit({api,chatId:current,source:draft.video_edit.source,busy:()=>!!activeJob(),onQueued:async()=>{await refresh();},pickFile:(path,callback)=>localModels.pickFile(path,callback),initialEdit:draft.video_edit,initialReferences:draft.media.filter(m=>m.mime?.startsWith('image/')),initialModel:draft.controls.video_model,initialParameters:draft.controls.video_parameters,initialSteps:draft.controls.video_steps,initialAssistant:draft.controls.assistant,segmentSeconds:draft.video_edit.segment_seconds});
+    toast('Modifica originale recuperata: clip, riferimenti e impostazioni sono pronti.');return;
+  }
+  $('#prompt').value=draft.prompt;attachments=[...draft.media];
+  $('#lab-tool').value=draft.lab||'auto';$('#lab-tool').dispatchEvent(new Event('change',{bubbles:true}));
+  manimPresentation?.set(draft.manim_presentation?{enabled:true,...draft.manim_presentation}:null);
+  loraUI.setSelections(draft.loras||[]);visualControls.set(draft.controls);
+  if(draft.slides)for(const [key,id] of Object.entries({count:'slides-count',format:'slides-format',engine:'slides-engine',design:'slides-design',detail:'slides-detail',composition:'slides-composition',vision_scope:'slides-vision'})){
+    const input=$('#'+id);if(input&&draft.slides[key]!=null){input.value=String(draft.slides[key]);input.dispatchEvent(new Event('change',{bubbles:true}));}
+  }
+  renderAttachments();composerUI?.render();$('#prompt').scrollIntoView({block:'center'});$('#prompt').focus();
+  toast('Richiesta caricata. Modificala e premi Invia.');
+}
+
 async function renderChat(){
   $('#welcome').hidden=!!chat?.messages.length;
   if(!chat)return;
-  const scroll=$('#scroll-area'),atBottom=scroll.scrollHeight-scroll.scrollTop-scroll.clientHeight<130;
+  await resolveVideoEditInputs(chat,state.jobs,api);
   for(const message of chat.messages){
     const pending=message.role==='assistant'&&['queued','running'].includes(message.status);
     const job=pending?(state.jobs.find(j=>j.message_id===message.id)||activeJob()):null;
     const timing=requestTiming(message,job,state.server_time??Date.now()/1000);
-    let article=document.getElementById('msg-'+message.id);const signature=JSON.stringify([message.content,message.status,message.media,message.meta,state.settings.chat_advanced,pending?job?.stage:null,timing?.text]);
+    let article=document.getElementById('msg-'+message.id);const signature=JSON.stringify([message.content,message.status,message.media,message.display_media,message.meta,state.settings.chat_advanced,pending?job?.stage:null,timing?.text]);
     if(article?.dataset.signature===signature)continue;
+    if(pending&&article?.querySelector('.video-progress')&&article.dataset.progressContent===message.content){
+      article.dataset.signature=signature;
+      const stage=article.querySelector('.activity-stage'),elapsed=article.querySelector('.activity-elapsed');
+      if(stage)stage.textContent=job?.stage||'Preparazione del motore…';if(elapsed)elapsed.textContent=timing?.text||'';
+      continue;
+    }
     if(!article){article=document.createElement('article');article.id='msg-'+message.id;article.className='message '+message.role;$('#messages').append(article);}
     article.dataset.signature=signature;
     article.innerHTML=`<div class="message-head">${message.role==='user'?'<span class="user-avatar">TU</span>':'<img src="/static/icon.svg" alt="">'}<strong>${message.role==='user'?'Tu':'H3 Chat'}</strong><span>${message.meta.model?esc(message.meta.model_identity?.label||message.meta.model):''}</span>${message.meta.canvas?'<span class="badge">Canvas</span>':''}</div><div class="message-content ${message.role==='assistant'?'rich':''}"></div><div class="message-actions"></div>`;
@@ -197,7 +256,13 @@ async function renderChat(){
       activity.innerHTML=`<div class="thinking" aria-hidden="true"><i></i><i></i><i></i></div><div><strong>${esc(title)}</strong><span class="activity-stage">${esc(job?.stage||'Preparazione del motore…')}</span><small class="activity-elapsed">${esc(timing?.text||'Preparazione del cronometro…')}</small></div>`;
       content.append(activity);
     }
-    appendMedia(content,message.media,{api,onEditVideo:message.role==='assistant'&&message.status==='done'?editVideo:null,onRecreateVideo:message.role==='assistant'&&message.status==='done'?recreateVideo:null,onUpscaleVideo:upscaleVideo,onRemixVideo:remixVideo});appendMusicDetails(content,message,state.settings.chat_advanced);appendVideoDetails(content,message,state.settings.chat_advanced);appendToolsDetails(content,message,state.settings.chat_advanced);
+    appendMedia(content,inputMedia(message),{api,videoMeta:message.role==='assistant'?message.meta:undefined,onEditVideo:message.role==='assistant'&&message.status==='done'?editVideo:null,onRecreateVideo:message.role==='assistant'&&message.status==='done'?recreateVideo:null,onUpscaleVideo:upscaleVideo,onRemixVideo:remixVideo});appendMusicDetails(content,message,state.settings.chat_advanced);appendVideoDetails(content,message,state.settings.chat_advanced);appendToolsDetails(content,message,state.settings.chat_advanced);
+    if(pending&&message.meta.intent==='video'){
+      const inputs=message.meta.references||chat.messages.slice(0,chat.messages.indexOf(message)).filter(m=>m.role==='user').at(-1)?.media||[];
+      appendVideoProgress(content,{job,message,audios:inputs.filter(m=>m.mime.startsWith('audio/'))});
+      appendVideoActivity(article.querySelector('.message-actions'),{job,message,api});
+      article.dataset.progressContent=message.content;
+    }
     if(message.role==='assistant')projects.append(content,message);
     if(message.meta.quote_warnings?.length){const warning=document.createElement('p');warning.className='render-error';warning.textContent='Citazione letterale da verificare: '+message.meta.quote_warnings.join(' ');content.append(warning);}
     if(message.meta.slide_warning){const warning=document.createElement('p');warning.className='small-note';warning.textContent=message.meta.slide_warning;content.append(warning);}
@@ -225,9 +290,12 @@ async function renderChat(){
       });actions.append(toCanvas);
       if(message.meta.finish_reason==='length'){const note=document.createElement('span');note.textContent='Limite di risposta raggiunto';actions.append(note);}
     }
-    if(message.role==='user'){const repeat=document.createElement('button');repeat.className='text-button';repeat.textContent='Riutilizza';repeat.onclick=()=>{$('#prompt').value=message.content;attachments=[...message.media];if(message.meta.manim_presentation){$('#lab-tool').value='manim';composerUI?.render();}manimPresentation?.set(message.meta.manim_presentation?{enabled:true,...message.meta.manim_presentation}:null);loraUI.setSelections(message.meta.loras||[]);visualControls.set({voice:message.meta.voice||false,voice_fields:message.meta.voice_fields||{},image_model:message.meta.image_model||'',assistant:message.meta.assistant??true,video:message.meta.video||false,video_quality:message.meta.video_quality||'high',video_editing:message.meta.video_editing||'continuous',web:message.meta.web||false,transcribe:message.meta.transcribe||false,music:message.meta.music||false,music_fields:message.meta.music_fields||{},music_quality:message.meta.music_quality||'',music_max_duration:message.meta.music_max_duration??null});renderAttachments();$('#prompt').focus();};actions.append(repeat);}
+    appendVideoResume(actions,{api,message,chatId:current,busy:()=>!!userJob(),onQueued:()=>refresh(),notify:toast});
+    if(message.role==='user'){const repeat=document.createElement('button');repeat.className='text-button';repeat.textContent='Riutilizza';repeat.onclick=act(()=>reloadRequest(message));actions.append(repeat);}
+    if(message.role==='assistant'&&!pending){const reload=document.createElement('button');reload.className='text-button';reload.textContent='Ricarica richiesta';reload.disabled=!state.video_options?.request_draft;reload.onclick=act(()=>reloadRequest(message));actions.append(reload);}
+    collapseInput(article,message);
   }
-  if(atBottom)scroll.scrollTop=scroll.scrollHeight;
+  clearUnusedVideoProgress();chatScroll.update();
 }
 function renderAttachments(){
  let image=0,audio=0,document=0;
@@ -237,23 +305,21 @@ function renderAttachments(){
 async function uploadFiles(files){
  if(attachments.length+files.length>12)throw Error('Massimo 12 allegati per messaggio.');
  for(const file of files){
-  const video=file.type.startsWith('video/')||/\.mp4$/i.test(file.name),sound=file.type.startsWith('audio/')||/\.(wav|mp3|flac|ogg)$/i.test(file.name),doc=/\.(pdf|docx|pptx)$/i.test(file.name);
-  const category=video?'video/':doc?'application/':sound?'audio/':'image/';
-  if(attachments.filter(x=>x.mime.startsWith(category)).length>=(doc||sound?3:9))throw Error(doc?'Massimo tre documenti.':sound?'Massimo tre audio.':'Massimo nove immagini; il modello mantiene il proprio limite.');
-  if(!video&&!doc&&!sound&&!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Scegli immagini, audio WAV/MP3/FLAC/OGG, PDF, Word .docx PowerPoint .pptx o video MP4.');
-  if(file.size>(doc?25:sound||video?64:12)*1024*1024)throw Error(doc?'Documenti: massimo 25 MB.':video?'Video: massimo 64 MB.':sound?'Audio: massimo 64 MB.':'Immagini: massimo 12 MB.');
-  let source=file;
-  if(!video&&!sound&&!doc){const bitmap=await createImageBitmap(file);if(Math.max(bitmap.width,bitmap.height)>8192){bitmap.close();throw Error('Massimo 8192 pixel.');}
-   if(file.type==='image/webp'){const c=document.createElement('canvas');c.width=bitmap.width;c.height=bitmap.height;c.getContext('2d').drawImage(bitmap,0,0);source=await new Promise(r=>c.toBlob(r,'image/png'));}bitmap.close();}
-  const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=reject;reader.readAsDataURL(source);});
-  attachments.push(await api('/uploads',{name:file.name,data}));renderAttachments();
+  toast('Caricamento · '+file.name);
+  const item=await uploadFile(file,{api,onProgress:(bytes,total)=>toast('Caricamento · '+file.name+' · '+Math.round(bytes/total*100)+'%')});
+  attachments.push(item);renderAttachments();
  }
 }
 async function send(event){event.preventDefault();if(userJob())return;const prompt=$('#prompt').value.trim();if(!prompt)return;
   $('#send').disabled=true;
   try{await chatModels.wait();if(!current){const fresh=await api('/chats',{collection_id:collection,project_id:project});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);manimPresentation?.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
-    await persistCanvas();const presentation=await manimPresentation.prepare();const sent=await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,...presentation,...visualControls.read(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='infographic'?{infographic:infographicsUI.read()}:{}),...($('#lab-tool').value==='slides'?{slides:{engine:$('#slides-engine').value,count:Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value,vision_scope:$('#slides-vision').value,...slideColors.read(),...slideImages.read()}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()});
-    if(['slides','infographic'].includes(sent.intent)){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}
+    await persistCanvas();const controls=visualControls.read();
+    if(controls.video&&controls.video_editing==='modify'){
+      const videos=attachments.filter(x=>x.mime?.startsWith('video/'));if(videos.length>1)throw Error('Scegli un solo video da modificare.');
+      await editVideo(videos[0],{initialPrompt:prompt,initialReferences:attachments.filter(x=>x.mime?.startsWith('image/')),initialSteps:controls.video_steps,initialAssistant:controls.assistant,initialModel:controls.video_model||undefined,initialParameters:controls.video_parameters||{},onQueued:async()=>{$('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);}});return;
+    }
+    const presentation=await manimPresentation.prepare();const sent=await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,...presentation,...visualControls.request(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='infographic'?{infographic:infographicsUI.read()}:{}),...($('#lab-tool').value==='slides'?{slides:{engine:$('#slides-engine').value,count:Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value,composition:$('#slides-composition').value,vision_scope:$('#slides-vision').value,...slideColors.read(),...slideImages.read()}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()});
+    if(['slides','infographic','image_batch'].includes(sent.intent)){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}
     $('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);await refresh();
   }finally{$('#send').disabled=false;}
 }
@@ -322,7 +388,7 @@ async function renderCanvas(){
   const isDeck=canvas.content.startsWith('```h3-slides\n');$('#canvas-source-tab').textContent=isDeck?'Sorgente slide':'Modifica';$('#canvas-source').ariaLabel=isDeck?'Sorgente della presentazione':'Sorgente canvas';
   for(const kind of ['html','pptx']){const button=document.querySelector('[data-export="'+kind+'"]');if(button)button.hidden=!isDeck;}
   if(!canvasEditing){const value={...canvas,media:[...canvas.media]},entry=canvasHistory.items.find(x=>x.id===value.id),message=(chat?.messages||[]).find(m=>m.id===entry?.message_id)||[...(chat?.messages||[])].reverse().find(m=>m.meta?.artifact?.content===value.content||m.content===value.content);renderQueue=renderQueue.catch(()=>{}).then(async()=>{const options={final:!activeJob()?.canvas||value.id!==canvasHistory.active_id,sources:message?.meta?.rag_sources||[],onCitation:(s,all)=>projects.citation(s,all,message),onExecute:act(executeArtifact)};
-    if(isDeck){try{await renderSlides($('#canvas-preview'),value,{...options,api,chatId:current,editable:!userJob(),onRegenerate:async(page,prompt)=>{
+    if(isDeck){try{await renderSlides($('#canvas-preview'),value,{...options,api,chatId:current,editable:!userJob(),onTimelineQueued:async()=>{await refresh();toast('Sostituzione nella timeline in coda. Il montaggio finale resta separato.');},onRegenerate:async(page,prompt)=>{
       if(userJob())throw Error('Attendi o interrompi la tua richiesta in corso.');
       await chatModels.wait();await persistCanvas();
       await api('/canvas/'+current+'/slides/regenerate',{artifact_id:canvas.id,page,prompt,think_level:$('#think-level').value});
@@ -481,7 +547,8 @@ document.addEventListener('click',e=>{if(!e.target.closest('#context-menu,[data-
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();act(newChat)();}if(e.key==='Escape'){$('#context-menu').hidden=true;$('#sidebar').classList.remove('visible');}});
 $('#mobile-nav').onclick=()=>$('#sidebar').classList.toggle('visible');
 $('#attach').onclick=()=>$('#file-input').click();$('#file-input').onchange=act(async e=>{await uploadFiles([...e.target.files]);e.target.value='';});
-initGallery({api,getAttachments:()=>attachments,setAttachments:items=>{attachments=items;renderAttachments();},notify:toast});
+initGallery({api,getAttachments:()=>attachments,setAttachments:items=>{attachments=items;renderAttachments();},notify:toast,
+ actions:{edit:async(media,item)=>{if(item.chat_id&&item.chat_id!==current)await openChat(item.chat_id);await editVideo(media);},recreate:recreateVideo,remix:remixVideo,upscale:upscaleVideo}});
 const upscaleOpen=document.createElement('button');upscaleOpen.type='button';upscaleOpen.className='btn small';upscaleOpen.id='upscale-open';upscaleOpen.textContent='↗ Upscale';upscaleOpen.title='Migliora un video dalla galleria o dal PC';$('#gallery-open').after(upscaleOpen);upscaleOpen.onclick=()=>upscaleVideo();
 const recreateOpen=document.createElement('button');recreateOpen.type='button';recreateOpen.className='btn small';recreateOpen.id='video-recreate-open';recreateOpen.textContent='↻ Ricrea video';recreateOpen.title='Recupera prompt, riferimenti e audio di un video MiniMax dalla galleria';upscaleOpen.after(recreateOpen);recreateOpen.onclick=()=>recreateVideo();
 const remixOpen=document.createElement('button');remixOpen.type='button';remixOpen.className='btn small';remixOpen.id='video-remix-open';remixOpen.textContent='♫ Remix';recreateOpen.after(remixOpen);remixOpen.onclick=()=>remixVideo();
@@ -519,7 +586,9 @@ $('#canvas-write').onclick=$('#canvas-source-tab').onclick;
 $('#canvas-title').oninput=canvasChanged;$('#canvas-source').oninput=canvasChanged;$('#canvas-save').onclick=act(async()=>{await persistCanvas();toast('Canvas salvato.');});
 document.querySelector('[data-export="md"]').insertAdjacentHTML('afterend','<button class="btn small" data-export="html" hidden>HTML</button><button class="btn small" data-export="pptx" hidden>PowerPoint</button>');
 document.querySelectorAll('[data-export]').forEach(b=>b.onclick=act(async()=>{if(activeJob()?.canvas&&canvas.id===canvasHistory.active_id)throw Error('Attendi che il documento sia completo prima di esportare.');await persistCanvas();if(!canvas.content&&!canvas.media.length)throw Error('Il canvas è vuoto.');canvasEditing=false;await renderCanvas();const root=$('#canvas-preview');$('#canvas-panel').classList.add('exporting');try{if(b.dataset.export==='md')saveBlob(new Blob([canvas.content],{type:'text/markdown;charset=utf-8'}),canvas.title+'.md');else if(readDeck(canvas.content))await exportSlides(canvas,b.dataset.export,state.token);else{if(b.dataset.export==='pdf')await exportPdf(root,canvas.title,state.token);if(b.dataset.export==='docx')await exportDocx(root,canvas.title);if(b.dataset.export==='png')await exportPng(root,canvas.title);}toast('Esportazione pronta.');}finally{$('#canvas-panel').classList.remove('exporting');}}));
-composerUI=initComposerPanel({getState:()=>state,visualControls,getAttachments:()=>attachments,notify:toast});
+composerUI=initComposerPanel({getState:()=>state,visualControls,getAttachments:()=>attachments,notify:toast,
+ getLastImageSeed:model=>api('/images/last-seed?model='+encodeURIComponent(model)),
+ saveImagePresets:async presets=>{const settings=await api('/settings',{moss_presets:presets});state.settings=settings;if(settingsDraft)settingsDraft.moss_presets=structuredClone(settings.moss_presets);}});
 infographicsUI=initInfographics({getState:()=>state,getAttachments:()=>attachments,uploadVideo:uploadFiles,notify:toast});
 manimPresentation=initManimPresentation({getAttachments:()=>attachments,getCanvas:()=>canvas,getState:()=>state,getChatId:()=>current,api,notify:toast});
 document.querySelector('#composer').addEventListener('change',()=>manimPresentation.render());

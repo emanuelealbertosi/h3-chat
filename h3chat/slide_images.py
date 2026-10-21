@@ -79,6 +79,7 @@ def request(app,operation,body):
             provenance={'kind':'web','url':body.get('source_url',''),'credit':str(body.get('credit',''))[:300],'license':str(body.get('license',''))[:150]}
         else:raise ValueError('Origine immagine non valida.')
         media=app.upload({'name':name,'data':base64.b64encode(raster(app,raw)).decode()});media['provenance']=provenance
-        safe_join(app.data,media['path']).with_suffix('.json').write_text(json.dumps(media),encoding='utf-8')
+        # Uploads use per-file directories; validation reads this canonical record.
+        safe_join(app.data,'uploads/'+media['id']+'.json').write_text(json.dumps(media),encoding='utf-8')
         return media
     raise ValueError('Operazione immagini sconosciuta.')

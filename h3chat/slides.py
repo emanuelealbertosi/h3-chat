@@ -93,7 +93,7 @@ def edit_options(prompt,content):
     if extra:count+=1 if extra[1].lower() in ('un','una') else int(extra[1])
     # An addition specifies an increment, not the new total.
     return options(prompt[:extra.start()]+prompt[extra.end():] if extra else prompt,
-                   {'count':count,'format':deck['format'],'engine':deck.get('engine','deterministic')}|{k:deck[k] for k in ('theme','typography','design','detail','engine','vision_scope','background','background_color','palette') if k in deck})
+                   {'count':count,'format':deck['format'],'engine':deck.get('engine','deterministic')}|{k:deck[k] for k in ('theme','typography','design','detail','composition','engine','vision_scope','background','background_color','palette') if k in deck})
 
 
 def options(prompt, body=None):
@@ -119,7 +119,7 @@ def options(prompt, body=None):
     if body.get('vision_scope','relevant') not in ('relevant','all'):raise ValueError('Analisi figure slide non valida.')
     if 'vision_scope' in body:result['vision_scope']=body['vision_scope']
     if re.search(r'\b(?:analizza\w*|esamina\w*|leggi)\s+tutte\s+le\s+(?:immagini|figure)\b',prompt,re.I):result['vision_scope']='all'
-    for key,allowed in (('theme',THEMES),('typography',TYPOGRAPHY),('design',DESIGNS),('detail',('concise','full'))):
+    for key,allowed in (('theme',THEMES),('typography',TYPOGRAPHY),('design',DESIGNS),('detail',('concise','full')),('composition',('standard','rich'))):
         if key in body:
             if body[key] not in allowed:raise ValueError('Tema o tipografia delle slide non validi.')
             result[key]=body[key]
@@ -130,6 +130,9 @@ def options(prompt, body=None):
         if re.search(pattern,prompt,re.I):result['design']=design;break
     if re.search(r'\b(?:test[oi]\s+(?:complet[oi]|estes[oi]|integral[ei]|dettagliat[oi])|discorsiv[oa]|senza\s+sintetizzare|non\s+solo\s+(?:titoli|headlines?)|full\s+text)\b',prompt,re.I):result['detail']='full'
     elif re.search(r'\b(?:sintetic[oa]|solo\s+(?:titoli|headlines?)|in\s+sintesi)\b',prompt,re.I):result['detail']='concise'
+    if re.search(r'\b(?:composizione\s+ricca|grafica\s+ricca|stile\s+infografic[oa]|come\s+(?:le\s+)?infografiche)\b',prompt,re.I):result['composition']='rich'
+    elif re.search(r'\b(?:composizione\s+classica|grafica\s+essenziale|stile\s+minimalista)\b',prompt,re.I):result['composition']='standard'
+    if result.get('composition')=='rich':result['engine']='llm'
     from .slide_colors import options as color_options
     result.update(color_options(body))
     return result
@@ -310,6 +313,7 @@ def validate_content(content, media):
     if deck.get('engine','deterministic') not in ('llm','deterministic'):raise ValueError('Motore slide non valido.')
     if deck.get('theme','lagoon') not in THEMES or deck.get('typography','modern') not in TYPOGRAPHY:raise ValueError('Tema slide non valido.')
     if deck.get('design','professional') not in DESIGNS or deck.get('detail','concise') not in ('concise','full'):raise ValueError('Stile o dettaglio slide non valido.')
+    if deck.get('composition','standard') not in ('standard','rich'):raise ValueError('Composizione slide non valida.')
     from .slide_colors import options as color_options
     color_options(deck)
     if 'title' in deck and (not isinstance(deck['title'],str) or len(deck['title'])>150):raise ValueError('Titolo presentazione non valido.')
@@ -379,8 +383,9 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     from .slide_html import BRIEF as HTML_BRIEF
     base[0]['content']+='\n'+(HTML_BRIEF if opts['engine']=='llm' else BRIEF)
     base[0]['content']+='\nOPZIONI DELLA PRESENTAZIONE: '+json.dumps({k:opts.get(k,default) for k,default in (('design','professional'),('detail','concise'))},ensure_ascii=False)+'. detail=full richiede testi e spiegazioni completi, non una lista di headline.'
-    from .slide_style import brief as style_brief
+    from .slide_style import brief as style_brief,composition_brief
     base[0]['content']+='\n'+style_brief(opts.get('design','professional'))
+    base[0]['content']+='\n'+composition_brief(opts.get('composition','standard'))
     if opts['engine']=='llm':
         from .slide_colors import brief as color_brief
         base[0]['content']+=color_brief(opts)
@@ -394,19 +399,49 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
         outline_schema['properties']['visual_direction']=TEXT
         outline_schema['required'].append('visual_direction')
     request=base+[{'role':'user','content':f"Progetta esattamente {opts['count']} slide, formato {opts['format']}. Solo titolo della presentazione e scaletta con titolo/obiettivo di ogni pagina. Rispetta la richiesta e le fonti già fornite."}]
-    if opts['engine']=='llm':request[-1]['content']+=' In visual_direction rendi concreto lo STILE VISIVO scelto: indica palette con colori, font e gerarchie, forme, ritmo dei layout e trattamento delle immagini. Non usare una direzione generica intercambiabile tra serio, giocoso e fumettoso. Niente template di card ripetute.'
+    if opts['engine']=='llm':request[-1]['content']+=' In visual_direction rendi concreto lo STILE VISIVO scelto: indica palette con colori, font e gerarchie, forme, ritmo dei layout e trattamento delle immagini. Non usare una direzione generica intercambiabile tra serio, giocoso e fumettoso. Niente template di card ripetute. La composizione richiesta per questo lancio prevale sui vecchi artefatti: non ereditare da essi limiti di parole, divieti di immagini o regole minimaliste. La direzione artistica non deve introdurre nuovi limiti ai contenuti.'
     started=time.monotonic();last=0
     def plan_progress(text):
         nonlocal last
         if text and time.monotonic()-last>.8:
             stage(f'Slide · scaletta breve · {len(text)} caratteri ricevuti · Think Off');last=time.monotonic()
-    raw,finish=app.engine.completion(request, planning, cancel, on_text=plan_progress, schema=outline_schema)
+    ceiling=min(settings['max_tokens'],max(768,settings['context']//2),16000)
+    for attempt in range(2):
+        raw,finish=app.engine.completion(request, planning, cancel, on_text=plan_progress, schema=outline_schema)
+        if finish!='length':break
+        meta['slide_outline_truncated']={'budget':planning['max_tokens'],'characters':len(raw)}
+        if attempt or planning['max_tokens']>=ceiling:
+            raise ValueError(f"Scaletta interrotta dopo {planning['max_tokens']} token di output: il modello non ha completato {opts['count']} titoli e obiettivi. Riduci la verbosità o scegli un modello che rispetti lo schema; aumenta Max token solo se inferiore a questo budget.")
+        planning=planning|{'max_tokens':min(ceiling,max(4096,planning['max_tokens']*2))}
+        stage(f"Slide · scaletta troncata · nuovo tentativo con {planning['max_tokens']} token")
+        request=request+[{'role':'user','content':'La scaletta precedente si è interrotta al limite interno di output. Riscrivi il JSON completo: titoli brevi, un solo obiettivo conciso per pagina, direzione visiva compatta. Non sviluppare ancora i contenuti delle slide e non ripetere le fonti in ogni obiettivo.'}]
     meta.setdefault('slide_timing',{})['planning_seconds']=round(time.monotonic()-started,2)
-    if finish=='length': raise ValueError('Scaletta incompleta: aumenta Max token del modello LLM.')
     outline=json.loads(raw)
     if not isinstance(outline,dict) or not isinstance(outline.get('title'),str) or not isinstance(outline.get('slides'),list) or len(outline['slides'])!=opts['count']: raise ValueError('Scaletta slide non valida.')
     for row in outline['slides']:
         if not isinstance(row,dict) or any(not isinstance(row.get(k),str) or len(row[k])>1500 for k in ('title','purpose')): raise ValueError('Scaletta slide non valida.')
+    if opts['engine']=='llm':
+        from .slide_editorial import prepare as prepare_editorial,recover_drafts
+        started=time.monotonic();meta['slide_editorial_plan']=[]
+        recovery_job,recovery_plans=recover_drafts(app,job,payload,opts)
+        if recovery_plans:meta['slide_editorial_recovery']={'job_id':recovery_job,'draft_pages':len(recovery_plans),'mode':'rechecked_drafts'}
+        meta['slide_outline']=outline
+        meta['slide_editorial_catalog']=references
+        def checkpoint_editorial():
+            target=app.data/'outputs'/job['id']/'editorial-state.json'
+            target.parent.mkdir(parents=True,exist_ok=True)
+            target.write_text(json.dumps({k:meta[k] for k in ('slide_outline','slide_editorial_catalog','slide_editorial_plan','slide_editorial_invalid') if k in meta},ensure_ascii=False),encoding='utf-8')
+        def save_editorial(index,value):
+            meta['slide_editorial_plan'].append({'slide':index+1,**value})
+            checkpoint_editorial()
+            app.store.update_answer(job,'Sto preparando contenuti e note delle slide.',meta=meta)
+        def save_invalid_editorial(index,raw,error):
+            meta['slide_editorial_invalid']={'slide':index+1,'raw':raw,'error':error}
+            checkpoint_editorial()
+            app.store.update_answer(job,'Sto verificando i riferimenti delle slide.',meta=meta)
+        checkpoint_editorial()
+        prepare_editorial(app.engine,base,outline,settings,cancel,stage,refs,save_editorial,save_invalid_editorial,recovery_plans)
+        meta.setdefault('slide_timing',{})['editorial_seconds']=round(time.monotonic()-started,2)
     if opts.get('generate_images',False):
         from .slide_generation_images import create
         generated,captions=create(app,job,outline,base,settings|{'_slides':opts},model,cancel,stage,log_path,meta)
@@ -417,8 +452,12 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     pages=[]
     for row in outline['slides']:
         pages.append({'title':row['title'][:150], 'purpose':row['purpose'], 'status':'pending','nodes':[], 'notes':'','sources':[]})
+        if 'editorial' in row:
+            editorial=row['editorial']
+            pages[-1].update(notes=editorial['notes'],sources=list(editorial['sources']),
+                editorial={k:editorial[k] for k in ('content','visual_plan')})
     deck={'version':1,'engine':opts['engine'],'format':opts['format'],'theme':opts.get('theme','lagoon'),'typography':opts.get('typography','modern'),
-          'design':opts.get('design','professional'),'detail':opts.get('detail','concise'),'vision_scope':opts.get('vision_scope','relevant'),
+          'design':opts.get('design','professional'),'detail':opts.get('detail','concise'),'composition':opts.get('composition','standard'),'vision_scope':opts.get('vision_scope','relevant'),
           'title':outline['title'][:150] or 'Presentazione','references':references,'pages':pages,'active':0}
     direction=outline.get('visual_direction','')
     if not isinstance(direction,str):raise ValueError('Direzione artistica delle slide non valida.')
@@ -440,7 +479,8 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
             from .slide_html import source,generate as generate_html,include_planned_images
             previous=pages[index-1].get('html','') if index else ''
             previous=previous[:max(800,min(4000,budget(settings,history)//4))]
-            request=base+([{'role':'assistant','content':previous}] if previous else [])+[{'role':'user','content':f"Crea SOLO la pagina {index+1}/{len(pages)}: {page['title']}\nObiettivo: {page['purpose']}\nViewport {FORMATS[opts['format']][0]}x{FORMATS[opts['format']][1]} px.\nSequenza completa: "+json.dumps(outline['slides'],ensure_ascii=False)+"\nMantieni coerenza con la pagina precedente, ma inventa una composizione adatta a questo contenuto. Restituisci subito HTML e CSS completi."}]
+            request=base+([{'role':'assistant','content':previous}] if previous else [])+[{'role':'user','content':f"Crea SOLO la pagina {index+1}/{len(pages)}: {page['title']}\nObiettivo: {page['purpose']}\nViewport {FORMATS[opts['format']][0]}x{FORMATS[opts['format']][1]} px.\nSequenza completa: "+json.dumps([{k:row[k] for k in ('title','purpose')} for row in outline['slides']],ensure_ascii=False)+"\nMantieni coerenza con la pagina precedente, ma inventa una composizione adatta a questo contenuto. Restituisci subito HTML e CSS completi."}]
+            request[-1]['content']+='\nCONTENUTI EDITORIALI PREPARATI PER QUESTA PAGINA:\n'+json.dumps(page['editorial'],ensure_ascii=False)+'\nComponi i contenuti visibili preparati: conserva spiegazioni, esempi e fonti, senza ridurli a slogan o sostituirli con una sola illustrazione. Non stampare istruzioni grafiche. Le note relatore sono già salvate separatamente; non trasferire nelle note il testo destinato alla slide. Rispetta comunque i vincoli espliciti della richiesta.'
             request[-1]['content']+='\nDirezione artistica: '+deck['visual_direction']
             planned=[{'id':item['asset_id'],'description':item['description']} for item in meta.get('slide_image_plan',[]) if item['slide']==index+1]
             if planned:request[-1]['content']+='\nIllustrazioni già generate PER QUESTA PAGINA: '+json.dumps(planned,ensure_ascii=False)+'\nIncludile tutte come <img data-asset-id="ID">, conservando le proporzioni e i limiti della pagina.'
@@ -454,7 +494,7 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
                 html=generate_html(app.engine,request,settings,cancel,stream_html,stage,f'Slide {index+1}')
                 page['html'],missing=include_planned_images(app.engine,request,settings,cancel,html,planned,stream_html,stage,index+1)
                 if missing:page['image_warning']='Il modello non ha inserito tutte le illustrazioni previste per questa pagina. Puoi aggiungerle con Modifica grafica.'
-                page['sources']=[r['id'] for r in references if '['+r['id']+']' in page['html']]
+                page['sources']=[r['id'] for r in references if r['id'] in page['sources'] or '['+r['id']+']' in page['html']]
                 page['status']='ready';publish()
             except Exception:
                 page['status']='interrupted';publish();raise

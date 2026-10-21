@@ -164,5 +164,6 @@ class StoryboardServiceTests(unittest.TestCase):
         self.assertEqual(payload['settings']['_video_editing'],'storyboard')
         self.assertEqual(self.app.store.chat(chat['id'])['messages'][0]['meta']['video_editing'],'storyboard')
         self.app.store.execute("UPDATE jobs SET status='done' WHERE id=?",(job,))
-        with patch.object(self.app.engine,'require_model'):
-            self.app.send(chat['id'],{'prompt':'Un ritratto','image_model':self.model['id'],'assistant':False,'video_editing':'storyboard'})
+        image={'id':'image-fixture','name':'Image fixture','architecture':'sd15','engine':'sd','capabilities':['create']}
+        with patch.object(self.app.engine,'require_model',return_value=image):
+            self.app.send(chat['id'],{'prompt':'Un ritratto','image_model':image['id'],'assistant':False,'video_editing':'storyboard'})

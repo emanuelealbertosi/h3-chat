@@ -112,6 +112,31 @@ class VisualModelsTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError,'istruzioni valide'):
                     self.app.engine.refine_image_prompt([], 'cat', [], self.settings, threading.Event(), self.base/'log', lambda _:None,image_model={'name':'Anima','architecture':'anima'})
 
+    def test_moss_assistant_translates_positions_with_prompt_dimensions_and_preserves_text(self):
+        from h3chat.external_models import PROFILES
+        target={'id':'moss-layout','name':'MOSS',**PROFILES['moss']}
+        original='1500x1000, titolo "Ciao!" in alto e un gatto a sinistra'
+        planned={'summary':'A cat with a title.','items':[{'label':'text','caption':'Greeting at the top','text':'Ciao!','bbox':[100,0,900,200]},
+                  {'label':'object','caption':'A cat on the left','text':'','bbox':[0,300,400,1000]}]}
+        with patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',return_value=(json.dumps(planned),'stop')) as completion:
+            prompt,info=self.app.engine.refine_image_prompt([],original,[],self.settings,threading.Event(),self.base/'log',lambda _:None,image_model=target)
+        layout=json.loads(prompt)
+        self.assertEqual(layout['items'][0]['bbox'],[-500,-600,-300,600]);self.assertEqual(layout['items'][0]['text'],'Ciao!')
+        self.assertEqual(info['prompt_format'],'layout');self.assertIn('1500 pixels wide',completion.call_args.args[0][0]['content'])
+        with patch.object(self.app.engine,'start_llama') as start,patch.object(self.app.engine,'completion') as completion:
+            again,_=self.app.engine.refine_image_prompt([],prompt,[],self.settings,threading.Event(),self.base/'log',lambda _:None,image_model=target)
+        self.assertEqual(again,prompt);start.assert_not_called();completion.assert_not_called()
+
+    def test_moss_assistant_off_keeps_spatial_prompt_unchanged(self):
+        target=self.app.external_model({'profile':'moss','files':self.ming['external_config']['files']})
+        chat=self.app.store.create_chat();original='Un gatto a sinistra e un albero a destra, 1500x1000'
+        ticket=self.app.send(chat['id'],{'prompt':original,'image_model':target['id'],'assistant':False})
+        job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(ticket['job_id'],))
+        with patch.object(self.app.engine,'refine_image_prompt') as refine,patch.object(self.app.engine,'generate',return_value={'id':job['id'],'mime':'image/png','path':'image.png','name':'image.png'}) as generate:
+            self.app.execute_job(job,threading.Event())
+        refine.assert_not_called();self.assertEqual(generate.call_args.args[2],original)
+        self.assertEqual(generate.call_args.args[1]['_image_options']['width'],1500)
+
     def test_native_assistant_on_targets_selected_model_and_off_needs_no_llm(self):
         for profile in ('anima','sdxl'):
             files=self.ming['external_config']['files'] if profile=='anima' else {'model':self.ming['external_config']['files']['diffusion']}

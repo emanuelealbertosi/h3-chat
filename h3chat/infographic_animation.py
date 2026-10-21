@@ -5,8 +5,9 @@ from .slide_html import BRIEF,validate,InvalidPage
 from .downloads import Cancelled
 from .infographic_text import EFFECTS
 from .remote_llm import EmptyCompletion
+from .slide_style import composition_brief
 
-HTML_BRIEF=BRIEF.replace('HTML statico completo.','HTML/CSS completo: le animazioni vengono interpretate dal motore tramite gli attributi data-motion, senza JavaScript.')
+HTML_BRIEF=BRIEF.replace('HTML statico completo.','HTML/CSS completo: le animazioni vengono interpretate dal motore tramite gli attributi data-motion, senza JavaScript.')+'\n'+composition_brief('rich')
 BRIEF_MOTION='Assegna agli elementi visibili data-motion="fade|slide|zoom|pan|blur|wipe|strobe|typewriter|appear|bump|drop|wave|flip", data-start e data-duration in secondi; data-out è opzionale. Distribuisci gli ingressi lungo la scena, con una regia coerente con la narrazione. Non limitarti a una pagina statica. Nessun JavaScript, CSS animation o transition.'
 
 def playable(html,duration):

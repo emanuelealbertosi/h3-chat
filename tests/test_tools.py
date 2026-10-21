@@ -76,11 +76,14 @@ class ToolsTests(unittest.TestCase):
         history=[{'role':'user','seq':1,'content':'Leggi il PDF','media':[item]}]
         enriched,meta,_,_=self.app.engine.prepare_tools(history,{'media':[item],'prompt':'Leggi il PDF'},DEFAULTS|{'chat_model':'vision-fixture'},threading.Event(),lambda _:None,self.data/'vision.log')
         self.assertEqual(len(enriched[-1]['media']),2);self.assertEqual(meta['documents'][0]['visual_pages'],[1,2]);self.assertIn('Immagine 2 = scanned.pdf pagina 2',enriched[-1]['content']);self.assertIn('Altre pagine senza testo non sono state lette',enriched[-1]['content'])
-    def test_word_archive_and_document_limits(self):
+    def test_document_uploads_are_unfiltered_and_word_is_validated_when_read(self):
         bad=io.BytesIO()
         with zipfile.ZipFile(bad,'w') as z:z.writestr('word/document.xml','<bad/>')
-        with self.assertRaises(ValueError):self.upload('bad.docx',bad.getvalue())
-        with self.assertRaises(ValueError):self.upload('big.pdf',b'%PDF-'+b'x'*(25*1024**2))
+        item=self.upload('bad.docx',bad.getvalue())
+        with self.assertRaises(RuntimeError):
+            self.app.engine.tool_call('document-worker.py',{'op':'read','path':str(self.data/item['path']),'output':str(self.data/'bad-word.json')},threading.Event(),lambda _:None,self.data/'bad-word.log',timeout=90)
+        large=self.upload('big.pdf',b'%PDF-'+b'x'*(25*1024**2))
+        self.assertGreater(large['size'],25*1024**2)
         items=[self.upload(str(i)+'.pdf',pdf_file()) for i in range(4)]
         with self.assertRaisesRegex(ValueError,'tre documenti'):self.app.validate_media(items)
     def test_excerpts_preserve_page_order_and_report_partial(self):

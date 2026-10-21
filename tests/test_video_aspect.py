@@ -85,7 +85,7 @@ SEGMENT 6 — 01:15–01:29.544
             data=Path(tmp);engine=VideoEngine();engine.root=engine.data=data
             image=data/'frame.jpg';exif=Image.Exif();exif[274]=6
             Image.new('RGB',(400,300)).save(image,exif=exif)
-            session=Mock();session.uses=0;session.wait.return_value={}
+            session=Mock();session.uses=0;session.wait.return_value={};session.files={'diffusion':str(data/'fixture.safetensors')}
             session.send.side_effect=lambda req:Path(req['output']).write_bytes(b'\0\0\0\x18ftypmp42')
             engine.tool_call=Mock(return_value={'sizes':[[300,400]]})
             for ident,refs,pictures,prompt,ratio in (

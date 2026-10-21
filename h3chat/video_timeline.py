@@ -13,10 +13,14 @@ def validate_audio_interval(duration,start,seconds,*,tail=False):
     tolerance=1/24+1/8000 if tail else 1/192000
     if start>=duration or start+seconds>duration+tolerance:raise ValueError(f'Audio troppo corto: servono {seconds:g} secondi dalla posizione {start:g}.')
 
-def timeline(duration):
+def timeline(duration,segment_seconds=15):
     if not math.isfinite(duration) or not 0<duration<=600:raise ValueError('Video con audio: durata massima 10 minuti.')
+    from .video_options import validate_segment_seconds
+    validate_segment_seconds(segment_seconds)
+    if segment_seconds is None:segment_seconds=15
     frames=math.ceil(duration*24)
-    return [{'index':i,'start':start/24,'duration':min(360,frames-start)/24,'frames':min(360,frames-start)} for i,start in enumerate(range(0,frames,360))]
+    size=segment_seconds*24
+    return [{'index':i,'start':start/24,'duration':min(size,frames-start)/24,'frames':min(size,frames-start)} for i,start in enumerate(range(0,frames,size))]
 
 def scene_plan(plan,scene,soundtrack_index,prompt=None,*,audio_start=0,shared=False,normalize=True):
     result=copy.deepcopy(plan);start=scene['start'];end=start+scene['duration']

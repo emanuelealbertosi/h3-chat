@@ -11,6 +11,21 @@ def story(count,duration):
          'time_basis':'local','continuity':'cut','lip_sync':False,'images':[]} for i in range(count)]}
 
 class ClipBudgetTests(unittest.TestCase):
+    def test_short_final_clip_has_explicit_local_window_and_is_repaired_before_video(self):
+        engine=VideoEngine();engine.require_model=Mock(return_value={});engine.start_llama=Mock()
+        bad=story(10,140)
+        bad['shots'][-1]['prompt']='[Shot 1] The sailor drinks tea as the camera widens. [Shot 2] At 00:07.5, Jack looks at the camera.'
+        good=copy.deepcopy(bad)
+        good['shots'][-1]['prompt']='[Shot 1] The sailor drinks tea as the camera widens. [Shot 2] At 00:03, Jack looks at the camera.'
+        engine.completion=Mock(side_effect=[(json.dumps(bad),'stop'),(json.dumps(good),'stop')])
+        settings={'chat_model':'fixture','context':80000,'video_prompt_max_tokens':8192,'_video_duration':140}
+        result=build(engine,{},[],settings,'Create a complete music video',threading.Event(),Mock(),Path('log'))
+        context=json.loads(engine.completion.call_args_list[0].args[0][1]['content'])
+        self.assertEqual(context['clip_windows'][-1],{'clip':10,'start':135,'end':140,'duration':5,'local_time_range':[0,5]})
+        self.assertEqual(result['shots'][-1]['duration'],5)
+        self.assertEqual(engine.completion.call_count,2)
+        self.assertIn('00:07.5 is INVALID',engine.completion.call_args_list[0].args[0][0]['content'])
+
     def test_count_is_generations_not_internal_shots(self):
         for prompt in ('Fai 9 clip con 21 inquadrature','Nine clips with twenty-one shots',
                        'Crea nove scene, più stacchi in ciascuna','clip: 9','Non fare 21 clip, ma 9 clip',
@@ -41,6 +56,12 @@ class ClipBudgetTests(unittest.TestCase):
             contract('CLIP 1 TIMELINE 00:00–00:10\nCLIP 2 TIMELINE 00:11–00:20',20)
         with self.assertRaisesRegex(ValueError,'coprire'):
             contract('CLIP 1 TIMELINE 00:00–00:10\nCLIP 2 TIMELINE 00:10–00:20',24)
+
+    def test_incomplete_numbered_prompt_explains_missing_audio_coverage(self):
+        prompt='10 consecutive 15-second clips, followed by one final 7.2-second clip.\n'
+        prompt+='\n'.join(f'CLIP {i+1:02}: scene' for i in range(5))
+        with self.assertRaisesRegex(ValueError,'solo 5 clip descritti.*almeno 11 clip.*Completa l’elenco'):
+            contract(prompt,157.159)
 
     def test_21_generations_are_repaired_to_9_and_internal_cuts_are_retained(self):
         engine=VideoEngine();engine.require_model=Mock(return_value={});engine.start_llama=Mock()

@@ -1,9 +1,10 @@
 """MiniMax H3 uses the private inference runtime and the shared process pool."""
 import json
 import time
+from pathlib import Path
 from .downloads import Cancelled, safe_join
 from .video_options import options, validate_plan, resolve_canvas
-from .video_routing import BRIEF, SCENE_DIRECTION, PLAN_SCHEMA, direct_plan, attachment_instructions
+from .video_routing import BRIEF, VIDEO_EDIT_BRIEF, SCENE_DIRECTION, PLAN_SCHEMA, direct_plan, attachment_instructions
 from .vision_runtime import status
 from .remote_llm import EmptyCompletion, StructuredCompletionError
 
@@ -24,12 +25,16 @@ class VideoEngine:
     def refine_video(self,history,prompt,refs,model,settings,cancel,log_path,stage):
         opts=options(model,settings,False)
         opts['duration']=settings.get('_video_duration',opts['duration'])
-        if not settings.get('_assistant',True):return direct_plan(prompt,refs,opts['duration']),None
+        source_video=bool(settings.get('_video_source'))
+        if not settings.get('_assistant',True):return direct_plan(prompt,refs,opts['duration'],source_video=source_video),None
+        from .video_loras import prompt_context
+        prompt+=prompt_context(opts['loras'])
         llm=self.require_model(settings['chat_model'],'chat')
         stage('Assistant · istruzioni, fotogrammi e audio del video')
         self.start_llama(llm,settings,log_path,cancel,stage=stage)
         assets={kind:[{'index':i,'name':x['name']} for i,x in enumerate([r for r in refs if r['mime'].startswith(mime)],1)] for kind,mime in (('images','image/'),('audios','audio/'))}
-        content=json.dumps({'request':prompt,'duration':opts['duration'],'attachments':assets,
+        preserved_audio=bool(settings.get('_video_soundtrack'))
+        content=json.dumps({'request':prompt,'duration':opts['duration'],'attachments':assets,'preserved_audio':preserved_audio,
              'audio_source_start':settings.get('_video_audio_start',0),
              'conversation':[{'role':m['role'],'text':m['content'][-2000:]} for m in history[-4:] if m.get('status')=='done']},ensure_ascii=False)
         # Reuse the chat model and its CPU mmproj when enabled. Audio is not sent
@@ -38,15 +43,21 @@ class VideoEngine:
         if not settings.get('vision_enabled',True) or not llm.get('vision',{}).get('enabled') or len(visual)>llm.get('max_refs',4):visual=[]
         content+='\nVisible images supplied to Assistant: '+str(bool(visual))+'. Do not invent unseen visual details.'
         messages=self.chat_messages([{'role':'user','content':content,'media':visual,'status':'done','seq':1}],llm,settings)
-        messages[0]={'role':'system','content':BRIEF+attachment_instructions(assets['images'],assets['audios'])}
+        messages[0]={'role':'system','content':(VIDEO_EDIT_BRIEF if source_video else BRIEF)+attachment_instructions(assets['images'],assets['audios'])}
+        if preserved_audio:
+            messages[0]['content']+='\nThe original soundtrack will be preserved. Explicit lyric alignment/reference cue sections describe existing vocals, not new dialogue to synthesize. Follow their performance directions without copying every lyric into the visual prompt or inventing vocal timestamps. Preserve exact words of separately requested new speech.'
         tuning=settings|{'think_level':'off','max_tokens':min(settings['video_prompt_max_tokens'],settings['context']//2)}
         from .video_request import spoken_lines
-        speech=spoken_lines(prompt)
+        speech=spoken_lines(prompt,preserved_audio=preserved_audio)
         for attempt in range(2):
             raw,finish=self.completion(messages,tuning,cancel,on_text=lambda _:None,schema=PLAN_SCHEMA)
             if finish=='length':raise ValueError(f"Assistant video ha esaurito il limite effettivo di {tuning['max_tokens']} token. Aumenta Max token istruzioni video nelle impostazioni del modello LLM; il limite effettivo è al massimo metà del contesto. Con un provider API vale anche il limite del servizio.")
-            try:plan=validate_plan(json.loads(raw),refs,opts['duration'])
-            except (ValueError,TypeError) as exc:raise ValueError('Assistant: piano video non valido. '+str(exc)) from exc
+            try:plan=validate_plan(json.loads(raw),refs,opts['duration'],source_video=source_video)
+            except (ValueError,TypeError) as exc:
+                if attempt:raise ValueError('Assistant: piano video non valido. '+str(exc)) from exc
+                stage('Assistant · correggo i riferimenti del piano')
+                messages=messages+[{'role':'assistant','content':raw},{'role':'user','content':'The plan failed validation: '+str(exc)+'. Correct the complete JSON plan. Do not add or request attachments.'+attachment_instructions(assets['images'],assets['audios'])}]
+                continue
             missing=[line for line in speech if line not in plan['prompt']]
             if not missing:break
             if attempt:raise ValueError('Assistant video ha omesso le parole del canto/dialogo anche dopo la correzione. Nessun video è stato avviato.')
@@ -55,13 +66,24 @@ class VideoEngine:
         return plan,{'model':llm['name'],'max_tokens':tuning['max_tokens']}
 
     def generate_video(self,model,settings,plan,refs,job_id,cancel,stage,*,prompt=None,scene=None):
-        if model.get('remote_media'):return self.remote_generate(model,settings,prompt if prompt is not None else plan['prompt'],refs,job_id,cancel,stage,plan=plan)
+        if model.get('remote_media'):
+            if options(model,settings,False).get('longtake_enabled'):raise ValueError('LongTakeNoCuts richiede MiniMax H3 standalone.')
+            if scene and scene.get('source_video'):raise ValueError('Modifica video richiede MiniMax H3 standalone con riferimenti video.')
+            return self.remote_generate(model,settings,prompt if prompt is not None else plan['prompt'],refs,job_id,cancel,stage,plan=plan)
         opts=options(model,settings)
+        if settings.get('_video_loras'):
+            from .video_loras import validate as validate_loras,aligned
+            opts['loras']=validate_loras(settings['_video_loras'])
+            if aligned(opts['loras']):opts['source_conditioning']='aligned'
+            if opts.get('pdd_enabled'):raise ValueError('Disattiva PDD per utilizzare i LoRA di editing.')
+        from .video_loras import prepare_plan,trained_turbo4
+        plan=prepare_plan(plan,opts['loras'],bool(scene and scene.get('source_video')))
         from .veda import preflight
         preflight(self.root,opts)
         if scene:opts.update(duration=scene['duration'],frames=scene['frames'])
-        plan=validate_plan(plan,refs,opts['duration'])
-        if any(a['role']=='lipsync' for a in plan['audios']) and opts['steps']<8:
+        plan=validate_plan(plan,refs,opts['duration'],source_video=bool(scene and scene.get('source_video')))
+        distilled_four=opts['steps']==4 and trained_turbo4(opts['loras'])
+        if any(a['role']=='lipsync' for a in plan['audios']) and opts['steps']<8 and not distilled_four:
             opts['steps']=8;stage('Lip-sync · uso almeno 8 passi standard')
         folder=self.data/'outputs'/job_id;folder.mkdir(parents=True,exist_ok=True)
         output=folder/'video.mp4'
@@ -74,13 +96,27 @@ class VideoEngine:
             # Read headers in a small cancellable worker without loading Torch.
             image_sizes=self.tool_call('image-size-worker.py',{'paths':request['images']},
                 cancel,stage,folder/'image-size.log',timeout=30)['sizes']
-        opts=resolve_canvas(opts,plan,image_sizes,request['format_prompt'])
+        request['forced_aspect']=settings.get('_video_aspect')
+        opts=resolve_canvas(opts,plan,image_sizes,request['format_prompt'],force_aspect=request['forced_aspect'])
         if scene and scene.get('canvas'):opts.update(scene['canvas'])
         request['options']=opts
         if scene:
             request.update(sequence=scene['sequence'],scene_index=scene['index'],canvas=scene.get('canvas'),audio_tail_padding=bool(scene.get('last')))
+            if scene.get('source_video'):
+                from .video_reference import validate_source
+                source=validate_source(scene['source_video'])
+                source['path']=str(safe_join(self.data,source['path']))
+                if not Path(source['path']).is_file():raise ValueError('Video sorgente non più disponibile.')
+                request['source_video']=source
             if 'continuity' in scene:request['continuity']=scene['continuity']
             if scene.get('resume_memory'):request['resume_memory']=scene['resume_memory']
+            if opts.get('longtake_enabled') and scene.get('longtake_context'):
+                request['longtake_context']=scene['longtake_context']
+            if scene.get('extension_context'):
+                from .video_extension import window,CONTEXT_FRAMES
+                context=scene['extension_context'];window(scene['frames'],context.get('side'))
+                if len(context.get('paths',[]))!=CONTEXT_FRAMES:raise ValueError('Contesto di estensione incompleto.')
+                request['extension_context']={'side':context['side'],'paths':[str(safe_join(self.data,p)) for p in context['paths']]}
         (folder/'video-plan.json').write_text(json.dumps({'plan':plan,'parameters':opts},ensure_ascii=False,indent=2),encoding='utf-8')
         stage(f"Video · formato {opts['aspect']} · {opts['output_width']}×{opts['output_height']}")
         startup_started=time.monotonic()
@@ -93,7 +129,12 @@ class VideoEngine:
         with output.open('rb') as stream:
             if stream.read(12)[4:8]!=b'ftyp':raise RuntimeError('Il motore non ha prodotto un MP4 valido.')
         session.uses+=1
-        actual=opts|done.get('parameters',{})|{'startup_seconds':startup_seconds,'quality':settings.get('_video_quality','high')}
+        actual=opts|done.get('parameters',{})|{'startup_seconds':startup_seconds,'quality':settings.get('_video_quality','high'),
+            'model_id':model['id'],'model_name':model['name'],'model_file':Path(session.files['diffusion']).name,
+            'lip_sync':any(a['role']=='lipsync' for a in plan['audios'])}
+        if actual.get('longtake',{}).get('context_saved'):
+            actual['longtake']['context_file']=(folder/'longtake-tail.safetensors').relative_to(self.data).as_posix()
+        if scene and scene.get('source_video'):actual['source_video_recipe']=scene['source_video']
         (folder/'video-plan.json').write_text(json.dumps({'plan':plan,'parameters':actual},ensure_ascii=False,indent=2),encoding='utf-8')
         return {'id':job_id,'name':'Video MiniMax H3.mp4','mime':'video/mp4','path':output.relative_to(self.data).as_posix(),'generation':actual}
 
@@ -163,7 +204,7 @@ class VideoEngine:
         from .video_timeline import timeline,scene_plan,validate_audio_interval
         from .video_resume import checkpoint,save as save_checkpoint
         from .soundtrack import compose,probe
-        scenes=timeline(settings['_video_duration']);soundtrack=settings['_video_soundtrack'];audio_start=settings.get('_video_audio_start',0)
+        scenes=timeline(settings['_video_duration'],settings.get('_video_segment_seconds') or 15);soundtrack=settings['_video_soundtrack'];audio_start=settings.get('_video_audio_start',0)
         if model.get('remote_media') and len(scenes)>1:raise ValueError('Video a più scene con memoria: seleziona il motore MiniMax H3 standalone. Il server esterno deve supportare esplicitamente questa funzione.')
         index=next(i for i,m in enumerate([r for r in refs if r['mime'].startswith('audio/')],1) if m['id']==soundtrack['id'])
         scripts=[plan['prompt']]*len(scenes)
@@ -219,6 +260,8 @@ class VideoEngine:
         if parameters and 'canvas_width' in parameters[0]:canvas=saved_canvas(parameters[0])
         def relative_output(path):return path.resolve().relative_to(self.data.resolve()).as_posix()
         record={'timeline':scenes,'prompts':scripts,'plan':plan,'model':model.get('id',''),'audio_start':audio_start,'completed':len(outputs),'parameters':parameters,'outputs':[relative_output(p) for p in outputs]}
+        from .video_job_resume_render import CONTEXT_KEYS
+        record['request_context']={'references':refs,'settings':{k:settings[k] for k in CONTEXT_KEYS if k in settings}}
         if storyboard:record['storyboard']=storyboard
         save_checkpoint(folder,record)
         completed=len(outputs)
@@ -226,6 +269,9 @@ class VideoEngine:
             if position<completed:continue
             if cancel.is_set():raise Cancelled()
             scoped=scene|{'last':position==len(scenes)-1,'sequence':job_id,'canvas':canvas}
+            if options(model,settings,False).get('longtake_enabled') and position and scene.get('continuity')!='cut':
+                from .video_longtake import attach
+                attach(self.data,scoped,parameters[position-1])
             if resumed and completed and position==completed and scene.get('continuity')!='cut':
                 anchor=max((i for i in range(position) if scenes[i].get('continuity')=='cut'),default=0) if storyboard else 0
                 scoped['resume_memory']={'opening':str(outputs[anchor]),'recent':[str(p) for p in outputs[anchor:][-2:]]}

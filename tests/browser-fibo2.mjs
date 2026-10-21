@@ -1,0 +1,35 @@
+import {spawn} from 'node:child_process';
+import {createRequire} from 'node:module';
+import {once} from 'node:events';
+import {createInterface} from 'node:readline';
+import {mkdir} from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
+const child=spawn('runtime/python/python.exe',['-X','utf8','tests/serve_canvas_fixture.py'],{stdio:['ignore','pipe','pipe']});let logs='';child.stderr.on('data',x=>logs+=x);
+const lines=createInterface({input:child.stdout});
+const [line]=await Promise.race([once(lines,'line'),once(child,'exit').then(()=>{throw Error(logs);})]);lines.close();
+const fixture=JSON.parse(line),browser=await chromium.launch({channel:'msedge',headless:true}),page=await browser.newPage({viewport:{width:1380,height:950}}),errors=[];
+page.on('pageerror',e=>errors.push(e.message));
+try{
+ await page.route('**/api/state',async route=>{const response=await route.fetch(),state=await response.json();state.models.push({id:'fibo-fixture',name:'FIBO 2.0 Dev',ready:true,local:true,engine:'fibo2',architecture:'fibo2',capabilities:['create','edit'],max_refs:4,width:1024,height:1024,steps:50,cfg:5,sampler:'euler',scheduler:'simple',strength:1});state.settings.create_model='fibo-fixture';await route.fulfill({response,json:state});});
+ await page.route('**/api/chats/*/messages',route=>route.fulfill({json:{job_id:'synthetic-only',intent:'create'}}));
+ await page.goto(fixture.url);await page.click(`[data-chat="${fixture.chat}"]`);await page.click('#prompt-images');await page.click('[data-mode-settings="prompt-image-panel"]');
+ const control=key=>page.locator(`[data-image-request="${key}"]`);
+ assert.equal(await control('steps').inputValue(),'50');assert.equal(await control('cfg').inputValue(),'5');
+ assert.deepEqual(await control('sampler').locator('option').evaluateAll(nodes=>nodes.map(n=>n.value)),['auto','euler']);
+ assert.deepEqual(await control('scheduler').locator('option').evaluateAll(nodes=>nodes.map(n=>n.value)),['auto','simple']);
+ assert.equal(await control('strength').count(),0);
+ assert.equal(await control('fibo_offload').inputValue(),'sequential');await control('fibo_offload').selectOption('group');
+ await control('aspect').selectOption('16:9');await control('megapixels').fill('1');await control('seed').fill('42');await control('steps').fill('30');
+ const dimensions=await page.locator('[data-image-canvas]').textContent();assert.match(dimensions,/1344 × 752/);
+ await page.locator('#prompt-mode-settings footer button').click();await page.reload();await page.click(`[data-chat="${fixture.chat}"]`);await page.click('[data-mode-settings="prompt-image-panel"]');
+ assert.equal(await control('steps').inputValue(),'30');assert.equal(await control('seed').inputValue(),'42');assert.equal(await control('aspect').inputValue(),'16:9');
+ assert.equal(await control('fibo_offload').inputValue(),'group');
+ await mkdir('work/fibo2-research-2026-10-20/browser',{recursive:true});await page.screenshot({path:'work/fibo2-research-2026-10-20/browser/chat-controls.png'});
+ await page.locator('#prompt-mode-settings footer button').click();await page.fill('#prompt','A red bicycle, 1424x800, seed 99, 50 passi.');
+ const sent=page.waitForRequest(r=>r.url().endsWith('/messages')&&r.method()==='POST');await page.click('#send');const body=(await sent).postDataJSON();
+ assert.equal(body.image_model,'fibo-fixture');assert.equal(body.image_parameters.seed,42);assert.equal(body.image_parameters.steps,30);
+ assert.equal(body.image_parameters.fibo_offload,'group');
+ assert.match(body.prompt,/seed 99/);assert.match(body.prompt,/1424x800/);assert.deepEqual(errors,[]);
+ console.log('PASS: FIBO defaults, supported controls, MP/aspect grid, persistence and original prompt submission; no real inference.');
+}finally{await browser.close();child.kill();}

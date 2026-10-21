@@ -65,6 +65,8 @@ def attach(root, model, opts, chunks, emit):
         generated=settings.parse_sparsity(str(opts.get('veda_sparsity',90))+'%','video'),
         reference=settings.parse_sparsity(str(opts.get('veda_reference_sparsity',90))+'%','riferimenti'))
     patched,patch=comfy_patch.apply(model,bundle,config,None)
+    from .veda_memory import install as install_memory_budget
+    install_memory_budget(patch,torch,comfy_patch.veda_engine)
     # The upstream engine owns the sparse head splitting; do not feed it a
     # partial set of heads. VEDA also groups calls declined to plain Sage.
     patched.model_options['transformer_options']['veda_held_head_chunks']=chunks

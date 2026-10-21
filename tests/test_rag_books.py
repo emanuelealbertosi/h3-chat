@@ -34,7 +34,7 @@ class RagBookTests(unittest.TestCase):
         self.assertTrue(Path(source['path']).is_relative_to(Path(self.tmp.name).resolve()/'project-imports'))
 
     def test_partial_wrong_project_offsets_and_size_limits(self):
-        for size in (0,True,RAG_FILE_BYTES+1):
+        for size in (-1,True,1.5,None):
             with self.assertRaises(ValueError):self.start(size=size)
         transfer=self.start(size=10);ident=transfer['id']
         other=self.app.knowledge.save({'name':'Other'})

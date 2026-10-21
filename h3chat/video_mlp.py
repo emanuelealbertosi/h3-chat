@@ -1,10 +1,16 @@
-"""Bound H3's INT8 feed-forward workspace without changing its token sequence.
+"""Bound H3's INT8 feed-forward workspace without changing its tokens.
 
 No Torch import in the web process. INT8 activations have independent per-row
 scales, so token batches preserve quantization and the fused SwiGLU operation.
 Both projections are transferred once per block, not once per token batch.
 """
 from types import MethodType
+
+
+def require_supported_weights(diffusion):
+    if any(getattr(weight, '_layout_cls', None) == 'AsymW4A8Int8Layout'
+            for _, weight in diffusion.named_parameters()):
+        raise ValueError('MiniMax H3 W4A8 non è supportato. Scegli una variante INT8.')
 
 
 def supported(layer, ops):
@@ -39,10 +45,9 @@ def run_chunked(layer, x, torch, ops, budget):
                 compute_dtype=x.dtype, want_requant=True) as (w2, b2):
             if (not isinstance(w1, ops.QuantizedTensor)
                     or not isinstance(w2, ops.QuantizedTensor)):
-                raise RuntimeError('H3 INT8 MLP: unexpected weight conversion.')
-            q1, s1 = ops.TensorWiseINT8Layout.get_plain_tensors(w1)
-            q2, s2 = ops.TensorWiseINT8Layout.get_plain_tensors(w2)
-            def linear(value, weight, scale, bias, original, activation='none'):
+                raise RuntimeError('H3 quantized MLP: unexpected weight conversion.')
+            def linear(value, original, bias, activation='none'):
+                weight,scale=ops.TensorWiseINT8Layout.get_plain_tensors(original)
                 return ops.quant_ops.ck.int8_linear(value, weight, scale, bias,
                     x.dtype, convrot=getattr(original._params, 'convrot', False),
                     convrot_groupsize=getattr(original._params, 'convrot_groupsize', 256),
@@ -50,8 +55,8 @@ def run_chunked(layer, x, torch, ops, budget):
             out = torch.empty_like(flat)
             for start in range(0, flat.shape[0], rows):
                 end = min(start + rows, flat.shape[0])
-                hidden = linear(flat[start:end], q1, s1, b1, w1)
-                result = linear(hidden, q2, s2, b2, w2, 'swiglu')
+                hidden = linear(flat[start:end], w1, b1)
+                result = linear(hidden, w2, b2, 'swiglu')
                 del hidden
                 out[start:end].copy_(result)
                 del result

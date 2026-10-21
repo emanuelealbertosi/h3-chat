@@ -11,6 +11,15 @@ from .models import metadata
 from .image_options import SAMPLERS, SCHEDULERS
 
 PROFILES = {
+    'fibo2-int8': {'label':'FIBO 2.0 Dev · INT8 ConvRot','main':'diffusion','required':['diffusion','llm','vae'],'optional':[],
+             'default_files':{'diffusion':'diffusion_models/fibo2_dev_int8_convrot.safetensors','llm':'text_encoders/qwen3vl_4b_int8_convrot.safetensors','vae':'vae/diffusion_pytorch_model.safetensors'},
+             'architecture':'fibo2','engine':'fibo2','quantization':'int8_convrot','capabilities':['create','edit'],'max_refs':4,'steps':50,'cfg':5,'width':1024,'height':1024,'sampler':'euler','scheduler':'simple','strength':1},
+    'fibo2': {'label':'FIBO 2.0 Dev · crea e modifica, BF16','main':'diffusion','required':['diffusion','llm','vae'],'optional':[],
+             'default_files':{'diffusion':'transformer/diffusion_pytorch_model-00001-of-00002.safetensors','llm':'text_encoder/model.safetensors','vae':'vae/diffusion_pytorch_model.safetensors'},
+             'architecture':'fibo2','engine':'fibo2','capabilities':['create','edit'],'max_refs':4,'steps':50,'cfg':5,'width':1024,'height':1024,'sampler':'euler','scheduler':'simple','strength':1},
+    'moss': {'label':'MOSS-Image · testo e img2img sperimentale, 5B','main':'diffusion','required':['diffusion','llm','vae'],'optional':[],
+             'default_files':{'diffusion':'mossImage_sft_pruned_int8.safetensors','llm':'qwen3.5_9b_w4a8_gptq.safetensors','vae':'flux2-vae.safetensors'},
+             'architecture':'moss','engine':'vision','capabilities':['create','edit'],'max_refs':1,'steps':50,'cfg':3,'width':1024,'height':1024,'sampler':'euler','scheduler':'sgm_uniform','strength':.65},
     'minimax-h3': {'label':'MiniMax H3 · Hybrid, video e audio','main':'diffusion','required':['diffusion','llm','vae','audio_vae'],'optional':[],
                    'default_files':{'diffusion':'minimax_h3_hybrid_fl2va_ref2va_b25-49-int8.safetensors','llm':'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors','vae':'minimax_h3_video_vae_int8_convrot.safetensors','audio_vae':'minimax_h3_audio_vae_fp32.safetensors'},
                    'architecture':'minimax-h3','engine':'video','capabilities':['video'],'max_refs':9},
@@ -23,6 +32,9 @@ PROFILES = {
     'qwen21-turbo': {'label':'Qwen Image 2.1 Turbo · crea e modifica, 8 passi','main':'diffusion','required':['diffusion','llm','vae'],'optional':[],
              'default_files':{'diffusion':'qwen_image_2.1_turbo_int8_convrot.safetensors','llm':'qwen3vl_8b_int8_convrot.safetensors','vae':'qwen_image_2.1_vae_bf16.safetensors'},
              'architecture':'qwen21','engine':'vision','capabilities':['create','edit'],'max_refs':4,'steps':8,'cfg':1,'width':1024,'height':1024,'sampler':'euler','scheduler':'qwen21_turbo','strength':1},
+    'krea2': {'label':'Krea 2 · immagini da testo, RedCraft e Turbo','main':'diffusion','required':['diffusion','llm','vae'],'optional':[],
+              'default_files':{'diffusion':'krea2_turbo.safetensors','llm':'qwen3vl_4b_fp8_scaled.safetensors','vae':'qwen_image_vae.safetensors'},
+              'architecture':'krea2','engine':'vision','capabilities':['create'],'max_refs':0,'steps':8,'cfg':1,'width':1024,'height':1024,'sampler':'euler','scheduler':'simple','strength':1},
     'chat': {'label':'Chat / vision · GGUF','main':'model','required':['model'],'optional':['mmproj'],
              'capabilities':['chat'],'max_refs':4},
     'sd': {'label':'Stable Diffusion / SDXL · checkpoint completo','main':'model','required':['model'],'optional':['vae'],
@@ -99,6 +111,11 @@ def build_model(config):
     if config['profile']=='yue2':
         from .music_models import sidecar_entries
         files += sidecar_entries(main.parent)
+    if config['profile'] in ('fibo2','fibo2-int8'):
+        from .fibo2 import sidecars,quantized
+        if quantized(config['files'])!=(config['profile']=='fibo2-int8'):
+            raise ValueError('Scegli il profilo FIBO BF16 o INT8 corrispondente al diffusore selezionato.')
+        files+=sidecars(config['files'])
     problems=[]
     for f in files:
         if not f['valid'] and f['role']!='mmproj':
@@ -111,7 +128,10 @@ def build_model(config):
     if config['profile']=='chat' and int(info.get('split.count',1))>sum(f['role'] in ('model','shard') for f in files):
         problems.append('Mancano alcune parti del modello GGUF suddiviso.')
     size=sum(f['size'] for f in files)
-    defaults={k:v for k,v in profile.items() if k in ('capabilities','architecture','max_refs','steps','cfg','engine','width','height','sampler','scheduler','strength')}
+    defaults={k:v for k,v in profile.items() if k in ('capabilities','architecture','max_refs','steps','cfg','engine','width','height','sampler','scheduler','strength','quantization')}
+    if config['profile'] in ('sd','sdxl'):
+        from .lora_families import checkpoint_family
+        defaults['lora_family']=checkpoint_family(main) or ('sdxl' if config['profile']=='sdxl' else '')
     if 'steps' in config:
         defaults.pop('steps',None)
         if config['steps']:defaults['steps']=config['steps']
@@ -148,7 +168,7 @@ def validate_config(body, model_id=None):
             continue
         p=absolute_path(value)
         if not valid_weight(p):raise ValueError(f'{ROLE_LABELS[role]}: scegli un file GGUF o safetensors leggibile e valido.')
-        if profile.get('engine')=='vision' and p.suffix.lower()!='.safetensors':raise ValueError('Ming e Qwen Image 2.1 richiedono i tre componenti safetensors; GGUF non supportato da questo motore.')
+        if profile.get('engine')=='vision' and p.suffix.lower()!='.safetensors':raise ValueError('Ming, Qwen Image 2.1 e Krea 2 richiedono i componenti safetensors; GGUF non supportato da questo motore.')
         if kind=='minimax-h3' and p.suffix.lower()!='.safetensors':raise ValueError('MiniMax H3 richiede quattro componenti safetensors. Usa il modello standard FL2VA / REF2VA, non PDD/Turbo.')
         if kind=='yue2' and p.suffix.lower()!='.gguf':raise ValueError('YuE2 richiede pesi e VAE in formato GGUF.')
         if kind=='chat' and p.suffix.lower()!='.gguf':raise ValueError('Il motore chat richiede file GGUF.')
@@ -201,6 +221,12 @@ def suggest(body):
     if kind not in PROFILES:raise ValueError('Scegli il tipo di modello.')
     main=absolute_path(body.get('path',''))
     if not valid_weight(main):raise ValueError('Scegli un file modello GGUF o safetensors valido.')
+    if kind=='fibo2-int8':
+        root=main.parent.parent
+        return {'name':'FIBO 2.0 Dev · INT8 ConvRot','candidates':{},'files':{'llm':str(root/'text_encoders/qwen3vl_4b_int8_convrot.safetensors'),'vae':str(root/'vae/diffusion_pytorch_model.safetensors')}}
+    if kind=='fibo2':
+        root=main.parent.parent
+        return {'name':'FIBO 2.0 Dev · BF16','candidates':{},'files':{'llm':str(root/'text_encoder/model.safetensors'),'vae':str(root/'vae/diffusion_pytorch_model.safetensors')}}
     candidates={role:[] for role in PROFILES[kind]['required']+PROFILES[kind]['optional']}
     for i,p in enumerate(main.parent.iterdir()):
         if i>=2000:break

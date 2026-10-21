@@ -21,7 +21,7 @@ class InstallTests(unittest.TestCase):
 
     def fixture(self,root):
         for name in ('ui/app.js','package.json','package-lock.json','scripts/build-ui.mjs','scripts/Launcher.cs','native/sd-worker.cpp',
-                     'H3-Chat.exe','native/h3-sd-worker.exe','static/app.js','static/vendor/katex.min.css','data/chat.sqlite','models/user.gguf'):
+                     'H3-Chat.exe','native/h3-sd-worker.exe','static/app.js','static/vendor/katex.min.css','runtime/bootstrap/pip.pyz','data/chat.sqlite','models/user.gguf'):
             p=root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(name,encoding='utf-8')
         build(root)
 
@@ -35,6 +35,7 @@ class InstallTests(unittest.TestCase):
             self.assertEqual((root/'static/app.js').read_text(),'static/app.js')
             self.assertEqual((root/'data/chat.sqlite').read_text(),'data/chat.sqlite')
             self.assertEqual((root/'models/user.gguf').read_text(),'models/user.gguf')
+            self.assertEqual((root/'runtime/bootstrap/pip.pyz').read_text(),'runtime/bootstrap/pip.pyz')
 
     def test_stale_or_corrupt_bundle_fails_before_replacing_files(self):
         with tempfile.TemporaryDirectory() as tmp:

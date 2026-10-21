@@ -105,7 +105,7 @@ class Handler(BaseHTTPRequestHandler):
         if not path.is_file():
             self.json({"error": "File non trovato."}, 404)
             return
-        if path.suffix.lower() in ('.wav','.mp3','.ogg','.flac','.mp4'):return send_audio(self,path)
+        if not path.resolve().is_relative_to((ROOT/'static').resolve()):return send_audio(self,path)
         body = path.read_bytes()
         self.send_response(200)
         mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
@@ -131,18 +131,23 @@ class Handler(BaseHTTPRequestHandler):
             if access and path.startswith('/api/auth/'):
                 return self.auth_request(path,method)
             if method == "GET":
+                if path=='/api/images/last-seed':
+                    from h3chat.image_history import last_seed
+                    query=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                    return self.json(last_seed(self.app,query.get('model',[''])[0]))
                 if path=='/api/gallery':
                     query=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-                    return self.json(self.app.store.gallery.listing(query.get('q',[''])[0],query.get('kind',['all'])[0],query.get('origin',['all'])[0],int(query.get('offset',['0'])[0])))
+                    return self.json(self.app.store.gallery.listing(query.get('q',[''])[0],query.get('kind',['all'])[0],query.get('origin',['all'])[0],int(query.get('offset',['0'])[0]),query.get('sort',['modified_desc'])[0],query.get('project_id',[''])[0]))
                 if len(parts)==2 and parts[0]=='gallery-file':
                     item=self.app.store.gallery.get(parts[1])
+                    if item.get('timeline_only'):raise ValueError('Questa timeline non ha ancora un filmato esportato. Aprila dalla galleria.')
                     return self.file(safe_join(self.app.data,item['path']))
                 if path=='/api/maintenance/state':
                     return self.json(self.server.workspaces.maintenance_state()|{'token':access.maintenance})
                 if len(parts)==3 and parts[:2]==['api','projects']:
                     return self.json(self.app.knowledge.project(parts[2]))
                 if path == "/api/health":
-                    return self.json({"app": "h3-chat", "version": __version__, "worker_alive": self.app.worker.is_alive(), "instance": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16], 'network': getattr(self.server, 'network', None).status if getattr(self.server, 'network', None) else {}})
+                    return self.json({"app": "h3-chat", "version": __version__, "worker_alive": self.app.worker.is_alive(), "instance": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16], 'features':{'repair_batch_20261018':True,'repair_batch_20261018_v2':True,'repair_batch_20261018_v3':True,'moss_image':True,'moss_mp_canvas':True,'assembly_progress_totals':True,'video_extension':True,'gallery_library':True,'gallery_saved_timelines':True,'mov_preview':True,'video_resume':True,'krea2':True,'video_probe':True,'edit_request_reload':True,'edit_request_reload_v2':True,'editing_fixes_20261015':True,'lora_library_families':True,'video_resplit':True,'video_conversion_progress':True,'video_activity':True,'video_longtake':True,'video_attention_choices':True}, 'network': getattr(self.server, 'network', None).status if getattr(self.server, 'network', None) else {}})
                 if path == "/api/state":
                     value=self.app.state() | {'network': getattr(self.server, 'network', None).status if getattr(self.server, 'network', None) else {}}
                     if access:
@@ -167,9 +172,27 @@ class Handler(BaseHTTPRequestHandler):
                     return self.json(self.app.hardware())
                 if len(parts) == 3 and parts[:2] == ["api", "chats"]:
                     return self.json(self.app.store.chat(parts[2]))
+                if len(parts)==5 and parts[:2]==['api','chats'] and parts[3]=='video-resume':
+                    from h3chat.video_job_resume import describe
+                    return self.json(describe(self.app,parts[2],message_id=parts[4]))
+                if len(parts)==5 and parts[:2]==['api','chats'] and parts[3]=='request-draft':
+                    from h3chat.request_draft import load
+                    return self.json(load(self.app,parts[2],parts[4]))
+                if len(parts)==5 and parts[:2]==['api','chats'] and parts[3]=='video-activity':
+                    from h3chat.video_activity import describe
+                    return self.json(describe(self.app,parts[2],parts[4]))
+                if len(parts)==5 and parts[:2]==['api','chats'] and parts[3]=='video-import-progress':
+                    from h3chat.video_import import progress
+                    query=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                    return self.json(progress(self.app,parts[2],parts[4],int(query.get('segment_seconds',['15'])[0])))
+                if len(parts)==4 and parts[:2]==['api','gallery'] and parts[3]=='preview-progress':
+                    from h3chat.video_browser_preview import progress
+                    return self.json(progress(self.app,parts[2]))
                 if len(parts)==5 and parts[:2]==['api','chats'] and parts[3]=='video-edit':
                     from h3chat.video_edit import describe
-                    return self.json(describe(self.app,parts[2],parts[4]))
+                    query=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                    segment=query.get('segment_seconds',[None])[0]
+                    return self.json(describe(self.app,parts[2],parts[4],None if segment is None else int(segment)))
                 if len(parts)==5 and parts[:2]==['api','chats'] and parts[3]=='video-recreate':
                     from h3chat.video_recreate import describe
                     return self.json(describe(self.app,parts[2],parts[4]))
@@ -193,9 +216,9 @@ class Handler(BaseHTTPRequestHandler):
                     return self.file(safe_join(self.app.data / "exports", relative))
                 if path.startswith("/media/"):
                     relative = path[len("/media/"):]
-                    if not relative.startswith(("uploads/", "outputs/", "project-imports/", "exports/")) or Path(relative).suffix not in (".png", ".jpg", ".wav", ".mp3", ".flac", ".ogg", ".mp4", ".pdf", ".docx", ".pptx", ".txt", ".md", ".srt", ".py", ".json", ".tex", ".log", ".html", ".svg"):
+                    if not relative.startswith(("uploads/", "outputs/", "project-imports/", "exports/")) or (not relative.startswith(("uploads/","project-imports/","exports/")) and Path(relative).suffix not in (".png", ".jpg", ".wav", ".mp3", ".flac", ".ogg", ".mp4", ".pdf", ".docx", ".pptx", ".txt", ".md", ".srt", ".py", ".json", ".tex", ".log", ".html", ".svg", ".glb")):
                         raise PermissionError("File non disponibile.")
-                    if relative.startswith(('project-imports/','exports/')) and not self.app.store.one('SELECT 1 FROM gallery WHERE path=?',(relative,)):raise PermissionError('File non disponibile.')
+                    if relative.startswith(('uploads/','project-imports/','exports/')) and not self.app.store.one('SELECT 1 FROM gallery WHERE path=?',(relative,)):raise PermissionError('File non disponibile.')
                     return self.file(safe_join(self.app.data, relative))
                 return self.json({"error": "Risorsa non trovata."}, 404)
             # Binary project blocks have their own small bound; other requests
@@ -208,11 +231,26 @@ class Handler(BaseHTTPRequestHandler):
                 if len(raw)!=length:raise ValueError('Blocco documento incompleto.')
                 return self.json(self.app.knowledge.uploads.append(parts[2],parts[4],offset,raw))
             body = self.read_body()
+            if path=='/api/uploads/start' and method=='POST':return self.json(self.app.uploads.start(body),201)
+            if len(parts)==4 and parts[:2]==['api','uploads'] and method=='POST':
+                if parts[3]=='chunk':return self.json(self.app.uploads.append(parts[2],body))
+                if parts[3]=='finish':return self.json(self.app.uploads.finish(parts[2]),201)
+            if len(parts)==3 and parts[:2]==['api','uploads'] and method=='DELETE':return self.json(self.app.uploads.cancel(parts[2]))
             if len(parts)==5 and parts[:2]==['api','canvas'] and parts[3:]==['infographic','render'] and method=='POST':
                 from h3chat.infographics import enqueue_render
                 return self.json(enqueue_render(self.app,parts[2],body),202)
             if path=='/api/gallery/select' and method=='POST':
                 return self.json(self.app.validate_media([{'id':ident} for ident in body.get('ids',[])],canvas=True))
+            if path in ('/api/gallery/delete-plan','/api/gallery/delete') and method=='POST':
+                from h3chat.gallery_delete import plan,remove
+                return self.json((plan if path.endswith('delete-plan') else remove)(self.app.store.gallery,body))
+            if len(parts)==3 and parts[:2]==['api','gallery'] and method=='PATCH':
+                return self.json(self.app.store.gallery.rename(parts[2],body.get('name')))
+            if len(parts)==3 and parts[:2]==['api','gallery'] and method=='DELETE':
+                return self.json(self.app.store.gallery.remove(parts[2]))
+            if len(parts)==4 and parts[:2]==['api','gallery'] and parts[3]=='preview' and method=='POST':
+                from h3chat.video_browser_preview import prepare
+                return self.json(prepare(self.app,parts[2]))
             if path=='/api/gallery/import' and method=='POST':
                 import base64
                 try:digest=hashlib.sha256(base64.b64decode(body.get('data',''),validate=True)).hexdigest()
@@ -322,9 +360,34 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(self.app.cancel(parts[2]))
             if len(parts) == 4 and parts[:2] == ["api", "chats"] and parts[3] == "messages" and method == "POST":
                 return self.json(self.app.send(parts[2], body), 202)
+            if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='video-probe' and method=='POST':
+                if self.identity.get('role')!='owner':raise PermissionError('Diagnostica riservata all’amministratore.')
+                from h3chat.video_probe import request
+                return self.json(request(self.app,parts[2],body),202)
+            if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='video-resume' and method=='POST':
+                from h3chat.video_job_resume import request
+                return self.json(request(self.app,parts[2],body),202)
+            if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='video-timeline-recover' and method=='POST':
+                from h3chat.video_timeline_recover import request
+                return self.json(request(self.app,parts[2],body),202)
+            if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='video-assemble' and method=='POST':
+                from h3chat.video_assemble import request
+                return self.json(request(self.app,parts[2],body),202)
+            if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='video-clip' and method=='POST':
+                from h3chat.video_clip_tools import request
+                return self.json(request(self.app,parts[2],body),202)
+            if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='video-extend' and method=='POST':
+                from h3chat.video_extend import request
+                return self.json(request(self.app,parts[2],body),202)
+            if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='video-clip-infographic' and method=='POST':
+                from h3chat.video_clip_tools import use_infographic
+                return self.json(use_infographic(self.app,parts[2],body),202)
             if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='video-edit' and method=='POST':
                 from h3chat.video_edit import request
                 return self.json(request(self.app,parts[2],body),202)
+            if len(parts)==5 and parts[:2]==['api','chats'] and parts[3]=='video-editor-draft' and method in ('POST','DELETE'):
+                from h3chat.video_editor_drafts import save,remove
+                return self.json((save if method=='POST' else remove)(self.app,parts[2],parts[4],body))
             if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='video-recreate' and method=='POST':
                 from h3chat.video_recreate import request
                 return self.json(request(self.app,parts[2],body),202)

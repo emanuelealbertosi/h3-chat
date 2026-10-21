@@ -10,12 +10,15 @@ KEYS=(*KEYS,'llm_timeout')
 BASE['llm_timeout']=1800
 KEYS=(*KEYS,'vision_max_refs')
 BASE['vision_max_refs']=4
+KEYS=(*KEYS,'llm_acceleration')
+BASE['llm_acceleration']='standard'
 
 def defaults(profile):
     return BASE|({'context':8192,'gpu_layers':99} if profile=='balanced' else {'gpu_layers':0} if profile=='cpu' else {})
 
 def validate(values):
     if not isinstance(values,dict) or set(values)-set(KEYS):raise ValueError('Parametri del preset LLM non validi.')
+    if 'llm_acceleration' in values and values['llm_acceleration'] not in ('standard','qwen27'):raise ValueError('Ottimizzazione LLM non valida.')
     if 'llm_timeout' in values and (type(values['llm_timeout']) is not int or not 60<=values['llm_timeout']<=14400):raise ValueError('Tempo massimo LLM: da 60 a 14400 secondi.')
     for key,lo,hi in (('vision_max_refs',1,12),('context',1024,MAX_CONTEXT),('max_tokens',64,MAX_OUTPUT_TOKENS),('gpu_layers',0,999),('mtp_draft_tokens',1,8),('prompt_max_tokens',256,8192),('music_prompt_max_tokens',256,8192),('video_prompt_max_tokens',256,MAX_OUTPUT_TOKENS)):
         if key in values and (type(values[key]) is not int or not lo<=values[key]<=hi):raise ValueError(f'{key}: inserisci un intero tra {lo} e {hi}.')

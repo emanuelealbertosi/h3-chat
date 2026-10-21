@@ -12,6 +12,20 @@ class VideoRecreateTests(unittest.TestCase):
     tearDown=fixture.VideoEditTests.tearDown
     original=fixture.VideoEditTests.original
 
+    def test_experimental_canvas_and_model_choices_do_not_change_presets(self):
+        chat,ident,refs,outputs,p=self.film();before=copy.deepcopy(self.app.store.settings())
+        manifest=describe(self.app,chat,ident)
+        self.assertEqual(manifest['model_id'],self.model['id'])
+        self.assertIn(self.model['id'],[m['id'] for m in manifest['models']])
+        new=request(self.app,chat,{'source':ident,'model':self.model['id'],
+            'parameters':{'megapixels':1.5,'experimental_resolution':True,'steps':12}})['job_id'];calls=[]
+        with patch.object(self.app.engine,'generate_video',side_effect=self.renderer(calls)),patch('h3chat.soundtrack.probe',return_value={'duration':60}),patch('h3chat.soundtrack.compose',return_value={'duration':42}):self.execute(new)
+        self.assertEqual(self.app.store.chat(chat)['messages'][-1]['status'],'done')
+        for _,_,opts,scene in calls:
+            self.assertEqual(opts['megapixels'],1.5)
+            self.assertGreater(scene['canvas']['width']*scene['canvas']['height'],1344*768)
+        self.assertEqual(self.app.store.settings(),before)
+
     def film(self):
         chat,ident,refs,outputs,p= self.original()
         record=checkpoint(self.app.data,ident)
@@ -71,6 +85,25 @@ class VideoRecreateTests(unittest.TestCase):
         self.assertEqual(len(self.app.store.all('SELECT * FROM jobs')),1)
         request(self.app,chat,{'source':original,'parameters':{}})
         with self.assertRaisesRegex(ValueError,'richiesta attiva'):request(self.app,chat,{'source':original,'parameters':{}})
+
+    def test_different_checkpoint_preserves_the_exact_recipe_and_preferences(self):
+        chat,original,*_=self.film()
+        alternate=copy.deepcopy(self.model);alternate.update(id='alternate-h3',name='Alternate H3')
+        self.app.catalog[alternate['id']]=alternate
+        self.app.store.save_settings({'video_overrides':{'alternate-h3':{'attention':'veda','attention_chunks':8,'veda_sparsity':90,'veda_reference_sparsity':0}}})
+        before=copy.deepcopy(self.app.store.settings())
+        new=request(self.app,chat,{'source':original,'model':alternate['id'],'parameters':{'steps':20}})['job_id']
+        job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(new,));payload=json.loads(job['payload'])
+        self.assertEqual(payload['settings']['video_model'],'alternate-h3')
+        calls=[]
+        with patch.object(self.app.engine,'generate_video',side_effect=self.renderer(calls)),patch('h3chat.soundtrack.probe',return_value={'duration':60}),patch('h3chat.soundtrack.compose',return_value={'duration':42}):self.execute(new)
+        answer=self.app.store.chat(chat)['messages'][-1]
+        self.assertEqual(answer['status'],'done',answer['meta'])
+        self.assertEqual(answer['meta']['model'],'Alternate H3')
+        self.assertEqual(len(calls),3)
+        self.assertTrue(all(c[2]['steps']==20 for c in calls))
+        self.assertTrue(all(c[2]['attention']=='veda' and c[2]['attention_chunks']==8 and c[2]['veda_reference_sparsity']==0 for c in calls))
+        self.assertEqual(self.app.store.settings(),before)
 
     def test_cross_chat_gallery_reuse_is_workspace_scoped(self):
         chat,original,*_=self.film();other=self.app.store.create_chat()['id']

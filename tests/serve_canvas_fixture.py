@@ -1,6 +1,7 @@
 """Disposable browser fixture: synthetic artifacts only, no model inference."""
 import base64
 import json
+import os
 from pathlib import Path
 import sys
 import struct
@@ -46,6 +47,28 @@ def main():
         sys.path.insert(0,str(ROOT/'runtime/tools/documents'))
         from PIL import Image,ImageDraw
         picture=Image.new('RGB',(320,180),'#087f8c');drawing=ImageDraw.Draw(picture);drawing.rectangle((20,20,140,140),fill='#d7ef92');drawing.ellipse((175,40,290,155),fill='#f5b5a9');picture.save(outputs/'fixture.png')
+        if os.environ.get('H3_VIDEO_UI_FIXTURE')=='1':
+            import av
+            with av.open(str(outputs/'fixture.mp4'),'w') as movie:
+                video=movie.add_stream('libx264',rate=1);video.width=320;video.height=180;video.pix_fmt='yuv420p';video.gop_size=1
+                for moment in range(390):
+                    frame=picture.copy();ImageDraw.Draw(frame).text((150,10),f'Clip {moment//15+1}',fill='#ffffff')
+                    for packet in video.encode(av.VideoFrame.from_image(frame)):movie.mux(packet)
+                for packet in video.encode(None):movie.mux(packet)
+        if os.environ.get('H3_TIMELINE_PREVIEW_FIXTURE')=='1':
+            import av,math,wave
+            for name,seconds in (('preview-source',9),('preview-edit',2)):
+                with av.open(str(outputs/(name+'.mp4')),'w') as movie:
+                    stream=movie.add_stream('libx264',rate=24);stream.width=160;stream.height=90;stream.pix_fmt='yuv420p';stream.gop_size=12
+                    for frame in range(seconds*24):
+                        color=(20,30,220) if name=='preview-edit' else ((220,30,20) if frame<72 else (220,140,20) if frame<144 else (20,200,200))
+                        for packet in stream.encode(av.VideoFrame.from_image(Image.new('RGB',(160,90),color))):movie.mux(packet)
+                    for packet in stream.encode(None):movie.mux(packet)
+            with wave.open(str(outputs/'preview-audio.wav'),'wb') as track:
+                track.setnchannels(1);track.setsampwidth(2);track.setframerate(16000)
+                track.writeframes(b''.join(struct.pack('<h',round(5000*math.sin(2*math.pi*330*n/16000))) for n in range(160000)))
+        app.store.execute("INSERT INTO messages(id,chat_id,role,content,created,media,meta) VALUES (?,?,'user',?,0,?,'{}')",
+            ('input-test',chat,'Richiesta molto lunga\n' * 50,json.dumps([{'id':'b'*32,'name':'fixture.png','path':'outputs/fixture.png','mime':'image/png'}])))
         original = {'title':'Documento iniziale', 'content':'# Documento iniziale\n\nVersione originale.\n\n$x^2$\n\n```python\nprint(42)\n```', 'media':[]}
         image = {'title':'Immagine precedente', 'content':'', 'media':[{'id':'a'*32, 'name':'fixture.png', 'path':'outputs/fixture.png', 'mime':'image/png'}]}
         latest = {'title':'Documento recente', 'content':'# Documento recente\n\nContenuto più recente.', 'media':[]}
@@ -142,7 +165,9 @@ def main():
                             svg='<style>body{margin:0;background:#163e48;color:white;font:24px Arial}.main{position:absolute;inset:110px 50px 60px;display:grid;grid-template-columns:340px 1fr;gap:30px}.text{display:flex;flex-direction:column}.diagram{display:flex;align-items:center;justify-content:center;padding:20px}svg{width:100%;height:100%}</style><div class="main"><div class="text"><h1>Testo originale</h1><p>Stessa composizione e caratteri.</p></div><div class="diagram"><svg viewBox="0 0 300 450"><circle cx="150" cy="225" r="130" fill="#fa8c45"/><text x="-30" y="225" fill="white">Etichetta intera</text><text x="90" y="445" fill="white">Nodo inferiore</text></svg></div></div>'
                             oversized='<style>body{margin:0;background:#faf3d7;color:#163e48}.picture{position:absolute;left:80px;top:100px;width:400px;height:300px}img{width:950px;height:850px;object-fit:fill}</style><h1>Immagine senza deformazioni</h1><div class="picture"><img data-asset-id="'+('a'*32)+'"></div>'
                             normal='<style>body{margin:0;background:#eef4ed;color:#163e48}.ok{position:absolute;left:100px;top:100px;width:900px;height:500px;display:flex;align-items:center;justify-content:center}p{font:28px Georgia}</style><section class="ok"><p>HTML libero già corretto</p></section>'
-                            deck={'version':1,'engine':'llm','format':'16:9','title':'Limiti delle figure','references':[], 'pages':[{'title':title,'status':'ready','html':html,'sources':[]} for title,html in [('SVG e griglia',svg),('Immagine grande',oversized),('Layout corretto',normal)]],'active':0}
+                            cropped='<style>body{margin:0}.strip{position:absolute;left:100px;top:100px;width:600px;height:120px}img{width:100%;height:100%;object-fit:cover!important}</style><div class="strip"><img data-asset-id="'+('a'*32)+'"></div>'
+                            covered='<style>*{margin:0;box-sizing:border-box}body{background:#0f172a;color:white;font:24px Arial}.header{position:absolute;top:32px;left:56px;right:56px}h1{font-size:42px;line-height:1.2;max-width:720px}.subtitle{margin-top:8px;line-height:1.5;max-width:700px}.main{position:absolute;top:130px;left:56px;right:56px;bottom:64px;background:#334155;display:grid;place-items:center}</style><div class="header"><h1>Un titolo molto lungo che deve andare su più righe conservando il sottotitolo</h1><p class="subtitle">Una spiegazione da mostrare intera, senza coprirla con immagini o pannelli sottostanti.</p></div><main class="main"><p>Contenuto originale</p></main>'
+                            deck={'version':1,'engine':'llm','format':'16:9','title':'Limiti delle figure','references':[], 'pages':[{'title':title,'status':'ready','html':html,'sources':[]} for title,html in [('SVG e griglia',svg),('Immagine grande',oversized),('Layout corretto',normal),('Immagine ritagliata',cropped),('Sottotitolo coperto',covered)]],'active':0}
                         finished=phase in ('done','design','contrast','html','html-bounds')
                         value={'title':deck['title'],'content':encode(deck),'media':image['media']}
                         app.save_artifact(chat,value['title'],value['content'],value['media'])

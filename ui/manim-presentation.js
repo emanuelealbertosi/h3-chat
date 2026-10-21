@@ -1,3 +1,4 @@
+import {uploadFile} from './file-upload.js';
 import {readDeck,exportSlides} from './slides.js';
 export const presentationAttachment=m=>['application/pdf','application/vnd.openxmlformats-officedocument.presentationml.presentation','image/png','image/jpeg','image/webp'].includes(m.mime);
 export function readyPresentation(value){try{const deck=readDeck(value?.content||'');return !!deck&&deck.pages.every(p=>p.status==='ready');}catch{return false;}}
@@ -26,9 +27,7 @@ export function initManimPresentation({getAttachments,getCanvas,getState,getChat
   if(d.source==='canvas'){
    const value={...getCanvas(),media:[...getCanvas().media]};notify('Preparo le slide del canvas per Manim…');
    const blob=await exportSlides(value,'source-pdf',getState().token);
-   if(blob.size>25*1024*1024)throw Error('La presentazione del canvas supera 25 MB: riduci le immagini o dividila.');
-   const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=reject;reader.readAsDataURL(blob);});
-   const source=await api('/uploads',{name:(value.title||'Presentazione')+'.pdf',data});media=[...media.filter(m=>m.mime.startsWith('audio/')),source];
+   const source=await uploadFile(blob,{api,name:(value.title||'Presentazione')+'.pdf'});media=[...media.filter(m=>m.mime.startsWith('audio/')),source];
   }
   return {media,manim_presentation:{mode:d.mode,source:d.source}};
  }};

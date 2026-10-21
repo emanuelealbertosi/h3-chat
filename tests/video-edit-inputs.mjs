@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import {resolveVideoEditInputs} from '../ui/video-edit-inputs.js';
+import {videoTimelineSource} from '../ui/video-timeline-source.js';
+const job='a'.repeat(32),source='b'.repeat(32);
+const media=Array.from({length:26},(_,i)=>({id:'frame-'+i,mime:'image/png',name:'frame '+i,path:'frames/'+i+'.png'}));
+media.push({id:'replacement',mime:'image/png',path:'replacement.png'},{id:'audio',mime:'audio/wav',path:'audio.wav'});
+const chat={id:'chat',messages:[{id:'user',role:'user',content:'Post-produzione video · solo spezzoni',media},{id:'answer',role:'assistant',media:[]}]};
+const jobs=[{id:job,message_id:'answer'}];let reads=0;
+await resolveVideoEditInputs(chat,jobs,async path=>{
+ assert.equal(path,'/chats/chat/video-edit/'+source);return {clips:[{clip:22,url:'/media/uploads/source.mp4'}]};
+},async path=>{reads++;assert.equal(path,'/media/outputs/'+job+'/scenes.json');return {revision_source:source,revision_request:[{clip:22,mode:'video',images:[27]}]};});
+assert.deepEqual(chat.messages[0].display_media.map(m=>m.id),[source,'replacement','audio']);
+assert.equal(chat.messages[0].media.length,28);
+delete chat.messages[0].display_media;
+await resolveVideoEditInputs(chat,jobs,()=>{throw Error('Must use cache');},()=>{throw Error('Must use cache');});
+assert.equal(reads,1);assert.equal(chat.messages[0].display_media.length,3);
+const other={id:'other',messages:[{...chat.messages[0],id:'normal',content:'Normal prompt',display_media:undefined},chat.messages[1]]};
+await resolveVideoEditInputs(other,jobs,()=>{throw Error('Ordinary input must stay untouched');});
+assert.equal(other.messages[0].display_media,undefined);
+const oldClip={mime:'video/mp4',path:'outputs/'+job+'/clip-022.mp4',generation:{clip_only:true,post_edit:true}};
+assert.deepEqual(videoTimelineSource(oldClip),{id:job,recover:true});
+assert.deepEqual(videoTimelineSource({...oldClip,generation:{...oldClip.generation,timeline_id:source}}),{id:source,recover:false});
+assert.equal(videoTimelineSource({...oldClip,path:'uploads/external.mp4'}),null);
+assert.equal(videoTimelineSource({...oldClip,generation:{clip_only:true}}),null);
+assert.equal(videoTimelineSource({...oldClip,mime:'audio/wav'}),null);
+console.log('Saved clip inputs, timeline reference retention, source preview, cache and ordinary messages passed.');

@@ -66,6 +66,7 @@ class Session:
         self.key,self.kind,self.model,self.files=key,kind,model,files
         self.settings=dict(settings);self.log_path=Path(log_path)
         self.process=None;self.log=None;self.port=None;self.api_key=None
+        self.child_env=None;self.acceleration=None
         self.ready=False;self.events=queue.Queue();self.started=time.time();self.uses=0
         self.reader=None
 
@@ -77,7 +78,7 @@ class Session:
         try:
             self.process=subprocess.Popen([str(a) for a in args],stdin=subprocess.PIPE if ipc else subprocess.DEVNULL,
                 stdout=subprocess.PIPE if ipc else self.log,stderr=self.log,cwd=str(cwd or Path(args[0]).parent),
-                creationflags=0x08000000 if os.name=='nt' else 0)
+                creationflags=0x08000000 if os.name=='nt' else 0,env=self.child_env)
         except Exception:self.log.close();self.log=None;raise
         if ipc:
             def read():
@@ -164,4 +165,5 @@ class Session:
                 'vision_device':self.settings.get('vision_device','cpu') if self.kind=='chat' and 'mmproj' in self.files else None,
                 'mtp_tokens':next((v for k,v in self.key[2] if k=='mtp_tokens'),0) if self.ready else 0,
                 'loras':getattr(self,'active_loras',[]),
+                'acceleration':self.acceleration,
                 'uses':self.uses,'started':self.started}

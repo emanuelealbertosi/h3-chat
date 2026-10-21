@@ -23,6 +23,8 @@ try{
  assert.equal(await page.locator('#slides-background-color-label').isVisible(),true);
  await page.getByRole('button',{name:'Deterministico',exact:true}).click();assert.equal(await page.locator('#slides-background').isDisabled(),true);assert.equal(await page.locator('#slides-background-color-label').isVisible(),false);
  await page.getByRole('button',{name:'LLM · HTML libero',exact:true}).click();assert.equal(await page.inputValue('#slides-background'),'custom');assert.equal(await page.inputValue('#slides-palette'),'pastel');
+ await page.getByRole('button',{name:'Ricca · stile infografica',exact:true}).click();assert.equal(await page.inputValue('#slides-composition'),'rich');assert.equal(await page.inputValue('#slides-engine'),'llm');assert.equal(await page.locator('#slides-generate-images').isChecked(),false);
+ await page.getByRole('button',{name:'Deterministico',exact:true}).click();assert.equal(await page.inputValue('#slides-composition'),'standard');await page.getByRole('button',{name:'Ricca · stile infografica',exact:true}).click();assert.equal(await page.inputValue('#slides-engine'),'llm');
  await page.getByRole('button',{name:'Più slide',exact:true}).click();assert.equal(await page.inputValue('#slides-count'),'9');
  await page.getByRole('button',{name:'Completa · tutte',exact:true}).click();
  await page.getByRole('button',{name:'Illustrazioni AI · tutte insieme',exact:true}).click();assert.equal(await page.locator('#slides-image-model-label').isVisible(),true);
@@ -30,7 +32,7 @@ try{
  await page.route('**/api/chats/*/messages',route=>route.fulfill({json:{job_id:'synthetic-only',intent:'slides',canvas:true}}));
  const send=async text=>{const request=page.waitForRequest(r=>r.method()==='POST'&&r.url().endsWith('/messages'));await page.fill('#prompt',text);await page.locator('#composer').evaluate(e=>e.requestSubmit());return (await request).postDataJSON();};
  const slides=await send('Crea una presentazione');assert.equal(slides.lab,'slides');assert.deepEqual([slides.slides.count,slides.slides.format,slides.slides.design,slides.slides.detail,slides.slides.vision_scope,slides.slides.generate_images],[9,'4:3','comic','full','all',true]);
- assert.deepEqual([slides.slides.background,slides.slides.background_color,slides.slides.palette],['custom','#eaf0ff','pastel']);
+ assert.deepEqual([slides.slides.background,slides.slides.background_color,slides.slides.palette],['custom','#eaf0ff','pastel']);assert.equal(slides.slides.composition,'rich');
  await page.click('#video-toggle');await pressed('#video-toggle');await page.click('[data-mode-settings="video-hint"]');
  await page.getByRole('group',{name:'Qualità',exact:true}).getByRole('button',{name:'Media · più rapida',exact:true}).click();
  assert.equal(await page.inputValue('#video-quality'),'medium');assert.match(await page.locator('#video-quality-summary').textContent(),/0,5 MP.*8 passi/);
@@ -41,6 +43,14 @@ try{
  await page.click('[data-mode-settings="video-hint"]');await page.getByRole('group',{name:'Regia',exact:true}).getByRole('button',{name:'Storyboard · stacchi',exact:true}).click();
  assert.equal(await page.inputValue('#video-editing'),'storyboard');assert.equal(await page.locator('#image-assistant').isChecked(),true);await page.locator('#prompt-mode-settings footer button').click();
  const storyboard=await send('Crea un videoclip con la canzone intera e scene con stacchi');assert.equal(storyboard.video_editing,'storyboard');assert.equal(storyboard.assistant,true);
+ await page.click('#video-toggle');await pressed('#prompt-auto');await page.click('#video-toggle');await pressed('#video-toggle');assert.equal(await page.inputValue('#video-editing'),'storyboard');
+ await page.click('#prompt-video-edit');await pressed('#prompt-video-edit');assert.equal(await page.getAttribute('#video-toggle','aria-pressed'),'false');
+ await page.click('#prompt-video-edit');await pressed('#prompt-auto');assert.equal(await page.getAttribute('#prompt-video-edit','aria-pressed'),'false');assert.equal(await page.getAttribute('#video-toggle','aria-pressed'),'false');assert.equal(await page.locator('#prompt-context').isVisible(),false);
+ const ordinary=await send('Scrivi un messaggio');assert.equal(ordinary.video,false);assert.equal(ordinary.video_editing,'continuous');
+ await page.click('#video-toggle');await pressed('#video-toggle');assert.equal(await page.inputValue('#video-editing'),'continuous');
+ await page.click('#prompt-video-edit');await pressed('#prompt-video-edit');await page.click('#video-toggle');await pressed('#video-toggle');assert.equal(await page.getAttribute('#prompt-video-edit','aria-pressed'),'false');
+ const standardVideo=await send('Crea un nuovo video');assert.equal(standardVideo.video,true);assert.equal(standardVideo.video_editing,'continuous');
+ await page.click('#prompt-video-edit');await page.click('#prompt-auto');await page.reload();await page.waitForFunction(()=>document.querySelector('#prompt-auto')?.getAttribute('aria-pressed')==='true');await pressed('#prompt-auto');assert.equal(await page.inputValue('#video-editing'),'continuous');
  await page.click('#prompt-manim');await page.click('#voice-toggle');await pressed('#prompt-manim');await pressed('#voice-toggle');assert.equal(await page.locator('#slides-options').isVisible(),false);
  await page.click('[data-mode-settings="voice-inputs"]');assert.equal(await page.getByRole('button',{name:'Auto · segue l’interpretazione',exact:true}).isVisible(),true);await page.getByRole('button',{name:'Entusiasta',exact:true}).click();await page.getByRole('button',{name:'Maschile',exact:true}).click();await page.getByRole('button',{name:'Espressiva',exact:true}).click();assert.equal(await page.locator('.voice-mode-choice').isVisible(),false);await page.locator('[data-mode-tab="manim-presentation-options"]').click();assert.equal(await page.locator('#manim-presentation-options').isVisible(),true);await page.locator('[data-mode-tab="voice-inputs"]').click();assert.equal(await page.locator('#voice-inputs').isVisible(),true);assert.equal(await page.locator('#prompt-context details').count(),0);
  await page.locator('#prompt-mode-settings footer button').click();const combined=await send('Spiega con animazione e voce');assert.equal(combined.lab,'manim');assert.equal(combined.voice,true);assert.equal(combined.voice_fields.gender,'male');assert.equal(combined.voice_fields.emotion,'enthusiasm');assert.equal(combined.voice_fields.expressiveness,'high');

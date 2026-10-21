@@ -53,7 +53,7 @@ class Context:
     def write_json(self,path,value):Path(path).write_text(json.dumps(value,ensure_ascii=False,indent=2),encoding='utf-8')
     def read_abc(self,path):return Path(path).read_text(encoding='utf-8')
     def run_job_process(self,job,d,args,append=True,phase=None):
-        if phase:emit('stage',message='Remix · '+phase[0])
+        if phase:emit('stage',message=self.config.get('stage_prefix','Remix')+' · '+phase[0])
         d=Path(d);d.mkdir(parents=True,exist_ok=True)
         env=os.environ.copy();env['H3_REMIX_MODELS']=json.dumps(self.config)
         # audio.cpp looks only in the app's private runtime and its own CUDA DLLs.
@@ -98,6 +98,31 @@ def main(r):
         subprocess.run([str(ROOT/'runtime/python/python.exe'),'-X','utf8',str(ROOT/'scripts/install-remix-score.py')],check=True,creationflags=0x08000000 if os.name=='nt' else 0)
         return {'ready':True}
     app=Context(r);op=r['op'];source=Path(r['source']);folder=Path(r['folder'])
+    if op=='timeline_audio':
+        import math
+        spans=r['intervals']
+        if not isinstance(spans,list) or not spans:raise ValueError('Intervalli audio mancanti.')
+        if any(set(s)!={'start','duration'} or any(type(s[k]) not in (int,float) or not math.isfinite(s[k]) for k in s) or s['start']<0 or s['duration']<=0 for s in spans):raise ValueError('Intervalli audio non validi.')
+        filters=[f'[0:a]asplit={len(spans)}'+''.join(f'[a{i}]' for i in range(len(spans)))]
+        for i,s in enumerate(spans):filters.append(f'[a{i}]atrim=start={s["start"]}:duration={s["duration"]},asetpts=PTS-STARTPTS,apad,atrim=duration={s["duration"]}[b{i}]')
+        filters.append(''.join(f'[b{i}]' for i in range(len(spans)))+f'concat=n={len(spans)}:v=0:a=1[out]')
+        script=folder/'audio-cuts.txt';script.write_text(';\n'.join(filters),encoding='utf-8')
+        app.ff(['-i',source,'-filter_complex_script',script,'-map','[out]','-ar','48000','-ac','2','-c:a','pcm_s16le',r['output']],'Taglio dei tratti audio della timeline')
+        return {'duration':sum(s['duration'] for s in spans)}
+    if op=='pad_import_audio':
+        import math
+        duration=r['duration'];current=info(source)['duration']
+        if type(duration) not in (int,float) or not math.isfinite(duration) or duration<=0:raise ValueError('Durata importazione audio non valida.')
+        if current+1/48000>=duration:return {'padded_seconds':0}
+        if duration-current>.5:raise ValueError('L’audio importato è più corto del video di oltre mezzo secondo: importa nuovamente il video originale.')
+        target=folder/'audio-padded.wav'
+        app.ff(['-i',source,'-af',f'apad,atrim=end_sample={round(duration*48000)}','-ar','48000','-ac','2','-c:a','pcm_s16le',target],'Allineamento della coda audio al video')
+        target.replace(source)
+        return {'padded_seconds':duration-current}
+    if op in ('import_clips','fit_video'):app.config['stage_prefix']=r.get('stage_prefix','Post-produzione')
+    if op=='extract_guides':
+        from h3chat.video_guide_frames import extract
+        return extract(source,r['start'],r['frames'],r['positions'],folder,frame_image)
     if op=='import_frame':
         import av
         from uuid import uuid4
@@ -111,16 +136,26 @@ def main(r):
     if op=='import_manifest':
         from uuid import uuid4
         import av
+        segment_seconds=r.get('segment_seconds',15)
+        if type(segment_seconds) is not int or segment_seconds not in (10,15):raise ValueError('Segmenti del video esterno: scegli 10 o 15 secondi.')
         stat=source.stat();fingerprint=[stat.st_size,stat.st_mtime_ns];manifest=folder/'import.json'
         if manifest.is_file():
             cached=json.loads(manifest.read_text(encoding='utf-8'))
-            if cached.get('fingerprint')==fingerprint and all(Path(x['path']).is_file() for x in cached['images']) and (folder/'audio.wav').is_file():return cached
+            if cached.get('fingerprint')==fingerprint and cached.get('segment_seconds',15)==segment_seconds and cached.get('segmentation_version',1)==r.get('segmentation_version',1) and all(Path(x['path']).is_file() for x in cached['images']) and (folder/'audio.wav').is_file():return cached
         result=info(source)
-        if not result['width'] or not 1<=result['duration']<=600:raise ValueError('Scegli un video da 1 secondo a 10 minuti.')
-        result.update(images=[],audio_id=uuid4().hex,fingerprint=fingerprint)
+        from h3chat.video_import import validate_metadata
+        validate_metadata(result)
+        result.update(images=[],audio_id=uuid4().hex,fingerprint=fingerprint,segment_seconds=segment_seconds,segmentation_version=r.get('segmentation_version',1))
+        if r.get('segmentation_version')==2:
+            from h3chat.video_import_windows import windows
+            starts=[start for start,frames in windows(round(result['duration']*24),segment_seconds)]
+        else:starts=range(0,round(result['duration']*24),segment_seconds*24)
+        from h3chat.video_conversion_progress import write as progress,ffmpeg as convert
+        progress_file=folder/'progress.json';starts=list(starts)
+        progress(progress_file,'Preparazione anteprime',done=0,total=len(starts))
         with av.open(str(source)) as f:
             stream=f.streams.video[0]
-            for i,t in enumerate(range(0,round(result['duration']*24),360)):
+            for i,t in enumerate(starts):
                 f.seek(round(t/24*1000000),backward=True)
                 frame=next((x for x in f.decode(stream) if x.time is None or x.time>=t/24-1/48),None)
                 if frame is None:raise ValueError('Fotogramma iniziale del clip non disponibile.')
@@ -128,20 +163,27 @@ def main(r):
                 # Video import uses the bundled media library, without Vision.
                 frame_image(frame,path)
                 result['images'].append({'id':uuid4().hex,'path':str(path)})
-        if result['has_audio']:app.extract(source,folder/'audio.wav',duration=result['duration'])
-        else:app.ff(['-f','lavfi','-i','anullsrc=r=48000:cl=stereo','-t',str(result['duration']),folder/'audio.wav'])
+                progress(progress_file,f'Preparazione anteprime · {i+1}/{len(starts)} clip',done=i+1,total=len(starts))
+        if result['has_audio']:
+            args=['-i',source,'-vn','-af',f'aresample=48000,apad,atrim=end_sample={round(result["duration"]*48000)},asetpts=N/SR/TB','-ar','48000','-ac','2','-c:a','pcm_s16le',folder/'audio.wav']
+        else:args=['-f','lavfi','-i','anullsrc=r=48000:cl=stereo','-t',str(result['duration']),folder/'audio.wav']
+        convert([app.FFMPEG,'-y','-v','error','-nostdin','-protocol_whitelist','file,pipe',*args],progress_file,result['duration'],'Preparazione audio originale')
+        progress(progress_file,'Salvataggio della suddivisione')
         part=manifest.with_suffix('.tmp');part.write_text(json.dumps(result),encoding='utf-8');part.replace(manifest)
         return result
     if op=='import_clips':
         total=len(r['timeline'])
-        for scene in r['timeline']:
-            path=folder/f'clip-{scene["index"]+1:03d}.mp4'
+        for position,scene in enumerate(r['timeline'],1):
+            path=Path(scene['output']) if scene.get('output') else folder/f'clip-{scene["index"]+1:03d}.mp4'
+            if path.resolve().parent!=folder.resolve():raise ValueError('Destinazione della clip fuori dalla cartella di lavoro.')
             if path.is_file():
                 try:
                     if abs(info(path)['duration']-scene['duration'])<.05:continue
                 except Exception:pass # Replace an incomplete cached clip after Stop.
-            part=folder/f'clip-{scene["index"]+1:03d}.pending.mp4'
-            app.ff(['-ss',str(scene['start']),'-i',source,'-t',str(scene['duration']),'-an','-vf','fps=24,scale=trunc(iw/2)*2:trunc(ih/2)*2','-frames:v',str(scene['frames']),'-c:v','libx264','-preset','fast','-crf','18',part],f'Preparazione clip esterno {scene["index"]+1}/{total}')
+            part=path.with_suffix('.pending.mp4')
+            label=(f'Timeline · {r["timeline_total"]} clip totali · preparazione originali {r.get("prepare_offset",0)+position}/{r.get("prepare_total",total)} · clip {scene["index"]+1}'
+                   if r.get('timeline_total') else f'Preparazione clip {scene["index"]+1}'+(f' · {position}/{total} da preparare' if total>1 else ''))
+            app.ff(['-ss',str(scene['start']),'-i',source,'-t',str(scene['duration']),'-an','-vf','fps=24,scale=trunc(iw/2)*2:trunc(ih/2)*2','-frames:v',str(scene['frames']),'-c:v','libx264','-preset','fast','-crf','18',part],label)
             if abs(info(part)['duration']-scene['duration'])>.05:raise RuntimeError('Preparazione del clip esterno incompleta.')
             part.replace(path)
         return {'clips':total}

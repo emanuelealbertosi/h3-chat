@@ -1,5 +1,6 @@
 """Separate user databases/files, with a single shared queue for local compute."""
 import json
+import re
 import threading
 import time
 from .service import Service
@@ -18,13 +19,16 @@ class Workspaces:
     def wrap(self,app):
         original=app.execute_job
         app.compute_lock=self.compute;app.knowledge.compute_lock=self.compute
-        for name in ('enqueue','regenerate'):
+        for name in ('enqueue','regenerate','resume_video'):
             submit=getattr(app.store,name,None)
             if callable(submit):
-                def queued(*args,_submit=submit,**kwargs):
+                def queued(*args,_submit=submit,_name=name,**kwargs):
                     with self.queue:
                         ident=_submit(*args,**kwargs)
-                        self.pending.append((app,ident));self.queue.notify_all()
+                        ticket=(app,ident)
+                        row=app.store.one('SELECT status FROM jobs WHERE id=?',(ident,)) if _name=='resume_video' else {'status':'queued'}
+                        if row and row['status']=='queued' and ticket not in self.pending:
+                            self.pending.append(ticket);self.queue.notify_all()
                     return ident
                 setattr(app.store,name,queued)
         stop=getattr(app,'cancel',None)
@@ -130,11 +134,15 @@ class Workspaces:
 
 
 def guest_allowed(path,method):
+    if method=='GET' and path=='/api/images/last-seed':return True
+    if method=='GET' and re.fullmatch(r'/api/gallery/[0-9a-f]{32}/preview-progress',path):return True
     if method=='GET' and (path=='/api/gallery' or path.startswith('/gallery-file/')):return True
-    if method=='POST' and path in ('/api/gallery/select','/api/gallery/import'):return True
+    if method=='POST' and path in ('/api/gallery/select','/api/gallery/import','/api/gallery/delete-plan','/api/gallery/delete'):return True
+    if method in ('PATCH','DELETE') and re.fullmatch(r'/api/gallery/[0-9a-f]{32}',path):return True
+    if method=='POST' and re.fullmatch(r'/api/gallery/[0-9a-f]{32}/preview',path):return True
     if method=='GET':return path.startswith(('/api/chats/','/api/canvas/','/api/projects/','/media/','/exports/')) or path in ('/','/access','/login','/api/state','/api/health') or path.startswith('/static/')
     if path in ('/api/chats','/api/collections','/api/uploads','/api/export/pdf','/api/export/html','/api/export/audio','/api/loras','/api/projects','/api/settings','/api/knowledge/options'):return True
-    if path.startswith(('/api/chats/','/api/canvas/','/api/collections/','/api/jobs/','/api/slides/images/')):return True
+    if path.startswith(('/api/chats/','/api/canvas/','/api/collections/','/api/jobs/','/api/slides/images/','/api/uploads/')):return True
     parts=path.strip('/').split('/')
     if parts[:2]==['api','projects']:
         # Browser uploads carry bytes. Server filesystem path selection is

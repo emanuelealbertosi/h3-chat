@@ -1,11 +1,14 @@
 # Documents, web and speech in H3-Chat 0.11
 
+**Lotti immagini:** con Assistant On si possono richiedere 2–24 immagini in un solo prompt, assegnando a ognuna modello, allegati, formato, megapixel e parametri. Un piano unico, generazione sequenziale con riuso del modello e una sola risposta sfogliabile in chat e canvas. Guida: [image-batch.md](image-batch.md).
+
 These tools feed the existing chat LLM. They do not require a second chat model,
 external inference server, system Python, compiler or cloud model account.
 
 ## Documents
 
-Attach up to three PDF / Word `.docx` files, 25 MB each. PDF text is extracted
+Attach up to three PDF / Word `.docx` files. Uploads have no total size or format
+filter; document decoding is checked when used. PDF text is extracted
 locally with pypdf and retains page references. Word paragraphs and tables are
 read with python-docx in document order and retain block references; Word does
 not provide stable page numbers. Macro documents, legacy `.doc`, password PDFs,

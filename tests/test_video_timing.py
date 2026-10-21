@@ -103,7 +103,7 @@ class TimingTests(unittest.TestCase):
                 return {'path':path.relative_to(engine.data).as_posix(),'generation':{'width':640,'height':480,'canvas_width':640,'canvas_height':480,'aspect':'4:3','aspect_source':'image'}}
             engine.generate_video=generate
             with patch('h3chat.soundtrack.compose',return_value={'duration':30}):
-                engine.generate_long_video({}, {'_video_duration':30,'_video_soundtrack':audio,'_assistant':False},plan,[audio],'job',threading.Event(),Mock(),prompt='Original storyboard')
+                engine.generate_long_video({'id':'fixture'}, {'_video_duration':30,'_video_soundtrack':audio,'_assistant':False},plan,[audio],'job',threading.Event(),Mock(),prompt='Original storyboard')
             self.assertEqual(len(calls),2)
             self.assertIn('00:00–00:15: Drive.',calls[1]['prompt']);self.assertNotIn('Wake.',calls[1]['prompt'])
             self.assertEqual([p['audios'][0]['start'] for p in calls],[0,15])

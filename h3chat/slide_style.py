@@ -39,6 +39,14 @@ contenuto da solo non cambia lo stile. Testi completi, fonti e contrasto leggibi
 restano obbligatori in ogni stile. Immagini caricate o provenienti dal RAG sono
 fonti originali: non ridisegnarle per adattarle allo stile.'''
 
+NO_IMAGE_TEXT = '''IMMAGINI GENERATE SENZA TESTO: crea soltanto illustrazioni e scene.
+Non chiedere al modello immagini parole, lettere, numeri, titoli, sottotitoli,
+etichette, cartelli scritti, loghi, watermark, fumetti con scritte o diagrammi
+testuali, neppure in grande. Tutte le scritte vanno composte separatamente
+in HTML/SVG leggibile e modificabile nella slide. Le immagini sono illustrazioni,
+non slide o infografiche già impaginate. Questa regola riguarda le immagini AI,
+non la grafica HTML/SVG e non modifica documenti o immagini originali caricati.'''
+
 IMAGE_CUES = {
     'professional': 'professional editorial visual style, restrained coordinated colors, clean refined composition',
     'playful': 'playful visual style, vibrant coordinated colors, expressive shapes, lively imaginative composition',
@@ -46,14 +54,32 @@ IMAGE_CUES = {
 }
 
 
+def composition_brief(composition='standard'):
+    if composition!='rich':return ''
+    return '''COMPOSIZIONE RICCA · STILE INFOGRAFICA.
+Progetta ogni pagina come una composizione editoriale illustrata, con un elemento
+visivo dominante e dettagli utili: diagrammi SVG, relazioni, fasi, confronti,
+etichette e immagini autorizzate, scelti in base al contenuto. Distribuisci questi
+elementi nella superficie utile, con gerarchie e dimensioni varie. Evita pagine
+ridotte a titolo e lista, card tutte uguali o grandi vuoti non intenzionali.
+Professionale significa preciso e curato: non impone una pagina spoglia. Anche
+in sintesi conserva ricchezza visiva senza aumentare il testo. Con testi completi
+conserva spiegazioni e fonti. Non riempire con fatti inventati, numeri decorativi,
+ornamenti casuali o caratteri minuscoli. Rispetta palette e richieste minimaliste
+esplicite. Le illustrazioni AI si usano solo se sono state abilitate e generate;
+altrimenti usa le immagini autorizzate e costruisci grafica pertinente in HTML/SVG.
+Mantieni leggibilità, contrasto, proporzioni e margini; varia i layout nel deck.'''
+
+
 def brief(design):
-    return GUIDES.get(design, GUIDES['professional']) + '\n' + COMMON
+    return GUIDES.get(design, GUIDES['professional']) + '\n' + COMMON + '\n' + NO_IMAGE_TEXT
 
 
 def image_prompt(prompt, design, form):
     # Keep the subject/medium authored by the LLM, but do not lose the selected
     # style when an image planner returns a generic prompt. No extra model call.
     cues = IMAGE_CUES.get(design, IMAGE_CUES['professional'])
+    no_text='Illustration only, no text, no letters, no words, no numbers, no captions, no labels, no typography, no logos, no watermarks. Leave signs, screens and speech bubbles blank; all slide text will be added separately.'
     if form == 'tags':
-        return prompt.rstrip(' ,.') + ', ' + cues
-    return prompt.rstrip() + '\nVisual direction: ' + cues + '.'
+        return prompt.rstrip(' ,.') + ', ' + cues + ', text-free illustration, blank signs, no text, no letters, no words, no numbers, no labels, no logos, no watermarks'
+    return prompt.rstrip() + '\nVisual direction: ' + cues + '.\n' + no_text

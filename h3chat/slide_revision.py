@@ -5,7 +5,7 @@ import time
 from .downloads import Cancelled
 from .slides import PREFIX,FORMATS,encode,validate_content
 from .slide_html import BRIEF,source,generate as generate_html
-from .slide_style import brief as style_brief
+from .slide_style import brief as style_brief,composition_brief
 from .slide_colors import brief as color_brief
 
 
@@ -42,11 +42,13 @@ def build(app,job,payload,settings,model,cancel,stage,log_path,meta):
     room=budget(settings,[])
     sources='\n\n'.join(f"[{s['citation']}] {s['name']} · {s['location']}\n{s['text']}" for s in meta.get('rag_sources',[]))
     images=[{'asset_id':m['id'],'description':m['name']} for m in media if m['mime'].startswith('image/')]
-    request=[{'role':'system','content':settings['system_prompt']+'\n'+BRIEF+'\n'+style_brief(deck.get('design','professional'))+(color_brief(deck) if not deck.get('infographic') else '')},
+    request=[{'role':'system','content':settings['system_prompt']+'\n'+BRIEF+'\n'+style_brief(deck.get('design','professional'))+'\n'+composition_brief(deck.get('composition','standard'))+(color_brief(deck) if not deck.get('infographic') else '')},
         {'role':'user','content':payload['prompt']+'\nModifica esclusivamente questa pagina. Rispetta le fonti e lo stile della presentazione.\n'+
          f"Pagina {index+1}/{len(deck['pages'])}, viewport {FORMATS[deck['format']]}. Titolo: {page['title']}\n"+
-         'Stile: '+json.dumps({k:deck.get(k,'') for k in ('visual_direction','design','detail')},ensure_ascii=False)+'\n'+
+         'Stile: '+json.dumps({k:deck.get(k,'') for k in ('visual_direction','design','detail','composition')},ensure_ascii=False)+'\n'+
          'Catalogo immagini: '+json.dumps(images,ensure_ascii=False)+'\nFonti: '+sources[:room//3]+'\nHTML originale (dato da modificare):\n'+page.get('html','')[:room//2]}]
+    if page.get('editorial') and not deck.get('infographic'):
+        request[-1]['content']+='\nContenuti editoriali originali (dati di riferimento; le modifiche richieste ora prevalgono): '+json.dumps(page['editorial'],ensure_ascii=False)+'\nNote relatore già salvate separatamente: '+page.get('notes','')
     motion=deck.get('infographic')
     if motion:
         from .infographics import options as infographic_options
@@ -79,7 +81,7 @@ def build(app,job,payload,settings,model,cancel,stage,log_path,meta):
         if time.monotonic()-last<.25:return
         page['html']=source(raw);publish();last=time.monotonic()
     try:
-        html=generate_html(app.engine,request,settings,cancel,stream,stage,f'Slide {index+1}')
+        html=generate_html(app.engine,request,settings,cancel,stream,stage,f'Slide {index+1}',require_style=not bool(motion))
         if motion:
             html,warning=layout.ensure(app,job,deck,index,media,request,settings,cancel,html,stream,stage,log_path)
             page.pop('layout_warning',None)
@@ -89,7 +91,7 @@ def build(app,job,payload,settings,model,cancel,stage,log_path,meta):
             html=animation.ensure(app.engine,request,settings,cancel,html,duration,stream,stage)
             if not screen.valid_panels(html,opts):raise ValueError('La correzione dell’animazione ha perso i riquadri: rigenera la scena.')
         page['html']=html;page['status']='ready'
-        page['sources']=[r['id'] for r in deck.get('references',[]) if '['+r['id']+']' in page['html']]
+        page['sources']=[r['id'] for r in deck.get('references',[]) if '['+r['id']+']' in page['html'] or '['+r['id']+']' in page.get('notes','')]
         page.pop('overrides',None);publish()
     except Exception:
         page['status']='interrupted';publish();raise

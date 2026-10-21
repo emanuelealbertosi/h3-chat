@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {reloadEditDraft,lastLaunchDraft} from '../ui/video-edit-reload.js';
+const data={clips:[{clip:1,start:0,end:15},{clip:2,start:15,end:30}],images:[{id:'poster',index:1},{id:'face',index:2},{id:'body',index:3}]};
+const edit={image_ids:['poster','body','face'],patches:[{clip:2,prompt:'Face <Picture 3>, outfit <Picture 2>',images:[3,2],mode:'video',audio_guide:false,start:2,end:10,reference_megapixels:.2}],remount:false,versions:{'2':'prior'}};
+const result=reloadEditDraft(data,edit,{model:'model',parameters:{megapixels:.5,seed:-1},steps:12,assistant:false,references:[]});
+assert.equal(result.state.clips[0].enabled,false);assert.equal(result.state.clips[1].enabled,true);
+assert.equal(result.state.active,2);assert.deepEqual(result.state.clips[1].images,[2,3]);
+assert.equal(result.state.clips[1].prompt,'Face <Picture 2>, outfit <Picture 3>');
+assert.equal(result.state.clips[1].first,48);assert.equal(result.state.clips[1].last,240);
+assert.equal(result.state.clips[1].audio_guide,false);assert.equal(result.state.values.remount,false);
+assert.deepEqual(result.state.versions,{'2':'prior'});assert.equal(result.state.values.reference_megapixels,'0.2');
+assert.throws(()=>reloadEditDraft({...data,images:data.images.slice(0,1)},edit,{references:[],parameters:{}}),/riferimento/);
+console.log('Edit reload preserves selected clips, media identity, settings, interval, versions and optional audio.');
+const last=lastLaunchDraft({...data,last_launch:{edit:{...edit,versions:{'2':'generated-current'}},model:'frozen',parameters:{attention:'veda',megapixels:.98,seed:0},steps:16,assistant:false,image_refs:[],pending_clips:[],saved_at:123}});
+assert.equal(last.state.clips.some(c=>c.enabled),false);assert.equal(last.state.model,'frozen');assert.equal(last.state.parameters.seed,0);
+assert.equal(last.state.clips[1].first,48);assert.deepEqual(last.state.versions,{'2':'generated-current'});
+assert.equal(last.state.values.video_steps,'16');assert.equal(last.last_launch,true);

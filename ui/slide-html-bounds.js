@@ -6,9 +6,26 @@ export function contentOverflows(doc,height){
  });
 }
 
-export function fitMediaBounds(doc,height){
+export function fitMediaBounds(doc,height,wholeImages=false){
  let changed=false;
  const css=element=>doc.defaultView.getComputedStyle(element);
+ // Repair a common authored-layout error: a wrapped title/subtitle extends
+ // below the fixed top of its sibling content panel. Reserve actual space,
+ // keeping the panel's lower edge and all text; never cover it with z-index.
+ if(wholeImages){
+  for(const header of doc.body.querySelectorAll('header,.header,[data-slide-header]')){
+   if(!header.querySelector('h1,h2')||header.closest('svg'))continue;
+   const head=header.getBoundingClientRect();if(head.top<0||head.top>height*.35)continue;
+   const end=Math.max(head.bottom,...[...header.querySelectorAll('*')].filter(e=>!e.closest('style,svg')).map(e=>e.getBoundingClientRect().bottom));
+   for(const panel of header.parentElement.children){
+    if(panel===header||!panel.matches('main,.main,[data-slide-content]')||css(panel).position!=='absolute')continue;
+    const box=panel.getBoundingClientRect(),gap=end+16-box.top;
+    if(gap<=0||box.top<head.top||box.right<=head.left||box.left>=head.right||box.height-gap<80)continue;
+    panel.style.setProperty('top',(panel.offsetTop+gap)+'px','important');
+    panel.style.setProperty('height',(box.height-gap)+'px','important');changed=true;
+   }
+  }
+ }
  // The root body's first child margin can shift an absolute background. Give
  // block bodies their own formatting context; preserve authored flex/grid.
  if(doc.querySelector('[data-h3-video]')&&css(doc.body).display==='block')doc.body.style.setProperty('display','flow-root','important');
@@ -27,6 +44,12 @@ export function fitMediaBounds(doc,height){
  if(contentOverflows(doc,height)){relax();relax();}
  for(const element of doc.body.querySelectorAll('img,svg')){
   const parent=element.parentElement;if(!parent)continue;
+  // Static slide illustrations are source content, not cropped backgrounds.
+  // object-fit:cover clips pixels even when the image element fits perfectly.
+  // Preserve authored cropping in animated infographics unless requested.
+  if(wholeImages&&element.tagName.toLowerCase()==='img'&&css(element).objectFit!=='contain'){
+   element.style.setProperty('object-fit','contain','important');changed=true;
+  }
   const box=element.getBoundingClientRect(),outer=parent.getBoundingClientRect(),style=css(parent);
   if(outer.width>0&&outer.height>0&&(box.right>1282||box.bottom>height+2||box.width>outer.width+2||box.height>outer.height+2)){
    const width=Math.max(1,Math.min(1280,outer.right)-Math.max(0,outer.left)-parseFloat(style.paddingLeft||0)-parseFloat(style.paddingRight||0));

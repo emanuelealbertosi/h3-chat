@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {generationRows} from '../ui/video-generation-details.js';
+const get=p=>Object.fromEntries(generationRows(p,{model:'Old saved model'}));
+const rows=get({model_name:'Model used',width:960,height:540,duration:3,steps:12,seed:0,offload:false,pdd_enabled:false,source_conditioning:'aligned',source_video:{conditioning:'aligned',width:960,height:544,megapixels:.15,frames:72},loras_applied:[{file:'vfx.safetensors',weight:1}],attention:'veda',attention_backend:'sage',veda:{active:false,fallback_reason:'Unavailable'}});
+assert.equal(rows.Modello,'Model used');assert.equal(rows.Seed,'0');assert.equal(rows.Offload,'Disattivato');assert.equal(rows['LoRA applicati'],'vfx.safetensors · peso 1');assert.equal(rows['Guida video'],'Allineata · stessa griglia dell’uscita');assert.equal('Risoluzione riferimento' in rows,false);assert.equal(rows['Attenzione utilizzata'],'sage');
+const legacy=get({steps:20,offload:true});assert.equal(legacy.Modello,'Old saved model');assert.equal('LoRA applicati' in legacy,false);assert.equal('Seed' in legacy,false);
+assert.equal(get({attention:'veda',attention_chunks_mode:'manual'})['Scelta gruppi VEDA'],'Esplicita');
+assert.equal('Scelta gruppi VEDA' in get({attention:'veda'}),false);
+assert.equal(get({loras:[]})['LoRA salvati'],'Nessuno');
+assert.equal(get({source_video:{megapixels:.2,frames:360}})['Risoluzione riferimento'],'0,2 MP');
+assert.equal(get({loras:[{path:'F:/models/adapter.safetensors',weight:.8}]})['LoRA salvati'],'adapter.safetensors · peso 0.8');
+console.log('Passed: saved video settings, zero/false values, legacy gaps, applied LoRA and actual aligned guide.');

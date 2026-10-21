@@ -74,6 +74,29 @@ PLAN_SCHEMA={'type':'object','properties':{
  'images':{'type':'array','items':{'type':'object','properties':{'index':{'type':'integer'},'role':{'type':'string','enum':['reference','keyframe']},'seconds':{'type':'number'}},'required':['index','role','seconds'],'additionalProperties':False}},
  'audios':{'type':'array','items':{'type':'object','properties':{'index':{'type':'integer'},'role':{'type':'string','enum':['reference','lipsync','reuse']},'start':{'type':'number'}},'required':['index','role','start'],'additionalProperties':False}}},'required':['prompt','images','audios'],'additionalProperties':False}
 
+VIDEO_EDIT_BRIEF = '''Prepare a MiniMax H3 SOURCE VIDEO EDIT, not a new scene.
+Return JSON prompt, images, audios using the supplied schema and attachment order.
+The actual complete source clip is supplied to H3 as <Video 1>. It determines
+motion, performances, poses, shot cuts, framing, camera movement and timing.
+Make ONLY the requested changes: identity, clothes, background, props or other
+attributes. Unrequested subjects and attributes remain as in <Video 1>.
+Do not invent actions, a turntable, a new camera move, new cuts or a new setting.
+An image is an optional identity/outfit/object/background reference, NOT a first
+frame and NOT a replacement scene. All images have role reference and seconds 0.
+The request overrides preservation only for the attributes explicitly changed.
+Use six labeled sections: subject_definitions, summary, retention_analysis,
+detailed_description, overall_soundscape, non_diegetic_music. In summary write
+[video editing] The target video is an edited version of <Video 1>.
+State that the same original video movement, camera, cuts and timing are retained.
+Mention each provided Picture where its requested attribute is transferred.
+Only refer to audio attachments actually listed in the request. A source video
+does not imply an Audio attachment. The application preserves the original
+soundtrack separately when audio guidance is disabled; do not invent Audio labels.
+You cannot see the source video's movement: refer to it rather than inventing
+its contents. If reference images are unseen, don't guess their colors/details.
+The user request is authoritative. Use English instructions, preserving exact
+original-language visible text, lyrics or dialogue. No fabricated reference labels.'''
+
 def attachment_instructions(images,audios):
     """Enumerate the actual user assets; generated memory is not an attachment."""
     pictures=[f'<Picture {x["index"]}>' for x in images]
@@ -91,7 +114,7 @@ def route(history,settings):
         if not re.search(r'\b(?:codice|tutorial|prompt|come fare|how to)\b',opening[:100]):return {'intent':'video','prompt':text,'selection':'auto'}
     return None
 
-def direct_plan(prompt,refs,duration):
+def direct_plan(prompt,refs,duration,*,source_video=False):
     """Assistant Off: deterministic labels, without rewriting the user's prompt."""
     pictures=[x for x in refs if x['mime'].startswith('image/')]
     audios=[x for x in refs if x['mime'].startswith('audio/')]
@@ -104,4 +127,4 @@ def direct_plan(prompt,refs,duration):
         images.append({'index':index,'role':role,'seconds':seconds})
     audio_role='lipsync' if re.search(r'lip[ -]?sync|sincronizz\w*\s+(?:labial|labbra)|canta|\b(?:sing|sings|singing)\b|mouth movements|movimenti labiali',prompt,re.I) else 'reuse' if re.search(r'audio originale|original audio|conserva.*audio',prompt,re.I) else 'reference'
     plan={'prompt':prompt,'images':images,'audios':[{'index':i,'role':audio_role if i==1 else 'reference','start':0} for i in range(1,len(audios)+1)]}
-    return validate_plan(plan,refs,duration)
+    return validate_plan(plan,refs,duration,source_video=source_video)

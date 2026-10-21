@@ -29,6 +29,13 @@ controlli per l’audio originale. Non serve un nuovo modello video.
 generati ed esportazioni, riutilizzabili in tutte le modalità e separati per account.
 [Guida a infografiche e galleria](docs/infographics-and-gallery.md).
 
+I profili locali opzionali **ISTA IQ3_S e Orca IQ3_XXS ottimizzati** portano il contesto a
+128K con MTP2 (ISTA) o MTP4 (Orca), cache Q4 e Vision CPU sul PC RTX 50 verificato. Si attivano nelle
+Preferenze del modello, senza cambiare automaticamente i preset salvati.
+Il motore rimane integrato: con memoria **A richiesta** viene chiuso prima del
+modello successivo della catena. Il motore Standard resta disponibile.
+[Attivazione, requisiti e verifiche](docs/llm-acceleration.md).
+
 **Voice** genera letture, lezioni e riassunti con Higgs Audio v3 nel motore
 integrato. Modello, codec, campioni vocali, CPU/GPU e interpretazione si
 configurano dal Setup. **Voice + Manim** crea copione, voce e diagrammi animati
@@ -106,7 +113,7 @@ Le chiavi sono protette con Windows DPAPI e non vengono mostrate o registrate ne
 
 Crea un **Progetto**, collega PDF/Word/testi o cartelle e usa **RAG** per recuperare estratti nella chat. Le citazioni aprono il pannello **Fonti e file**, con documento, pagina/righe e testo evidenziato. La ricerca web funziona anche senza progetto; gli snapshot delle fonti web possono essere salvati e indicizzati nel progetto. Ricerca per parole inclusa, ricerca semantica opzionale con un GGUF embedding (EmbeddingGemma scaricabile dall’admin).
 
-Per i **libri nel RAG** usa **Scegli file…**, trascina file/cartelle nel progetto oppure collega i percorsi originali senza copiarli. Sono ammessi fino a **512 MB per documento**, **3.000 pagine per PDF** e dieci milioni di caratteri estratti (massimo 20.000 estratti). Il caricamento mostra la percentuale e invia blocchi da 2 MB; gli embedding sono indicizzati in piccoli gruppi su disco. La prima indicizzazione di un libro può richiedere tempo, soprattutto con Ovis su CPU; le richieste successive riutilizzano l’indice se il file e il modello non cambiano. Le citazioni conservano il numero di pagina. Con Ovis e immagini RAG attive, anche le pagine scansionate possono essere cercate visivamente. Per la ricerca lessicale o gli embedding solo testo serve prima una copia con OCR. Gli allegati diretti della chat mantengono il limite separato di 25 MB e 300 pagine.
+Per i **libri nel RAG** usa **Scegli file…**, trascina file/cartelle nel progetto oppure collega i percorsi originali senza copiarli. Il caricamento accetta qualsiasi formato e dimensione. Per l’indicizzazione sono analizzate fino a **3.000 pagine per PDF** e dieci milioni di caratteri estratti (massimo 20.000 estratti). Il caricamento mostra la percentuale e invia blocchi da 2 MB; gli embedding sono indicizzati in piccoli gruppi su disco. La prima indicizzazione di un libro può richiedere tempo, soprattutto con Ovis su CPU; le richieste successive riutilizzano l’indice se il file e il modello non cambiano. Le citazioni conservano il numero di pagina. Con Ovis e immagini RAG attive, anche le pagine scansionate possono essere cercate visivamente. Per la ricerca lessicale o gli embedding solo testo serve prima una copia con OCR. Gli allegati diretti della chat non hanno limiti di caricamento; l’analisi PDF usa fino a 300 pagine.
 
 **Strumenti → Interprete numerico** esegue calcoli e dati dei grafici con sintassi Python limitata. Installa **Manim** dal Setup e chiedi «Ricava dal PDF allegato un’animazione Manim»: lo stesso LLM scrive Python Manim completo: scene 2D/3D, camera, trasformazioni, updaters, immagini e formule Tex/MathTex. Installa anche **LaTeX** dal Setup per le formule. MP4 riproducibile, codice Python modificabile e file LaTeX scaricabili in chat o nel canvas. La durata esplicita (ad esempio 30s) prevale sul preset ed è verificata; il codice generato può essere corretto automaticamente fino a due volte. Il rendering Windows usa AppContainer senza capacità di rete e limiti di RAM/tempo. Gli storyboard già salvati restano utilizzabili. [Uso e limiti](docs/projects-and-animations.md).
 
@@ -160,7 +167,7 @@ Il lip-sync usa l’audio per condizionare la generazione con denoise audio zero
 
 ## PDF, Word, web e trascrizione
 
-Allega **PDF o Word .docx** alla chat (fino a tre documenti, 25 MB ciascuno; PDF fino a 300 pagine). L’app estrae testo e tabelle localmente e conserva riferimenti a pagine/blocchi. Per documenti lunghi passa all’LLM estratti pertinenti e lo indica nella risposta. I file restano disponibili per domande successive. Per scansioni o figure PDF abilita Vision e indica le pagine: vengono fornite fino al limite di immagini del modello, massimo quattro pagine per lettura. Le altre pagine non vengono dichiarate lette. Word legacy `.doc`, macro e PDF protetti da password non sono supportati.
+Allega **PDF o Word .docx** alla chat (fino a tre documenti; analisi PDF fino a 300 pagine, caricamento senza limiti di dimensione). L’app estrae testo e tabelle localmente e conserva riferimenti a pagine/blocchi. Per documenti lunghi passa all’LLM estratti pertinenti e lo indica nella risposta. I file restano disponibili per domande successive. Per scansioni o figure PDF abilita Vision e indica le pagine: vengono fornite fino al limite di immagini del modello, massimo quattro pagine per lettura. Le altre pagine non vengono dichiarate lette. Word legacy `.doc`, macro e PDF protetti da password non sono supportati.
 
 **Web** forza una ricerca per il messaggio; “cerca sul web…” viene riconosciuto automaticamente se abilitato nelle preferenze. Default DuckDuckGo con fallback Bing; Bing e una propria istanza SearXNG sono selezionabili. L’app legge le fonti pubbliche e aggiunge link reali alla risposta o al canvas. Se una pagina blocca l’accesso, la fonte è indicata come solo estratto. Se non recupera risultati pertinenti, mostra un errore: non simula una ricerca. Solo il messaggio di ricerca viene inviato al provider, non i file allegati.
 
@@ -168,7 +175,7 @@ Gli **audio allegati a una richiesta chat** vengono trascritti localmente; puoi 
 
 **Quale file LLM sto usando?** Setup, Preferenze e Catalogo mostrano il nome effettivo del GGUF; sotto la selezione compaiono il percorso completo e «Copia percorso». In chat premi il nome del modello accanto all’invio per aprire gli stessi dettagli. Le etichette personali restano salvate, mentre nomi interni generici come `Staged_Tmpl` vengono sostituiti dal file nei menu. Nome interno GGUF e architettura dichiarata restano consultabili nei dettagli. Se il modello non è scaricato o il percorso è mancante, il file è indicato come previsto. Gli aggiornamenti dei nomi non cambiano modelli selezionati, percorsi o preset.
 
-In **Setup → Documenti, ricerca e trascrizione**, installa il motore opzionale e scarica **Whisper Small multilingue** (default) oppure **Tiny**. Puoi scegliere una cartella Faster Whisper/CTranslate2 già presente altrove con `model.bin`, `config.json` e `tokenizer.json`; nessun peso viene copiato. Imposta lingua, thread e beam. Inferenza **CPU INT8**, processo liberato dopo la richiesta, nessuna VRAM aggiuntiva; massimo tre audio, 64 MB e 30 minuti ciascuno. Non è un motore di analisi musicale, rumori, emozioni o identità vocale. I risultati possono contenere errori.
+In **Setup → Documenti, ricerca e trascrizione**, installa il motore opzionale e scarica **Whisper Small multilingue** (default) oppure **Tiny**. Puoi scegliere una cartella Faster Whisper/CTranslate2 già presente altrove con `model.bin`, `config.json` e `tokenizer.json`; nessun peso viene copiato. Imposta lingua, thread e beam. Inferenza **CPU INT8**, processo liberato dopo la richiesta, nessuna VRAM aggiuntiva; massimo tre audio; la trascrizione analizza fino a 30 minuti e il decoder ha un limite separato di 64 MB. Non è un motore di analisi musicale, rumori, emozioni o identità vocale. I risultati possono contenere errori.
 
 I componenti PDF/Word sono inclusi nello ZIP Windows e preparati da `install.bat` nei clone; il runtime audio e i pesi si installano dal Setup con SHA-256 e revisioni fissate. Dopo l’installazione, documenti e trascrizione funzionano offline. [Guida e limiti](docs/chat-tools.md).
 
@@ -265,6 +272,16 @@ I livelli riservano rispettivamente 0%, 12,5%, 25%, 50% e 75% del limite di risp
 
 La scelta è salvata e fotografata in ogni richiesta, anche con canvas attivo. Il router usa sempre Think Off per evitare lavoro aggiuntivo prima di una generazione immagini. La fase thinking è indicata nello stato; la risposta e il canvas ricevono solo il contenuto finale, senza i token di ragionamento.
 
+**Modifica video** consente di cambiare personaggi, vestiti, sfondi e oggetti da
+prompt usando la clip originale come guida, con immagini di riferimento
+facoltative. È distinta da Rigenera e I2V, conserva l’audio e permette di
+rimontare il filmato oppure ottenere solo gli spezzoni. [Guida](docs/video-source-edit.md).
+
+La modifica opzionale dei **fotogrammi guida** estrae inizio, metà e fine del
+tratto e applica automaticamente il prompt con il modello immagini scelto,
+prima di caricare MiniMax. Le guide sono salvate in galleria e riusate in caso
+di ripresa; la fedeltà del movimento resta dipendente dal modello video.
+
 ## Modelli residenti o a richiesta
 
 In **Impostazioni → Setup → Modelli in memoria** scegli:
@@ -354,7 +371,7 @@ Il motore immagini C++ usa batch singolo e VAE a tasselli. Con backend GPU, diff
 
 FLUX include encoder Qwen3 4B e VAE. Vision include il proiettore multimodale. Il catalogo fissa revisioni, dimensioni e hash dei componenti; non scarica codice Python dei repository dei modelli. Le licenze dei pesi sono indicate nel catalogo e restano quelle dei rispettivi autori. `scripts/lock_catalog.py` rigenera i manifest verificando i metadati ufficiali: è uno strumento per chi mantiene l'app, non parte dell'avvio.
 
-I limiti degli allegati sono quattro immagini, 12 MB ciascuna e 8192 px per lato. La UI accetta PNG, JPEG e WebP; converte WebP in PNG. Se il modello scelto accetta meno riferimenti, il lavoro viene fermato con una spiegazione: nessun riferimento viene scartato silenziosamente.
+Il caricamento dal PC non impone limiti di formato, dimensione o risoluzione e conserva i file originali. I riferimenti utilizzabili dipendono dal modello scelto. Se il modello scelto accetta meno riferimenti, il lavoro viene fermato con una spiegazione: nessun riferimento viene scartato silenziosamente.
 
 ## Dati, protezioni e recupero
 
@@ -416,3 +433,5 @@ Le impostazioni richiedono uno stato aggiornato dal motore prima di aprirsi; se 
 ## Upscale video
 
 RTX Video Super Resolution è disponibile come motore opzionale e autonomo, per video generati o esterni. Premi **Upscale** sotto un video oppure accanto alla galleria; configura default, installazione e qualità RTX in **Impostazioni → Upscale video**. Prove brevi, proporzioni, tempi, audio originale e recupero dei blocchi interrotti: [guida](docs/upscale.md).
+
+LoRA per modifica video: Character Swap e VFX Edit FFP sono selezionabili dal pulsante LoRA della chat e dalle modali video, con peso regolabile e guida allineata opzionale. Vedi [configurazione e limiti](docs/video-edit-loras.md).

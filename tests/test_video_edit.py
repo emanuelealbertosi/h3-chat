@@ -11,6 +11,147 @@ class VideoEditTests(unittest.TestCase):
     setUp=fixture.VideoTests.setUp
     tearDown=fixture.VideoTests.tearDown
 
+    def test_chat_shows_only_used_inputs_without_changing_saved_references(self):
+        chat,ident,refs,outputs,params=self.original()
+        video={'id':ident,'name':'Original video.mp4','mime':'video/mp4','path':f'outputs/{ident}/video.mp4'}
+        (self.app.data/video['path']).write_bytes(b'\0\0\0\x18ftypisom')
+        self.app.store.gallery.register([video])
+        new=request(self.app,chat,{'source':ident,'assistant':False,'remount':False,
+            'patches':[{'clip':2,'mode':'video','prompt':'Replace the character','images':[2]}]})['job_id']
+        messages=self.app.store.chat(chat)['messages'];user=messages[-2]
+        self.assertEqual([r['id'] for r in user['display_media']],[ident,refs[1]['id'],refs[2]['id']])
+        self.assertEqual(user['media'],refs)
+        payload=json.loads(self.app.store.one('SELECT payload FROM jobs WHERE id=?',(new,))['payload'])
+        self.assertEqual(payload['media'],refs)
+        self.assertEqual(payload['settings']['_video_edit']['patches'][0]['images'],[2])
+        self.assertNotIn('display_media',messages[0])
+        self.assertEqual(describe(self.app,chat,ident)['images'][0]['id'],refs[0]['id'])
+        self.app.store.execute("UPDATE jobs SET status='cancelled' WHERE id=?",(new,))
+        replay=self.app.store.regenerate(chat)
+        self.assertEqual(self.app.store.chat(chat)['messages'][-2]['display_media'],user['display_media'])
+        replay_payload=json.loads(self.app.store.one('SELECT payload FROM jobs WHERE id=?',(replay,))['payload'])
+        self.assertEqual(replay_payload['media'],refs)
+
+    def test_per_request_resolution_uses_source_aspect_and_keeps_preferences(self):
+        chat,ident,refs,outputs,params=self.original();before=copy.deepcopy(self.app.store.settings())
+        manifest=describe(self.app,chat,ident);self.assertEqual(manifest['model_id'],self.model['id'])
+        self.assertIn(self.model['id'],[m['id'] for m in manifest['models']])
+        new=request(self.app,chat,{'source':ident,'assistant':False,'model':self.model['id'],
+            'parameters':{'megapixels':2,'experimental_resolution':True},
+            'patches':[{'clip':2,'prompt':'Closer framing'}]})['job_id']
+        def generate(model,settings,plan,refs,job,cancel,stage,**kw):
+            canvas=kw['scene']['canvas'];self.assertEqual(canvas['aspect'],'16:9')
+            self.assertGreater(canvas['width']*canvas['height'],1344*768)
+            path=self.app.data/'outputs'/job/'video.mp4';path.parent.mkdir(parents=True);path.write_bytes(b'\x00\x00\x00\x18ftypisomnew')
+            return {'path':path.relative_to(self.app.data).as_posix(),'generation':params}
+        def fit(worker,body,*args,**kw):
+            Path(body['output']).write_bytes(b'\x00\x00\x00\x18ftypisomnew')
+            return {}
+        with patch.object(self.app.engine,'generate_video',side_effect=generate),patch.object(self.app.engine,'tool_call',side_effect=fit) as fitted,patch('h3chat.soundtrack.probe',return_value={'duration':60}),patch('h3chat.soundtrack.compose',return_value={'duration':42}):
+            self.app.execute_job(self.app.store.one('SELECT * FROM jobs WHERE id=?',(new,)),threading.Event())
+        self.assertEqual(self.app.store.chat(chat)['messages'][-1]['status'],'done')
+        self.assertEqual(fitted.call_args.args[1]['width'],640)
+        self.assertEqual(self.app.store.settings(),before)
+
+    def test_clip_only_partial_outputs_save_timeline_and_resume_without_regeneration(self):
+        chat,ident,refs,outputs,params=self.original()
+        original=(self.app.data/'outputs'/ident/'scenes.json').read_bytes()
+        new=request(self.app,chat,{'source':ident,'assistant':False,'remount':False,'patches':[
+            {'clip':2,'prompt':'Closer framing','start':4,'end':9},
+            {'clip':3,'prompt':'A new final moment'}]})['job_id']
+        def generate(model,settings,plan,selected,job,cancel,stage,**kw):
+            path=self.app.data/'outputs'/job/'video.mp4';path.parent.mkdir(parents=True,exist_ok=True)
+            path.write_bytes(b'\x00\x00\x00\x18ftypisomnew')
+            return {'path':path.relative_to(self.app.data).as_posix(),'generation':params|{'duration':kw['scene']['duration']}}
+        def splice(worker,body,*args,**kw):
+            Path(body['output']).write_bytes(b'\0\0\0\x18ftypisommerged')
+            return {'frames':360}
+        with patch.object(self.app.engine,'generate_video',side_effect=generate) as gpu,patch.object(self.app.engine,'tool_call',side_effect=splice) as merging,patch('h3chat.soundtrack.probe',return_value={'duration':60}),patch('h3chat.soundtrack.compose',side_effect=RuntimeError('Synthetic mux error')):
+            self.app.execute_job(self.app.store.one('SELECT * FROM jobs WHERE id=?',(new,)),threading.Event())
+        self.assertEqual(gpu.call_count,2);merging.assert_called_once()
+        saved=checkpoint(self.app.data,new);self.assertFalse(saved['revision_remount'])
+        self.assertEqual(saved['revision_completed'],[2,3])
+        recovered=self.app.regenerate(chat)['job_id']
+        def compose(engine,clips,audio,target,*args,**kw):
+            target.write_bytes(b'\x00\x00\x00\x18ftypisomnew')
+            return {'duration':kw['audio_duration']}
+        with patch.object(self.app.engine,'generate_video') as repeat,patch.object(self.app.engine,'tool_call') as splice,patch('h3chat.soundtrack.probe',return_value={'duration':60}),patch('h3chat.soundtrack.compose',side_effect=compose) as mux:
+            self.app.execute_job(self.app.store.one('SELECT * FROM jobs WHERE id=?',(recovered,)),threading.Event())
+        repeat.assert_not_called();splice.assert_not_called()
+        self.assertEqual([c.kwargs['audio_start'] for c in mux.call_args_list],[26,37])
+        self.assertEqual([c.kwargs['audio_duration'] for c in mux.call_args_list],[5,12])
+        self.assertTrue(all(len(c.args[1])==1 for c in mux.call_args_list))
+        self.assertTrue(all(c.args[1][0] not in [self.app.data/p for p in outputs] for c in mux.call_args_list))
+        answer=self.app.store.chat(chat)['messages'][-1]
+        self.assertEqual(answer['status'],'done',answer['meta']);self.assertEqual(len(answer['media']),2)
+        self.assertEqual([m['generation']['duration'] for m in answer['media']],[5,12])
+        self.assertTrue(all(m['generation']['clip_only'] for m in answer['media']))
+        for m in answer['media']:self.assertEqual(self.app.store.gallery.get(m['id'])['path'],m['path'])
+        self.assertEqual(answer['meta']['video_parameters']['reused_clips'],0)
+        self.assertTrue(saved['working_timeline'])
+        self.assertEqual(describe(self.app,chat,recovered)['duration'],42)
+        self.assertEqual(describe(self.app,chat,recovered)['edited_clips'],[2,3])
+        self.assertEqual(answer['media'][0]['generation']['timeline_id'],recovered)
+        self.assertEqual((self.app.data/'outputs'/ident/'scenes.json').read_bytes(),original)
+
+    def test_accumulated_edits_use_updated_clip_and_assemble_without_ai(self):
+        from h3chat.video_assemble import request as assemble
+        from h3chat.video_edit import source,source_interval
+        chat,ident,refs,outputs,params=self.original()
+        before=(self.app.data/'outputs'/ident/'scenes.json').read_bytes()
+        def generate(model,settings,plan,selected,job,cancel,stage,**kw):
+            out=self.app.data/'outputs'/job/'video.mp4';out.parent.mkdir(parents=True,exist_ok=True);out.write_bytes(b'\0\0\0\x18ftypisomnew')
+            return {'path':out.relative_to(self.app.data).as_posix(),'generation':params|{'duration':kw['scene']['duration']}}
+        def compose(engine,clips,audio,target,*args,**kw):
+            target.write_bytes(b'\0\0\0\x18ftypisomfinal');return {'duration':kw['audio_duration']}
+        def splice(worker,body,*args,**kw):
+            Path(body['output']).write_bytes(b'\0\0\0\x18ftypisommerged');return {'frames':360}
+        with patch.object(self.app.engine,'generate_video',side_effect=generate) as gpu,patch.object(self.app.engine,'tool_call',side_effect=splice),patch('h3chat.soundtrack.probe',return_value={'duration':60}),patch('h3chat.soundtrack.compose',side_effect=compose) as mux:
+            first=request(self.app,chat,{'source':ident,'assistant':False,'remount':False,'patches':[{'clip':2,'mode':'video','prompt':'Change outfit','start':2,'end':6}]})['job_id']
+            self.app.execute_job(self.app.store.one('SELECT * FROM jobs WHERE id=?',(first,)),threading.Event())
+            updated=source(self.app,chat,first)
+            self.assertEqual(source_interval(updated,{'clip':2,'start':7,'end':9})['path'],updated['record']['outputs'][1])
+            second=request(self.app,chat,{'source':first,'assistant':False,'remount':False,'patches':[{'clip':3,'prompt':'Change background'}]})['job_id']
+            self.app.execute_job(self.app.store.one('SELECT * FROM jobs WHERE id=?',(second,)),threading.Event())
+            saved=checkpoint(self.app.data,second)
+            self.assertEqual(saved['outputs'][1],updated['record']['outputs'][1]);self.assertEqual(saved['edited_clips'],[2,3])
+            self.assertEqual(saved['outputs'][0],outputs[0]);self.assertEqual(gpu.call_count,2)
+            final=assemble(self.app,chat,{'source':second})['job_id']
+            self.app.execute_job(self.app.store.one('SELECT * FROM jobs WHERE id=?',(final,)),threading.Event())
+            self.assertEqual(gpu.call_count,2)
+            self.assertEqual(mux.call_args.args[1],[self.app.data/p for p in saved['outputs']])
+            self.assertEqual(mux.call_args.kwargs['audio_start'],7);self.assertEqual(mux.call_args.kwargs['audio_duration'],42)
+        answer=self.app.store.chat(chat)['messages'][-1]
+        self.assertEqual(answer['status'],'done',answer['meta']);self.assertFalse(answer['media'][0]['generation'].get('clip_only',False))
+        self.assertEqual(describe(self.app,chat,final)['edited_clips'],[2,3])
+        self.assertEqual((self.app.data/'outputs'/ident/'scenes.json').read_bytes(),before)
+
+    def test_full_version_from_draft_uses_latest_timeline_metadata(self):
+        chat,original,refs,outputs,params=self.original()
+        def generate(model,settings,plan,selected,job,cancel,stage,**kw):
+            out=self.app.data/'outputs'/job/'video.mp4';out.parent.mkdir(parents=True);out.write_bytes(b'\0\0\0\x18ftypisomnew')
+            return {'path':out.relative_to(self.app.data).as_posix(),'generation':params|{'duration':kw['scene']['duration']}}
+        def mux(engine,clips,audio,target,*args,**kw):
+            target.write_bytes(b'\0\0\0\x18ftypisomfinal');return {'duration':kw['audio_duration']}
+        with patch.object(self.app.engine,'generate_video',side_effect=generate),patch('h3chat.soundtrack.probe',return_value={'duration':60}),patch('h3chat.soundtrack.compose',side_effect=mux):
+            draft=request(self.app,chat,{'source':original,'assistant':False,'remount':False,'patches':[{'clip':2,'prompt':'Change outfit'}]})['job_id']
+            self.app.execute_job(self.app.store.one('SELECT * FROM jobs WHERE id=?',(draft,)),threading.Event())
+            final=request(self.app,chat,{'source':draft,'assistant':False,'remount':True,'patches':[{'clip':3,'prompt':'Change background'}]})['job_id']
+            self.app.execute_job(self.app.store.one('SELECT * FROM jobs WHERE id=?',(final,)),threading.Event())
+        answer=self.app.store.chat(chat)['messages'][-1];self.assertEqual(answer['status'],'done',answer['meta'])
+        generation=answer['media'][0]['generation'];self.assertTrue(generation['remount'])
+        self.assertNotIn('clip_only',generation);self.assertNotIn('timeline_id',generation)
+        self.assertEqual(answer['media'][0]['id'],final)
+        self.assertEqual(describe(self.app,chat,final)['edited_clips'],[2,3])
+        self.assertEqual(checkpoint(self.app.data,final)['outputs'][1],checkpoint(self.app.data,draft)['outputs'][1])
+
+    def test_remount_flag_rejects_non_booleans_before_queueing(self):
+        chat,ident,*_=self.original()
+        for invalid in ('false',0,None):
+            with self.subTest(value=invalid),self.assertRaisesRegex(ValueError,'Rimonta'):
+                request(self.app,chat,{'source':ident,'remount':invalid,'patches':[{'clip':1,'prompt':'Change'}]})
+        self.assertEqual(len(self.app.store.all('SELECT id FROM jobs')),1)
+
     def original(self):
         chat=self.app.store.create_chat()['id']
         refs=[{'id':'1'*32,'name':'hero.png','path':'uploads/hero.png','mime':'image/png'},
@@ -65,14 +206,16 @@ class VideoEditTests(unittest.TestCase):
         chat,ident,refs,outputs,params=self.original()
         original=(self.app.data/'outputs'/ident/'scenes.json').read_bytes()
         settings=copy.deepcopy(self.app.store.settings())
-        new=request(self.app,chat,{'source':ident,'assistant':False,'patches':[
+        new=request(self.app,chat,{'source':ident,'assistant':False,'video_steps':20,'patches':[
             {'clip':2,'prompt':'Close-up of <Picture 1> singing.','images':[1,2],'lip_sync':True},
             {'clip':3,'prompt':'Close-up of <Picture 2>.','images':[2]}]})['job_id']
         calls=[]
         def generate(model,settings,plan,selected,job,cancel,stage,**kw):
+            from h3chat.video_options import options
+            self.assertEqual(options(model,settings,False)['steps'],20)
             calls.append((plan,selected,kw['scene']))
             path=self.app.data/'outputs'/job/'video.mp4';path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(b'\x00\x00\x00\x18ftypisomnew')
-            return {'path':path.relative_to(self.app.data).as_posix(),'generation':params}
+            return {'path':path.relative_to(self.app.data).as_posix(),'generation':params|{'steps':20}}
         with patch.object(self.app.engine,'generate_video',side_effect=generate),patch.object(self.app.engine,'generate_long_video') as full,patch('h3chat.soundtrack.probe',return_value={'duration':60}),patch('h3chat.soundtrack.compose',return_value={'duration':42}) as mux,patch.object(self.app.knowledge,'retrieve') as rag:
             self.app.execute_job(self.app.store.one('SELECT * FROM jobs WHERE id=?',(new,)),threading.Event())
         answer=self.app.store.chat(chat)['messages'][-1]
@@ -93,6 +236,7 @@ class VideoEditTests(unittest.TestCase):
         saved=checkpoint(self.app.data,new)
         self.assertEqual(saved['outputs'][0],outputs[0]);self.assertEqual(saved['revision_completed'],[2,3])
         self.assertEqual(answer['meta']['video_parameters']['reused_clips'],1)
+        self.assertEqual(answer['meta']['video_parameters']['edited_steps'],[20])
         self.assertEqual(answer['media'][0]['id'],new)
         self.assertEqual(describe(self.app,chat,new)['clips'][2]['images'],[2])
 
@@ -233,5 +377,66 @@ class VideoEditTests(unittest.TestCase):
             recovered=self.app.regenerate(chat)['job_id']
             self.app.execute_job(self.app.store.one('SELECT * FROM jobs WHERE id=?',(recovered,)),threading.Event())
         gpu.assert_called_once();self.assertEqual(calls,2);self.assertEqual(self.app.store.chat(chat)['messages'][-1]['status'],'done')
+
+class EditRequestRegressionTests(VideoEditTests):
+    def test_reload_edit_uses_only_selected_references_and_saved_contract(self):
+        from h3chat.request_draft import load
+        chat,ident,refs,_,_=self.original()
+        video={'id':ident,'name':'Film.mp4','mime':'video/mp4','path':f'outputs/{ident}/video.mp4'}
+        (self.app.data/video['path']).write_bytes(b'\0\0\0\x18ftypisom')
+        self.app.store.gallery.register([video])
+        queued=request(self.app,chat,{'source':ident,'assistant':False,'remount':False,'patches':[{'clip':2,'mode':'video','prompt':'Use <Picture 2>','images':[2],'audio_guide':False}]})['job_id']
+        answer=self.app.store.chat(chat)['messages'][-1];before=self.app.store.all('SELECT * FROM jobs')
+        draft=load(self.app,chat,answer['id'])
+        self.assertEqual([m['id'] for m in draft['media']],[ident,refs[1]['id']])
+        self.assertEqual(draft['video_edit']['image_ids'],[r['id'] for r in refs[:2]])
+        self.assertFalse(draft['video_edit']['patches'][0]['audio_guide'])
+        self.assertEqual(self.app.store.all('SELECT * FROM jobs'),before)
+
+    def test_disabled_audio_guide_never_sends_audio_to_minimax(self):
+        chat,ident,refs,outputs,params=self.original()
+        job=request(self.app,chat,{'source':ident,'assistant':False,'remount':False,'patches':[{'clip':2,'mode':'video','prompt':'A blue jacket','images':[1],'audio_guide':False}]})['job_id']
+        def generate(model,settings,plan,chosen,job_id,cancel,stage,**kw):
+            self.assertEqual(plan['audios'],[])
+            self.assertEqual(chosen,[refs[0]])
+            out=self.app.data/'outputs'/job_id/'video.mp4';out.parent.mkdir(parents=True);out.write_bytes(b'\0\0\0\x18ftypisom')
+            return {'path':out.relative_to(self.app.data).as_posix(),'generation':params}
+        with patch.object(self.app.engine,'generate_video',side_effect=generate),patch('h3chat.soundtrack.probe',return_value={'duration':1}),patch('h3chat.soundtrack.compose',return_value={'duration':15}):
+            self.app.execute_job(self.app.store.one('SELECT * FROM jobs WHERE id=?',(job,)),threading.Event())
+        answer=self.app.store.chat(chat)['messages'][-1];self.assertEqual(answer['status'],'done',answer['content'])
+
+    def test_queued_removal_keeps_timeline_editable_and_does_not_use_ai(self):
+        from h3chat.video_assemble import request as assemble
+        chat,ident,refs,outputs,params=self.original()
+        queued=assemble(self.app,chat,{'source':ident,'remove_clips':[2]})['job_id']
+        def cpu(worker,body,*args,**kw):
+            self.assertEqual(worker,'video-remix-worker.py');self.assertEqual(body['op'],'timeline_audio')
+            self.assertEqual(body['intervals'],[{'start':7,'duration':15},{'start':37,'duration':12}])
+            Path(body['output']).write_bytes(b'synthetic soundtrack');return {'duration':27}
+        def mux(engine,videos,audio,out,*args,**kw):
+            self.assertEqual(kw['audio_start'],0);self.assertEqual(kw['audio_duration'],27)
+            self.assertEqual([str(p.relative_to(self.app.data)) for p in videos],[str(Path(outputs[0])),str(Path(outputs[2]))])
+            out.write_bytes(b'\0\0\0\x18ftypisom');return {'duration':27}
+        with patch.object(self.app.engine,'tool_call',side_effect=cpu),patch.object(self.app.engine,'generate_video') as gpu,patch('h3chat.soundtrack.compose',side_effect=mux):
+            self.app.execute_job(self.app.store.one('SELECT * FROM jobs WHERE id=?',(queued,)),threading.Event())
+        gpu.assert_not_called();answer=self.app.store.chat(chat)['messages'][-1]
+        self.assertEqual(answer['status'],'done',answer['content'])
+        manifest=describe(self.app,chat,queued)
+        self.assertEqual(manifest['duration'],27);self.assertEqual(len(manifest['clips']),2)
+        self.assertTrue(manifest['preview_audio']['url'].endswith('timeline-audio.wav'))
+
+    def test_remove_clip_reindexes_video_and_cuts_matching_audio(self):
+        from h3chat.video_assemble import remove_clips
+        chat,ident,refs,outputs,params=self.original();original=checkpoint(self.app.data,ident)
+        result,intervals=remove_clips(original,[2])
+        self.assertEqual(result['outputs'],[outputs[0],outputs[2]])
+        self.assertEqual([x['start'] for x in result['timeline']],[0,15])
+        self.assertEqual([x['index'] for x in result['timeline']],[0,1])
+        self.assertEqual(intervals,[{'start':7,'duration':15},{'start':37,'duration':12}])
+        self.assertEqual(result['audio_start'],0);self.assertEqual(len(original['timeline']),3)
+        original['plan']['images']=[{'index':1,'role':'keyframe','seconds':18},{'index':2,'role':'keyframe','seconds':35}]
+        retimed,_=remove_clips(original,[2]);self.assertEqual(retimed['plan']['images'],[{'index':1,'role':'reference','seconds':0},{'index':2,'role':'keyframe','seconds':20}])
+        for bad in ([1,2,3],[0],[2,2],[True]):
+            with self.assertRaises(ValueError):remove_clips(original,bad)
 
 if __name__=='__main__':unittest.main()

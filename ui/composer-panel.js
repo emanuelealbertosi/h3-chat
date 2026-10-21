@@ -1,9 +1,10 @@
 import {initComposerSettings} from './composer-settings.js';
+import {initImageRequest} from './image-request.js';
 const $=selector=>document.querySelector(selector);
 function button(text,id){const element=document.createElement('button');element.type='button';element.className='prompt-choice';element.textContent=text;if(id)element.id=id;return element;}
 function field(title){const element=document.createElement('div');element.className='prompt-field';const heading=document.createElement('span');heading.className='prompt-field-label';heading.textContent=title;element.append(heading);return element;}
 
-export function initComposerPanel({getState,visualControls,getAttachments,notify}){
+export function initComposerPanel({getState,visualControls,getAttachments,notify,saveImagePresets,getLastImageSeed}){
  const composer=$('#composer'),lab=$('#lab-tool'),image=$('#image-model'),slides=$('#slides-options');
  const modes=document.createElement('div');modes.id='prompt-modes';modes.className='prompt-modes';modes.setAttribute('role','group');modes.ariaLabel='Cosa vuoi creare';
  const context=document.createElement('div');context.id='prompt-context';context.className='prompt-context';context.hidden=true;
@@ -29,6 +30,8 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  // Keep existing controls and their request semantics; only their presentation changes.
  const auto=button('✦ Automatico','prompt-auto'),images=button('▧ Immagini','prompt-images');modes.append(auto,images);
  for(const id of ['music-toggle','video-toggle','voice-toggle']){const item=$('#'+id);item.className='prompt-choice';modes.append(item);}
+ const videoEdit=button('✎ Modifica video','prompt-video-edit');modes.append(videoEdit);
+ videoEdit.onclick=()=>{const value=visualControls.read(),active=value.video&&value.video_editing==='modify';setLab('auto');reset();if(!active)visualControls.set({...visualControls.read(),video:true,video_editing:'modify'});render();};
  const tools=new Map([['slides',button('▥ Slide','prompt-slides')],['infographic',button('✧ Infografica','prompt-infographic')],['manim',button('⌁ Manim','prompt-manim')],['calculate',button('∑ Calcolo','prompt-calculate')]]);
  for(const item of tools.values())modes.append(item);
  const transcribe=$('#transcribe-toggle');transcribe.className='prompt-choice';modes.append(transcribe);
@@ -42,14 +45,19 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  for(const id of ['music-toggle','video-toggle','voice-toggle','transcribe-toggle']){const item=$('#'+id),previous=item.onclick;item.onclick=event=>{if(id!=='voice-toggle'||lab.value!=='manim')setLab('auto');previous?.(event);render();};}
  lab.closest('label').hidden=true;
  const imagePanel=field('Modello immagini');imagePanel.id='prompt-image-panel';context.append(imagePanel);imagePanel.append(image.closest('label'));pills(image,'Scegli il modello',true);
+ const imageRequest=initImageRequest({holder:imagePanel,getState,visualControls,savePresets:saveImagePresets,getLastSeed:getLastImageSeed,notify});
  for(const id of ['slides-options','music-inputs','voice-inputs','video-hint'])context.append($('#'+id));
  pills($('#video-quality'),'Qualità');
+ pills($('#video-resolution'),'Risoluzione video');
+ pills($('#video-format'),'Formato video');
+ pills($('#video-segments'),'Durata segmenti');
+ pills($('#video-steps'),'Passi');
  pills($('#video-editing'),'Regia');
  slides.classList.add('prompt-slide-options');
  const count=$('#slides-count'),countLabel=count.closest('label');countLabel.classList.add('prompt-count');const minus=button('−'),plus=button('＋');minus.ariaLabel='Meno slide';plus.ariaLabel='Più slide';count.before(minus);count.after(plus);for(const [item,delta] of [[minus,-1],[plus,1]])item.onclick=()=>{count.value=Math.max(1,Math.min(30,(Number(count.value)||8)+delta));count.dispatchEvent(new Event('change',{bubbles:true}));render();};
  const slideTechnical=field('Presentazioni · opzioni tecniche');slides.append(slideTechnical);
  for(const id of ['slides-engine','slides-vision'])slideTechnical.append($('#'+id).closest('label'));
- for(const [id,title] of [['slides-format','Formato'],['slides-design','Stile'],['slides-detail','Contenuto'],['slides-background','Sfondo'],['slides-palette','Palette']])pills($('#'+id),title);
+ for(const [id,title] of [['slides-format','Formato'],['slides-design','Stile'],['slides-detail','Contenuto'],['slides-composition','Composizione'],['slides-background','Sfondo'],['slides-palette','Palette']])pills($('#'+id),title);
  for(const id of ['slides-engine','slides-vision'])pills($('#'+id),id==='slides-engine'?'Motore slide':'Analisi delle figure');
  const imageToggle=toggle($('#slides-generate-images'),'Illustrazioni AI · tutte insieme',slides);imageToggle.classList.add('prompt-slide-images');
  const imageModels=$('#slides-image-model'),generatedModels=pills(imageModels,'Modello per le illustrazioni',true);
@@ -72,10 +80,10 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  const llmPicker=pills($('#chat-model'),'Modello LLM',true);llmPicker.classList.add('prompt-llm-picker');technicalBody.append(llmPicker);const modelButton=button('Scegli LLM','prompt-llm-open');footer.prepend(modelButton);modelButton.onclick=()=>open('models');
  const identity=button('File e percorso del modello');identity.className='text-button';identity.onclick=()=>{dialog.close();$('#model-name').click();};llmPicker.append(identity);
  const update=()=>render();composer.addEventListener('change',update);composer.addEventListener('input',event=>{if(event.target!==$('#prompt'))render();});
- const modeSettings=initComposerSettings({context,getState,onChange:render});
+ const modeSettings=initComposerSettings({context,getState,onChange:render,visualControls});
  function render(){
   const state=getState();if(!state)return;
-  const value=visualControls.read(),mode=lab.value;
+  const value=visualControls.read(),mode=lab.value;videoEdit.setAttribute('aria-pressed',String(value.video&&value.video_editing==='modify'));
   auto.setAttribute('aria-pressed',String(mode==='auto'&&!value.image_model&&!value.music&&!value.video&&!value.voice&&!value.transcribe));images.setAttribute('aria-pressed',String(!!value.image_model));
   for(const [name,item] of tools)item.setAttribute('aria-pressed',String(mode===name));
   imagePanel.hidden=!value.image_model;slides.hidden=mode!=='slides';slideTechnical.hidden=mode!=='slides';generatedModels.hidden=!$('#slides-generate-images').checked;
@@ -90,7 +98,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
   technical.title=summary.textContent;
   modelButton.textContent='LLM · '+($('#chat-model').selectedOptions[0]?.textContent||'Scegli un modello');modelButton.title=$('#chat-model').title;modelButton.disabled=$('#chat-model').disabled;
   $('.side-bottom>small').textContent='H3 CHAT · '+state.version;
-  modeSettings.render();
+  imageRequest.render();modeSettings.render();
  }
  return {render};
 }

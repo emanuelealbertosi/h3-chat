@@ -5,7 +5,49 @@ from unittest.mock import patch
 from tests import test_slides as fixtures
 from h3chat.slides import PREFIX, options,validate_content,encode,edit_options
 
+def editorial_response():
+    return json.dumps({'content':'Spiegazione completa con un esempio concreto.',
+        'visual_plan':'Confronto annotato fra esempio e risultato.',
+        'notes':'Note del relatore, attività e approfondimenti.','sources':[]}),'stop'
+
 class HTMLTests(fixtures.GenerationTests):
+    def test_editorial_notes_and_sources_survive_interrupted_html(self):
+        job=self.enqueue('Crea 2 slide con testi completi e note del relatore')
+        def complete(messages,settings,cancel,**kw):
+            properties=kw.get('schema',{}).get('properties',{})
+            if 'slides' in properties:
+                return json.dumps({'title':'Corso','slides':[{'title':t,'purpose':'Spiega'} for t in ('A','B')]}),'stop'
+            if 'content' in properties:return editorial_response()
+            self.assertIn('Spiegazione completa con un esempio concreto.',messages[-1]['content'])
+            kw['on_text']('<main><h1>Bozza visibile')
+            raise RuntimeError('Interruzione del modello durante HTML')
+        with patch.object(self.app.engine,'require_model',return_value=self.model),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete):
+            self.app.execute_job(job,threading.Event())
+        answer=self.app.store.messages(job['chat_id'])[-1];self.assertEqual(answer['status'],'failed')
+        deck=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4])
+        self.assertEqual(deck['pages'][0]['status'],'interrupted')
+        self.assertEqual(deck['pages'][1]['status'],'pending')
+        self.assertTrue(all(p['notes']=='Note del relatore, attività e approfondimenti.' for p in deck['pages']))
+        self.assertEqual(len(answer['meta']['slide_editorial_plan']),2)
+
+    def test_rich_composition_reaches_planner_pages_and_saved_deck(self):
+        job=self.enqueue('Crea 2 slide',slides={'composition':'rich','detail':'concise','generate_images':False});calls=[]
+        def complete(messages,settings,cancel,**kw):
+            calls.append(messages)
+            self.assertIn('COMPOSIZIONE RICCA',messages[0]['content'])
+            if 'content' in kw.get('schema',{}).get('properties',{}):return editorial_response()
+            if kw.get('schema'):
+                return json.dumps({'title':'Corso','visual_direction':'Diagrammi e illustrazioni pertinenti','slides':[{'title':'A','purpose':'Spiega A'},{'title':'B','purpose':'Spiega B'}]}),'stop'
+            return '<main><h1>Pagina illustrata</h1><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"/></svg></main>','stop'
+        with patch.object(self.app.engine,'require_model',return_value=self.model),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete):
+            self.app.execute_job(job,threading.Event())
+        answer=self.app.store.messages(job['chat_id'])[-1];self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
+        deck=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4])
+        self.assertEqual(deck['composition'],'rich');self.assertEqual(deck['detail'],'concise');self.assertNotIn('image_generation',deck)
+        self.assertEqual(len(calls),5)
+        self.assertTrue(all(p['notes']=='Note del relatore, attività e approfondimenti.' for p in deck['pages']))
+        self.assertTrue(all('Spiegazione completa' in p['editorial']['content'] for p in deck['pages']))
+
     def test_html_response_wrapper_is_not_rendered_as_slide_text(self):
         from h3chat.slide_html import validate
         html='<style>body{color:white}</style><main><h1>Una storia</h1><p>Testo completo.</p></main>'
@@ -27,6 +69,7 @@ class HTMLTests(fixtures.GenerationTests):
                     self.assertIn(cue,messages[0]['content'])
                     self.assertIn('HTML e CSS ORIGINALI',messages[0]['content'])
                     self.assertIn('nessun template obbligatorio',messages[0]['content'])
+                    if 'content' in kw.get('schema',{}).get('properties',{}):return editorial_response()
                     if kw.get('schema'):
                         self.assertIn('Non usare una direzione generica intercambiabile',messages[-1]['content'])
                         return json.dumps({'title':'Corso','visual_direction':'Direzione scelta dal LLM',
@@ -40,13 +83,14 @@ class HTMLTests(fixtures.GenerationTests):
                 deck=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4])
                 self.assertEqual(deck['design'],design)
                 self.assertTrue(all(p['html']=='<main><h1>Composizione libera del modello</h1></main>' for p in deck['pages']))
-                self.assertEqual(len(calls),3);instructions[design]=calls[0]
+                self.assertEqual(len(calls),5);instructions[design]=calls[0]
         self.assertEqual(len(set(instructions.values())),3)
 
     def test_html_is_streamed_verbatim_and_no_page_schema_or_layout_nodes(self):
         job=self.enqueue();self.job=job;calls=[]
         def complete(messages,settings,cancel,**kw):
             calls.append((messages,kw.get('schema')))
+            if 'content' in kw.get('schema',{}).get('properties',{}):return editorial_response()
             if kw.get('schema'):
                 return json.dumps({'title':'Corso','slides':[{'title':'A','purpose':'Introduzione'},{'title':'B','purpose':'Esempio'}]}),'stop'
             html='<style>body{background:#153a51;color:white;font:32px Georgia}h1{font-size:72px}</style><main><h1>Libertà creativa</h1><p>Un paragrafo completo [R1]</p><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="orange"/></svg></main>'
@@ -60,7 +104,7 @@ class HTMLTests(fixtures.GenerationTests):
         artifact=answer['meta']['artifact'];validate_content(artifact['content'],[])
         deck=json.loads(artifact['content'][len(PREFIX):-4]);self.assertEqual(deck['engine'],'llm')
         self.assertTrue(all('<svg' in p['html'] and p['nodes']==[] for p in deck['pages']))
-        self.assertTrue(all(schema is None for _,schema in calls[1:]));self.assertIn('HTML e CSS ORIGINALI',calls[0][0][0]['content'])
+        self.assertTrue(all(schema is None for _,schema in calls[3:]));self.assertIn('HTML e CSS ORIGINALI',calls[0][0][0]['content'])
         self.assertNotIn('Non creare codice HTML',calls[0][0][0]['content'])
         self.assertNotIn('<style>',answer['content'])
 
@@ -70,6 +114,7 @@ class HTMLTests(fixtures.GenerationTests):
             calls.append(messages)
             self.assertIn('Sfondo principale del colore #eaf0ff',messages[0]['content'])
             self.assertIn('colori pastello',messages[0]['content'])
+            if 'content' in kw.get('schema',{}).get('properties',{}):return editorial_response()
             if kw.get('schema'):
                 return json.dumps({'title':'Corso','visual_direction':'Avorio e azzurro pastello',
                     'slides':[{'title':t,'purpose':'Spiega'} for t in ('A','B')]}),'stop'
@@ -79,7 +124,7 @@ class HTMLTests(fixtures.GenerationTests):
         answer=self.app.store.messages(job['chat_id'])[-1];self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
         deck=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4])
         self.assertEqual([deck[k] for k in ('background','background_color','palette')],['custom','#eaf0ff','pastel'])
-        self.assertEqual(len(calls),3);validate_content(encode(deck),[])
+        self.assertEqual(len(calls),5);validate_content(encode(deck),[])
 
     def test_default_and_legacy_edit_engines(self):
         self.assertEqual(options('')['engine'],'llm')

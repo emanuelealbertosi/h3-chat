@@ -1,5 +1,9 @@
 # MiniMax H3 standalone
 
+Prompt-based source-video editing is documented in [Modifica video](video-source-edit.md).
+It passes the actual selected clip as a video reference; ordinary reference-image
+regeneration and I2V remain separate modes.
+
 H3-Chat owns a private Python worker (`native/video-worker.py`) and imports the
 pinned inference library already distributed with its optional Ming/Qwen
 runtime. It starts no ComfyUI server, loads no external custom nodes and has no
@@ -139,8 +143,8 @@ canonical costumes are not assigned unsupported colors. These are direction inst
 for the LLM, not fixed scene templates or an extra planning pass. The existing output
 budget, batching, attachment validation, audio offsets and visual-memory mechanism remain.
 
-Attach up to **9 images and 3 audio files** (WAV, MP3, FLAC, OGG). Image limit:
-12 MB / 8192 px; audio limit: 64 MB. Numbering is separate by media type and follows
+Attach up to **9 images and 3 audio files**. PC uploads have no size or format filter;
+the engine validates decoding support when a file is used. Numbering is separate by media type and follows
 attachment order. For example:
 
 > Crea un video. Usa immagine 1 come frame iniziale, immagine 2 a 7 secondi,
@@ -376,3 +380,27 @@ in Storyboard mode. An explicit whole-video duration or `AUDIO: 00:15–00:30`
 still selects only that window. A complete song without such a restriction sets
 the full film duration automatically. The storyboard is derived from the user's
 scene descriptions; the text LLM is not assumed to have heard/beat-analyzed audio.
+
+Clip editing saves a new working timeline after every successful edit. Disable
+**Rimonta nel video** to receive the edited intervals as separate MP4s while
+retaining their replacements in the full timeline. **Riprendi timeline** under
+these outputs reopens the updated clips; subsequent edits use that version of
+the footage. **Monta video completo** assembles all saved clips and the original
+soundtrack through the shared queue without running the planner or video model.
+The original video and older timelines remain available. Unchanged intervals of
+external videos point directly to the source file. Editing a whole clip does not
+extract other clips; a partial edit extracts only its own clip for splicing.
+Remaining intervals are prepared only when assembling the complete film.
+Old clip-only exports also expose **Riprendi timeline**: their first use recovers
+the working timeline through the shared queue using saved files, without AI.
+
+The clip editor puts the timeline first, followed by grouped generation controls
+and the selected clip editor. Guide detail has
+0.15, 0.20, 0.35 and 0.50 MP buttons and remembers the chosen value in the browser;
+it is separate from output resolution. A custom guide value is optional.
+
+### Parametri salvati nella chat
+
+L’attenzione del diffusore è scelta nello stesso worker per generazione, modifica locale, ricreazione e inserimento: Automatico/Sage, VEDA automatico o esplicito a 8/56 gruppi, Sage, ComfyKitchen INT8 e PyTorch. La scelta è salvata nei parametri della richiesta; dettagli e direttive del prompt sono descritti in [Impostazioni della singola richiesta](video-request-options.md). ComfyKitchen non sostituisce il motore video e non viene usato come ripiego implicito di VEDA. Il backend realmente selezionato è registrato nei log e nei risultati.
+
+Ogni video generato mostra il pannello chiuso **Impostazioni di generazione**, indipendente dal flag Avanzate. I valori provengono dai metadati del file: modello, dimensioni, durata, passi, seed, campionamento, attenzione effettiva, offload, PDD, LoRA e guida sorgente quando registrati. I filmati composti permettono di aprire le impostazioni di ciascuna clip. Le nuove generazioni conservano anche nome, identificativo e file del modello e stato lip-sync. I campi mancanti nei video storici non sono dedotti dai preset correnti.

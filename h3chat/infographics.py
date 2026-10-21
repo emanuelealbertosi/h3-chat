@@ -185,6 +185,10 @@ def build(app,job,payload,history,settings,model,cancel,stage,log,meta):
     deck={'version':1,'engine':'llm','title':plan['title'],'format':opts['format'],'theme':'lagoon','typography':'modern','design':'professional','detail':'concise','references':references,
         'pages':[{'title':s['title'][:150],'html':'','status':'pending','notes':s['narration'],'sources':[]} for s in plan['scenes']],'active':0,
         'infographic':{'version':1,'durations':[opts['duration']/opts['scenes']]*opts['scenes'],'transition':'fade' if opts['transition']=='auto' else opts['transition'],'sfx':opts['sfx'],'options':opts,'delivery':plan['delivery']}}
+    if settings.get('_video_clip_target'):
+        target=settings['_video_clip_target']
+        deck['infographic']['timeline_target']=target
+        deck['infographic']['durations']=[target['end']-target['start']]
     media=list(assets)+video_items+posters
     if video:deck['infographic']['video']=video
     elif videos:deck['infographic']['videos']=videos
@@ -193,7 +197,8 @@ def build(app,job,payload,history,settings,model,cancel,stage,log,meta):
         app.save_artifact(job['chat_id'],artifact['title'],artifact['content'],artifact['media']);app.store.update_answer(job,'Sto componendo l’infografica nel canvas.',meta=meta)
         return artifact
     publish()
-    selected=opts.get('image_model') or settings.get('create_model')
+    from .lab_image_model import select
+    selected=select(app.engine,settings,opts.get('image_model'))
     if opts['images']=='generate' or (opts['images']=='auto' and not assets and not videos and selected):
         from .slide_generation_images import create
         image_settings=settings|{'_slides':{'image_model':selected,'design':'playful' if opts['style'] in ('playful','comic') else 'professional'}}
@@ -250,8 +255,12 @@ def build(app,job,payload,history,settings,model,cancel,stage,log,meta):
     media.append({'id':uuid4().hex,'name':'infografica.json','mime':'application/json','path':(folder/'infografica.json').relative_to(app.data).as_posix()})
     if opts['output']=='video':
         app.engine.stop();stage('Infografica · rendering e montaggio audio')
-        app.engine.tool_call('infographic-worker.py',{'data':str(app.data),'deck':deck,'media':media,'voice':str(voice_path) if voice_path else None,'music':str(music_path) if music_path else None,'output':str(folder/'infografica.mp4')},cancel,stage,log,timeout=render_timeout(sum(deck['infographic']['durations'])))
-        media.append({'id':uuid4().hex,'name':deck['title']+'.mp4','mime':'video/mp4','path':(folder/'infografica.mp4').relative_to(app.data).as_posix()})
+        from .video_clip_tools import render_options
+        app.engine.tool_call('infographic-worker.py',{'data':str(app.data),'deck':deck,'media':media,'voice':str(voice_path) if voice_path else None,'music':str(music_path) if music_path else None,'output':str(folder/'infografica.mp4')}|render_options(deck),cancel,stage,log,timeout=render_timeout(sum(deck['infographic']['durations'])))
+        from .video_clip_tools import signature,record_render
+        record_render(folder/'infografica.mp4',deck)
+        media.append({'id':uuid4().hex,'name':deck['title']+'.mp4','mime':'video/mp4','path':(folder/'infografica.mp4').relative_to(app.data).as_posix(),
+            'generation':{'infographic_signature':signature(deck)}})
     meta['infographic']=deck['infographic'];return publish()
 
 def enqueue_render(app,chat_id,body):
@@ -271,8 +280,12 @@ def render_saved(app,job,settings,cancel,stage,log,meta):
         item=paths.get(motion.get(key))
         return str(safe_join(app.data,item['path'])) if item and item['mime'].startswith('audio/') else None
     app.engine.stop();stage('Infografica · rendering delle modifiche')
-    app.engine.tool_call('infographic-worker.py',{'data':str(app.data),'deck':deck,'media':media,'voice':audio_path('voice_id'),'music':audio_path('music_id'),'output':str(folder/'infografica.mp4')},cancel,stage,log,timeout=render_timeout(sum(motion['durations'])))
+    from .video_clip_tools import render_options
+    app.engine.tool_call('infographic-worker.py',{'data':str(app.data),'deck':deck,'media':media,'voice':audio_path('voice_id'),'music':audio_path('music_id'),'output':str(folder/'infografica.mp4')}|render_options(deck),cancel,stage,log,timeout=render_timeout(sum(motion['durations'])))
     source_ids={v['asset_id'] for v in motion.get('videos',[])}|{motion.get('video',{}).get('asset_id')}
-    media=[m for m in media if not m['mime'].startswith('video/') or m['id'] in source_ids]+[{'id':uuid4().hex,'name':deck['title']+'.mp4','mime':'video/mp4','path':(folder/'infografica.mp4').relative_to(app.data).as_posix()}]
+    from .video_clip_tools import signature,record_render
+    record_render(folder/'infografica.mp4',deck)
+    media=[m for m in media if not m['mime'].startswith('video/') or m['id'] in source_ids]+[{'id':uuid4().hex,'name':deck['title']+'.mp4','mime':'video/mp4','path':(folder/'infografica.mp4').relative_to(app.data).as_posix(),
+        'generation':{'infographic_signature':signature(deck)}}]
     artifact={'title':deck['title'],'content':encode(deck),'media':media};meta['artifact']=artifact;meta['infographic']=motion
     app.save_artifact(job['chat_id'],artifact['title'],artifact['content'],media);return artifact

@@ -1,5 +1,6 @@
 """Stream generated audio with byte ranges, so the player can seek without buffering it all."""
 import re
+import mimetypes
 
 def send_audio(handler,path):
  size=path.stat().st_size;start=0;end=size-1;partial=False
@@ -19,7 +20,10 @@ def send_audio(handler,path):
    handler.send_response(416);handler.send_header('Content-Range',f'bytes */{size}');handler.send_header('Content-Length','0');handler.end_headers();return
   partial=True
  handler.send_response(206 if partial else 200)
- handler.send_header('Content-Type',{'.mp4':'video/mp4','.mp3':'audio/mpeg','.ogg':'audio/ogg','.flac':'audio/flac'}.get(path.suffix.lower(),'audio/wav'))
+ handler.send_header('Content-Type',{'.wav':'audio/wav','.mkv':'video/x-matroska','.mov':'video/quicktime','.m4a':'audio/mp4'}.get(path.suffix.lower(),mimetypes.guess_type(path.name)[0] or 'application/octet-stream'))
+ handler.send_header('Content-Security-Policy',"default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; form-action 'none'; base-uri 'none'")
+ handler.send_header('Referrer-Policy','no-referrer')
+ if path.suffix.lower() in ('.html','.svg','.js','.mjs','.xml') or not mimetypes.guess_type(path.name)[0]:handler.send_header('Content-Disposition','attachment')
  handler.send_header('Accept-Ranges','bytes')
  handler.send_header('Content-Length',str(end-start+1))
  handler.send_header('X-Content-Type-Options','nosniff')

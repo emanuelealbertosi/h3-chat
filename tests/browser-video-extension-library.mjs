@@ -1,0 +1,47 @@
+import {spawn} from 'node:child_process';
+import {createRequire} from 'node:module';
+import {once} from 'node:events';
+import {createInterface} from 'node:readline';
+import {mkdir,readFile} from 'node:fs/promises';
+import {build} from 'esbuild';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
+await mkdir('work/extension-library-qa',{recursive:true});
+await build({entryPoints:['tests/video-extension-browser-entry.js'],outfile:'work/extension-library-qa/harness.js',bundle:true,format:'iife',platform:'browser',target:'es2022'});
+const child=spawn('runtime/python/python.exe',['-X','utf8','tests/serve_canvas_fixture.py'],{stdio:['ignore','pipe','pipe'],env:{...process.env,H3_TIMELINE_PREVIEW_FIXTURE:'1'}});
+let diagnostics='';child.stderr.on('data',x=>diagnostics+=x);const lines=createInterface({input:child.stdout});
+const [line]=await Promise.race([once(lines,'line'),once(child,'exit').then(()=>{throw Error(diagnostics);})]);lines.close();
+const fixture=JSON.parse(line),browser=await chromium.launch({channel:'msedge',headless:true,args:['--disable-gpu','--mute-audio']});
+const page=await browser.newPage({viewport:{width:1450,height:1000}}),errors=[],writes=[];page.on('pageerror',e=>errors.push(e.message));
+const movie={id:'a'.repeat(32),name:'Camera.mov',path:'uploads/camera.mov',mime:'video/quicktime',url:'/media/outputs/preview-source.mp4',size:1000,origin:'uploaded'};
+await page.exposeFunction('extensionApi',async(path,body,method)=>{
+ if(path.startsWith('/gallery?'))return {items:[movie],more:false,offset:48,total:1,manage:true};
+ if(path==='/gallery/select')return [movie];
+ writes.push({path,body,method});return path.endsWith('/preview')?{url:'/media/outputs/preview-source.mp4'}:{job_id:'queued'};
+});
+try{
+ await page.goto(fixture.url);await page.route('**/static/extension-test.js',async route=>route.fulfill({contentType:'application/javascript',body:await readFile('work/extension-library-qa/harness.js','utf8')}));
+ await page.addScriptTag({url:fixture.url+'/static/extension-test.js'});
+ await page.evaluate(()=>{window.extensionData={models:[{id:'model',name:'MiniMax fixture',parameters:{attention:'veda',megapixels:.98,seed:734}}],model_id:'model',clips:[1,2,3].map(n=>({clip:n,start:(n-1)*15,end:n*15,url:'/media/outputs/preview-source.mp4',preview_start:0,versions:[{id:'chosen-previous',url:'/media/outputs/preview-edit.mp4',preview_start:0}]}))};window.extensionFixture.openVideoExtend({api:window.extensionApi,chatId:'chat',source:'source',clip:window.extensionData.clips[1],side:'before',data:window.extensionData,getVersions:()=>({'1':'chosen-previous'}),busy:()=>false});});
+ let dialog=page.locator('.video-post-dialog');await dialog.getByRole('button',{name:'Primo / ultimo fotogramma',exact:true}).click();await dialog.getByRole('button',{name:'10 s',exact:true}).click();
+ assert.equal(await dialog.getByLabel('Primo fotogramma',{exact:true}).inputValue(),'previous');assert.equal(await dialog.getByLabel('Ultimo fotogramma',{exact:true}).inputValue(),'next');
+ await dialog.getByRole('button',{name:'Vedi fotogramma',exact:true}).first().click();assert.match(await dialog.locator('[data-still] video').getAttribute('src'),/preview-edit/);
+ await dialog.locator('[name="prompt"]').fill('Continue smoothly across both frames');await dialog.locator('[name="assistant"]').uncheck();
+ await dialog.locator('.prompt-options-body').evaluate(e=>e.scrollTop=0);await page.screenshot({path:'work/extension-library-qa/extension.png',fullPage:true});await dialog.getByRole('button',{name:'Genera e inserisci clip'}).click();await page.waitForFunction(()=>!document.querySelector('.video-post-dialog'));
+ assert.equal(writes[0].path,'/chats/chat/video-extend');assert.equal(writes[0].body.mode,'frames');assert.equal(writes[0].body.side,'before');assert.equal(writes[0].body.duration,10);assert.equal(writes[0].body.parameters.megapixels,.98);assert.equal(writes[0].body.parameters.attention,'veda');assert.equal(writes[0].body.versions['1'],'chosen-previous');
+ await page.evaluate(()=>window.extensionFixture.openGallery({api:window.extensionApi,browse:true,onSelect:items=>window.chosenLibrary=items,actions:{edit:media=>window.editedLibrary=media}}));
+ await page.getByRole('button',{name:'Apri Camera.mov',exact:true}).click();let player=page.locator('.gallery-player');
+ await player.locator('input').fill('Le vacanze.mov');await player.getByRole('button',{name:'Rinomina',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.gallery-player h2').textContent==='Le vacanze.mov');
+ assert.equal(writes.at(-1).method,'PATCH');await player.getByRole('button',{name:'Modifica / estendi video'}).click();await page.waitForFunction(()=>window.editedLibrary?.id==='a'.repeat(32));
+ await page.evaluate(()=>window.extensionFixture.openGallery({api:window.extensionApi,browse:true,onSelect:()=>{}}));await page.getByRole('button',{name:'Apri Camera.mov',exact:true}).click();player=page.locator('.gallery-player');await player.getByText('Rimuovi dalla galleria',{exact:true}).click();await player.getByRole('button',{name:'Rimuovi file dalla galleria',exact:true}).click();assert.equal(writes.at(-1).method,'DELETE');await page.locator('.gallery-dialog [data-close]').click();
+ let sceneReads=0;await page.route('**/media/outputs/'+'b'.repeat(32)+'/scenes.json',route=>{sceneReads++;return route.fulfill({contentType:'application/json',body:JSON.stringify({timeline:[{start:0,duration:15},{start:15,duration:15},{start:30,duration:15}],outputs:['outputs/preview-source.mp4','outputs/preview-edit.mp4','outputs/preview-source.mp4'],completed:3,revision_request:[{clip:2}],revision_completed:[2],plan:{audios:[{index:1,role:'reuse'}]}})});});
+ await page.evaluate(()=>{const host=document.createElement('div');host.id='progress-fixture';document.querySelector('#messages').append(host);window.extensionFixture.appendVideoProgress(host,{job:{id:'b'.repeat(32)},message:{meta:{intent:'video'}},audios:[{path:'outputs/preview-audio.wav'}]});});
+ assert.equal(sceneReads,0);await page.locator('.video-progress summary').click();await page.locator('.video-progress [data-clip="2"]').waitFor();assert.equal(await page.locator('.video-progress [data-clip]').count(),1);assert.equal(await page.locator('.video-progress video').getAttribute('src'),null);
+ await page.locator('.video-progress [data-clip="2"]').click();assert.match(await page.locator('.video-progress video').getAttribute('src'),/preview-edit/);await page.locator('.video-progress summary').click();await page.waitForFunction(()=>!document.querySelector('.video-progress video').getAttribute('src'));
+ await page.setViewportSize({width:430,height:900});await page.evaluate(()=>window.extensionFixture.openVideoExtend({api:window.extensionApi,chatId:'chat',source:'source',clip:window.extensionData.clips[0],side:'before',data:window.extensionData,getVersions:()=>({})}));dialog=page.locator('.video-post-dialog');assert(await dialog.evaluate(d=>d.scrollWidth<=d.clientWidth+2));await dialog.getByRole('button',{name:'Primo / ultimo fotogramma',exact:true}).click();assert.equal(await dialog.getByLabel('Primo fotogramma',{exact:true}).inputValue(),'none');await page.screenshot({path:'work/extension-library-qa/mobile.png',fullPage:true});
+ await dialog.locator('[data-close]').click();await page.setViewportSize({width:1450,height:1000});
+ const project=await page.evaluate(async chat=>{const state=await(await fetch('/api/state')).json(),headers={'Content-Type':'application/json','X-H3-Token':state.token};const p=await(await fetch('/api/projects',{method:'POST',headers,body:JSON.stringify({name:'Progetto prova',instructions:'',sources_only:false})})).json();await fetch('/api/chats/'+chat,{method:'PATCH',headers,body:JSON.stringify({project_id:p.id})});return p;},fixture.chat);
+ await page.reload();await page.locator('[data-chat="'+fixture.chat+'"]').click();await page.locator('[data-project="'+project.id+'"][aria-current="true"]').waitFor();assert.match(await page.locator('[data-project="'+project.id+'"]').textContent(),/Chat aperta/);
+ await page.locator('[data-chat="'+fixture.other+'"]').click();await page.waitForFunction(()=>!document.querySelector('[data-project][aria-current="true"]'));
+ assert.deepEqual(errors,[]);console.log('PASS: insertion modes/duration/boundaries/settings, gallery player/rename/delete/actions, lazy completed-revisions preview, mobile layout, current chat project highlight');
+}finally{await browser.close();child.kill();}

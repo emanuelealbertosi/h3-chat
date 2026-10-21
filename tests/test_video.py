@@ -26,6 +26,17 @@ class VideoTests(unittest.TestCase):
         self.model=self.app.external_model({'profile':'minimax-h3','name':'H3 fixture','files':self.files})
         self.app.save_settings({'video_model':self.model['id'],'music_model':'','ram_cache_gb':0})
     def tearDown(self):self.app.close();self.tmp.cleanup()
+    def test_new_h3_links_inherit_attention_and_preserve_later_user_edits(self):
+        preset={'attention':'veda','attention_chunks':8,'veda_reference_sparsity':0,'steps':20}
+        self.app.save_settings({'video_overrides':{self.model['id']:preset}})
+        files=self.files|{'diffusion':str(safetensors(self.folder/'originali/alternate.safetensors'))}
+        linked=self.app.external_model({'profile':'minimax-h3','name':'Alternate H3','files':files})
+        values=self.app.store.settings()['video_overrides']
+        self.assertEqual(values[linked['id']],{'attention':'veda','attention_chunks':8,'veda_reference_sparsity':0})
+        self.assertEqual(values[self.model['id']],preset)
+        self.app.save_settings({'video_overrides':values|{linked['id']:{'attention':'pytorch'}}})
+        self.app.external_model({'id':linked['id'],'profile':'minimax-h3','name':'Renamed H3','files':files})
+        self.assertEqual(self.app.store.settings()['video_overrides'][linked['id']],{'attention':'pytorch'})
     def test_defaults_and_invalid_numbers(self):
         opts=options(self.model,DEFAULTS,False)
         self.assertEqual(opts['steps'],12)
@@ -91,7 +102,9 @@ class VideoTests(unittest.TestCase):
         media=self.app.upload({'name':'test.wav','data':base64.b64encode(buffer.getvalue()).decode()})
         self.assertEqual(media['mime'],'audio/wav');self.assertEqual(self.app.validate_media([media]),[media])
         with self.assertRaises(ValueError):self.app.validate_media([media]*2)
-        with self.assertRaises(ValueError):self.app.upload({'data':base64.b64encode(b'<script>bad</script>').decode()})
+        item=self.app.upload({'data':base64.b64encode(b'<script>bad</script>').decode()})
+        self.assertEqual(item['mime'],'application/octet-stream')
+        self.assertEqual((self.app.data/item['path']).read_bytes(),b'<script>bad</script>')
     def test_video_job_snapshot_and_canvas_without_llm(self):
         for canvas in (False,True):
             chat=self.app.store.create_chat()
@@ -102,7 +115,7 @@ class VideoTests(unittest.TestCase):
             with patch.object(self.app.engine,'start_llama') as llama,patch.object(self.app.engine,'generate_video',return_value=media) as generate:
                 self.app.execute_job(job,threading.Event())
             llama.assert_not_called();self.assertTrue(json.loads(job['payload'])['settings']['_video'])
-            self.assertEqual(generate.call_args.args[1],json.loads(job['payload'])['settings'])
+            self.assertEqual(generate.call_args.args[1],json.loads(job['payload'])['settings']|{'_video_loras':[]})
             answer=self.app.store.chat(chat['id'])['messages'][-1]
             self.assertEqual(answer['status'],'done',answer['meta']);self.assertEqual(answer['media'],[] if canvas else [media])
             if canvas:self.assertEqual(answer['meta']['artifact']['media'],[media])
@@ -123,6 +136,16 @@ class VideoTests(unittest.TestCase):
         self.assertIn('Allowed Picture labels: NONE',instructions)
         self.assertIn('Allowed Audio labels: <Audio 1>',instructions)
         self.assertNotIn('<Picture 1>',instructions)
+
+    def test_video_edit_without_audio_repairs_a_hallucinated_audio_label_once(self):
+        invalid={'prompt':'Edit <Video 1>, preserving <Audio 1>.','images':[],'audios':[{'index':1,'role':'reuse','start':0}]}
+        valid={'prompt':'Edit <Video 1>, preserving the camera and motion.','images':[],'audios':[]}
+        with patch.object(self.app.engine,'require_model',return_value={'id':'chat','name':'Chat','vision':{'enabled':False}}),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=[(json.dumps(invalid),'stop'),(json.dumps(valid),'stop')]) as completion:
+            result,_=self.app.engine.refine_video([], 'Keep the source movement',[],self.model,DEFAULTS|{'_video_source':True},threading.Event(),self.folder/'log',lambda _:None)
+        self.assertEqual(result,valid);self.assertEqual(completion.call_count,2)
+        instructions=completion.call_args_list[0].args[0][0]['content']
+        self.assertIn('Allowed Audio labels: NONE',instructions)
+        self.assertNotIn('The original supplied <Audio 1>',instructions)
 
     def test_large_assistant_budget_reaches_completion_and_remains_context_bounded(self):
         refs=[{'mime':'audio/mpeg','name':'song.mp3'}]

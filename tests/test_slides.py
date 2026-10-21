@@ -19,6 +19,18 @@ def node(kind='text',text='Fonte [R1]',**kw):
     return {'id':'n1','parent':'root','kind':kind,'text':text,'asset_id':'','language':'text','style':{'flow':'stack','columns':[1,1],'surface':'plain','gap':20}}|kw
 
 class SchemaTests(unittest.TestCase):
+    def test_rich_composition_is_independent_of_text_and_survives_edits(self):
+        from h3chat.slide_style import composition_brief
+        chosen=options('',{'composition':'rich','engine':'deterministic','detail':'concise','generate_images':False})
+        self.assertEqual(chosen['engine'],'llm');self.assertEqual(chosen['detail'],'concise')
+        self.assertFalse(chosen['generate_images'])
+        self.assertEqual(options('Crea slide in stile infografico',{'composition':'standard'})['composition'],'rich')
+        self.assertEqual(options('Usa grafica essenziale',{'composition':'rich'})['composition'],'standard')
+        content=encode({'version':1,'format':'16:9','engine':'llm','composition':'rich','pages':[{'title':'A','html':'<h1>A</h1>','status':'ready'}]})
+        self.assertEqual(edit_options('Cambia il titolo',content)['composition'],'rich')
+        self.assertIn('diagrammi SVG',composition_brief('rich'));self.assertEqual(composition_brief(),'')
+        with self.assertRaises(ValueError):options('',{'composition':'unknown'})
+
     def test_route_and_options(self):
         for prompt in ('Crea 12 slide dal PDF','Trasforma queste immagini in una presentazione','Prepara le diapositive dal RAG','Modifica la presentazione in 4:3'):
             self.assertTrue(requested(prompt))
@@ -178,6 +190,23 @@ class GenerationTests(unittest.TestCase):
         self.assertEqual(planning['think_level'],'off');self.assertLessEqual(planning['max_tokens'],1000);self.assertLessEqual(planning['llm_timeout'],300)
         for settings,is_plan in seen:
             if not is_plan:self.assertEqual((settings['max_tokens'],settings['think_level']),(25000,'xhigh'))
+
+    def test_truncated_outline_retries_once_with_more_output_within_user_budget(self):
+        job=self.enqueue();payload=json.loads(job['payload']);payload['settings'].update(max_tokens=10000,context=30000)
+        job=job|{'payload':json.dumps(payload)};seen=[]
+        self.calls=[];self.job=job;self.progress=0;self.fail=False;self.documents=False
+        def complete(messages,settings,cancel,**kw):
+            if 'slides' in kw['schema']['properties']:
+                seen.append(settings['max_tokens'])
+                if len(seen)==1:return '{"title":"Report","slides":[','length'
+                self.assertIn('scaletta precedente',messages[-1]['content'])
+            return self.completion(messages,settings,cancel,**kw)
+        with patch.object(self.app.engine,'require_model',return_value=self.model),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete):
+            self.app.execute_job(job,self.cancel)
+        answer=self.app.store.messages(job['chat_id'])[-1]
+        self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
+        self.assertEqual(len(seen),2);self.assertGreater(seen[1],seen[0]);self.assertLessEqual(seen[1],10000)
+        self.assertEqual(answer['meta']['slide_outline_truncated']['budget'],seen[0])
 
     def test_generation_recovers_invalid_tree_and_streams_before_node_id(self):
         job=self.enqueue();page_calls=0;self.calls=[];self.job=job;self.progress=0;self.fail=False;self.documents=False

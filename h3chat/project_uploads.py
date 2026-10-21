@@ -2,7 +2,7 @@
 from pathlib import Path
 import threading
 import uuid
-from .document_limits import RAG_FILE_BYTES,IMPORT_CHUNK_BYTES
+from .document_limits import IMPORT_CHUNK_BYTES
 
 class ProjectUploads:
     def __init__(self,knowledge):
@@ -17,7 +17,7 @@ class ProjectUploads:
         from .rag import import_metadata
         name,label,extension,defer=import_metadata(body)
         size=body.get('size')
-        if type(size) is not int or not 0<size<=RAG_FILE_BYTES:raise ValueError('Documento vuoto o oltre 512 MB.')
+        if type(size) is not int or size<0:raise ValueError('Dimensione file non valida.')
         with self.knowledge.index_lock,self.lock:
             if self.knowledge.closed.is_set():raise ValueError('Applicazione in chiusura.')
             self.knowledge.mutable(project)

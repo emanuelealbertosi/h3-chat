@@ -90,6 +90,8 @@ def model_path(root, model, value):
     if model.get('external'):
         path=Path(value)
         sidecar=model.get('engine')=='music' and any(f['path']==value and f['role'] in ('tokenizer','model_config','generation_config','vae_config') for f in model['files'])
+        if model.get('engine')=='fibo2':
+            sidecar=any(f['path']==value and f['role'].startswith('fibo_sidecar_') for f in model['files'])
         if not path.is_absolute() or (path.suffix.lower() not in ('.gguf','.safetensors') and not sidecar):
             raise ValueError('Percorso del modello esterno non valido.')
         return path.resolve()
@@ -191,12 +193,14 @@ def inspect_model(root, model):
         params['context_length']=None
     if model.get('local') and int(info.get('split.count',1))>sum(e['role'] in ('model','shard') for e in model['files']): ready=False
     if model.get('external') and model.get('external_problems'): ready=False
-    return {'ready':ready, 'complete':ready if model.get('local') else model_ready(root,model), 'vision':{'enabled':bool(projector),'expected':expected,
+    result={'ready':ready, 'complete':ready if model.get('local') else model_ready(root,model), 'vision':{'enabled':bool(projector),'expected':expected,
             'projector':(str(projector.resolve()) if model.get('external') else projector.relative_to(Path(root).resolve()).as_posix()) if projector else None,
             'projector_size':projector.stat().st_size if projector else 0,
             'warning':warning, 'max_refs':max(1,model.get('max_refs',4)) if projector else 0},
             'thinking':thinking,'parameters':params,'mtp':inspect_mtp(root,model,info,ready),
             'identity':llm_identity(base,model,info) if base else None}
+    from .llm_acceleration import traits
+    return result | {'acceleration':traits(root,model|result)}
 
 
 def thinking_parameters(model, settings, router=False):

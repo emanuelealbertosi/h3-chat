@@ -1,5 +1,7 @@
 """Check video component lifetimes without loading CUDA or user model weights."""
 import ast
+import json
+import tempfile
 import time
 import contextlib
 from pathlib import Path
@@ -11,15 +13,16 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class VideoMemoryOrderTests(unittest.TestCase):
-    def exercise(self, offload, veda=False):
+    def exercise(self, offload, veda=False,diagnostics=False):
         tree = ast.parse((ROOT/'native/video-worker.py').read_text(encoding='utf-8'))
         definition = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'Worker')
         events = []
-        namespace = {'emit': lambda event, **values: events.append((event, values)), 'write_video': Mock(), 'read_safetensors':Mock(return_value=({},{})), 'configure_cuda_allocator':Mock(return_value=False),'os':SimpleNamespace(environ={}), 'time':time, 'logging':Mock()}
+        namespace = {'emit': lambda event, **values: events.append((event, values)), 'write_video': Mock(), 'read_safetensors':Mock(return_value=({},{})), 'configure_cuda_allocator':Mock(return_value=False),'os':SimpleNamespace(environ={}), 'time':time, 'logging':Mock(),'Path':Path,'json':json}
         exec(compile(ast.Module(body=[definition], type_ignores=[]), '<video-worker>', 'exec'), namespace)
         worker = namespace['Worker']()
         torch = SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: True,get_allocator_backend=lambda:'native'),
             set_num_threads=Mock(), no_grad=contextlib.nullcontext)
+        if diagnostics:torch.cuda.synchronize=Mock()
         comfy = ModuleType('comfy')
         comfy.cli_args = ModuleType('comfy.cli_args');comfy.cli_args.args = SimpleNamespace()
         comfy.sd = ModuleType('comfy.sd');comfy.sd.VAE = Mock()
@@ -76,7 +79,7 @@ class VideoMemoryOrderTests(unittest.TestCase):
         comfy.sd.VAE.return_value.decode.side_effect = decode
         comfy.sample.sample = sample
         worker.load_diffuser, worker.load_conditioners, worker.condition = load_diffuser, load_conditioners, condition
-        worker.images = Mock(return_value=[])
+        worker.images = Mock(return_value=[]);worker.source_info=None
         worker.configure_attention = Mock(return_value='pytorch');worker.attention_chunks=1
         if veda:
             from collections import Counter
@@ -88,8 +91,14 @@ class VideoMemoryOrderTests(unittest.TestCase):
             worker.configure_attention.side_effect=configure
         opts = {'frames':24, 'shift_video':12, 'shift_audio':3, 'seed':1, 'aspect':'16:9','megapixels':.2,
             'steps':2, 'cfg':1, 'sampler':'res_multistep', 'scheduler':'simple'}
-        request = {'options':opts, 'plan':{'audios':[]}, 'output':'unused.mp4','images':[]}
-        if veda:opts['attention']='veda'
+        temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
+        request = {'options':opts, 'plan':{'audios':[]}, 'output':str(Path(temporary.name)/'unused.mp4'),'images':[]}
+        if diagnostics:
+            (Path(temporary.name)/'sampling-diagnostics.json').write_text(json.dumps({'synchronize_steps':True,'trim_unused_cache':True}))
+            worker.memory_snapshot=lambda phase:{'phase':phase,'reserved_mb':14560,'allocated_mb':265,'free_mb':0}
+        if veda:
+            opts.update(attention='veda',width=128,height=96)
+            torch.cuda.get_device_properties=lambda device:SimpleNamespace(total_memory=16*1024**3)
         with patch.dict('sys.modules', modules):
             worker.load({'files':{'vae':'unused.safetensors'}, 'offload':offload})
             if offload:self.assertIsNone(worker.model)
@@ -123,8 +132,13 @@ class VideoMemoryOrderTests(unittest.TestCase):
         namespace['write_video'].assert_called()
         if offload:
             self.assertEqual(comfy.sd.VAE.call_count, 2)
-            self.assertEqual(comfy.model_management.soft_empty_cache.call_count, 4)
+            self.assertEqual(comfy.model_management.soft_empty_cache.call_count, 6 if diagnostics else 4)
             self.assertEqual(comfy.model_management.reset_cast_buffers.call_count, 4)
+        if diagnostics:
+            self.assertEqual(torch.cuda.synchronize.call_count,4)
+            records=[json.loads(line) for line in (Path(temporary.name)/'sampling-memory.jsonl').read_text().splitlines()]
+            self.assertEqual(sum('cache_trim_seconds' in r for r in records),2)
+            self.assertEqual(sum('step' in r for r in records),4)
 
     def test_on_demand_weights_do_not_overlap_before_or_after_sampling(self):
         self.exercise(True)
@@ -134,6 +148,9 @@ class VideoMemoryOrderTests(unittest.TestCase):
 
     def test_veda_predictor_released_before_decode_and_next_scene(self):
         self.exercise(True,veda=True)
+
+    def test_scoped_cache_diagnostics_preserve_loaded_weights_and_normal_lifetimes(self):
+        self.exercise(True,diagnostics=True)
 
 
 if __name__ == '__main__':unittest.main()

@@ -54,8 +54,9 @@ class LoraTests(unittest.TestCase):
     def test_unknown_family_is_explicit_and_incompatible_family_is_rejected(self):
         unknown=lora(self.root/'first/unknown.safetensors','')
         item=next(i for i in self.lib.scan(self.dirs,True)['items'] if i['path']==str(unknown))
-        self.assertIn('non dichiarata',item['note'])
-        self.assertEqual(len(self.lib.capture([{'id':item['id'],'model_id':'anima'}],self.dirs,self.models)),1)
+        self.assertIn('non riconosciuta',item['note'])
+        with self.assertRaisesRegex(ValueError,'incompatibile'):
+            self.lib.capture([{'id':item['id'],'model_id':'anima'}],self.dirs,self.models)
         with self.assertRaisesRegex(ValueError,'incompatibile'):
             self.lib.capture([self.selection('flux2')],self.dirs,self.models)
 

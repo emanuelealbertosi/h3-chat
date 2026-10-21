@@ -17,7 +17,7 @@ class TimelineTests(unittest.TestCase):
                 return {'path':path.relative_to(tmp).as_posix(),'generation':{'width':640,'height':480,'canvas_width':640,'canvas_height':480,'aspect':'4:3','aspect_source':'image','format_image':1}}
             engine.generate_video=generate
             with patch('h3chat.soundtrack.compose',return_value={'duration':42}) as mux:
-                item=engine.generate_long_video({}, {'_video_duration':42,'_video_soundtrack':audio,'_assistant':False},plan,[audio],'job',threading.Event(),lambda _:None,prompt='Anima con audio')
+                item=engine.generate_long_video({'id':'fixture'}, {'_video_duration':42,'_video_soundtrack':audio,'_assistant':False},plan,[audio],'job',threading.Event(),lambda _:None,prompt='Anima con audio')
             self.assertEqual([p['audios'][0]['start'] for p,s in calls],[0,15,30])
             self.assertEqual([s['duration'] for p,s in calls],[15,15,12])
             self.assertEqual(calls[1][1]['canvas']['aspect'],'4:3')
@@ -31,6 +31,21 @@ class TimelineTests(unittest.TestCase):
         self.assertGreaterEqual(sum(s['duration'] for s in timeline(30.01)),30.01)
         for x in (0,601,float('nan')):
             with self.assertRaises(ValueError):timeline(x)
+
+    def test_selected_five_ten_fifteen_second_windows_keep_the_whole_track(self):
+        import math
+        for maximum in (5,10,15):
+            for duration in (30,42,30.01):
+                shots=timeline(duration,maximum)
+                self.assertEqual(sum(s['frames'] for s in shots),math.ceil(duration*24))
+                self.assertTrue(all(0<s['duration']<=maximum for s in shots))
+                self.assertEqual([s['start'] for s in shots],[i*maximum for i in range(len(shots))])
+        from h3chat.video_clip_budget import contract
+        self.assertEqual(contract('Use the entire song',30,segment_seconds=5)['count'],6)
+        self.assertEqual(contract('Use the entire song',30,segment_seconds=10)['count'],3)
+        self.assertEqual(contract('Use the entire song',30,segment_seconds=15)['count'],2)
+        with self.assertRaisesRegex(ValueError,'massimo 5'):
+            contract('Create 2 clips',30,segment_seconds=5)
 
     def test_explicit_reference_labels_and_global_timing_are_preserved(self):
         plan={'prompt':'Use <Picture 1> and <Audio 1>','images':[{'index':1,'role':'keyframe','seconds':0},{'index':2,'role':'keyframe','seconds':20}], 'audios':[{'index':1,'role':'lipsync','start':2}]}

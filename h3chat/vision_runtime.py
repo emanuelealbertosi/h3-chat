@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 REVISION = '3b4c0b0e457cf0a51cf3038e0a6750d8f96ce251'
-SAMPLERS = ('auto', 'euler', 'euler_ancestral', 'heun', 'dpm_2', 'dpmpp_2m', 'dpmpp_2m_sde', 'dpmpp_sde', 'lcm')
+SAMPLERS = ('auto', 'euler', 'euler_ancestral', 'heun', 'dpm_2', 'dpmpp_2m', 'dpmpp_2m_sde', 'dpmpp_sde', 'res_multistep', 'lcm')
 SCHEDULERS = ('auto', 'simple', 'normal', 'karras', 'exponential', 'sgm_uniform', 'ddim_uniform', 'beta', 'linear_quadratic', 'kl_optimal', 'qwen21_turbo')
 
 
@@ -20,15 +20,19 @@ def status(root):
         'runtime/vision/packages/triton/__init__.py',
         'runtime/python/include/Python.h','runtime/python/libs/python313.lib'))
     return {'ready':ready, 'accelerated':accelerated, 'backends':['cuda','cpu'], 'revision':REVISION,
-            'note':'Motore integrato Ming / Qwen Image 2.1 · NVIDIA CUDA o CPU. Nessun server esterno.'}
+            'note':'Motore integrato Ming / Qwen Image 2.1 / Krea 2 · NVIDIA CUDA o CPU. Nessun server esterno.'}
 
 
 def validate_options(model, options):
     if model.get('engine') != 'vision':
         return
     if options['sampler'] not in SAMPLERS or options['scheduler'] not in SCHEDULERS:
-        raise ValueError('Sampler o scheduler non supportato da Ming / Qwen Image 2.1. Usa Euler e Simple oppure i valori disponibili per questo modello.')
+        raise ValueError('Sampler o scheduler non supportato da Ming / Qwen Image 2.1 / Krea 2. Usa Euler e Simple oppure i valori disponibili per questo modello.')
     from .qwen_image21 import validate_schedule
     validate_schedule(model.get('architecture'),options)
-    # Native editing is reference-conditioned generation, not latent blending.
-    options['strength'] = 1.0
+    # MOSS uses actual img2img latent blending. Other native Edit models use
+    # reference-conditioned generation and retain their full denoise schedule.
+    if model.get('architecture')=='moss':
+        value=options.get('strength',.65)
+        if type(value) not in (int,float) or not .05<=value<=1:raise ValueError('Intensità MOSS img2img: scegli da 0,05 a 1.')
+    else:options['strength'] = 1.0

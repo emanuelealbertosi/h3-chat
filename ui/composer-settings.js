@@ -1,20 +1,21 @@
+import {videoRequestSummary} from './video-request.js';
 const $=selector=>document.querySelector(selector);
 const selected=selector=>$(selector)?.selectedOptions?.[0]?.textContent?.trim()||'';
 const chosen=selector=>$(selector)?.querySelector('[aria-pressed="true"]')?.textContent?.trim()||'';
 
 // Keep the original controls, values and handlers inside a dedicated dialog.
-export function initComposerSettings({context,getState,onChange}){
+export function initComposerSettings({context,getState,onChange,visualControls}){
  const dialog=document.createElement('dialog');dialog.id='prompt-mode-settings';dialog.className='prompt-options-dialog prompt-mode-dialog';dialog.setAttribute('aria-labelledby','prompt-mode-title');
  dialog.innerHTML='<header><div><span class="eyebrow">DAL PROSSIMO MESSAGGIO</span><h2 id="prompt-mode-title">Impostazioni</h2></div><button type="button" class="icon-button" aria-label="Chiudi impostazioni della modalità">×</button></header><nav class="prompt-mode-tabs" aria-label="Impostazioni delle modalità attive"></nav><div class="prompt-options-body"></div><footer><span class="small-note">Le scelte restano impostate anche chiudendo la finestra.</span><button type="button" class="btn primary">Fatto</button></footer>';
  document.body.append(dialog);
  const body=dialog.querySelector('.prompt-options-body'),tabs=dialog.querySelector('nav'),entries=[];
  let current=null,opener=null;
  const definitions=[
-  ['prompt-image-panel','Immagini',()=>selected('#image-model')],
-  ['slides-options','Slide',()=>[$('#slides-count')?.value+' slide',selected('#slides-format'),selected('#slides-design'),selected('#slides-detail'),$('#slides-engine')?.value==='llm'?'Sfondo '+($('#slides-background')?.value==='custom'?$('#slides-background-color')?.value:selected('#slides-background').toLowerCase()):'',$('#slides-engine')?.value==='llm'?'Palette '+selected('#slides-palette').toLowerCase():'',$('#slides-generate-images')?.checked?'Illustrazioni AI':''].filter(Boolean).join(' · ')],
+  ['prompt-image-panel','Immagini',()=>[selected('#image-model'),selected('[data-image-request="aspect"]')].filter(Boolean).join(' · ')],
+  ['slides-options','Slide',()=>[$('#slides-count')?.value+' slide',selected('#slides-format'),selected('#slides-design'),selected('#slides-detail'),selected('#slides-composition'),$('#slides-engine')?.value==='llm'?'Sfondo '+($('#slides-background')?.value==='custom'?$('#slides-background-color')?.value:selected('#slides-background').toLowerCase()):'',$('#slides-engine')?.value==='llm'?'Palette '+selected('#slides-palette').toLowerCase():'',$('#slides-generate-images')?.checked?'Illustrazioni AI':''].filter(Boolean).join(' · ')],
   ['music-inputs','Music',()=>[chosen('#music-inputs [data-music-quality]'),$('#music-inputs [data-duration-enable="chat"]')?.checked?'Max '+$('#music-inputs [data-duration-seconds="chat"]')?.value+' s':'',$('#music-inputs [data-music-field="instrumental"]')?.checked?'Strumentale':'Con voce',$('#music-inputs [data-music-field="title"]')?.value,$('#music-inputs [data-music-field="style"]')?.value?.slice(0,100)].filter(Boolean).join(' · ')],
   ['voice-inputs','Voice',()=>['gender','delivery','emotion','expressiveness'].map(key=>selected('#voice-inputs [data-voice-field="'+key+'"]').replace('Auto · segue l’interpretazione','Auto')).filter(Boolean).join(' · ')],
-  ['video-hint','Video',()=>[selected('#video-quality'),selected('#video-editing'),'Immagini e audio dal prompt',getState()?.models.find(m=>m.id===getState()?.settings.video_model)?.name].filter(Boolean).join(' · ')],
+  ['video-hint','Video',()=>[selected('#video-quality'),selected('#video-steps'),selected('#video-editing'),videoRequestSummary(visualControls.read(),getState())].filter(Boolean).join(' · ')],
   ['infographic-options','Infografica',()=>['format','layout','panel_order','style','output','voice_style'].filter(key=>key!=='panel_order'||!$('[data-infographic-field="panel_order"]')?.hidden).map(key=>chosen('[data-infographic-field="'+key+'"]')).filter(Boolean).join(' · ')],
   ['manim-presentation-options','Manim',()=>$('#manim-presentation-enable')?.getAttribute('aria-pressed')==='true'?[...$('#manim-presentation-options').querySelectorAll('[data-manim-source][aria-pressed="true"],[data-manim-mode][aria-pressed="true"]')].map(e=>e.textContent.trim()).join(' · '):'Python libero · '+(getState()?.settings.manim_duration||8)+' s dal preset']
  ];

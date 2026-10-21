@@ -19,6 +19,7 @@ PROFILES = {
 DEFAULTS = {
     "llm_timeout": 1800,
     "vision_max_refs": 4,
+    "llm_acceleration": "standard",
     "lab_auto": True, "manim_device": "cpu", "manim_duration": 8, "manim_fps": 15, "manim_width": 854, "manim_height": 480, "manim_timeout": 600, "manim_memory_gb": 4,
     "llm_device": "inherit", "image_device": "inherit", "rag_device": "cpu", "asr_device": "cpu",
     "rag_enabled": True, "rag_embedding_model": "", "rag_embedding_profile": "embeddinggemma", "rag_top_k": 6, "rag_visual": True,
@@ -31,7 +32,7 @@ DEFAULTS = {
     "music_advanced": False, "music_overrides": {}, "music_prompt_max_tokens": 2200,
     "music_quality": "model", "music_quality_profiles": {"high":{"model":"","steps":60},"low":{"model":"","steps":32}},
     "edit_model": "", "diagram_model": "", "diagram_auto": True, "vision_enabled": True, "vision_device": "cpu", "prompt_max_tokens": 2200, "context": 4096, "gpu_layers": 20, "max_tokens": 1024,
-    "image_advanced": False, "chat_advanced": False, "image_overrides": {}, "image_cfg": 7,
+    "image_advanced": False, "chat_advanced": False, "image_overrides": {}, "image_cfg": 7, "image_aspect": "auto", "moss_presets": [],
     "lora_dirs": [], "image_sampler": "auto", "image_scheduler": "auto", "seed": -1, "negative_prompt": "",
     "temperature": 0.7, "width": 512, "height": 512, "steps": 20,
     "strength": 0.65, "threads": 4, "system_prompt": "Rispondi in italiano, in modo chiaro e utile.",
@@ -151,9 +152,27 @@ class Store:
 
     def messages(self, chat_id, until=None):
         rows = self.all("SELECT * FROM messages WHERE chat_id=? AND seq<=? ORDER BY seq", (chat_id, until or 2**62))
+        edits = {r['input_seq']: json.loads(r['edit']) for r in self.all(
+            "SELECT json_extract(payload,'$.until') AS input_seq,json_extract(payload,'$.settings._video_edit') AS edit "
+            "FROM jobs WHERE chat_id=? AND json_type(payload,'$.settings._video_edit')='object' ORDER BY created",
+            (chat_id,))}
         for row in rows:
             row["media"] = json.loads(row["media"])
             row["meta"] = json.loads(row["meta"])
+            edit = edits.get(row['seq']) if row['role']=='user' else None
+            if edit:
+                images = [m for m in row['media'] if m.get('mime','').startswith('image/')]
+                selected = {n for patch in edit.get('patches',[]) for n in patch.get('images',[])}
+                visible = [m for i,m in enumerate(images,1) if i in selected]
+                visible += [m for m in row['media'] if not m.get('mime','').startswith(('image/','video/'))]
+                if any(p.get('mode')=='video' for p in edit.get('patches',[])):
+                    try:
+                        source = self.gallery.get(edit.get('source'))
+                        if source['mime'].startswith('video/'):
+                            visible.insert(0,{k:source[k] for k in ('id','name','path','mime')})
+                    except ValueError:
+                        pass
+                row['display_media'] = visible
         return rows
 
     def create_chat(self, title="Nuova chat", collection_id=None, project_id=None):
@@ -166,7 +185,11 @@ class Store:
         loras=loras or []
         lora_meta={"manim_presentation":settings.get("_manim_presentation"),"voice":settings.get("_voice",False),"voice_fields":settings.get("_voice_fields",{}),"web":settings.get("_web",False),"transcribe":settings.get("_transcribe",False),"video":settings.get("_video",False),"music":settings.get("_music",False),"music_fields":settings.get("_music_fields",{}),"image_model":settings.get("_image_model",""),"assistant":settings.get("_assistant",True),"loras":[{k:l[k] for k in ("id","name","weight","model_id","model_name")} for l in loras]}
         lora_meta["video_quality"]=settings.get("_video_quality","high")
+        lora_meta["video_steps"]=settings.get("_video_steps")
+        lora_meta["video_segment_seconds"]=settings.get("_video_segment_seconds")
         lora_meta["video_editing"]=settings.get("_video_editing","continuous")
+        lora_meta["video_model"]=settings.get("_video_request",{}).get("model","")
+        lora_meta["video_request_parameters"]=settings.get("_video_request",{}).get("parameters",{})
         lora_meta["music_quality"]=settings.get("music_quality","model")
         lora_meta["music_max_duration"]=settings.get("_music_max_duration")
         with self.connect() as db:
@@ -217,7 +240,7 @@ class Store:
                 elif isinstance(prior_upscale,str) and re.fullmatch('[a-f0-9]{32}',prior_upscale) and (self.root/'outputs'/prior_upscale/'upscale/checkpoint.json').is_file():value['settings']['_upscale_resume']=prior_upscale
             value['settings'].pop('_video_resume',None)
             value['settings'].pop('_manim_voice_resume',None)
-            if original['status'] in ('failed','cancelled'):
+            if original['status'] in ('failed','cancelled','interrupted'):
                 try:
                     from .video_resume import checkpoint
                     saved=checkpoint(self.root,original['id'])
@@ -243,6 +266,10 @@ class Store:
             db.execute("INSERT INTO jobs VALUES (?,?,?,?, 'queued','In attesa','',?)", (job_id, chat_id, answer_id, payload, now))
             db.execute("UPDATE chats SET updated=? WHERE id=?", (now, chat_id))
         return job_id
+
+    def resume_video(self, chat_id, job_id):
+        from .video_job_resume import enqueue
+        return enqueue(self, chat_id, job_id)
 
     def update_answer(self, job, content, status="running", media=None, meta=None):
         details=meta or {}

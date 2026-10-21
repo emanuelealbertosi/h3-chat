@@ -1,6 +1,6 @@
 import unittest
 from types import SimpleNamespace as NS
-from h3chat.video_mlp import supported, rows_per_chunk, install
+from h3chat.video_mlp import supported, rows_per_chunk, install, require_supported_weights
 
 
 class VideoMLPTests(unittest.TestCase):
@@ -38,5 +38,14 @@ class VideoMLPTests(unittest.TestCase):
         layer,ops=self.fixture();install(NS(blocks=[NS(mlp=layer)]),None,ops)
         layer.fc2.weight_function.append(object())
         self.assertEqual(layer.forward(NS(requires_grad=False,device=NS(type='cuda'))),'original')
+
+    def test_removed_w4a8_variant_is_rejected_without_affecting_int8(self):
+        layer,ops=self.fixture()
+        require_supported_weights(NS(named_parameters=lambda:[('weight',layer.fc1.weight)]))
+        layer.fc1.weight._layout_cls=layer.fc2.weight._layout_cls='AsymW4A8Int8Layout'
+        self.assertFalse(supported(layer,ops))
+        self.assertEqual(install(NS(blocks=[NS(mlp=layer)]),None,ops),0)
+        with self.assertRaisesRegex(ValueError,'W4A8 non è supportato'):
+            require_supported_weights(NS(named_parameters=lambda:[('weight',layer.fc1.weight)]))
 
 if __name__=='__main__':unittest.main()

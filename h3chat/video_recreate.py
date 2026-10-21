@@ -4,10 +4,10 @@ import json
 import math
 import re
 from .downloads import Cancelled, safe_join
-from .video_options import DEFAULTS, options, resolve_canvas, validate, validate_plan
+from .video_options import DEFAULTS, ACCELERATION_KEYS, options, resolve_canvas, validate, validate_plan
 from .video_resume import checkpoint, save
 
-EDITABLE = ('megapixels','steps','cfg','sampler','scheduler','seed','offload','attention')
+EDITABLE = ('megapixels','steps','cfg','sampler','scheduler','seed','offload','attention','pdd_enabled','pdd_lora','experimental_resolution','loras','source_conditioning','longtake_enabled','attention_chunks','attention_chunks_mode','veda_predictor','veda_sparsity','veda_reference_sparsity','shift_video','shift_audio')
 
 
 def load(app, chat_id, ident):
@@ -26,6 +26,7 @@ def load(app, chat_id, ident):
         if not safe_join(app.data,item['path']).is_file():raise ValueError('Un riferimento originale non è più disponibile.')
     if (folder/'scenes.json').is_file():
         record=checkpoint(app.data,ident)
+        if record.get('revision_remount') is False:raise ValueError('Questa richiesta ha prodotto spezzoni separati. Scegli un singolo spezzone per modificarlo.')
         if record.get('imported_size'):raise ValueError('Un video importato non contiene le istruzioni originali di tutte le scene. Usa Modifica clip per cambiare altri tratti.')
         if record['completed']!=len(record['timeline']):raise ValueError('Il video contiene clip incompleti.')
     else:
@@ -90,8 +91,25 @@ def load(app, chat_id, ident):
                         a['start']=record.get('audio_start',0)+start
                         if 'lip_sync' in scene:a['role']='lipsync' if scene['lip_sync'] else 'reuse'
             partial|=is_partial
+            if record.get('extension'):
+                # The new soundtrack uses the shifted timeline's clock.
+                for a in plan['audios']:
+                    if a['role'] in ('reuse','lipsync'):a['start']=record.get('audio_start',0)+start
             recipe={'plan':plan,'refs':local_refs}
-        recipe['plan']=validate_plan(recipe['plan'],recipe['refs'],seconds)
+            if scene.get('extension_context'):recipe['extension_context']=scene['extension_context']
+            if scene.get('generation_mode')=='video':
+                params=record['parameters'][i]
+                if is_partial:
+                    # A combined interval edit is replayed against its complete
+                    # saved clip, whose unchanged surrounding motion is intact.
+                    recipe['source_video']={'path':record['outputs'][i],'start':0,'frames':frames,'megapixels':.35}
+                elif params.get('source_video_recipe'):recipe['source_video']=copy.deepcopy(params['source_video_recipe'])
+                else:raise ValueError('La modifica salvata non contiene la clip sorgente per la ricreazione.')
+        if recipe.get('source_video'):
+            from .video_reference import validate_source
+            recipe['source_video']=validate_source(recipe['source_video'])
+            if not safe_join(app.data,recipe['source_video']['path']).is_file():raise ValueError('Video sorgente della modifica non più disponibile.')
+        recipe['plan']=validate_plan(recipe['plan'],recipe['refs'],seconds,source_video=bool(recipe.get('source_video')))
         for item in recipe['refs']:
             if not safe_join(app.data,item['path']).is_file():raise ValueError('Un riferimento del clip non è più disponibile.')
         recipes.append(recipe)
@@ -114,9 +132,11 @@ def tuning(value, changes=None):
 
 def describe(app,chat_id,ident):
     value=load(app,chat_id,ident);p=tuning(value)
-    return {'source':ident,'model':value['model']['name'],'duration':value['duration'],
+    from .video_edit import model_choices
+    from .video_loras import choices
+    return {'attention_choices':True,'longtake_experimental':True,'source':ident,'model':value['model']['name'],'model_id':value['model']['id'],'models':model_choices(app),'loras':choices(app),'duration':value['duration'],
         'aspect':value['record']['parameters'][0].get('aspect','16:9'),
-        'parameters':{k:min(p[k],.98) if k=='megapixels' else p[k] for k in EDITABLE},'clips':len(value['recipes']),
+        'parameters':{k:min(p[k],.98) if k=='megapixels' and not p.get('experimental_resolution') else p[k] for k in EDITABLE},'clips':len(value['recipes']),
         'references':[{'name':x['name'],'mime':x['mime']} for x in value['refs']],
         'audio':value['audio']['name'] if value['audio'] else None,
         'partial_edit':value['partial'],
@@ -124,9 +144,18 @@ def describe(app,chat_id,ident):
 
 
 def request(app,chat_id,body):
-    if not isinstance(body,dict) or set(body)-{'source','parameters','canvas'}:raise ValueError('Richiesta di ricreazione non valida.')
+    if not isinstance(body,dict) or set(body)-{'source','parameters','canvas','model'}:raise ValueError('Richiesta di ricreazione non valida.')
     value=load(app,chat_id,body.get('source'));changes=body.get('parameters',{})
+    original_model=value['model']['id']
+    if not isinstance(body.get('model',''),str):raise ValueError('Selezione modello video non valida.')
+    if body.get('model'):
+        selected=app.engine.require_model(body['model'],'video')
+        if selected.get('remote_media'):raise ValueError('Il confronto richiede un modello MiniMax H3 standalone.')
+        value['model']=selected
     if not isinstance(changes,dict) or set(changes)-set(EDITABLE):raise ValueError('Puoi cambiare i parametri di generazione; formato, durata e riferimenti restano quelli salvati.')
+    if value['model']['id']!=original_model:
+        preset=app.store.settings().get('video_overrides',{}).get(value['model']['id'],{})
+        changes={key:preset[key] for key in ACCELERATION_KEYS if key in preset}|changes
     tuning(value,changes)
     canvas=body.get('canvas',value['payload'].get('canvas',False))
     if type(canvas) is not bool:raise ValueError('Destinazione canvas non valida.')
@@ -143,6 +172,7 @@ def request(app,chat_id,body):
 
 def render(app,job,payload,settings,cancel,stage,log):
     command=settings['_video_recreate'];value=load(app,job['chat_id'],command['source'])
+    value['model']=app.engine.require_model(settings['video_model'],'video')
     from .soundtrack import probe,compose
     from .video_timeline import validate_audio_interval
     durations={}
@@ -175,11 +205,16 @@ def render(app,job,payload,settings,cancel,stage,log):
         resolved=resolve_canvas(options(value['model'],local,False),{'images':[]},[],p.get('aspect','16:9'))
         canvas={k:resolved[k] for k in ('width','height','output_width','output_height','aspect','aspect_source','format_image')}
         scoped=scene|{'index':i,'sequence':job['id'],'canvas':canvas,'last':i==len(record['timeline'])-1}
+        if presets.get('longtake_enabled') and i and scene.get('continuity')!='cut':
+            from .video_longtake import attach
+            attach(app.data,scoped,record['parameters'][i-1])
         if completed and i==completed and scene.get('continuity')!='cut':
             anchor=max((n for n in range(i) if record['timeline'][n].get('continuity')=='cut'),default=0)
             scoped['resume_memory']={'opening':str(safe_join(app.data,record['outputs'][anchor])),
                 'recent':[str(safe_join(app.data,p)) for p in record['outputs'][anchor:][-2:]]}
         recipe=value['recipes'][i]
+        if recipe.get('source_video'):scoped['source_video']=recipe['source_video']
+        if recipe.get('extension_context'):scoped['extension_context']=recipe['extension_context']
         def report(label):stage(f'Ricreazione · clip {i+1}/{len(value["recipes"])} · '+label)
         media=app.engine.generate_video(value['model'],local,recipe['plan'],recipe['refs'],job['id']+f'/scene-{i+1:03d}',cancel,report,prompt=canvas['aspect'],scene=scoped)
         record['outputs'].append(media['path']);record['parameters'].append(media['generation']);record['completed']=i+1;save(folder,record)

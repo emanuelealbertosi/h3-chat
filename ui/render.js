@@ -6,6 +6,11 @@ import mermaid from 'mermaid';
 import Chart from 'chart.js/auto';
 import {validateChart} from './chart-schema.js';
 import {addVideoAudioControl} from './video-playback.js';
+import {videoTimelineSource} from './video-timeline-source.js';
+import {appendGenerationDetails} from './video-generation-details.js';
+import {addBrowserPreview} from './video-browser-preview.js';
+import {openImageZoom,bindImageZoom} from './image-zoom.js';
+import {appendImageBatch} from './image-batch.js';
 
 export const escape = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function saveBlob(blob,name){document.dispatchEvent(new CustomEvent('h3-export',{detail:{blob,name}}));const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
@@ -35,6 +40,7 @@ export async function renderRich(target,text,{final=true,sources=[],onCitation=n
     if(match){quote.classList.add('callout','callout-'+match[1].toLowerCase());const label=document.createElement('strong');label.className='callout-label';label.textContent=({NOTE:'Nota',TIP:'Suggerimento',IMPORTANT:'Importante',WARNING:'Attenzione',CAUTION:'Avvertenza',QUOTE:'Citazione',RESULT:'Risultato',DEFINITION:'Definizione'})[match[1].toUpperCase()];quote.prepend(label);const walker=document.createTreeWalker(first,NodeFilter.SHOW_TEXT);const node=walker.nextNode();if(node)node.textContent=node.textContent.replace(/^\[!\w+\]\s*/, '');}
   }
   for(const img of target.querySelectorAll('img')) {if(!img.getAttribute('src')?.startsWith('/media/'))img.remove();}
+  bindImageZoom(target);
   for(const code of target.querySelectorAll('pre > code')) {
     const lang=code.className.replace('language-','');
     if(final && lang==='mermaid') {
@@ -73,10 +79,12 @@ export async function renderRich(target,text,{final=true,sources=[],onCitation=n
   }
 }
 
-export function appendMedia(target,media,{api,onEditVideo,onRecreateVideo,onUpscaleVideo,onRemixVideo}={}) {
+export function appendMedia(target,media,{api,onEditVideo,onRecreateVideo,onUpscaleVideo,onRemixVideo,videoMeta}={}) {
+  if(appendImageBatch(target,media))return;
   for(const m of media||[]){
     const figure=document.createElement('figure'),url='/media/'+escape(m.path);
-    if(!m.mime?.startsWith('image/')&&!m.mime?.startsWith('audio/')&&!m.mime?.startsWith('video/')){figure.className='document-output';figure.innerHTML=`<a href="${url}" download="${escape(m.name)}">▤ ${escape(m.name)} · Scarica</a>`;}
+    if(m.mime==='model/gltf-binary'){figure.className='file-output';const caption=document.createElement('figcaption');caption.textContent=m.name+' ';const link=document.createElement('a');link.href='/media/'+m.path;link.download=m.name;link.textContent='Scarica GLB';caption.append(link);figure.append(caption);}
+    else if(!m.mime?.startsWith('image/')&&!m.mime?.startsWith('audio/')&&!m.mime?.startsWith('video/')){figure.className='document-output';figure.innerHTML=`<a href="${url}" download="${escape(m.name)}">▤ ${escape(m.name)} · Scarica</a>`;}
     else if(m.mime?.startsWith('video/')){figure.className='video-output';figure.innerHTML=`<video controls playsinline preload="metadata" src="${url}" aria-label="${escape(m.name)}"></video><figcaption><a href="${url}" download="${escape(m.name)}">Scarica MP4</a></figcaption>`;addVideoAudioControl(figure);if(onUpscaleVideo&&/^[a-f0-9]{32}$/.test(m.id)){const upscale=document.createElement('button');upscale.type='button';upscale.className='text-button';upscale.textContent='Upscale';upscale.onclick=()=>onUpscaleVideo(m);figure.querySelector('figcaption').append(upscale);}if(onEditVideo&&/^[a-f0-9]{32}$/.test(m.id)){const button=document.createElement('button');button.type='button';button.className='text-button';button.textContent='Modifica clip';button.onclick=()=>onEditVideo(m);figure.querySelector('figcaption').append(button);}}
     else if(m.mime?.startsWith('audio/')){
       figure.className='audio-output';figure.innerHTML=`<div class="audio-title">♫ ${escape(m.name)}</div><audio class="no-export" controls preload="metadata" src="${url}" aria-label="${escape(m.name)}"></audio><figcaption class="no-export audio-downloads"></figcaption>`;
@@ -94,9 +102,14 @@ export function appendMedia(target,media,{api,onEditVideo,onRecreateVideo,onUpsc
       }
       if(!m.path.toLowerCase().endsWith('.wav')&&!m.path.toLowerCase().endsWith('.mp3')){const a=document.createElement('a');a.href='/media/'+m.path;a.download=m.name;a.textContent='Scarica originale';caption.append(a);}
     }
-    else{figure.className='image-output';figure.innerHTML=`<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="${escape(m.name)}" loading="lazy"></a><figcaption class="no-export">${escape(m.name)} <a href="${url}" download>Scarica originale</a></figcaption>`;}
+    else{figure.className='image-output';figure.innerHTML=`<button type="button" class="image-zoom-trigger" aria-label="Ingrandisci ${escape(m.name)}"><img src="${url}" alt="${escape(m.name)}" loading="lazy"></button><figcaption class="no-export">${escape(m.name)} <a href="${url}" download>Scarica originale</a></figcaption>`;const trigger=figure.querySelector('button');trigger.onclick=()=>openImageZoom('/media/'+m.path,m.name,trigger);}
     if(m.mime?.startsWith('video/')&&onRemixVideo){const button=document.createElement('button');button.type='button';button.className='text-button';button.textContent='Remix audio';button.onclick=()=>onRemixVideo(m);figure.querySelector('figcaption').append(button);}
-    if(m.mime?.startsWith('video/')&&onRecreateVideo&&m.generation?.engine==='minimax-h3'&&!m.generation?.imported_video&&/^[a-f0-9]{32}$/.test(m.id)){const button=document.createElement('button');button.type='button';button.className='text-button';button.textContent='Ricrea video';button.onclick=()=>onRecreateVideo(m);figure.querySelector('figcaption').append(button);}
+    if(m.mime?.startsWith('video/')&&onRecreateVideo&&m.generation?.engine==='minimax-h3'&&!m.generation?.imported_video&&!m.generation?.clip_only&&/^[a-f0-9]{32}$/.test(m.id)){const button=document.createElement('button');button.type='button';button.className='text-button';button.textContent='Ricrea video';button.onclick=()=>onRecreateVideo(m);figure.querySelector('figcaption').append(button);}
+    const timeline=videoTimelineSource(m);
+    if(onEditVideo&&timeline){
+      const resume=document.createElement('button');resume.type='button';resume.className='text-button';resume.textContent='Riprendi timeline';resume.onclick=()=>onEditVideo({...m,id:timeline.id,timeline_recovery:timeline.recover});figure.querySelector('figcaption').append(resume);
+    }
+    if(m.mime?.startsWith('video/')){appendGenerationDetails(figure,m,videoMeta);addBrowserPreview(figure.querySelector('figcaption'),figure.querySelector('video'),m,api);figure.querySelector('figcaption a[download]').textContent=m.path.toLowerCase().endsWith('.mp4')?'Scarica MP4':'Scarica originale';}
     target.append(figure);
   }
 }

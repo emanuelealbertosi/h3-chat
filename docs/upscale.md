@@ -1,6 +1,6 @@
 # Upscale video
 
-Premi **Upscale** sotto un video nella chat o nel canvas. Il pulsante **↗ Upscale** accanto alla galleria permette di scegliere anche un video esterno dal PC o dalla galleria. Il caricamento standard accetta MP4 fino a 64 MB; i video già generati e presenti in galleria non richiedono un nuovo caricamento.
+Premi **Upscale** sotto un video nella chat o nel canvas. Il pulsante **↗ Upscale** accanto alla galleria permette di scegliere anche un video esterno dal PC o dalla galleria. Il caricamento non impone limiti di dimensione o formato; il motore verifica poi che il file sia un video decodificabile. I video già in galleria non richiedono un nuovo caricamento.
 
 L'app usa **NVIDIA RTX Video Super Resolution**, autonomo su GPU NVIDIA e Windows, fino a 4×. La qualità High è predefinita, Ultra opzionale. Non richiede ComfyUI e non esegue interpolazione: conserva i fotogrammi e i tempi originali, comprese frequenza variabile e rotazione di visualizzazione. L'audio AAC di un video intero è copiato senza ricodifica; altri codec e prove brevi vengono convertiti in AAC. Il file originale resta disponibile; il nuovo MP4 viene registrato in chat, canvas e galleria.
 

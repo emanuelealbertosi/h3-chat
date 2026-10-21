@@ -2,7 +2,7 @@
 
 Dal pulsante accanto a Think in chat, oppure da **Impostazioni → Preferenze**, puoi impostare:
 
-- **Max token di risposta**: 64–8192 token, fino a metà del contesto. Comprende testo e thinking, anche per il canvas. Il valore precedente viene conservato negli aggiornamenti; per una nuova installazione è 1024.
+- **Max token di risposta**: 64–100.000 token, fino a metà del contesto. Comprende testo e thinking, anche per il canvas. Il valore precedente viene conservato negli aggiornamenti; per una nuova installazione è 1024.
 - **Attiva MTP per i modelli compatibili**: disattivato inizialmente. L'opzione è disponibile solo quando il GGUF installato contiene i moduli necessari e l'architettura è supportata.
 - **Token da anticipare**: 1–8, inizialmente 3. Il motore verifica le proposte prima di accettarle; aumentare questo numero non garantisce maggiore velocità. I modelli con più teste concatenate hanno anche il limite imposto dal numero di teste.
 
@@ -12,7 +12,13 @@ Il limite max token riguarda l'output: **Contesto** regola invece lo spazio comp
 
 ## Rilevamento e motore
 
-H3-Chat usa il MTP nativo di llama.cpp **b10809**: `--spec-type draft-mtp --spec-draft-n-max N`. Non scarica un secondo modello draft e non duplica i pesi: il contesto MTP condivide il modello principale. MTP disattivato viene inviato esplicitamente come `--spec-type none`.
+Il motore Standard di H3-Chat usa il MTP nativo di llama.cpp **b10809**: `--spec-type draft-mtp --spec-draft-n-max N`. Non scarica un secondo modello draft e non duplica i pesi: il contesto MTP condivide il modello principale. MTP disattivato viene inviato esplicitamente come `--spec-type none`.
+
+L'installazione locale può usare anche i [profili ISTA e Orca ottimizzati](llm-acceleration.md),
+esplicitamente selezionati per modello: runtime separato, MTP2 per ISTA IQ3_S
+o MTP4 per Orca IQ3_XXS, e finestra della
+sola bozza di 8192 token. Il contesto principale rimane fino a 131.072 token.
+Non cambia la gestione del rilascio di memoria o il motore degli altri modelli.
 
 Il rilevamento legge le intestazioni GGUF, senza caricare i pesi in memoria. Controlla `general.architecture`, `ARCH.nextn_predict_layers`, `ARCH.block_count`, i tensori principali e i tensori `nextn.eh_proj`, `nextn.enorm`, `nextn.hnorm` di tutti i moduli dichiarati, riunendo i file shard collegati. Il nome del file e i soli metadati NextN non bastano. I GGUF senza tensori MTP, con parti mancanti o contenenti solo una testa separata non abilitano l'opzione. Sono supportati i moduli incorporati nel GGUF completo; un draft MTP separato richiederebbe un collegamento aggiuntivo, non previsto da questa versione.
 

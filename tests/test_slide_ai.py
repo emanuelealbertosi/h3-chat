@@ -34,6 +34,8 @@ class SlideAITests(unittest.TestCase):
 
     def test_revision_changes_only_selected_page_and_preserves_original_history(self):
         chat=self.app.store.create_chat()['id'];saved,original=self.deck(chat)
+        original['pages'][0].update(notes='Approfondimento del relatore [R1].',editorial={'content':'Spiegazione estesa.', 'visual_plan':'Confronto annotato.'})
+        saved=self.app.store.canvas_history.save(chat,{'title':'Corso','content':encode(original),'media':[]})
         with patch.object(self.app.engine,'require_model',side_effect=self.model_for):
             sent=enqueue(self.app,chat,{'artifact_id':saved['id'],'page':0,'prompt':'Rendi il titolo più vivace'})
         job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(sent['job_id'],))
@@ -41,15 +43,19 @@ class SlideAITests(unittest.TestCase):
             self.assertIn('Palette calda',messages[-1]['content']);self.assertIn('1280, 960',messages[-1]['content'])
             self.assertIn('STILE VISIVO: giocoso / colorato',messages[0]['content'])
             self.assertIn('Illustrazioni: immaginative',messages[0]['content'])
+            self.assertIn('Spiegazione estesa.',messages[-1]['content'])
+            self.assertIn('Approfondimento del relatore',messages[-1]['content'])
             kw['on_text']('<main><h1>Nuovo')
-            return '<main><h1>Nuovo titolo</h1><p>Testo corretto [R1]</p></main>','stop'
+            return '<main style="color:#123"><h1>Nuovo titolo</h1><p>Testo corretto [R1]</p></main>','stop'
         with patch.object(self.app.engine,'require_model',side_effect=self.model_for),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete):
             self.app.execute_job(job,threading.Event())
         answer=self.app.store.messages(chat)[-1];self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
         result=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4])
         self.assertEqual(result['pages'][1],original['pages'][1]);self.assertIn('Nuovo titolo',result['pages'][0]['html'])
+        self.assertEqual(result['pages'][0]['notes'],original['pages'][0]['notes'])
+        self.assertEqual(result['pages'][0]['editorial'],original['pages'][0]['editorial'])
         self.assertEqual(self.app.store.canvas_history.get(chat,saved['id'])['content'],encode(original))
-        self.assertEqual(len(self.app.store.canvas_history.listing(chat)['items']),2)
+        self.assertEqual(len(self.app.store.canvas_history.listing(chat)['items']),3)
         self.assertNotIn('<main>',answer['content'])
 
     def test_revision_uses_saved_slide_colors_not_current_infographic_palette(self):
@@ -62,13 +68,32 @@ class SlideAITests(unittest.TestCase):
         def complete(messages,settings,cancel,**kw):
             self.assertIn('Sfondo principale scuro',messages[0]['content'])
             self.assertIn('colori vivaci e saturi',messages[0]['content'])
-            return '<main><h1>Nuova spiegazione</h1></main>','stop'
+            return '<style>body{background:#123;color:white}</style><main><h1>Nuova spiegazione</h1></main>','stop'
         with patch.object(self.app.engine,'require_model',side_effect=self.model_for),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete):
             self.app.execute_job(job,threading.Event())
         answer=self.app.store.messages(chat)[-1];self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
         result=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4])
         self.assertEqual(result['background'],'dark');self.assertEqual(result['palette'],'vivid')
         self.assertEqual(result['pages'][1],deck['pages'][1])
+
+    def test_unstyled_revision_is_not_marked_ready_and_keeps_other_pages(self):
+        chat=self.app.store.create_chat()['id'];saved,original=self.deck(chat)
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for):
+            sent=enqueue(self.app,chat,{'artifact_id':saved['id'],'page':0,'prompt':'Ricrea con grafica completa'})
+        job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(sent['job_id'],))
+        def complete(*args,**kw):
+            html='<main class="layout"><h1>Testo senza CSS</h1></main>'
+            kw['on_text'](html)
+            return html,'stop'
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete) as completion:
+            self.app.execute_job(job,threading.Event())
+        answer=self.app.store.messages(chat)[-1]
+        self.assertEqual(answer['status'],'failed');self.assertEqual(completion.call_count,2)
+        self.assertIn('CSS',answer['meta']['error'])
+        result=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4])
+        self.assertEqual(result['pages'][0]['status'],'interrupted')
+        self.assertEqual(result['pages'][1],original['pages'][1])
+        self.assertEqual(self.app.store.canvas_history.get(chat,saved['id'])['content'],encode(original))
 
     def test_static_revision_can_receive_choreography_without_rewriting_other_pages_or_audio(self):
         from h3chat.infographic_choreography import targets
@@ -150,8 +175,14 @@ class SlideAITests(unittest.TestCase):
             schema=kw.get('schema')
             if schema and 'slides' in schema['properties']:
                 self.events.append('outline');return json.dumps({'title':'Corso','slides':[{'title':'A','purpose':'Introduzione'},{'title':'B','purpose':'Esempio'}]}),'stop'
+            if schema and 'content' in schema['properties']:
+                self.events.append('editorial')
+                return json.dumps({'content':'Esempio concreto di confronto.', 'visual_plan':'Confronto annotato fra due procedure.', 'notes':'Note complete del relatore.','sources':[]}),'stop'
             if schema and 'images' in schema['properties']:
                 self.events.append('image-plan');self.assertIn('tag descrittivi in inglese',messages[-1]['content'])
+                self.assertIn('IMMAGINI GENERATE SENZA TESTO',messages[0]['content'])
+                self.assertIn('Nessun testo, neppure grande',messages[-1]['content'])
+                self.assertIn('Esempio concreto di confronto.',messages[-1]['content'])
                 return json.dumps({'images':[{'slide':i,'prompt':'colorful illustration, abstract shapes','description':'Illustrazione '+str(i)} for i in (1,2)]}),'stop'
             self.events.append('html');self.assertEqual(len(generated),2);self.assertTrue(all(image['id'] in str(messages) for image in generated))
             repair=messages[-1]['content'].startswith('Questa pagina deve usare')
@@ -160,10 +191,11 @@ class SlideAITests(unittest.TestCase):
             html='<main><h1>Slide</h1>'+figure+'</main>';kw['on_text'](html);return html,'stop'
         def generate(model,settings,prompt,refs,ident,cancel,stage):
             self.events.append('image');self.assertEqual(settings['memory_policy'],'on_demand');self.assertEqual(settings['ram_cache_gb'],0)
+            self.assertIn('no text',prompt);self.assertIn('no letters',prompt)
             image={'id':ident,'mime':'image/png','name':'image.png','path':'outputs/'+ident+'/image.png'};generated.append(image);return image
         with patch.object(self.app.engine,'require_model',side_effect=self.model_for),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama') as llm,patch.object(self.app.engine,'generate',side_effect=generate),patch.object(self.app.engine,'completion',side_effect=complete):self.app.execute_job(job,threading.Event())
         answer=self.app.store.messages(chat)[-1];self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
-        self.assertEqual(self.events,['outline','image-plan','image','image','html','html','html']);self.assertEqual(llm.call_count,2)
+        self.assertEqual(self.events,['outline','editorial','editorial','image-plan','image','image','html','html','html']);self.assertEqual(llm.call_count,2)
         self.assertEqual(len(answer['meta']['artifact']['media']),2)
         deck=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4])
         for index,image in enumerate(generated):self.assertIn(image['id'],deck['pages'][index]['html'])

@@ -55,10 +55,11 @@ class MediaProviders:
         assets=[{'name':r['name'],'data':base64.b64encode(safe_join(self.store.root,r['path']).read_bytes()).decode()} for r in refs]
         if cfg['adapter']=='h3':
             params=settings.get('image_overrides',{}).get(model['id'],{}) if task in ('create','edit') else settings.get('music_overrides',{}).get(model['id'],{}) if task=='music' else settings.get('video_overrides',{}).get(model['id'],{})
+            if task in ('create','edit') and params.get('aspect')=='auto':params={k:v for k,v in params.items() if k!='aspect'}
             if task=='music' and params.get('max_duration') is None:params={k:v for k,v in params.items() if k!='max_duration'}
             if task=='video':
                 from .video_options import apply_quality
-                params=apply_quality(params,settings.get('_video_quality','high'))
+                params=apply_quality(params,settings.get('_video_quality','high'),settings.get('_video_steps'))
                 if plan and any(a['role']=='lipsync' for a in plan.get('audios',[])) and 'steps' in params:
                     params['steps']=max(8,params['steps'])
             ticket=self.client.exchange(cfg,key,cancel,path='/v1/h3/generations',body={'task':task,'model':cfg['model'],'prompt':prompt,'assets':assets,'parameters':params,'device':cfg['device'],'composition':composition,'plan':plan},timeout=60)

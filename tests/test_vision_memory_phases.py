@@ -9,6 +9,7 @@ import time
 import unittest
 from unittest.mock import Mock,patch
 from h3chat.residency import Session
+from h3chat.qwen_image21 import TURBO_SCHEDULER,TURBO_SIGMAS,validate_schedule
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -16,7 +17,8 @@ ROOT=Path(__file__).resolve().parents[1]
 def worker_class():
     tree=ast.parse((ROOT/'native/vision-worker.py').read_text(encoding='utf-8'))
     worker=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='Worker')
-    namespace={'emit':Mock(),'time':time}
+    namespace={'emit':Mock(),'time':time,'TURBO_SCHEDULER':TURBO_SCHEDULER,
+               'TURBO_SIGMAS':TURBO_SIGMAS,'validate_schedule':validate_schedule}
     exec(compile(ast.Module(body=[worker],type_ignores=[]),'<vision-worker>', 'exec'),namespace)
     return namespace['Worker']
 
@@ -77,7 +79,7 @@ class MemoryPhaseTests(unittest.TestCase):
         instance.comfy=SimpleNamespace(model_management=manager,
             sample=SimpleNamespace(prepare_noise=lambda *args:'noise',sample=sample),
             samplers=SimpleNamespace(KSampler=SimpleNamespace(SAMPLERS=['euler'],SCHEDULERS=['simple'])))
-        instance.torch=SimpleNamespace(inference_mode=nullcontext)
+        instance.torch=SimpleNamespace(no_grad=nullcontext)
         return instance,events
 
     def generate(self,instance):

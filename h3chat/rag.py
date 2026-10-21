@@ -19,7 +19,7 @@ from contextlib import contextmanager
 from .downloads import Cancelled, safe_join
 from .residency import Session
 from .store import uid
-from .document_limits import RAG_FILE_BYTES,RAG_TEXT_CHARS,RAG_CHUNKS,IMPORT_CHUNK_BYTES,INLINE_IMPORT_BYTES
+from .document_limits import RAG_TEXT_CHARS,RAG_CHUNKS,IMPORT_CHUNK_BYTES,INLINE_IMPORT_BYTES
 
 TEXT_EXTENSIONS={'.txt','.md','.csv','.json','.py','.js','.ts','.html','.css','.tex'}
 EXTENSIONS=TEXT_EXTENSIONS|{'.pdf','.docx'}
@@ -32,7 +32,7 @@ def import_metadata(body):
     label=body.get('relative_path') or name
     if not isinstance(label,str) or len(label)>1200 or label.startswith('/') or any(x in label for x in ('\\',':','\0')) or any(part in ('','..','.') for part in label.split('/')) or label.split('/')[-1]!=name:raise ValueError('Nome della cartella importata non valido.')
     extension=Path(name).suffix.lower()
-    if extension not in EXTENSIONS:raise ValueError('Usa PDF, Word .docx oppure file di testo/codice.')
+    if not re.fullmatch(r'\.[a-z0-9_-]{1,20}',extension):extension=''
     if type(defer) is not bool:raise ValueError('Importazione documento non valida.')
     return name,label,extension,defer
 
@@ -253,17 +253,6 @@ class Knowledge:
         """Register a complete private staging file without loading its bytes."""
         name,label,extension,defer=import_metadata(body);path=Path(path)
         if self.closed.is_set():raise ValueError('Applicazione in chiusura.')
-        if not 0<path.stat().st_size<=RAG_FILE_BYTES:raise ValueError('Documento vuoto o oltre 512 MB.')
-        with path.open('rb') as inp:
-            if extension=='.pdf' and inp.read(5)!=b'%PDF-':raise ValueError('Il file non è un PDF valido.')
-        if extension=='.docx':
-            import zipfile
-            try:
-                with zipfile.ZipFile(path) as z:
-                    items=z.infolist();names={x.filename for x in items}
-                    if not {'[Content_Types].xml','word/document.xml'}<=names or len(items)>10000 or sum(x.file_size for x in items)>RAG_FILE_BYTES or any('vbaproject' in n.lower() for n in names):
-                        raise ValueError('Documento Word non valido, troppo grande o con macro.')
-            except zipfile.BadZipFile:raise ValueError('Documento Word non valido.')
         hasher=hashlib.sha256(label.encode('utf-8')+b'\0')
         with path.open('rb') as inp:
             for piece in iter(lambda:inp.read(IMPORT_CHUNK_BYTES),b''):hasher.update(piece)
@@ -299,7 +288,6 @@ class Knowledge:
             with self.store.connect() as db:
                 for p in roots:db.execute('INSERT OR IGNORE INTO project_roots VALUES (?,?,?)',(uid(),ident,str(p)))
                 for p in files:
-                    if p.stat().st_size>RAG_FILE_BYTES:raise ValueError('Documento oltre 512 MB: '+p.name)
                     db.execute('INSERT OR IGNORE INTO project_sources(id,project_id,path,name) VALUES (?,?,?,?)',(uid(),ident,str(p.resolve()),p.name))
                     db.execute('DELETE FROM project_exclusions WHERE project_id=? AND path=?',(ident,str(p.resolve())))
                 if db.execute('SELECT COUNT(*) FROM project_sources WHERE project_id=?',(ident,)).fetchone()[0]>500:raise ValueError('Massimo 500 documenti per progetto.')
@@ -330,7 +318,7 @@ class Knowledge:
         with self.lock:self.tasks[ident]['stage']=stage
     def read(self,source,cancel,stage):
         path=Path(source['path'])
-        if path.stat().st_size>RAG_FILE_BYTES:raise ValueError('Documento oltre 512 MB.')
+        if path.suffix.lower() not in EXTENSIONS:raise ValueError('File conservato nel progetto e in galleria; questo formato non è indicizzabile dal RAG.')
         if path.suffix.lower() in IMAGE_EXTENSIONS:return [],[]
         if path.suffix.lower() in TEXT_EXTENSIONS:
             with path.open(encoding='utf-8-sig',errors='replace') as inp:text=inp.read(RAG_TEXT_CHARS+1)

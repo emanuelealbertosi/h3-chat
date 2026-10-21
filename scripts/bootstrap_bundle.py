@@ -21,7 +21,7 @@ def verify_sources(root, manifest):
         raise ValueError('Componenti precompilati non allineati ai sorgenti. Scarica una versione completa oppure ricostruisci il bundle come documentato.')
 
 def build(root=ROOT):
-    paths = [root/'H3-Chat.exe', root/'native/h3-sd-worker.exe', root/'static/app.js', root/'static/app.js.LEGAL.txt',
+    paths = [root/'H3-Chat.exe', root/'native/h3-sd-worker.exe', root/'static/app.js', root/'static/app.js.LEGAL.txt', root/'runtime/bootstrap/pip.pyz',
              *sorted((root/'static/vendor').rglob('*')), *sorted((root/'native/redist').glob('*'))]
     files = {p.relative_to(root).as_posix(): p for p in paths if p.is_file()}
     for name in ('H3-Chat.exe', 'native/h3-sd-worker.exe', 'static/app.js', 'static/vendor/katex.min.css'):

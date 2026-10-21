@@ -6,36 +6,101 @@ from fractions import Fraction
 
 DEFAULTS = {'duration':12, 'megapixels':.7, 'aspect':'16:9', 'steps':12, 'cfg':1,
             'sampler':'res_multistep', 'scheduler':'simple', 'seed':-1,
-            'shift_video':12, 'shift_audio':3, 'offload':True, 'attention':'auto','attention_chunks':0,
-            'veda_predictor':'', 'veda_sparsity':90, 'veda_reference_sparsity':90}
+            'shift_video':12, 'shift_audio':3, 'offload':True, 'attention':'auto','attention_chunks':0,'attention_chunks_mode':'auto',
+            'veda_predictor':'', 'veda_sparsity':90, 'veda_reference_sparsity':90,
+            'pdd_enabled':False,'pdd_lora':'','experimental_resolution':False,
+            'loras':[],'source_conditioning':'reference','longtake_enabled':False}
 ASPECTS = ('16:9','9:16','1:1','4:3','3:4')
 NATIVE_MEGAPIXELS = .98
 NATIVE_PIXELS = 1344 * 768
+ACCELERATION_KEYS = ('attention','attention_chunks','attention_chunks_mode','veda_predictor','veda_sparsity','veda_reference_sparsity')
+REQUEST_KEYS = ('duration','megapixels','aspect','attention','attention_chunks','attention_chunks_mode','pdd_enabled','pdd_lora','seed','longtake_enabled')
+
+
+def validate_segment_seconds(value):
+    if value is not None and (type(value) is not int or value not in (5,10,15)):
+        raise ValueError('Durata segmenti video: scegli 5, 10 o 15 secondi.')
+    return value
+
+
+def capture_request(settings,body,require_model):
+    """Capture composer choices in the queued snapshot, never the saved preset."""
+    selection=body.get('video_model','')
+    if not isinstance(selection,str):raise ValueError('Selezione modello video non valida.')
+    changes=body.get('video_parameters',{})
+    segment_seconds=validate_segment_seconds(body.get('video_segment_seconds'))
+    if not isinstance(changes,dict) or set(changes)-set(REQUEST_KEYS):
+        raise ValueError('Parametri della richiesta video non validi.')
+    if body.get('video') and isinstance(body.get('prompt'),str) and 'attention' not in changes:
+        from .video_attention import prompt_choice
+        changes=prompt_choice(body['prompt'])|changes
+    if not selection and not changes and segment_seconds is None:return settings
+    if not body.get('video',False):raise ValueError('Seleziona Video per usare le impostazioni video della richiesta.')
+    model_id=selection or settings['video_model']
+    model=require_model(model_id,'video')
+    if model.get('remote_media') and (set(changes)-{'duration','megapixels','aspect'} or segment_seconds is not None):
+        raise ValueError('PDD e accelerazione locale richiedono MiniMax H3 standalone.')
+    result=settings|{'video_model':model_id,'_video_segment_seconds':segment_seconds,
+                     '_video_request':{'model':selection,'parameters':dict(changes)}}
+    if 'aspect' in changes:result['_video_aspect']=changes['aspect']
+    if changes or segment_seconds is not None:
+        candidate=settings.get('video_overrides',{}).get(model_id,{})|changes
+        if segment_seconds is not None:candidate['duration']=segment_seconds
+        if candidate.get('pdd_enabled'):
+            candidate.update(steps=8,sampler='euler',cfg=1,shift_video=12,shift_audio=3)
+        result['video_overrides']=settings.get('video_overrides',{})|{model_id:validate(candidate)}
+    return result
+
+def inherited_acceleration(settings,model_id):
+    """Newly linked H3 models inherit the user's selected attention configuration."""
+    presets=settings.get('video_overrides',{})
+    if model_id in presets:return {}
+    selected=presets.get(settings.get('video_model',''),{})
+    return {key:selected[key] for key in ACCELERATION_KEYS if key in selected}
 
 def quality(value='high'):
     if not isinstance(value,str) or value not in ('high','medium'):
         raise ValueError('Qualità video: scegli Alta oppure Media.')
     return value
 
-def apply_quality(parameters,value='high'):
+def validate_steps(value):
+    if value is not None and (type(value) is not int or not 1<=value<=50):
+        raise ValueError('Passi video: scegli un numero intero da 1 a 50.')
+    return value
+
+
+def apply_quality(parameters,value='high',steps=None):
     """Request-only caps; never change the model's saved generation parameters."""
     result=dict(parameters)
     if quality(value)=='medium':
         result['megapixels']=min(result.get('megapixels',DEFAULTS['megapixels']),.5)
         result['steps']=min(result.get('steps',DEFAULTS['steps']),8)
+    if validate_steps(steps) is not None:result['steps']=steps
     return result
 
 def validate(value):
     if not isinstance(value,dict) or set(value)-set(DEFAULTS):raise ValueError('Parametri video non riconosciuti.')
     result=DEFAULTS|value
-    for key,lo,hi in (('duration',1,15),('megapixels',.2,1),('steps',1,50),('cfg',1,10),('shift_video',.01,100),('shift_audio',.01,100)):
+    from .video_attention import validate as validate_attention
+    validate_attention(result)
+    from .video_longtake import validate as validate_longtake
+    validate_longtake(result)
+    from .video_loras import validate as validate_loras,aligned
+    result['loras']=validate_loras(result['loras'])
+    if result['source_conditioning'] not in ('reference','aligned'):raise ValueError('Guida video: scegli riferimento leggero o allineata.')
+    if aligned(result['loras']):result['source_conditioning']='aligned'
+    if result['pdd_enabled']:
+        from .video_loras import validate_pdd_combination
+        validate_pdd_combination(result['loras'])
+    if type(result['experimental_resolution']) is not bool:raise ValueError('Risoluzione sperimentale: scegli attivo o disattivo.')
+    for key,lo,hi in (('duration',1,15),('megapixels',.2,2 if result['experimental_resolution'] else 1),('steps',1,50),('cfg',1,10),('shift_video',.01,100),('shift_audio',.01,100)):
         v=result[key]
         if type(v) not in (int,float) or not math.isfinite(v) or not lo<=v<=hi:raise ValueError('Parametro video fuori intervallo: '+key)
     if type(result['steps']) is not int:raise ValueError('I passi video devono essere interi.')
     if result['aspect'] not in ASPECTS:raise ValueError('Formato video non valido.')
     if result['sampler'] not in ('res_multistep','euler','dpmpp_2m') or result['scheduler'] not in ('simple','normal','beta'):raise ValueError('Sampler/scheduler video non supportato.')
     if type(result['offload']) is not bool:raise ValueError('Offload video: scegli attivo o disattivo.')
-    if result['attention'] not in ('auto','sage','pytorch','veda'):raise ValueError('Accelerazione video non supportata.')
+    if result['attention'] not in ('auto','sage','pytorch','veda','comfy_kitchen'):raise ValueError('Accelerazione video non supportata.')
     for key in ('veda_sparsity','veda_reference_sparsity'):
         v=result[key]
         if type(v) not in (int,float) or not math.isfinite(v) or not 0<=v<=99:raise ValueError('Sparsità VEDA: scegli una percentuale da 0 a 99.')
@@ -45,12 +110,16 @@ def validate(value):
         if absolute_path(result['veda_predictor']).suffix.lower()!='.safetensors':raise ValueError('VEDA richiede un predictor safetensors.')
     if type(result['attention_chunks']) is not int or not 0<=result['attention_chunks']<=56:raise ValueError('Suddivisioni attenzione: da 0 (automatico) a 56.')
     if type(result['seed']) is not int or not -1<=result['seed']<=2147483647:raise ValueError('Seed video non valido.')
+    from .video_pdd import validate as validate_pdd
+    validate_pdd(result)
     return result
 
 def options(model,settings,randomize=True):
-    result=apply_quality(validate(settings.get('video_overrides',{}).get(model['id'],{})),settings.get('_video_quality','high'))
+    result=apply_quality(validate(settings.get('video_overrides',{}).get(model['id'],{})),settings.get('_video_quality','high'),settings.get('_video_steps'))
+    from .video_pdd import validate as validate_pdd
+    validate_pdd(result)
     # Keep older 1.0 MP presets valid without exceeding the native H3 canvas.
-    if result['megapixels']>NATIVE_MEGAPIXELS:
+    if result['megapixels']>NATIVE_MEGAPIXELS and not result['experimental_resolution']:
         result['requested_megapixels']=result['megapixels'];result['megapixels']=NATIVE_MEGAPIXELS
     if randomize and result['seed']==-1:result['seed']=secrets.randbelow(2**31)
     a,b=map(int,result['aspect'].split(':'));ratio=a/b
@@ -59,7 +128,7 @@ def options(model,settings,randomize=True):
     result['frames']=round(result['duration']*24)
     return result
 
-def resolve_canvas(opts,plan,image_sizes,prompt=''):
+def resolve_canvas(opts,plan,image_sizes,prompt='',*,force_aspect=None):
     """Choose the output ratio before padding to the H3 latent's 32px grid.
 
     Keyframes own the format. Reference-only jobs can override it in the user's
@@ -87,13 +156,16 @@ def resolve_canvas(opts,plan,image_sizes,prompt=''):
     images=plan.get('images',[])
     guides=sorted((x for x in images if x['role']=='keyframe'),key=lambda x:(x['seconds'],x['index']))
     anchor=guides[0] if guides else (images[0] if images and explicit is None else None)
-    if anchor:
+    if force_aspect is not None:
+        if force_aspect not in ASPECTS:raise ValueError('Formato video della richiesta non valido.')
+        ratio=Fraction(force_aspect.replace(':','/'));source='request';anchor=None
+    elif anchor:
         width,height=image_sizes[anchor['index']-1]
         if min(width,height)<=0:raise ValueError('Dimensioni del riferimento video non valide.')
         ratio=Fraction(width,height);source='image'
     elif explicit is not None:ratio=explicit;source='prompt'
     else:ratio=Fraction(opts['aspect'].replace(':','/'));source='preset'
-    area=min(opts['megapixels'],NATIVE_MEGAPIXELS)*1024**2
+    area=(opts['megapixels'] if opts.get('experimental_resolution') else min(opts['megapixels'],NATIVE_MEGAPIXELS))*1024**2
     a,b=ratio.numerator,ratio.denominator
     if max(a,b)<=32:
         step=2 if a%2 or b%2 else 1
@@ -106,7 +178,8 @@ def resolve_canvas(opts,plan,image_sizes,prompt=''):
     # Padding must also fit the native pixel budget while the visible result
     # retains the requested/image aspect ratio. In 16:9 this is 1344x756
     # on the native 1344x768 canvas, rather than stretched 1344x768 pixels.
-    while width*height>NATIVE_PIXELS:
+    pixel_budget=math.ceil(width*height) if opts.get('experimental_resolution') else NATIVE_PIXELS
+    while width*height>pixel_budget:
         if max(a,b)<=32:
             k-=step
             if k<step:raise ValueError('Formato video fuori dal canvas nativo.')
@@ -118,7 +191,7 @@ def resolve_canvas(opts,plan,image_sizes,prompt=''):
     return opts|{'aspect':f'{a}:{b}','aspect_source':source,'format_image':anchor['index'] if anchor else None,
         'width':width,'height':height,'output_width':output_width,'output_height':output_height}
 
-def validate_plan(plan,refs,duration):
+def validate_plan(plan,refs,duration,*,source_video=False):
     if not isinstance(plan,dict) or set(plan)-{'prompt','images','audios'}:raise ValueError('Piano video non valido.')
     prompt=plan.get('prompt')
     if not isinstance(prompt,str) or not prompt.strip() or len(prompt)>24000:raise ValueError('Istruzioni video vuote o troppo lunghe.')
@@ -149,6 +222,8 @@ def validate_plan(plan,refs,duration):
         count=sum(x['mime'].startswith(mime) for x in refs)
         if any(not 1<=int(index)<=count for index in re.findall(r'<'+label+r'\s+(\d+)>',prompt,re.I)):
             raise ValueError('Il prompt cita un allegato '+label+' inesistente.')
+    if any(not source_video or int(n)!=1 for n in re.findall(r'<Video\s+(\d+)>',prompt,re.I)):
+        raise ValueError('Il prompt cita un Video non disponibile. Usa Modifica video per passare la clip sorgente.')
     return result
 
 
@@ -164,6 +239,7 @@ def prompt_duration(prompt,has_audio=False):
 
 
 def with_prompt_duration(settings,prompt):
+    if settings.get('_video_segment_seconds') is not None:return settings
     value=prompt_duration(prompt)
     if value is None:return settings
     model=settings['video_model'];presets=dict(settings.get('video_overrides',{}))

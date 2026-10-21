@@ -1,4 +1,4 @@
-"""Opt-in INT8 MLP equivalence: CUDA, ConvRot, CPU-stored weights, partial batches."""
+"""Opt-in INT8 MLP equivalence: CUDA, CPU-stored weights, partial batches."""
 import json,os,sys,sqlite3
 from pathlib import Path
 from types import SimpleNamespace as NS
