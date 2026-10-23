@@ -1,7 +1,7 @@
 {
   "archive": "windows-bootstrap.zip",
-  "size": 5479874,
-  "sha256": "68fcf62db846257343374c74a33b1b6a4aba8119ec616802dcf0b06866cca985",
+  "size": 5479876,
+  "sha256": "7e24f3c40bb48ff141cae9867e4026f47a0a5a699d2b5ae71e7ad3d97fce6201",
   "sources": {
     "ui/account-session.js": "7c93a887736f45621c9349d5fc78b4629c45aaf487a0a1b660241eeabbbb19e0",
     "ui/api-only-setup.js": "96385538ae237b40d04983399594ccb327bde905b39275c06da8a4024973bfa3",
@@ -101,7 +101,7 @@
     "ui/visual-controls.js": "14ccefd6a5b4c8da9e4d539176fa5bfc2b76d1f2f6a519bfc74e1b6bcfe03fbd",
     "ui/voice.js": "1b0e7212722774b8e40777bb8c048f3b57ab0fa9cb8ccd3cc89d5f25c3e60bde",
     "ui/workspace-layout.js": "a57a7752919cb09f1802247f2ea0e1b7a66e697f9ba632ce8bcec6b5e121f981",
-    "ui/workspace-settings.js": "d8ab813b7c50065381477809b056a43daccd79ed25b5d8e744ae8c9a5148323d",
+    "ui/workspace-settings.js": "26c1c156d378f58461f057ecce375191601b298fd0a4d587131f608b40add30a",
     "package.json": "f99fcc6c9b07589a9f1f788aed050b4167b3b65e8bb742d726970153e9bdfb09",
     "package-lock.json": "43ba55feeed7630e92e6c28d98c85e85fcb4f15689b7d48e2fa78faebce57c31",
     "scripts/build-ui.mjs": "089c2a1d0b582b34114c7b684f104d52a2a216a35efd1a4ec3f4940c2ece84b4",
@@ -118,7 +118,7 @@
   "files": {
     "H3-Chat.exe": "776a15737dda9bc9fd90575430869e79def535989fa69c43f2a06df5e5eb0da9",
     "native/h3-sd-worker.exe": "8c29e2eacd15fa9a704b977cb69ed345d06495c2ec7e2702087d0278ba29fb00",
-    "static/app.js": "98817a4216b365a37c8fff9fd14f0fd3b074e0683d00e5779359d670c8fc701e",
+    "static/app.js": "9d847a9f9e61f7fb737a6fd471a6135584a5518ab52ce2175fa9261b8f3fc5b1",
     "runtime/bootstrap/pip.pyz": "91d5fd9f6f25549fd839c60536c6f1b945316ce3588d34a605635b6071c91526",
     "static/vendor/fonts/KaTeX_AMS-Regular.ttf": "68534840bcfdd2bffb6f0e8deb48684dd01e7f04ea2813267577afb906de1d13",
     "static/vendor/fonts/KaTeX_AMS-Regular.woff": "30da91e84c893f875e252689faebdc590b2871145e8adc7f9a9d4dbd8ce0b251",

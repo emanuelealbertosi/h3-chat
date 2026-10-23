@@ -40,6 +40,18 @@ embedding e **CPU**, installa i suoi componenti e scarica i relativi pesi. Per
 EmbeddingGemma 2 il runtime CPU è separato dai motori generativi; il vecchio
 EmbeddingGemma GGUF usa invece il motore llama CPU, installabile dal Setup.
 
+Per usare **EmbeddingGemma 2** premi **Scarica EmbeddingGemma 2**, poi
+**Installa componenti EmbeddingGemma 2** e **Usa EmbeddingGemma 2 scaricato**.
+Scegli **Ricerca semantica RAG → CPU** e salva. I pesi occupano circa 1,53 GB
+su disco; i componenti CPU richiedono circa 164 MB di download. Non serve CUDA.
+Il download non sostituisce da solo l'embedding selezionato.
+
+Per soli testi puoi disattivare **Indicizza anche immagini e pagine illustrate**:
+viene caricato il solo encoder testuale. Attivandolo, diventano ricercabili anche
+le figure e le pagine illustrate dei PDF e dei documenti Word. La memoria del
+modello viene rilasciata al termine della ricerca; il cambio di embedding o di
+modalità immagini ricostruisce l'indice al successivo utilizzo del progetto.
+
 I documenti e l'indice rimangono sul PC. Con un LLM esterno gli estratti recuperati
 vengono inviati al provider insieme alla domanda; le immagini selezionate
 richiedono un provider con Vision attivo. La velocità di indicizzazione dipende

@@ -368,7 +368,7 @@ class Knowledge:
                         chunks=[b|{'text':b['text'][j:j+1600]} for b in blocks for j in range(0,len(b['text']),1600) if b['text'][j:j+1600].strip()]
                         if visual_enabled(settings) and path.suffix.lower() in ({'.pdf','.docx'}|IMAGE_EXTENSIONS):
                             visual_chunks,visual_warnings=self.read_visuals(source,blocks,cancel,stage);chunks+=visual_chunks;warnings+=visual_warnings
-                        elif path.suffix.lower() in IMAGE_EXTENSIONS:raise ValueError('Per indicizzare immagini scegli Ovis e attiva immagini nel RAG.')
+                        elif path.suffix.lower() in IMAGE_EXTENSIONS:raise ValueError('Per indicizzare immagini scegli Ovis oppure EmbeddingGemma 2 e attiva immagini nel RAG.')
                         if not chunks:raise ValueError('Il documento non contiene testo estraibile. Per un libro scansionato crea prima una copia con OCR.')
                         if len(chunks)>RAG_CHUNKS:raise ValueError('Troppi estratti nel documento: massimo 20.000.')
                         self.replace_chunks(source,chunks,warnings,settings,model_key,st,fingerprint,cancel,stage)
