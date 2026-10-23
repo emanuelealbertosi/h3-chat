@@ -16,7 +16,7 @@ try{
  const resume=page.locator('[data-slides-resume]');await resume.waitFor();assert.equal(await resume.isEnabled(),true);assert.match(await page.locator('.slide-generation-progress').innerText(),/1\/2 slide complete/);
  await page.route('**/api/chats/*/slides/resume',route=>route.fulfill({json:{job_id:'resume-fixture',canvas:true,intent:'slides'}}));
  const resumed=page.waitForRequest(request=>request.method()==='POST'&&request.url().endsWith('/slides/resume'));await resume.click();assert.ok((await resumed).postDataJSON().artifact_id);
- await post('start');await page.waitForFunction(()=>document.querySelector('[data-slides-resume]')?.disabled);assert.match(await page.locator('.slide-generation-progress').innerText(),/40 caratteri/);
+ await post('start');await page.waitForFunction(()=>document.querySelector('[data-slides-resume]')?.disabled&&document.querySelector('.slide-generation-progress')?.textContent.includes('40 caratteri'));assert.match(await page.locator('.slide-generation-progress').innerText(),/40 caratteri/);
  await post('stream');await page.frameLocator('.h3-html-page iframe').getByText('Testo progressivo aggiornato').waitFor();assert.match(await page.locator('.slide-generation-progress').innerText(),/200 caratteri/);
  await post('rendered');await page.waitForFunction(()=>document.querySelector('.slides-navigation select')?.selectedOptions[0]?.textContent==='2. Seconda');
  await page.locator('.slide-ai-revision summary').click();assert.equal(await revision().isDisabled(),true);

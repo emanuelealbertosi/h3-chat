@@ -99,6 +99,7 @@ def main():
                                        {'title':'Seconda','status':'ready' if ready else 'interrupted' if phase=='interrupted' else 'writing','html':html,'sources':[],'notes':'Seconda nota'}]}
                         value={'title':deck['title'],'content':encode(deck),'media':[]}
                         terminal='cancelled' if phase=='interrupted' else 'done' if phase=='done' else 'running'
+                        app.save_artifact(chat,value['title'],value['content'],value['media'])
                         app.store.update_answer(active,'Slide di collaudo.',terminal,[],{'canvas':True,'intent':'slides','artifact':value})
                         app.store.execute('UPDATE jobs SET status=? WHERE id=?',(terminal,active['id']))
                         return self.json({'ok':True})
