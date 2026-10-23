@@ -17,7 +17,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Verify compiler-free clone installation
+      - name: Verify API-only clone installation without GPU engines
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1 -ApiOnly
+      - name: Verify full compiler-free clone installation
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1
       - run: npm ci
       - run: npm run build
