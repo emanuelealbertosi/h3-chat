@@ -1,13 +1,26 @@
 import json,tempfile,threading,unittest
 from pathlib import Path
 from unittest.mock import patch
-from h3chat.embeddinggemma2 import checkpoint,formatted,memory_assessment
+from h3chat.embeddinggemma2 import checkpoint,formatted,memory_assessment,runtime_ready,runtime_paths
 from h3chat.rag import Embeddings,validate
 from h3chat.rag_profiles import visual_enabled
 from h3chat.store import DEFAULTS
 from h3chat.downloads import Cancelled
 
 class Gemma2Tests(unittest.TestCase):
+    def test_standalone_cpu_runtime_needs_no_vision_or_cuda(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            for name in ('cpu/torch/__init__.py','packages/transformers/models/embedding_gemma2/modeling_embedding_gemma2.py','packages/tokenizers/__init__.py','packages/huggingface_hub/__init__.py'):
+                p=root/'runtime/embeddinggemma2'/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text('fixture')
+            self.assertTrue(runtime_ready(root));self.assertTrue(runtime_ready(root,'cpu'))
+            self.assertFalse(runtime_ready(root,'cuda'))
+            self.assertEqual(runtime_paths(root,'cpu'),[root/'runtime/embeddinggemma2/cpu',root/'runtime/embeddinggemma2/packages'])
+            self.assertNotIn(root/'runtime/embeddinggemma2/cpu',runtime_paths(root,'cuda'))
+        import json
+        manifest=json.loads((Path(__file__).resolve().parents[1]/'runtimes.json').read_text())['embeddinggemma2']['files']
+        self.assertFalse(any(any(word in f['url'].lower() for word in ('sageattention','triton','vision-engine','cu130','cu128')) for f in manifest))
+
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name).resolve();self.folder=self.root/'gemma';self.folder.mkdir()

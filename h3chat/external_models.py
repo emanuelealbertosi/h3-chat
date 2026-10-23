@@ -11,12 +11,8 @@ from .models import metadata
 from .image_options import SAMPLERS, SCHEDULERS
 
 PROFILES = {
-    'fibo2-int8': {'label':'FIBO 2.0 Dev · INT8 ConvRot','main':'diffusion','required':['diffusion','llm','vae'],'optional':[],
-             'default_files':{'diffusion':'diffusion_models/fibo2_dev_int8_convrot.safetensors','llm':'text_encoders/qwen3vl_4b_int8_convrot.safetensors','vae':'vae/diffusion_pytorch_model.safetensors'},
-             'architecture':'fibo2','engine':'fibo2','quantization':'int8_convrot','capabilities':['create','edit'],'max_refs':4,'steps':50,'cfg':5,'width':1024,'height':1024,'sampler':'euler','scheduler':'simple','strength':1},
-    'fibo2': {'label':'FIBO 2.0 Dev · crea e modifica, BF16','main':'diffusion','required':['diffusion','llm','vae'],'optional':[],
-             'default_files':{'diffusion':'transformer/diffusion_pytorch_model-00001-of-00002.safetensors','llm':'text_encoder/model.safetensors','vae':'vae/diffusion_pytorch_model.safetensors'},
-             'architecture':'fibo2','engine':'fibo2','capabilities':['create','edit'],'max_refs':4,'steps':50,'cfg':5,'width':1024,'height':1024,'sampler':'euler','scheduler':'simple','strength':1},
+    'minimax-music': {'label':'MiniMax Music 3 · canzoni e musica','main':'diffusion','required':['diffusion','llm','vae'],'optional':[],
+             'architecture':'minimax-music','engine':'vision','capabilities':['music'],'max_refs':0},
     'moss': {'label':'MOSS-Image · testo e img2img sperimentale, 5B','main':'diffusion','required':['diffusion','llm','vae'],'optional':[],
              'default_files':{'diffusion':'mossImage_sft_pruned_int8.safetensors','llm':'qwen3.5_9b_w4a8_gptq.safetensors','vae':'flux2-vae.safetensors'},
              'architecture':'moss','engine':'vision','capabilities':['create','edit'],'max_refs':1,'steps':50,'cfg':3,'width':1024,'height':1024,'sampler':'euler','scheduler':'sgm_uniform','strength':.65},
@@ -111,17 +107,15 @@ def build_model(config):
     if config['profile']=='yue2':
         from .music_models import sidecar_entries
         files += sidecar_entries(main.parent)
-    if config['profile'] in ('fibo2','fibo2-int8'):
-        from .fibo2 import sidecars,quantized
-        if quantized(config['files'])!=(config['profile']=='fibo2-int8'):
-            raise ValueError('Scegli il profilo FIBO BF16 o INT8 corrispondente al diffusore selezionato.')
-        files+=sidecars(config['files'])
     problems=[]
     for f in files:
         if not f['valid'] and f['role']!='mmproj':
             problems.append(f"{ROLE_LABELS.get(f['role'],'Parte GGUF')}: file assente, non leggibile o formato non valido ({f['path']}).")
     if config['profile']=='yue2':
         from .music_models import weight_problems
+        problems += weight_problems(config['files'])
+    if config['profile']=='minimax-music':
+        from .minimax_music import weight_problems
         problems += weight_problems(config['files'])
     if config['profile']=='chat' and info.get('general.architecture')=='clip':
         problems.append('Il file principale è un proiettore/encoder, non un modello chat.')
@@ -221,12 +215,6 @@ def suggest(body):
     if kind not in PROFILES:raise ValueError('Scegli il tipo di modello.')
     main=absolute_path(body.get('path',''))
     if not valid_weight(main):raise ValueError('Scegli un file modello GGUF o safetensors valido.')
-    if kind=='fibo2-int8':
-        root=main.parent.parent
-        return {'name':'FIBO 2.0 Dev · INT8 ConvRot','candidates':{},'files':{'llm':str(root/'text_encoders/qwen3vl_4b_int8_convrot.safetensors'),'vae':str(root/'vae/diffusion_pytorch_model.safetensors')}}
-    if kind=='fibo2':
-        root=main.parent.parent
-        return {'name':'FIBO 2.0 Dev · BF16','candidates':{},'files':{'llm':str(root/'text_encoder/model.safetensors'),'vae':str(root/'vae/diffusion_pytorch_model.safetensors')}}
     candidates={role:[] for role in PROFILES[kind]['required']+PROFILES[kind]['optional']}
     for i,p in enumerate(main.parent.iterdir()):
         if i>=2000:break

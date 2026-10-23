@@ -162,9 +162,6 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
             keys += ('context', 'gpu_layers', 'vision_enabled', 'vision_device', 'llm_acceleration')
         runtime_options=tuple((k,settings.get(k, 'on_demand' if k=='memory_policy' else 'standard' if k=='llm_acceleration' else None)) for k in keys)
         if kind=='image':runtime_options+=(('image_engine',model.get('engine','native')),('architecture',model.get('architecture')))
-        if kind=='image' and model.get('engine')=='fibo2':
-            opts=settings.get('_image_options') or image_options(model,settings)
-            runtime_options+=(('fibo_offload',opts.get('fibo_offload','sequential')),)
         if kind=='music':runtime_options=(('music_backend',music_backend(settings)),('music_threads',settings['music_threads']),('memory_policy',settings.get('memory_policy','on_demand')))
         if kind=='video':runtime_options=(('offload',video_options(model,settings,False)['offload']),('threads',settings['threads']),('memory_policy',settings.get('memory_policy','on_demand')))
         if kind=='chat': runtime_options+=(('mtp_tokens',mtp_tokens(model,settings)),)
@@ -227,7 +224,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                 raise Cancelled()
             self.configure(settings)
             key = self.session_key(kind, model, settings)
-            large_host_weights = kind == 'video' or (kind == 'image' and model.get('engine') == 'fibo2')
+            large_host_weights = kind == 'video'
             if self.policy == 'on_demand':
                 for old in list(self.sessions):
                     if old != key:
@@ -237,7 +234,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                 # RAM held by idle Torch image workers. A warm image process
                 # helps chat/image switching but competes with video offload.
                 if large_host_weights and self.warm_image:
-                    if stage:stage('Rilascio memoria · motore immagini inattivo '+('prima di FIBO' if kind=='image' else 'prima del video'))
+                    if stage:stage('Rilascio memoria · motore immagini inattivo prima del video')
                     self.warm_image.stop()
                     self.warm_image = None
             session = self.sessions.get(key)
@@ -548,9 +545,6 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         session = self._activate('image',model,settings,log_path,cancel,stage=stage)
         if session.ready and session.alive():
             return session
-        if model.get('engine')=='fibo2':
-            from .fibo2_engine import start as start_fibo
-            return start_fibo(self,session,model,settings,log_path,cancel,stage)
         if model.get('engine') == 'vision':
             return self.start_vision(session,model,settings,log_path,cancel,stage=stage)
         backend = 'cpu' if settings['profile']=='cpu' else settings['backend']
@@ -661,6 +655,10 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
             raise ValueError(f"{model_label(model)} accetta al massimo {model.get('max_refs',1)} riferimenti; ne hai forniti {len(refs)}.")
         architecture = model.get('architecture')
         params=settings.get('_image_options') or image_options(model,settings)
+        if params.get('moss_turbo'):
+            if architecture!='moss':raise ValueError('Turbo DMD2 richiede MOSS o Kromoss.')
+            from .moss_dmd2 import adapter_path
+            params=params|{'moss_dmd2_path':adapter_path(self.root)}
         return params|{'op':'generate','prompt':prompt,'output':str(output),
                 'references':[str(safe_join(self.data,r['path'])) for r in refs],
                 'init_image':architecture=='sd','euler':architecture in ('flux2','qwen-edit','anima'),

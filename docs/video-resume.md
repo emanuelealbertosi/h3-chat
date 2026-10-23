@@ -13,3 +13,5 @@ Per una modifica video con timeline di lavoro salvata, la finestra offre anche *
 Se tutte le clip erano già state prodotte e si era interrotto soltanto il montaggio, il comando diventa **Completa montaggio** e non richiama il generatore video. La stessa richiesta inviata due volte non crea due riprese.
 
 Sono supportate le generazioni video con una timeline salvata, le ricreazioni e le modifiche di clip. Le operazioni prive di un checkpoint valido mostrano il motivo e non ripartono da zero. Per estensioni singole, esportazioni e remix usa **Ricarica richiesta**.
+
+Il checkpoint viene pubblicato con sostituzione atomica e tentativi limitati quando Windows tiene temporaneamente aperto il file. Il salvataggio precedente resta valido finché il nuovo è pubblicato. Un blocco permanente viene comunque segnalato: non viene ignorato. Nelle revisioni, una clip già generata ma non ancora installata viene recuperata dal checkpoint senza ripetere il calcolo GPU.

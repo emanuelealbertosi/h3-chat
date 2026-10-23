@@ -59,6 +59,7 @@ def render(app,job,payload,settings,cancel,stage,log):
     selected=choices(app,job['chat_id'],settings['_video_assemble'],value,settings.get('_video_assemble_versions'))
     apply(value,selected,app.data)
     record=copy.deepcopy(value['record'])
+    record.pop('batch_movies',None)
     if cancel.is_set():raise Cancelled()
     from .soundtrack import compose
     folder=app.data/'outputs'/job['id'];folder.mkdir(parents=True,exist_ok=True)
@@ -80,7 +81,7 @@ def render(app,job,payload,settings,cancel,stage,log):
         audio_start=record.get('audio_start',0),audio_duration=value['duration'])
     record['revision_remount']=True;record['working_timeline']=True;save(folder,record)
     parameters=value['meta'].get('video_parameters',{}).copy()
-    for key in ('clip_only','source_intervals','source_interval','timeline_id'):parameters.pop(key,None)
+    for key in ('clip_only','source_intervals','source_interval','timeline_id','batch_movies'):parameters.pop(key,None)
     parameters.update(duration=result['duration'],scenes=len(record['timeline']),
         scene_parameters=record['parameters'],audio_preserved=True,audio_start=record.get('audio_start',0),
         remount=True,post_edit=True,assembled_timeline=settings['_video_assemble'],edited_clips=record.get('edited_clips',[]))

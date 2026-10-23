@@ -1,5 +1,6 @@
 import json,unittest
-import numpy as np
+from runtime_test_support import cpu_package
+np=cpu_package('numpy')
 from h3chat.moss_image import unpack_qkv
 from h3chat.external_models import PROFILES
 from h3chat.image_options import options
@@ -8,6 +9,7 @@ from h3chat.store import DEFAULTS
 def descriptor(value):return np.frombuffer(json.dumps(value).encode(),dtype=np.uint8)
 
 class MossTests(unittest.TestCase):
+    @unittest.skipUnless(np is not None,'Install the private documents runtime for NumPy tensor checks')
     def test_non_grid_output_is_cropped_without_pixel_resampling(self):
         from h3chat.image_canvas import crop_canvas
         source=np.arange(1504*1504,dtype=np.uint32).reshape(1504,1504)
@@ -29,6 +31,7 @@ class MossTests(unittest.TestCase):
         for value in (0,1.1,float('nan'),True):
             with self.assertRaises(ValueError):options(model,DEFAULTS|{'image_overrides':{'moss-test':{'strength':value}}})
 
+    @unittest.skipUnless(np is not None,'Install the private documents runtime for NumPy tensor checks')
     def test_fused_int8_projection_preserves_each_row_and_its_scale(self):
         weight=np.arange(-24,24,dtype=np.int8).reshape(12,4);scale=np.arange(1,13,dtype=np.float32).reshape(12,1)/100
         state={'layers.0.proj.qkv.weight':weight,'layers.0.proj.qkv.weight_scale':scale,
@@ -42,6 +45,7 @@ class MossTests(unittest.TestCase):
         self.assertEqual(len([k for k in actual if k.endswith('.comfy_quant')]),3)
         self.assertIn('layers.0.proj.qkv.weight',state)
 
+    @unittest.skipUnless(np is not None,'Install the private documents runtime for NumPy tensor checks')
     def test_bad_fused_shapes_and_unreviewed_quantization_fail_before_sampling(self):
         with self.assertRaises(ValueError):unpack_qkv({'layers.0.proj.qkv.weight':np.zeros((13,4))})
         with self.assertRaises(ValueError):unpack_qkv({'layers.0.proj.qkv.weight':np.zeros((12,4)),

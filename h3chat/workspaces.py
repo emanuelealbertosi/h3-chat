@@ -134,6 +134,7 @@ class Workspaces:
 
 
 def guest_allowed(path,method):
+    if method=='GET' and re.fullmatch(r'/api/media/[0-9a-f]{32}/generation',path):return True
     if method=='GET' and path=='/api/images/last-seed':return True
     if method=='GET' and re.fullmatch(r'/api/gallery/[0-9a-f]{32}/preview-progress',path):return True
     if method=='GET' and (path=='/api/gallery' or path.startswith('/gallery-file/')):return True

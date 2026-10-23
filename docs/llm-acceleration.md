@@ -1,7 +1,7 @@
 # Qwen27B ISTA IQ3_S e Orca IQ3_XXS ottimizzati in H3-Chat
 
-Aggiornamento locale 0.16.18. Il runtime è installato in `F:\H3-Chat` e usa
-gli stessi pesi originali già collegati, senza copiarli. Il motore Standard,
+Il runtime opzionale si installa nella cartella dell'app e usa
+i pesi originali già collegati, senza copiarli. Il motore Standard,
 le altre quantizzazioni e i backend CPU/Vulkan rimangono invariati.
 
 ## Attivazione
@@ -17,9 +17,9 @@ le altre quantizzazioni e i backend CPU/Vulkan rimangono invariati.
 4. Conserva **Memoria → A richiesta** per liberare la memoria fra i modelli
    della catena. Non avviare contemporaneamente il server standalone Qwen27B.
 
-In questa installazione Orca è già collegato al catalogo come **Staged_Tmpl**:
-il riconoscimento usa il GGUF reale, non quel nome personalizzato. Non serve
-collegarlo una seconda volta. Il modello chat predefinito non viene sostituito
+Il riconoscimento usa il GGUF reale, indipendentemente dal nome assegnato
+al collegamento nel catalogo. Non serve collegarlo una seconda volta se è già
+presente. Il modello chat predefinito non viene sostituito
 quando configuri il preset di Orca; selezionalo nella chat quando vuoi usarlo.
 
 I valori salvati precedenti (sul PC: contesto 50.000 e MTP1) non vengono
@@ -188,19 +188,28 @@ servizio H3 in uso e preset reali non riavviati/modificati.
 Per ripetere la prova completa solo a GPU libera:
 
 ```powershell
-.\runtime\python\python.exe -X utf8 scripts\benchmark_llm_accelerator.py --label orca-verifica-nuova --model orca-iq3xxs --context 131072 --long 8000 126000 --arithmetic-tokens 2048 --vision
+.\runtime\python\python.exe -X utf8 scripts\benchmark_llm_accelerator.py --label orca-verifica-nuova --model orca-iq3xxs --model-path ".\models\Qwen3.8-27B-OrcaRouter-GSQ-RCO-IQ3_XXS-v2.0-qatfa.gguf" --mmproj ".\models\mmproj-Qwen3.8-27B-BF16.gguf" --context 131072 --long 8000 126000 --arithmetic-tokens 2048 --vision
 ```
+
+Sostituisci i percorsi d'esempio con i tuoi file: `--model-path` è obbligatorio;
+`--mmproj` è facoltativo se il proiettore col nome originale è accanto al GGUF.
+Il corpus iniziale proviene dai sorgenti `h3chat/` di questo checkout; con
+`--corpus percorso.txt` puoi fornire lo stesso testo per confronti ripetibili.
+La figura di test Vision (quadrato rosso e cerchio blu) viene creata su CPU;
+`--vision-image percorso.png` permette di sostituirla con una figura equivalente.
+Non vengono cercati modelli, documenti o immagini nelle cartelle di altri utenti.
+Usa lo stesso corpus e la stessa immagine per confrontare le prestazioni:
+i valori storici sopra non misurano queste nuove fixture predefinite.
 
 Lo script non sovrascrive report con lo stesso nome, rifiuta server standalone
 già attivi e ferma soltanto il processo posseduto dal suo Engine temporaneo.
 
 ## Installazione locale e provenienza
 
-Il runtime è stato copiato dal motore già verificato
-`F:\AI\Qwen27B\engine-mtp-window-nativefa`: llama.cpp commit
+Il runtime di riferimento proviene da un motore già verificato: llama.cpp commit
 `555d1ec9daa4564cb06adb39c469acfdcd1d1e93`, con modifica alla sola llama-common
-per limitare la cache della bozza. Il sorgente della modifica locale rimane
-in `F:\AI\Qwen27B\scripts\mtp-window-build\speculative.cpp`.
+per limitare la cache della bozza. Questa compilazione personalizzata deve
+essere fornita esplicitamente: lo script non può ricostruirla dai soli hash.
 Le dipendenze CUDA 12.8 e Microsoft CRT sono incluse nella cartella privata;
 il Toolkit serve all'installatore locale, non al successivo avvio del runtime.
 Le licenze originali e il manifest con hash/provenienza sono nella stessa cartella.
@@ -210,14 +219,18 @@ download. L'identificatore legacy del manifest contiene ancora iq3s-mtp2:
 identifica gli stessi file attestati, non il profilo del modello; i controlli
 per ISTA/Orca, MTP e memoria sono separati nel codice dell'app.
 
-Per ripetere l'installazione in questa copia, ad app ferma:
+Per installare quella build verificata, ad app ferma:
 
 ```powershell
-.\runtime\python\python.exe .\scripts\install_qwen27_accelerator.py
+.\runtime\python\python.exe .\scripts\install_qwen27_accelerator.py --source ".\motore-verificato" --cuda "$env:CUDA_PATH" --license ".\llama.cpp\LICENSE"
 ```
 
-Lo script richiede i percorsi sorgente locali verificati (personalizzabili con
-`--source`, `--cuda`, `--license`), controlla gli hash prima della copia e non
+`--source`, `--cuda` e `--license` sono obbligatori: sostituisci gli esempi
+con la directory del motore attestato, il Toolkit CUDA 12.8 e la licenza
+llama.cpp originale. Se `CUDA_PATH` non è configurato, passa il percorso
+completo del Toolkit. Le librerie Microsoft vengono cercate in
+`%WINDIR%\System32`, modificabile con `--system32`.
+Lo script controlla gli hash prima della copia e non
 sovrascrive librerie installate differenti. Non scarica nulla e non usa GPU.
 Il runtime opzionale non è incluso automaticamente nel pacchetto portabile
 generico: la build sm_120 non è un backend universale per altri PC.

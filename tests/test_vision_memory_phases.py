@@ -17,7 +17,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def worker_class():
     tree=ast.parse((ROOT/'native/vision-worker.py').read_text(encoding='utf-8'))
     worker=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='Worker')
-    namespace={'emit':Mock(),'time':time,'TURBO_SCHEDULER':TURBO_SCHEDULER,
+    namespace={'emit':Mock(),'time':time,'nullcontext':nullcontext,'TURBO_SCHEDULER':TURBO_SCHEDULER,
                'TURBO_SIGMAS':TURBO_SIGMAS,'validate_schedule':validate_schedule}
     exec(compile(ast.Module(body=[worker],type_ignores=[]),'<vision-worker>', 'exec'),namespace)
     return namespace['Worker']

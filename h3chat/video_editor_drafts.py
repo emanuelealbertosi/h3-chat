@@ -70,8 +70,13 @@ def validate(app,chat_id,ident,value,state):
     if not isinstance(clips,list) or len(clips)!=count:raise ValueError('Elenco dei clip della bozza non valido.')
     allowed={'enabled','clip','prompt','images','lip_sync','audio_guide','range','first','last','frames','mode','anchors','anchor_image','start_image','auto_anchors','anchor_edit_model','anchor_images'}
     for i,(clip,scene) in enumerate(zip(clips,value['record']['timeline']),1):
-        if not isinstance(clip,dict) or set(clip)-{'audio_guide'}!=allowed-{'audio_guide'} or type(clip['clip']) is not int or clip['clip']!=i or type(clip['frames']) is not int or clip['frames']!=scene['frames']:
+        if not isinstance(clip,dict) or set(clip)-{'audio_guide','recover_memory','end_frame'}!=allowed-{'audio_guide'} or type(clip['clip']) is not int or clip['clip']!=i or type(clip['frames']) is not int or clip['frames']!=scene['frames']:
             raise ValueError('La bozza non corrisponde ai segmenti del video.')
+        if 'recover_memory' in clip and type(clip['recover_memory']) is not bool:raise ValueError('Memoria precedente della bozza non valida.')
+        if 'end_frame' in clip:
+            end_frame=clip['end_frame']
+            if not (type(end_frame) is int and image(end_frame) and end_frame is not None) and not (isinstance(end_frame,str) and end_frame in ('none','original','next')):
+                raise ValueError('Fotogramma finale della bozza non valido.')
         if 'audio_guide' in clip and type(clip['audio_guide']) is not bool:raise ValueError('Guida audio della bozza non valida.')
         if any(type(clip[k]) is not bool for k in ('enabled','lip_sync','range','auto_anchors')):
             raise ValueError('Selezioni dei clip della bozza non valide.')

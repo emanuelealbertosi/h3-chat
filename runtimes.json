@@ -746,65 +746,268 @@
     "files": [
       {
         "path": "runtime/downloads/H3-Chat-vision-crt-0.7.0-windows-x64.zip",
-        "extract_to": "runtime/vision/dlls",
+        "extract_to": "runtime/embeddinggemma2/dlls",
         "url": "https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.7.0/H3-Chat-vision-crt-0.7.0-windows-x64.zip",
         "size": 708131,
         "sha256": "6c6a9bf24ecbf394ca54f7b5def83f7f01391e567a9c18e6ab1e390bc41b88fa"
       },
       {
-        "path": "runtime/downloads/H3-Chat-vision-engine-0.7.0-windows-x64.zip",
-        "extract_to": "runtime/vision",
-        "url": "https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.7.0/H3-Chat-vision-engine-0.7.0-windows-x64.zip",
-        "size": 2102575536,
-        "sha256": "b02020528937bd8d47bfb95516aca101803858a8d882717ad3b4a91cbbcf8fe7"
+        "url": "https://download-r2.pytorch.org/whl/cpu/torch-2.10.0%2Bcpu-cp313-cp313-win_amd64.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/torch-2.10.0+cpu-cp313-cp313-win_amd64.whl",
+        "size": 113670411,
+        "sha256": "b719da5af01b59126ac13eefd6ba3dd12d002dc0e8e79b8b365e55267a8189d3",
+        "extract_to": "runtime/embeddinggemma2/cpu"
       },
       {
-        "path": "runtime/downloads/sageattention-2.2.0+cu130torch2.10.0andhigher.post6-cp310-abi3-win_amd64.whl",
-        "url": "https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows.post6/sageattention-2.2.0%2Bcu130torch2.10.0andhigher.post6-cp310-abi3-win_amd64.whl",
-        "size": 16656067,
-        "sha256": "1635283f5c01ec3cda58a784d0d7eabbcaffaf9511d1b263db4750e1ed7958bb",
-        "extract_to": "runtime/vision/packages"
-      },
-      {
-        "path": "runtime/downloads/triton_windows-3.7.1.post27-cp313-cp313-win_amd64.whl",
-        "url": "https://files.pythonhosted.org/packages/ec/28/f0b2801c2cfd79be5878bf429e82b5da00fb78f046a9c21ba946681cc467/triton_windows-3.7.1.post27-cp313-cp313-win_amd64.whl",
-        "size": 49684257,
-        "sha256": "e8ed215c02afc85a81f0097196f8bebdf6f68085f1bc0fe8771b9a74783f15ab",
-        "extract_to": "runtime/vision/packages"
-      },
-      {
-        "path": "runtime/downloads/python_3.13.2_include_libs.zip",
-        "url": "https://github.com/woct0rdho/triton-windows/releases/download/v3.0.0-windows.post1/python_3.13.2_include_libs.zip",
-        "size": 555256,
-        "sha256": "e3e8c3abb17ea8de1cd2cd264ad15aae3de5eb7dc61ab37cb1a3d07f9c86238d",
-        "extract_to": "runtime/python"
+        "url": "https://download-r2.pytorch.org/whl/cpu/torchvision-0.25.0%2Bcpu-cp313-cp313-win_amd64.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/torchvision-0.25.0+cpu-cp313-cp313-win_amd64.whl",
+        "size": 4322022,
+        "sha256": "783c8fc580bbfc159bff52f4f72cdd538e42b32956e70dffa42b940db114e151",
+        "extract_to": "runtime/embeddinggemma2/cpu"
       },
       {
         "url": "https://files.pythonhosted.org/packages/b9/59/1e7f1212c215c73690ae6cab4678efe1555ff985953e145d88cc212859b0/transformers-5.19.0-py3-none-any.whl",
-        "path": "runtime/downloads/embeddinggemma2/transformers-5.19.0-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/transformers-5.19.0-py3-none-any.whl",
         "size": 12599123,
         "sha256": "afcd2dd5f603ed28c1e1fcb00a338ccbb4ef5f878ed289635df8b58187afb518",
         "extract_to": "runtime/embeddinggemma2/packages"
       },
       {
-        "url": "https://files.pythonhosted.org/packages/db/f7/0a69ac6b82dbccf3f71add938a161c497952749294b8dd6dfe03a819dc40/tokenizers-0.23.2-cp310-abi3-win_amd64.whl",
-        "path": "runtime/downloads/embeddinggemma2/tokenizers-0.23.2-cp310-abi3-win_amd64.whl",
-        "size": 2863236,
-        "sha256": "2e96f5699d5249c9c64aa8412e044f727aae3a4098cf830f9901ec1afc361cde",
+        "url": "https://files.pythonhosted.org/packages/3f/eb/b0834ad8b583d7d9d42b80becff092082a1c3c156bb582590fcc973f1c7c/pillow-12.1.1-cp313-cp313-win_amd64.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/pillow-12.1.1-cp313-cp313-win_amd64.whl",
+        "size": 7040108,
+        "sha256": "344cf1e3dab3be4b1fa08e449323d98a2a3f819ad20f4b22e77a0ede31f0faa1",
         "extract_to": "runtime/embeddinggemma2/packages"
       },
       {
-        "url": "https://files.pythonhosted.org/packages/fc/16/963096d224b80909432dc16561a615fd33d2d13beef3ce4c63fa25e40867/huggingface_hub-1.33.0-py3-none-any.whl",
-        "path": "runtime/downloads/embeddinggemma2/huggingface_hub-1.33.0-py3-none-any.whl",
-        "size": 846435,
-        "sha256": "04e434b06e100eddbce9a6e817d72693a7884b10a79bd67ab48080d5c07eb899",
+        "url": "https://files.pythonhosted.org/packages/f3/ec/100f2b1794ede74a9b3d7ec6b9736927f56713414c1dfe19ab6c383494bf/numpy-2.5.3-cp313-cp313-win_amd64.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/numpy-2.5.3-cp313-cp313-win_amd64.whl",
+        "size": 12560965,
+        "sha256": "71cad2b2a7451ab79d8f5e71b453485b6775963d5cf794179144a7463fe6e8ec",
         "extract_to": "runtime/embeddinggemma2/packages"
       },
       {
-        "url": "https://files.pythonhosted.org/packages/98/b7/8c59a66d15205024662f1d66968136f13893f96df1ddc5087e2e281fc95f/hf_xet-1.6.0-cp38-abi3-win_amd64.whl",
-        "path": "runtime/downloads/embeddinggemma2/hf_xet-1.6.0-cp38-abi3-win_amd64.whl",
-        "size": 4033128,
-        "sha256": "fb4fadde1b2b70bf4c0c14a6dccbe7194b1c28947fefd5bbe3fed9d940676c3b",
+        "url": "https://files.pythonhosted.org/packages/c7/89/5f6ef1162d0323f167b6baab04d1b4bd6a946161a8af6d86f622d9d79aa1/huggingface_hub-2.3.0-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/huggingface_hub-2.3.0-py3-none-any.whl",
+        "size": 855161,
+        "sha256": "5da369600233568a126eb5578754935b2add9446b42d9e2fc0927d56840ac1a5",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/58/50/6c0d534c5f134586a8e1ba4e330569e32f057e33372ae556463212fb4cd3/click-8.5.0-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/click-8.5.0-py3-none-any.whl",
+        "size": 125251,
+        "sha256": "255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/4d/59/b35106dfa71b6eef605dc88bd038fe99c7f86fb132a15b60d0bf2f235b2c/hf_xet-1.7.0-cp38-abi3-win_amd64.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/hf_xet-1.7.0-cp38-abi3-win_amd64.whl",
+        "size": 3822644,
+        "sha256": "2b7bb5727889b0f2436dbaaad8fc4c3e66b8240d992716989e0c086b4278b1bc",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/7b/3d/2e4bc4fd1ef9770871669adb348d612a6e4786b303a23f9935b81c48dd60/httpx2-2.16.0-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/httpx2-2.16.0-py3-none-any.whl",
+        "size": 97880,
+        "sha256": "fd2c5d7909e8d86fe92d53020c310ca0e4e431b838c207c5754b9bbf0308d49a",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/af/c2/ce417c397afa5181f0e3c6ff01a4d01639414e1adef08730d97571297151/httpcore2-2.16.0-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/httpcore2-2.16.0-py3-none-any.whl",
+        "size": 85070,
+        "sha256": "5c4358319f2602d984ad93182c9fee5160f22e9da7babdda870a5e7c4e2dc34f",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/d1/6c/24f074c9a0efb98e61b20aafe6b2641922d5db24e447d5d6daffd9e17555/tokenizers-0.23.3-cp310-abi3-win_amd64.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/tokenizers-0.23.3-cp310-abi3-win_amd64.whl",
+        "size": 2872101,
+        "sha256": "1f0823bb00c5fdc98e487354d54dd55a03848d61a1a0bf29a68c77f24f3b26c3",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/1b/6d/3fba214c1e5e0f69991677ec3bc17023f0421776975e1de0c682dca475e2/safetensors-0.8.0-cp310-abi3-win_amd64.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/safetensors-0.8.0-cp310-abi3-win_amd64.whl",
+        "size": 355540,
+        "sha256": "096ec1a98435df7beb08853bb5aa9081a84f23d0adc67ed1a0a10550f608373f",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/12/b8/4bd346e22b28902df4d651910f5242c28d84e4a5c2435ca5c3f797ed7e2e/anyio-4.15.1-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/anyio-4.15.1-py3-none-any.whl",
+        "size": 132079,
+        "sha256": "6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/e0/1b/5e74289a1878e666bb4b65fe5805a04cafcac2aa5f519ef1ead67ef91c56/filelock-4.2.4-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/filelock-4.2.4-py3-none-any.whl",
+        "size": 162475,
+        "sha256": "301241438c57936ef93f4243a94f2559022268bfcf9b375a9a72eb0f8db8358e",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/6c/c0/a98505f18594f1bce828bb159cec0fcf9860562f1a2c85913409fc8f3d9e/fsspec-2026.9.0-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/fsspec-2026.9.0-py3-none-any.whl",
+        "size": 221738,
+        "sha256": "8dd6e646e99ea382bd85f97a45e6b526a442d79423a7dc673f1e2756d05fcb5f",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/h11-0.16.0-py3-none-any.whl",
+        "size": 37515,
+        "sha256": "63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/58/a2/bb081bab032533a855d44de1d56f8e8426114ff1ba5d1f07a438a0a654f8/idna-3.20-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/idna-3.20-py3-none-any.whl",
+        "size": 69583,
+        "sha256": "ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/7e/cd/fe58041e9011f307c490e3e17dd48cc516448f7c698a3f2d9d9d65d7e6a8/networkx-3.7-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/networkx-3.7-py3-none-any.whl",
+        "size": 2142205,
+        "sha256": "e3fd2c13a7814cee3746340d8d7f8598a67f16a58bf47fb7f8793fab6efca1b0",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/packaging-26.3-py3-none-any.whl",
+        "size": 129956,
+        "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/97/c9/39d5b874e8b28845e4ec2202b5da735d0199dbe5b8fb85f91398814a9a46/pyyaml-6.0.3-cp313-cp313-win_amd64.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/pyyaml-6.0.3-cp313-cp313-win_amd64.whl",
+        "size": 154090,
+        "sha256": "79005a0d97d5ddabfeeea4cf676af11e647e41d81c9a7722a193022accdb6b7c",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/80/a7/bf93a3a6afa5f7bc16b7afb94ae581b01cae620b8ad56bd8f9572a985959/regex-2026.9.29-cp313-cp313-win_amd64.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/regex-2026.9.29-cp313-cp313-win_amd64.whl",
+        "size": 280307,
+        "sha256": "61956f074ecd123f55adca68ee3eab46e6a07ad3f8e64e6db95dfacb444f55c4",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/a2/09/77d55d46fd61b4a135c444fc97158ef34a095e5681d0a6c10b75bf356191/sympy-1.14.0-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/sympy-1.14.0-py3-none-any.whl",
+        "size": 6299353,
+        "sha256": "e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/mpmath-1.3.0-py3-none-any.whl",
+        "size": 536198,
+        "sha256": "a0b2b9fe80bbcd81a6647ff13108738cfb482d481d826cc0e02f5b35e5c88d2c",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/a7/03/921a3d3c75785aca9ebfbfcabfbc3a1be12e2ab5265deb026d55a5a3f83e/tqdm-4.70.1-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/tqdm-4.70.1-py3-none-any.whl",
+        "size": 80199,
+        "sha256": "c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/51/e9/3a7820be2bb0fe53b6bc9c3be26d3d1158004e4c3ab953aa6840b955b1e9/truststore-0.10.5-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/truststore-0.10.5-py3-none-any.whl",
+        "size": 19017,
+        "sha256": "9aaaedaefaf06d8b206278cf8b5012bc897f485a874503501e12d776df78951c",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/typing_extensions-4.16.0-py3-none-any.whl",
+        "size": 45571,
+        "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/colorama-0.4.6-py2.py3-none-any.whl",
+        "size": 25335,
+        "sha256": "4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/62/a1/3d680cbfd5f4b8f15abc1d571870c5fc3e594bb582bc3b64ea099db13e56/jinja2-3.1.6-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/jinja2-3.1.6-py3-none-any.whl",
+        "size": 134899,
+        "sha256": "85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/6f/36/163da64de88a13db79214ef75fa041be7fa13bdb42261cf5b7484de14bfb/markupsafe-3.0.4-cp313-cp313-win_amd64.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/markupsafe-3.0.4-cp313-cp313-win_amd64.whl",
+        "size": 14313,
+        "sha256": "1f1f9477e174582b0a1b583d60b66e1f2cf5d3fe12cee985e4aedf44766600e5",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/ef/55/6dc6d6bb953bdfc52519a0059592c52b6e3b8ad51cf8256dffceb55b0610/setuptools-84.2.1-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/setuptools-84.2.1-py3-none-any.whl",
+        "size": 876263,
+        "sha256": "ca140b45d5325a9478f880e351484f62fef15f336462e449ca0c03c873d589c2",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/07/ea/2e31b67051e91a133189e9c000c222502ddc6969856416de0d095de4c0b0/typer-0.27.3-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/typer-0.27.3-py3-none-any.whl",
+        "size": 123312,
+        "sha256": "e50022f28b82a86313e54501317a1db64bf8f8d036ff8cfe5ca7e47675454aff",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/annotated_doc-0.0.5-py3-none-any.whl",
+        "size": 5302,
+        "sha256": "117bac03a25ede5df5440e855b32d556049ca169ead221505badf432fed4b101",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/82/3b/64d4899d73f91ba49a8c18a8ff3f0ea8f1c1d75481760df8c68ef5235bf5/rich-15.0.0-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/rich-15.0.0-py3-none-any.whl",
+        "size": 310654,
+        "sha256": "33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/71/46/17f022dd3e953bf20a04a028a21ec746d942f8d2af30fa0f124fa0e6a684/pygments-2.21.0-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/pygments-2.21.0-py3-none-any.whl",
+        "size": 1250147,
+        "sha256": "2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/b3/81/4da04ced5a082363ecfa159c010d200ecbd959ae410c10c0264a38cac0f5/markdown_it_py-4.2.0-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/markdown_it_py-4.2.0-py3-none-any.whl",
+        "size": 91687,
+        "sha256": "9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/mdurl-0.1.2-py3-none-any.whl",
+        "size": 9979,
+        "sha256": "84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8",
+        "extract_to": "runtime/embeddinggemma2/packages"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/e0/f9/0595336914c5619e5f28a1fb793285925a8cd4b432c9da0a987836c7f822/shellingham-1.5.4-py2.py3-none-any.whl",
+        "path": "runtime/downloads/embeddinggemma2/cpu/shellingham-1.5.4-py2.py3-none-any.whl",
+        "size": 9755,
+        "sha256": "7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686",
         "extract_to": "runtime/embeddinggemma2/packages"
       }
     ]

@@ -135,6 +135,9 @@ class Handler(BaseHTTPRequestHandler):
                     from h3chat.image_history import last_seed
                     query=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
                     return self.json(last_seed(self.app,query.get('model',[''])[0]))
+                if len(parts)==4 and parts[:2]==['api','media'] and parts[3]=='generation':
+                    from h3chat.media_generation import get as creation_recipe
+                    return self.json(creation_recipe(self.app,parts[2]))
                 if path=='/api/gallery':
                     query=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
                     return self.json(self.app.store.gallery.listing(query.get('q',[''])[0],query.get('kind',['all'])[0],query.get('origin',['all'])[0],int(query.get('offset',['0'])[0]),query.get('sort',['modified_desc'])[0],query.get('project_id',[''])[0]))
@@ -147,7 +150,7 @@ class Handler(BaseHTTPRequestHandler):
                 if len(parts)==3 and parts[:2]==['api','projects']:
                     return self.json(self.app.knowledge.project(parts[2]))
                 if path == "/api/health":
-                    return self.json({"app": "h3-chat", "version": __version__, "worker_alive": self.app.worker.is_alive(), "instance": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16], 'features':{'repair_batch_20261018':True,'repair_batch_20261018_v2':True,'repair_batch_20261018_v3':True,'moss_image':True,'moss_mp_canvas':True,'assembly_progress_totals':True,'video_extension':True,'gallery_library':True,'gallery_saved_timelines':True,'mov_preview':True,'video_resume':True,'krea2':True,'video_probe':True,'edit_request_reload':True,'edit_request_reload_v2':True,'editing_fixes_20261015':True,'lora_library_families':True,'video_resplit':True,'video_conversion_progress':True,'video_activity':True,'video_longtake':True,'video_attention_choices':True}, 'network': getattr(self.server, 'network', None).status if getattr(self.server, 'network', None) else {}})
+                    return self.json({"app": "h3-chat", "version": __version__, "worker_alive": self.app.worker.is_alive(), "instance": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16], 'features':{'repair_batch_20261018':True,'repair_batch_20261018_v2':True,'repair_batch_20261018_v3':True,'moss_image':True,'moss_mp_canvas':True,'assembly_progress_totals':True,'video_extension':True,'gallery_library':True,'gallery_saved_timelines':True,'mov_preview':True,'video_resume':True,'krea2':True,'video_probe':True,'edit_request_reload':True,'edit_request_reload_v2':True,'editing_fixes_20261015':True,'lora_library_families':True,'video_resplit':True,'video_conversion_progress':True,'video_activity':True,'video_attention_choices':True}, 'network': getattr(self.server, 'network', None).status if getattr(self.server, 'network', None) else {}})
                 if path == "/api/state":
                     value=self.app.state() | {'network': getattr(self.server, 'network', None).status if getattr(self.server, 'network', None) else {}}
                     if access:
@@ -260,6 +263,9 @@ class Handler(BaseHTTPRequestHandler):
                     try:return self.json(self.app.store.gallery.get(existing['id']))
                     except ValueError:pass
                 item=self.app.upload(body|{'_gallery_export':True});self.app.store.execute('INSERT OR REPLACE INTO gallery_exports VALUES (?,?)',(digest,item['id']));return self.json(item,201)
+            if len(parts)==5 and parts[:2]==['api','chats'] and parts[3:]==['slides','resume'] and method=='POST':
+                from h3chat.slide_resume import enqueue
+                return self.json(enqueue(self.app,parts[2],body),202)
             if len(parts)==5 and parts[:2]==['api','canvas'] and parts[3:]==['slides','regenerate'] and method=='POST':
                 from h3chat.slide_revision import enqueue
                 return self.json(enqueue(self.app,parts[2],body),202)
@@ -435,7 +441,9 @@ class Handler(BaseHTTPRequestHandler):
             if len(parts) == 3 and parts[:2] == ["api", "canvas"] and method == "PUT":
                 self.app.store.chat(parts[2])
                 title, content = body.get("title", "Canvas"), body.get("content", "")
-                if not isinstance(title, str) or len(title) > 150 or not isinstance(content, str) or len(content) > 200000:
+                from h3chat.slides import PREFIX,MAX_DECK_CHARACTERS
+                content_limit=MAX_DECK_CHARACTERS if isinstance(content,str) and content.startswith(PREFIX) else 200000
+                if not isinstance(title, str) or len(title) > 150 or not isinstance(content, str) or len(content) > content_limit:
                     raise ValueError("Canvas troppo grande o non valido.")
                 if self.app.store.one("SELECT id FROM jobs WHERE chat_id=? AND status IN ('queued','running') AND json_extract(payload,'$.canvas')=1", (parts[2],)):
                     raise ValueError("Il motore sta scrivendo nel canvas. Attendi o interrompilo prima di modificare.")

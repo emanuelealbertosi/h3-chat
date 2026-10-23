@@ -45,8 +45,12 @@ def audio_window(prompt,source_duration,*,storyboard=False):
         duration=end-start
     if duration is None:duration=source_duration-start
     if not 0<duration<=600:raise ValueError('Video con audio: durata massima 10 minuti.')
-    if start>=source_duration or start+duration>source_duration+1/192000:
+    # Human timings are commonly rounded (e.g. 175.8 s for 175.798667 s).
+    # Snap only a subframe overrun at EOF to the decoded source duration;
+    # never extend/retime the song or accept a genuinely missing interval.
+    if start>=source_duration or start+duration>source_duration+1/24+1/192000:
         raise ValueError(f'La traccia audio non copre il segmento richiesto: {start:g}–{start+duration:g} secondi.')
+    duration=min(duration,source_duration-start)
     return {'start':start,'duration':duration,'source_duration':source_duration,'explicit':end is not None or prompt_duration(prompt,has_audio=True) is not None}
 
 
@@ -88,9 +92,18 @@ def spoken_lines(prompt,*,preserved_audio=False):
     """Quoted new speech; existing-track lyric cues are not new dialogue."""
     result=[]
     cues=lyric_cue_sections(prompt) if preserved_audio else []
+    # Lyrics may be interleaved with actions under CLIP headings rather than
+    # collected in a dedicated lyric section. Require explicit soundtrack and
+    # no-additional-dialogue instructions before treating those sung quotes as
+    # references; a newly requested spoken line must still be conserved.
+    song_references=preserved_audio and bool(re.search(r'\b(?:actual|original|supplied)\s+(?:audio|song|soundtrack|recording)\b',prompt,re.I)) and bool(re.search(r'\bno\s+(?:additional|new)\s+(?:(?:vocals?|singing)\s*,\s*)?dialogue\b|\bnon aggiungere\s+(?:nuovi\s+)?dialoghi\b',prompt,re.I))
     for match in re.finditer(r'["“]([^"”\n]{2,400})["”]',prompt):
         if any(start<=match.start()<end for start,end in cues):continue
         context=prompt[max(0,match.start()-220):match.start()]
+        if song_references:
+            sung=list(re.finditer(r'\b(?:sings?|singing|canta|canto|lyrics?|lyrical|vocals?|verse|chorus)\b',context,re.I))
+            spoken=list(re.finditer(r'\b(?:says?|dice|dialogue|dialogo|battuta|narration|narrazione)\b',context,re.I))
+            if sung and (not spoken or sung[-1].start()>spoken[-1].start()):continue
         if re.search(r'\b(?:vocal|vocals|lyric|lyrics|dialogue|dialogo|battuta|canta|canto|dice|sings|says)\b',context,re.I):
             result.append(match[1])
     return result

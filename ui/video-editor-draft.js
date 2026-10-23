@@ -5,7 +5,7 @@ export function remapEditorDraft(state,images){
  const image=index=>index==null?null:mapping.get(index);
  if([...mapping.values()].some(x=>!x))throw Error('Un’immagine della bozza non è più disponibile.');
  const prompt=text=>text.replace(/<Picture\s+(\d+)>/gi,(tag,n)=>mapping.has(Number(n))?'<Picture '+mapping.get(Number(n))+'>':tag);
- return {...state,common_prompt:prompt(state.common_prompt),clips:state.clips.map(c=>({...c,prompt:prompt(c.prompt),images:c.images.map(image),start_image:image(c.start_image),anchor_image:image(c.anchor_image),anchor_images:Object.fromEntries(Object.entries(c.anchor_images).map(([key,n])=>[key,image(n)]))}))};
+ return {...state,common_prompt:prompt(state.common_prompt),clips:state.clips.map(c=>({...c,prompt:prompt(c.prompt),images:c.images.map(image),...(typeof c.end_frame==='number'?{end_frame:image(c.end_frame)}:{}),start_image:image(c.start_image),anchor_image:image(c.anchor_image),anchor_images:Object.fromEntries(Object.entries(c.anchor_images).map(([key,n])=>[key,image(n)]))}))};
 }
 
 export function videoEditorDraft(host,{dialog,data,api,chatId,source,capture,reopen,beforeLaunch,restored=false}){

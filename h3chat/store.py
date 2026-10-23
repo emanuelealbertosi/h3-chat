@@ -99,6 +99,8 @@ class Store:
                 if name not in {row['name'] for row in db.execute('PRAGMA table_info(rag_chunks)')}:
                     db.execute(f'ALTER TABLE rag_chunks ADD COLUMN {name} {definition}')
             db.execute("UPDATE project_sources SET status='pending' WHERE status='indexing'")
+            from .retired_features import migrate
+            migrate(db)
             # One-time migration preserves the user's existing active model settings.
             if not db.execute("SELECT 1 FROM settings WHERE key='llm_overrides'").fetchone():
                 existing=DEFAULTS|{r['key']:json.loads(r['value']) for r in db.execute('SELECT * FROM settings')}
@@ -191,6 +193,8 @@ class Store:
         lora_meta["video_model"]=settings.get("_video_request",{}).get("model","")
         lora_meta["video_request_parameters"]=settings.get("_video_request",{}).get("parameters",{})
         lora_meta["music_quality"]=settings.get("music_quality","model")
+        lora_meta['music_model']=settings.get('music_model','')
+        lora_meta['music_resing']=bool(settings.get('_music_resing'))
         lora_meta["music_max_duration"]=settings.get("_music_max_duration")
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")

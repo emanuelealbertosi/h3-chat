@@ -4,7 +4,7 @@ export function renderWorkspaceSettings(host,{draft,state,api,pickFile,pickDirec
  const $=s=>host.querySelector(s),path=$('[data-setting="rag_embedding_model"]');
  const profile=$('[data-setting="rag_embedding_profile"]');
  profile.add(new Option('Ovis-Omni-Embedding-3B · cartella safetensors','ovis'));
- profile.add(new Option('EmbeddingGemma 2 · 740M · multimodale · cartella safetensors','embeddinggemma2'));
+ profile.add(new Option('EmbeddingGemma 2 · testo 270M · Vision opzionale · cartella safetensors','embeddinggemma2'));
  profile.value=draft.rag_embedding_profile;
  const description=host.querySelector('p');description.textContent='La ricerca per parole è subito disponibile. Per cercare per significato scegli un embedding GGUF oppure la cartella locale di Ovis o EmbeddingGemma 2. Entrambi possono indicizzare immagini e pagine illustrate; gli altri embedding usano il testo estratto.';
  path.closest('label').querySelector('span').textContent='Modello embedding · file GGUF o cartella safetensors originale';

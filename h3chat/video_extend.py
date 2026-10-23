@@ -57,7 +57,6 @@ def request(app, chat_id, body):
     parameters=body.get('parameters',{})
     if not isinstance(parameters,dict) or set(parameters)-set(EDITABLE):raise ValueError('Parametri video non validi.')
     preset=validate(settings.get('video_overrides',{}).get(selected,{})|parameters|{'duration':duration})
-    if preset.get('longtake_enabled'):raise ValueError('LongTakeNoCuts: usa la generazione o Modifica clip; l’inserimento prima/dopo conserva il proprio contesto separato.')
     from .video_loras import aligned
     if aligned(preset['loras']):raise ValueError('I LoRA di modifica del video non si applicano a nuove clip. Deselezionali; PDD resta utilizzabile.')
     settings.update(video_model=selected,video_overrides=settings.get('video_overrides',{})|{selected:preset},
@@ -166,6 +165,14 @@ def render(app,job,payload,settings,cancel,stage,log):
         'frames':duration*24,'width':width,'height':height},cancel,stage,log,timeout=1800)
     generated_path=item['path'];item=copy.deepcopy(item);item['path']=fitted.relative_to(app.data).as_posix()
     item['generation'].update(width=width,height=height,insert_mode=command['mode'],timeline_label='Clip aggiunta')
+    if item.get('batch_variants'):
+        for n,take in enumerate(item['batch_variants']):
+            if not n:take['path']=item['path']
+            else:
+                variant_fitted=folder/f'inserted-variant-{n+1:03d}.mp4'
+                app.engine.tool_call('video-clip-worker.py',{'source':str(safe_join(app.data,take['path'])),'output':str(variant_fitted),'frames':duration*24,'width':width,'height':height},cancel,stage,log,timeout=1800)
+                take['path']=variant_fitted.relative_to(app.data).as_posix()
+            take['generation'].update(width=width,height=height)
     cut=sum(s['frames'] for s in value['record']['timeline'][:index])/24
     audio_path=folder/'timeline-audio.wav'
     app.engine.tool_call('video-extension-worker.py',{'op':'audio','original':str(safe_join(app.data,value['audio']['path'])),
@@ -177,6 +184,8 @@ def render(app,job,payload,settings,cancel,stage,log):
         if r['mime'].startswith('image/') and not any(m['id']==r['id'] for m in images):images.append(r)
     audios=[audio if r['id']==value['audio']['id'] else r for r in value['refs'] if r['mime'].startswith('audio/')]
     all_refs=images+audios;record=inserted_record(value['record'],item,plan,index,duration,all_refs,refs,audio,model['id'])
+    from .video_batch import register
+    register(record,index,item,all_refs)
     record.update(extension_source=command['source'],extension=command,extension_context=context)
     if context:record['timeline'][index]['extension_context']=context
     save(folder,record);app.store.gallery.register([audio])
@@ -184,8 +193,11 @@ def render(app,job,payload,settings,cancel,stage,log):
     prepare(app,value|{'record':record},cancel,stage,log);save(folder,record)
     from .soundtrack import compose
     result=compose(app.engine,[safe_join(app.data,p) for p in record['outputs']],audio_path,folder/'video.mp4',cancel,stage,log,audio_duration=value['duration']+duration)
+    from .video_batch import compose_branches
+    compose_branches(app.engine,record,folder,audio,cancel,stage,log,0,value['duration']+duration)
     parameters=item['generation']|{'duration':result['duration'],'scenes':len(record['timeline']),'scene_parameters':record['parameters'],
         'engine':'minimax-h3','audio_preserved':True,'audio_start':0,'post_edit':True,'inserted_clip':index+1,'extension_source':command['source']}
+    if record.get('batch_movies'):parameters['batch_movies']=record['batch_movies']
     media={'id':job['id'],'name':'Video · clip aggiunta.mp4','path':(folder/'video.mp4').relative_to(app.data).as_posix(),'mime':'video/mp4','generation':parameters}
     app.store.update_answer(job,f"Ho aggiunto una clip di {duration} secondi {'dopo' if command['side']=='after' else 'prima'} della clip {command['clip']}. Le scene esistenti sono conservate; puoi continuare a modificare la nuova timeline.",'done',[media],
         {'intent':'video','references':all_refs,'video_plan':record['plan'],'video_parameters':parameters,'execution_mode':'Standalone · GPU · inserimento clip'})

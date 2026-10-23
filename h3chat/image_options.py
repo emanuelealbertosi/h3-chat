@@ -17,7 +17,7 @@ SCHEDULERS = tuple(dict.fromkeys(SCHEDULERS + VISION_SCHEDULERS))
 
 ASPECTS=('auto','1:1','16:9','9:16','4:3','3:4','3:2','2:3')
 IMAGE_DEFAULT_KEYS=('width','height','steps','image_cfg','image_sampler','image_scheduler','seed','negative_prompt','strength','image_aspect')
-OVERRIDE_KEYS=('width','height','steps','cfg','sampler','scheduler','seed','negative_prompt','strength','aspect','megapixels','fibo_offload')
+OVERRIDE_KEYS=('width','height','steps','cfg','sampler','scheduler','seed','negative_prompt','strength','aspect','megapixels','moss_turbo','moss_turbo_previous')
 MOSS_NEGATIVE_PROMPT = 'low quality, blurry, jpeg artifacts, bad anatomy, malformed hands, extra fingers, missing fingers, extra limbs, distorted face'
 
 
@@ -31,7 +31,6 @@ def configured(model, settings):
             'seed':settings.get('seed',-1),'negative_prompt':settings.get('negative_prompt','') or (MOSS_NEGATIVE_PROMPT if model.get('architecture')=='moss' else ''),
             'strength':model.get('strength',settings['strength']),'aspect':settings.get('image_aspect','auto')}
     if model.get('architecture')=='qwen-edit':result['flow_shift']=3
-    if model.get('architecture')=='fibo2' and not model.get('quantization'):result['fibo_offload']='sequential'
     result.update(settings.get('image_overrides',{}).get(model.get('id',''),{}))
     return result
 
@@ -47,16 +46,14 @@ def capture_request(model,settings,value):
 
 def apply_aspect(result,prompt='',model=None):
     moss=(model or {}).get('architecture')=='moss'
-    fibo=(model or {}).get('architecture')=='fibo2'
-    limit=4096 if moss else 2048 if fibo else 1536
-    grid=1 if moss else 16 if fibo else 64
+    limit=4096 if moss else 1536
+    grid=1 if moss else 64
     # Explicit canvas dimensions also override an editing reference's shape.
     dimensions=re.findall(r'(?<!\d)(\d{3,4})\s*[x×*]\s*(\d{3,4})(?!\d)',prompt,re.I)
     if dimensions:
         width,height=map(int,dimensions[-1])
         if any(n<256 or n>limit or n%grid for n in (width,height)) or (moss and width*height>4_194_304):
             if moss:raise ValueError('MOSS: dimensioni tra 256 e 4096 pixel e massimo circa 4,2 MP. La richiesta non viene ridotta automaticamente.')
-            if fibo:raise ValueError('FIBO: dimensioni da 256 a 2048, in multipli di 16. Consigliato circa 1 MP.')
             raise ValueError('Dimensioni immagine: scegli da 256 a 1536 pixel, in multipli di 64 (es. 1024x576).')
         divisor=math.gcd(width,height);aspect=f'{width//divisor}:{height//divisor}'
         result.update(width=width,height=height,megapixels=width*height/1_000_000,aspect=aspect if aspect in ASPECTS else 'auto',preserve_reference_aspect=False)
@@ -73,14 +70,14 @@ def apply_aspect(result,prompt='',model=None):
     mp=re.findall(r'(?<![\d.])(\d+(?:[.,]\d+)?)\s*(?:MP|megapixel(?:s)?)\b',prompt,re.I)
     target=float(mp[-1].replace(',','.')) if mp else result.get('megapixels')
     if target is not None and (not isinstance(target,(int,float)) or not math.isfinite(target) or not .25<=target<=4):raise ValueError('Megapixel immagine: scegli da 0,25 a 4 MP.')
-    if moss or fibo or target is not None:
+    if moss or target is not None:
         area=target*1_000_000 if target is not None else result['width']*result['height']
         a,b=map(int,aspect.split(':')) if aspect!='auto' else (result['width'],result['height'])
         ratio=a/b
         width=math.ceil(math.sqrt(area*ratio)/grid)*grid;height=math.ceil(area/width/grid)*grid
         if moss and aspect!='auto':
             k=math.ceil(math.sqrt(area/(a*b)));width,height=a*k,b*k
-        if max(width,height)>(4096 if not fibo else 2048):raise ValueError('Formato troppo estremo per i megapixel scelti.')
+        if max(width,height)>4096:raise ValueError('Formato troppo estremo per i megapixel scelti.')
         result.update(width=width,height=height,megapixels=area/1_000_000)
         return result
     if aspect!='auto':
@@ -92,6 +89,8 @@ def apply_aspect(result,prompt='',model=None):
 
 def options(model, settings,prompt=''):
     result=configured(model,settings)
+    from .moss_dmd2 import effective
+    result=effective(result)
     requested={}
     for key,pattern in (
         ('steps',r'\b(?:steps?|passi)\s*[:=]?\s*(\d+)\b|\b(\d+)\s*(?:steps?|passi)\b(?!\s*[:=]?\s*\d)'),
@@ -111,9 +110,6 @@ def options(model, settings,prompt=''):
         if result['sampler']=='auto':result['sampler']='euler'
         if result['scheduler']=='auto':result['scheduler']=model.get('scheduler') if model.get('scheduler') in VISION_SCHEDULERS and model.get('scheduler')!='auto' else 'simple'
     validate_options(model,result)
-    if model.get('architecture')=='fibo2':
-        from .fibo2 import validate_options as validate_fibo
-        validate_fibo(result)
     if model.get('engine')!='vision' and (result['sampler'] not in NATIVE_SAMPLERS or result['scheduler'] not in NATIVE_SCHEDULERS):
         raise ValueError('Sampler o scheduler non supportato dal motore immagini selezionato.')
     if result['seed']<0:result['seed']=secrets.randbits(31)
@@ -126,14 +122,13 @@ def validate_overrides(value,models=None):
     for ident,settings in value.items():
         if not isinstance(ident,str) or not 1<=len(ident)<=100 or not isinstance(settings,dict) or set(settings)-set(OVERRIDE_KEYS):raise ValueError('Personalizzazione immagine non valida.')
         moss=(models or {}).get(ident,{}).get('architecture')=='moss'
-        fibo=(models or {}).get(ident,{}).get('architecture')=='fibo2'
-        if 'fibo_offload' in settings and (settings['fibo_offload'] not in ('sequential','group','resident','full') or (models is not None and not fibo)):
-            raise ValueError('Gestione memoria FIBO non valida.')
-        limit=4096 if moss else 2048 if fibo else 1536
+        from .moss_dmd2 import validate as validate_turbo
+        validate_turbo(settings,moss if models is not None else None)
+        limit=4096 if moss else 1536
         for key,lo,hi in (('width',256,limit),('height',256,limit),('steps',1,100),('seed',-1,2147483647)):
             if key in settings and (type(settings[key]) is not int or not lo<=settings[key]<=hi):raise ValueError(f'{key}: intero tra {lo} e {hi}.')
         for key in ('width','height'):
-            if key in settings and not moss and settings[key]%(16 if fibo else 64):raise ValueError('Le dimensioni devono essere multipli di '+('16.' if fibo else '64.'))
+            if key in settings and not moss and settings[key]%64:raise ValueError('Le dimensioni devono essere multipli di '+'64.')
         for key,lo,hi in (('cfg',0,30),('strength',.05,1),('megapixels',.25,4)):
             if key in settings and (type(settings[key]) not in (int,float) or not math.isfinite(settings[key]) or not lo<=settings[key]<=hi):raise ValueError(key+' fuori intervallo.')
         if settings.get('sampler','auto') not in SAMPLERS or settings.get('scheduler','auto') not in SCHEDULERS:raise ValueError('Sampler o scheduler non supportato.')

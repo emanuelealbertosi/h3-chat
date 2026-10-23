@@ -65,6 +65,10 @@ In **Impostazioni → Preferenze → Progetti e ricerca nei documenti** puoi sca
 **EmbeddingGemma 2 · 740M** e i suoi componenti, oppure scegliere dal filesystem
 la cartella originale con configurazione, tokenizer, processor e pesi safetensors.
 Il download occupa circa **1,53 GB**; 740M indica il numero di parametri, non MB.
+I **componenti CPU separati** richiedono circa **164 MB** di download e non
+includono CUDA, SageAttention, Triton o motori generativi. Puoi installarli su
+Windows x64 senza GPU. Per la modalità GPU servono anche i componenti Ovis / Vision;
+le librerie CPU non sostituiscono il runtime GPU già installato.
 Premi **Usa EmbeddingGemma 2 scaricato**, poi **Salva impostazioni**, solo quando
 vuoi selezionarlo. Aggiunta e download non cambiano il modello RAG già scelto.
 

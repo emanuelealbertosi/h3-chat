@@ -53,6 +53,28 @@ class StoryboardTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'copia'):validate(value,24,self.refs,'A film')
         self.assertEqual(len(validate(value,24,self.refs,'Ripeti la prima scena')['shots']),3)
 
+    def test_image_aliases_and_global_cast_are_bound_to_actual_local_slots(self):
+        refs=[{'id':f'i{i}','mime':'image/png','path':f'{i}.png','name':f'{i}.png'} for i in range(1,10)]+[self.refs[-1]]
+        value={'style':'Warm cinematic lighting. Warrior (Image 1) is stern. Singer (Image 2) is cheerful. Guest (Image 8) smiles. The living room (Image 9) has a blue sofa.',
+               'shots':[{'end':15,'prompt':'[Shot 1] Singer (Image 2) enters the living room (Image 9). <Picture 1> as the warrior looks up.',
+                         'time_basis':'local','continuity':'cut','lip_sync':True,
+                         'images':[{'index':9,'role':'reference'},{'index':2,'role':'reference'},{'index':1,'role':'reference'}]}]}
+        original=copy.deepcopy(value);saved=validate(value,15,refs,'Create one clip')
+        local,selected=local_plan(saved,saved['shots'][0],self.plan,refs,1,0)
+        self.assertEqual([r['id'] for r in selected],['i9','i2','i1','audio'])
+        self.assertIn('living room (<Picture 1>)',local['prompt'])
+        self.assertIn('Singer (<Picture 2>)',local['prompt'])
+        self.assertIn('<Picture 3> as the warrior',local['prompt'])
+        self.assertNotIn('Guest',local['prompt']);self.assertNotIn('Image 9',local['prompt']);self.assertNotIn('<Picture 9>',local['prompt'])
+        self.assertIn('do not restore a familiar character',local['prompt'])
+        self.assertEqual(value,original)
+
+    def test_plain_image_alias_cannot_reference_an_unselected_attachment(self):
+        for label in ('Image 2','Picture 2','Immagine 2','<Picture 2>'):
+            value=copy.deepcopy(self.value);value['shots'][1]['prompt']=f'The teacher follows {label}.'
+            with self.subTest(label=label),self.assertRaisesRegex(ValueError,'non selezionata'):
+                validate(value,24,self.refs,'A film')
+
     def test_storyboard_repairs_once_and_provider_failures_propagate(self):
         bad=copy.deepcopy(self.value);bad['shots'][-1]['end']=20
         engine=VideoEngine();engine.require_model=Mock(return_value={});engine.start_llama=Mock()

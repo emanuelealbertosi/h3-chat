@@ -90,8 +90,6 @@ def model_path(root, model, value):
     if model.get('external'):
         path=Path(value)
         sidecar=model.get('engine')=='music' and any(f['path']==value and f['role'] in ('tokenizer','model_config','generation_config','vae_config') for f in model['files'])
-        if model.get('engine')=='fibo2':
-            sidecar=any(f['path']==value and f['role'].startswith('fibo_sidecar_') for f in model['files'])
         if not path.is_absolute() or (path.suffix.lower() not in ('.gguf','.safetensors') and not sidecar):
             raise ValueError('Percorso del modello esterno non valido.')
         return path.resolve()

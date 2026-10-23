@@ -49,6 +49,28 @@ class LyricCueTests(unittest.TestCase):
         prompt='## VOCAL SEQUENCE\nJack sings: "Please do not leave me."'
         self.assertEqual(spoken_lines(prompt,preserved_audio=True),['Please do not leave me.'])
 
+    def test_song_quotes_interleaved_in_clip_actions_are_not_new_speech(self):
+        prompt='''Preserve the original soundtrack. No additional dialogue, singing or narration.
+## CLIP 01 — GLOBAL 00:00–00:15
+During the opening male verse, the captain sings:
+"We are sailing through the night"
+These are lyrical synchronization cues; use the actual audio for timing.
+## CLIP 02 — GLOBAL 00:15–00:30
+At her female vocal entry:
+"The dawn is shining on the sea":
+Cut to the deck. She sings cheerfully while folding the sails.
+"We have our matching sailor clothes":
+Return to the cabin.
+'''
+        self.assertEqual(spoken_lines(prompt,preserved_audio=True),[])
+        self.assertIn('We have our matching sailor clothes',spoken_lines(prompt))
+        self.assertEqual(spoken_lines(prompt+'\nThe captain says: "Turn the ship around!"',preserved_audio=True),['Turn the ship around!'])
+        value=copy.deepcopy(self.value)
+        value['shots'].append(value['shots'][0]|{'end':30,'prompt':'The captain enters the cabin and folds his coat.'})
+        validate(value,30,self.refs,prompt,preserved_audio=True)
+        with self.assertRaisesRegex(ValueError,'parole esatte'):
+            validate(value,30,self.refs,prompt+'\nThe captain says: "Turn the ship around!"',preserved_audio=True)
+
     def test_italian_cues_and_next_heading_boundary(self):
         prompt='## Versi della canzone\nCanto: "Il mare ci separa"\nQuesti versi sono un riferimento per la sincronizzazione.\n## Dialogo\nRose dice: "Torna qui!"'
         self.assertEqual(spoken_lines(prompt,preserved_audio=True),['Torna qui!'])

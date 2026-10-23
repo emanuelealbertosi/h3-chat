@@ -1,13 +1,13 @@
 import base64
-import io
 import json
 import threading
 import unittest
 from unittest.mock import patch
-from PIL import Image
 import test_visual_models as fixture
 from h3chat.downloads import Cancelled
 from h3chat.image_batch import requested, validate_plan, model_choice
+
+PNG=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aOKsAAAAASUVORK5CYII=')
 
 
 class ImageBatchTests(unittest.TestCase):
@@ -15,8 +15,8 @@ class ImageBatchTests(unittest.TestCase):
     tearDown=fixture.VisualModelsTests.tearDown
 
     def image(self,color):
-        stream=io.BytesIO();Image.new('RGB',(128,128),color).save(stream,'PNG')
-        return self.app.upload({'name':color+'.png','data':base64.b64encode(stream.getvalue()).decode()})
+        # These tests inspect reference ownership/order, not pixel generation.
+        return self.app.upload({'name':color+'.png','data':base64.b64encode(PNG).decode()})
 
     def test_detection_preserves_discussion_and_negation(self):
         for prompt in ('Creami 4 immagini, due 16:9 e due 9:16','Vorrei generare due immagini','Generate 3 images'):
@@ -42,7 +42,7 @@ class ImageBatchTests(unittest.TestCase):
             previous=self.app.store.one('SELECT media FROM messages WHERE id=?',(job['message_id'],))
             observed.append(len(json.loads(previous['media'])))
             folder=self.app.data/'outputs'/output_id;folder.mkdir(parents=True)
-            Image.new('RGB',(64,64),'navy').save(folder/'image.png')
+            (folder/'image.png').write_bytes(PNG)
             return {'id':output_id,'name':'image.png','path':f'outputs/{output_id}/image.png','mime':'image/png','generation':{'seed':settings['_image_options']['seed']}}
         before=self.app.store.settings()
         with patch.object(self.app.engine,'start_llama') as load,patch.object(self.app.engine,'completion',return_value=(json.dumps(plan),'stop')) as completion,patch.object(self.app.engine,'generate',side_effect=generate),patch.object(self.app.engine,'refine_image_prompt') as refine:
@@ -175,7 +175,7 @@ class ImageBatchTests(unittest.TestCase):
         def generate(model,settings,prompt,refs,ident,cancel,stage):
             calls.append(ident)
             if len(calls)==2:raise Cancelled()
-            folder=self.app.data/'outputs'/ident;folder.mkdir(parents=True);Image.new('RGB',(64,64),'green').save(folder/'image.png')
+            folder=self.app.data/'outputs'/ident;folder.mkdir(parents=True);(folder/'image.png').write_bytes(PNG)
             return {'id':ident,'path':f'outputs/{ident}/image.png','mime':'image/png','name':'image.png'}
         with patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',return_value=(json.dumps(plan),'stop')),patch.object(self.app.engine,'generate',side_effect=generate):
             self.app.execute_job(job,threading.Event())

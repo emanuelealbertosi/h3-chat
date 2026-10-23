@@ -11,6 +11,17 @@ def story(count,duration):
          'time_basis':'local','continuity':'cut','lip_sync':False,'images':[]} for i in range(count)]}
 
 class ClipBudgetTests(unittest.TestCase):
+    def test_generation_total_and_full_clip_plus_tail_breakdown_agree(self):
+        headers='\n'.join(f'## CLIP {i+1:02} — GLOBAL {i*15//60:02}:{i*15%60:02}–{min((i+1)*15,175.8)//60:02.0f}:{min((i+1)*15,175.8)%60:04.1f}' for i in range(12))
+        for description in ('12 consecutive clips: 11 clips of 15 seconds and one final clip of 10.8 seconds.',
+                            '12 generation clips: eleven clips of 15 seconds and one final clip of 10.8 seconds.',
+                            '12 clip consecutivi: 11 clip da 15 secondi e un clip finale da 10,8 secondi.'):
+            with self.subTest(description=description):
+                result=contract(description+'\n'+headers,8438336/48000)
+                self.assertEqual(result['count'],12);self.assertEqual(result['end_frames'],[360*i for i in range(1,12)]+[4220])
+        with self.assertRaisesRegex(ValueError,'numeri di clip diversi'):
+            contract('13 consecutive clips: 11 clips of 15 seconds and one final clip of 10.8 seconds.',175.8)
+
     def test_short_final_clip_has_explicit_local_window_and_is_repaired_before_video(self):
         engine=VideoEngine();engine.require_model=Mock(return_value={});engine.start_llama=Mock()
         bad=story(10,140)

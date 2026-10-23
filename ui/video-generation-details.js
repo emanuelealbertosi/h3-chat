@@ -12,6 +12,8 @@ export function generationRows(p,meta={}){
  add('Formato',p.aspect);add('Risoluzione impostata',number(p.megapixels)&&number(p.megapixels)+' MP');
  add('Fotogrammi al secondo',number(p.fps));add('Passi',number(p.steps));add('CFG',number(p.cfg));
  add('Sampler',p.sampler);add('Scheduler',p.scheduler);add('Seed',Number.isFinite(p.seed)?String(p.seed):null);
+ add('Turbo DMD2',yes(p.moss_turbo));
+ if(p.moss_dmd2?.applied_modules)add('Adattatore DMD2',`${p.moss_dmd2.applied_modules} moduli · FP32 separato`);
  add('Shift video / audio',p.shift_video!=null&&p.shift_audio!=null?`${p.shift_video} / ${p.shift_audio}`:null);
  add('Attenzione richiesta',p.attention_requested||p.attention);
  add('Attenzione utilizzata',p.attention_backend);if(p.attention_chunks_mode&&(p.attention==='veda'||p.attention_requested==='veda'))add('Scelta gruppi VEDA',p.attention_chunks_mode==='manual'?'Esplicita':'Automatica');add('Gruppi attenzione effettivi',number(p.attention_chunks));if(p.attention_chunks_requested!=null&&p.attention_chunks_requested!==p.attention_chunks)add('Gruppi richiesti',number(p.attention_chunks_requested));

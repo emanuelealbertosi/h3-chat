@@ -47,3 +47,30 @@ ciascuno. Per più interventi sulla stessa clip, modifica la nuova versione.
 Richiede un video completo con checkpoint e riferimenti ancora disponibili,
 generato dal motore MiniMax H3 standalone. Ogni utente accede soltanto ai video
 e ai riferimenti della propria area.
+
+## Memoria precedente e raccordo finale
+
+In **Rigenera · riferimenti**, con **Intera clip**, puoi attivare **Recupera
+memoria dalle clip precedenti**. Il motore rilegge il primo fotogramma della
+sequenza corrente e i finali delle ultime due clip disponibili, rispettando le
+versioni selezionate in timeline. Usa anche una clip precedente appena rigenerata
+nello stesso lancio. L’ultimo stacco precedente delimita la memoria; non vengono
+usate clip future. La prima clip non ha memoria precedente. Sugli stacchi la
+casella parte disattivata: attivarla significa chiedere esplicitamente una
+continuazione da prima dello stacco.
+
+Il **Fotogramma finale per il raccordo** è indipendente e può essere combinato
+con la memoria. Scegli **Finale libero**, **Finale attuale della clip**, **Primo
+fotogramma della clip successiva**, oppure un’immagine caricata. Le immagini
+estratte sono preparate su CPU dalla versione selezionata e restano interne,
+senza comparire nella galleria ordinaria. La guida usa l’ultimo fotogramma reale
+della clip (359 a 15 s/24 fps), non il padding del modello. Richiede uno dei nove
+posti immagine; nessun riferimento viene scartato automaticamente. L’ultima clip
+non offre un primo fotogramma successivo.
+
+Memoria e finale guidato sono salvati nella bozza e nell’ultimo lancio e vengono
+recuperati dopo un’interruzione. Il montaggio non rigenera automaticamente le
+clip successive. I2V e Modifica video mantengono i propri strumenti di guida;
+per i tratti parziali usa i fotogrammi guida di Modifica video. Non vengono
+applicate dissolvenze o sostituzioni pixel per pixel: il modello interpreta gli
+ancoraggi, e una destinazione molto diversa può peggiorare la transizione.

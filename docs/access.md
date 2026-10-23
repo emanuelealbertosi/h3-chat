@@ -1,10 +1,15 @@
 # Account e accesso remoto
 
-Apri **Accessi** nella barra superiore, oppure `http://127.0.0.1:8788/access`
+Apri **Account e accessi** in fondo alla barra laterale, oppure `http://127.0.0.1:8788/access`
 (usa la porta indicata nei log se diversa). Il primo amministratore si configura
 dal PC che ospita l’app: nome utente e password di almeno 12 caratteri.
 Finché manca questo account, l’accesso locale funziona e quello remoto è bloccato.
 Dopo la configurazione, anche il browser locale richiede il login.
+
+Nello stesso punto trovi **Esci dall’account**. Il comando salva le modifiche
+pendenti del canvas, revoca la sessione del browser e torna alla pagina di login.
+Non arresta il server e non annulla i lavori già inviati. Su schermi piccoli apri
+prima la navigazione con **☰** per raggiungere questi comandi.
 
 Le chat, i documenti e il RAG esistenti restano nel tuo spazio amministratore.
 Da **Accessi → Ospiti** crea un account per ogni persona. Ogni ospite dispone di

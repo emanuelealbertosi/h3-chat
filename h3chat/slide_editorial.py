@@ -87,7 +87,11 @@ def prepare(engine,base,outline,settings,cancel,stage,refs,on_page,on_invalid=No
             request[-1]['content']+='\nBOZZA GIÀ PREPARATA PER QUESTA POSIZIONE (dato di lavoro, NON una fonte):\n'+json.dumps(draft,ensure_ascii=False)+'\nConserva spiegazioni, esempi e note pertinenti invece di ripartire da zero. Verifica la corrispondenza con titolo e obiettivo attuali e ricontrolla OGNI riferimento sul catalogo e sui testi disponibili ORA; gli identificatori della bozza non provano alcun collegamento con le fonti attuali. Correggi le attribuzioni non dimostrate o indica [DA VERIFICARE], senza inventare fonti.'
         request[-1]['content']+='\nID ammessi nel campo sources: '+json.dumps(sorted(refs))+'. I codici interni di un documento (per esempio S1 o L01-B) non diventano automaticamente ID del catalogo e non vanno sostituiti con un R dello stesso numero.'
         for attempt in range(2):
-            raw,finish=engine.completion(request,tuning,cancel,on_text=progress,schema=schema_for(refs))
+            from .remote_llm import StructuredCompletionError
+            try:raw,finish=engine.completion(request,tuning,cancel,on_text=progress,schema=schema_for(refs))
+            except StructuredCompletionError as exc:
+                if on_invalid:on_invalid(index,exc.content,exc.reason or str(exc))
+                raise ValueError(f'Contenuti e note della slide {index+1}: {exc} Le pagine già preparate e la risposta non valida sono conservate.') from exc
             if cancel.is_set():raise Cancelled()
             if finish=='length':raise ValueError(f'Contenuti e note della slide {index+1} incompleti: aumenta Max token. Nessuna pagina verrà composta da un piano troncato.')
             try:value=validate(json.loads(raw),refs);break
@@ -104,13 +108,13 @@ def prepare(engine,base,outline,settings,cancel,stage,refs,on_page,on_invalid=No
         row['editorial']=value;on_page(index,value)
 
 
-def recover_drafts(app,job,payload,opts):
+def recover_drafts(app,job,payload,opts,*,requested_opts=None):
     """Earlier failed plans are untrusted drafts, never verified source evidence."""
     row=app.store.one("SELECT j.id,j.payload,m.meta FROM jobs j JOIN messages m ON m.id=j.message_id WHERE j.chat_id=? AND j.status='failed' AND j.id<>? ORDER BY j.created DESC LIMIT 1",(job['chat_id'],job['id']))
     if not row:return None,{}
     try:
         old=json.loads(row['payload']);meta=json.loads(row['meta'])
-        if old['prompt'].strip()!=payload['prompt'].strip() or old.get('project_id')!=payload.get('project_id') or old.get('media')!=payload.get('media') or old['settings'].get('_slides')!=opts:return None,{}
+        if old['prompt'].strip()!=payload['prompt'].strip() or old.get('project_id')!=payload.get('project_id') or old.get('media')!=payload.get('media') or old['settings'].get('_slides')!=(requested_opts or opts):return None,{}
         old_outline=meta.get('slide_outline',{}).get('slides',[])
         # Pre-checkpoint versions can be recovered only when the human request
         # specified every ordinal explicitly, so page numbers have an anchor.

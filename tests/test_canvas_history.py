@@ -141,6 +141,7 @@ class HistoryApiTests(unittest.TestCase):
                 with urllib.request.urlopen(req) as response:
                     return json.load(response)
             try:
+                self.assertEqual(request('/api/state')['slide_options'],{'max_count':50,'automatic_count':True})
                 chat = app.store.create_chat()['id']
                 image = {'id':'a'*32, 'name':'old.png', 'path':'outputs/old.png', 'mime':'image/png'}
                 old = app.store.canvas_history.save(chat, {'title':'Old', 'content':'', 'media':[image]}, key='job:first')
@@ -155,6 +156,16 @@ class HistoryApiTests(unittest.TestCase):
                 with self.assertRaises(urllib.error.HTTPError) as cm:
                     request(path, {}, 'POST', token='')
                 self.assertEqual(cm.exception.code, 403)
+                from h3chat.slides import encode
+                slide_html='<style>main{font-size:24px}</style><main><p>'+('Contenuto ' * 600)+'</p></main>'
+                deck={'version':1,'engine':'llm','format':'16:9','pages':[{'title':f'Slide {i+1}','status':'ready','html':slide_html,'notes':'Nota','sources':[]} for i in range(50)]}
+                content=encode(deck)
+                self.assertGreater(len(content),200000)
+                saved=request(f'/api/canvas/{chat}',{'title':'50 slide','content':content,'media':[]},'PUT')
+                self.assertEqual(len(json.loads(saved['content'][13:-4])['pages']),50)
+                with self.assertRaises(urllib.error.HTTPError) as oversized:
+                    request(f'/api/canvas/{chat}',{'title':'Testo','content':'x'*200001,'media':[]},'PUT')
+                self.assertEqual(oversized.exception.code,400)
                 request(path, {}, 'POST')
                 self.assertEqual(request(f'/api/canvas/{chat}')['id'], old['id'])
                 outputs = Path(folder) / 'outputs'; outputs.mkdir(exist_ok=True)

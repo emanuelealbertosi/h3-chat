@@ -1,0 +1,6 @@
+interface:
+  display_name: "H3-Chat"
+  short_description: "Usa H3-Chat e riprendi i lavori salvati"
+  default_prompt: "Usa $h3 per recuperare lo stato di H3-Chat e continuare il lavoro richiesto senza duplicare le generazioni."
+policy:
+  allow_implicit_invocation: true

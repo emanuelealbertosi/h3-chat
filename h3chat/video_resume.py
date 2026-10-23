@@ -1,5 +1,5 @@
 """Validate saved scene checkpoints without loading models or modifying jobs."""
-import copy,json,re,math
+import copy,json,re,math,secrets,time
 from .downloads import safe_join
 
 def checkpoint(data,ident):
@@ -42,5 +42,16 @@ def checkpoint(data,ident):
     return value|{'plan':plan,'outputs':outputs,'source':ident}
 
 def save(folder,value):
-    target=folder/'scenes.json';part=folder/'scenes.writing'
-    part.write_text(json.dumps(value,ensure_ascii=False,indent=2),encoding='utf-8');part.replace(target)
+    target=folder/'scenes.json'
+    # Windows readers/scanners can briefly hold the destination without delete
+    # sharing. Keep the previous checkpoint intact while retrying publication;
+    # a unique staging file also prevents writers from sharing an unfinished JSON.
+    part=folder/('scenes.'+secrets.token_hex(6)+'.writing')
+    part.write_text(json.dumps(value,ensure_ascii=False,indent=2),encoding='utf-8')
+    for attempt in range(12):
+        try:part.replace(target);return
+        except PermissionError:
+            # A persistent permission problem must still fail visibly. Retain
+            # the complete staging file for diagnosis/recovery in that case.
+            if attempt==11:raise
+            time.sleep(min(.025*2**attempt,.5))

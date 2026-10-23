@@ -8,6 +8,7 @@ from .remote_llm import EmptyCompletion, StructuredCompletionError
 from .video_options import validate_plan
 from .video_request import repeated_scene, spoken_lines
 from .video_clip_budget import contract, requested
+from .video_storyboard_refs import normalize as image_labels,indices as image_indices,remap as remap_images,style_for_clip
 
 MAX_SHOTS=160
 SCHEMA={'type':'object','properties':{
@@ -27,6 +28,7 @@ def validate(value,duration,refs,request,*,audio_start=0,clip_budget=None,preser
     if not isinstance(value,dict) or set(value)!= {'style','shots'} or not isinstance(value['style'],str) or not value['style'].strip() or len(value['style'])>1200:
         raise ValueError('Stile dello storyboard non valido.')
     shots=value['shots'];images=[r for r in refs if r['mime'].startswith('image/')]
+    if any(n<1 or n>len(images) for n in image_indices(value['style'])):raise ValueError('Lo stile cita un’immagine inesistente.')
     if not isinstance(shots,list) or not 1<=len(shots)<=MAX_SHOTS:raise ValueError('Storyboard: da 1 a 160 inquadrature.')
     if clip_budget is None and requested(request)[0] is not None:clip_budget=contract(request,duration,audio_start=audio_start)
     if clip_budget and len(shots)!=clip_budget['count']:
@@ -55,11 +57,11 @@ def validate(value,duration,refs,request,*,audio_start=0,clip_budget=None,preser
                 raise ValueError('Lo storyboard cita un’immagine inesistente o ripetuta.')
             seen.add(item['index'])
         if sum(x['role']=='keyframe' for x in chosen)>1:raise ValueError('Scegli un solo frame iniziale per inquadratura.')
-        labels=[int(n) for n in re.findall(r'<Picture\s+(\d+)>',shot['prompt']+' '+value['style'],re.I)]
+        labels=image_indices(shot['prompt'])
         if any(n not in seen for n in labels):raise ValueError('La descrizione cita un’immagine non selezionata per questa inquadratura.')
         from .video_timing import localize
         clip={'index':index,'start':cursor/24,'duration':frames/24,'frames':frames,'end':frame/24}
-        description=localize(shot['prompt'].strip(),clip,basis=shot.get('time_basis','auto'),audio_start=audio_start)
+        description=localize(image_labels(shot['prompt'].strip()),clip,basis=shot.get('time_basis','auto'),audio_start=audio_start)
         scenes.append(clip|{'prompt':description,'time_basis':'local','images':chosen,'continuity':shot['continuity'],'lip_sync':shot['lip_sync']})
         cursor=frame
     if cursor!=target:raise ValueError('Storyboard incompleto.')
@@ -67,12 +69,21 @@ def validate(value,duration,refs,request,*,audio_start=0,clip_budget=None,preser
         raise ValueError('Lo storyboard deve conservare le parole esatte del canto/dialogo nelle inquadrature appropriate.')
     duplicate=repeated_scene([],[s['prompt'] for s in scenes],request)
     if duplicate:raise ValueError(f'L’inquadratura {duplicate} copia un’azione già descritta: sviluppa lo storyboard senza ripetere l’apertura.')
-    return {'style':value['style'].strip(),'shots':scenes}
+    return {'style':image_labels(value['style'].strip()),'shots':scenes}
 
 
 def build(engine,plan,refs,settings,prompt,cancel,stage,log):
     duration=settings['_video_duration'];segment_seconds=settings.get('_video_segment_seconds') or 15
     preserved_audio=bool(settings.get('_video_soundtrack'))
+    from .video_direct_storyboard import read as read_direct, request_text
+    direct=read_direct(prompt)
+    if direct is not None:
+        if settings.get('_assistant',True):raise ValueError('Disattiva Assistant per usare il piano video diretto senza riscritture.')
+        header=request_text(prompt)
+        clip_budget=contract(header,duration,audio_start=settings.get('_video_audio_start',0),segment_seconds=segment_seconds)
+        result=validate(direct,duration,refs,header,audio_start=settings.get('_video_audio_start',0),clip_budget=clip_budget,preserved_audio=preserved_audio)
+        stage(f'Storyboard diretto · {len(result["shots"])} clip · Assistant Off')
+        return result|{'direct':True}
     clip_budget=contract(prompt,duration,audio_start=settings.get('_video_audio_start',0),segment_seconds=segment_seconds)
     # With the minimum number of clips there is no useful timing choice for
     # the LLM: use the selected windows and the exact decoded audio tail.
@@ -96,8 +107,9 @@ def build(engine,plan,refs,settings,prompt,cancel,stage,log):
     instructions='''Direct a music-video storyboard covering the entire requested duration.
 Return JSON style, shots. Each shots item is ONE GPU GENERATION CLIP, not one
 visual shot or cut. Return EXACTLY generation_clips items. Never multiply GPU
-calls for camera cuts or action changes. style contains only stable cast, wardrobe and visual aesthetic,
-not a replay of the opening, and no Picture labels. Each shot has end (seconds relative
+calls for camera cuts or action changes. style contains only shared cinematography,
+lighting and visual aesthetic, preferably under 400 characters; no cast roster,
+character appearance descriptions, replay of the opening, or Picture labels. Each shot has end (seconds relative
 to this video), prompt (English visible action/camera), continuity (cut or continue),
 lip_sync, images [{index,role}]. Start is the preceding end, starting at zero.
 Generation clips last 1–max_clip_seconds seconds, the last may have a shorter tail. End the last
@@ -124,7 +136,11 @@ uses that image as the first frame. Only select images relevant to each shot.
 The inventory role is authoritative: never promote a reference character sheet,
 face, costume or location into a keyframe. A reference guides identity/style,
 not the opening composition or output aspect ratio. Explicitly associate each
-selected Picture label with its intended character in that clip's prompt.
+selected <Picture N> label with its intended character/location in that clip's
+prompt, using GLOBAL attachment indices. Use the actual supplied design: a familiar
+character name must not replace custom faces, haircuts, proportions or costume
+details with the default franchise appearance. Never invent unseen appearance
+details. Clothing changes explicitly requested by the user remain allowed.
 A clip's continuity=cut starts it without the preceding last frame; continuity=continue
 is only for continuation across GENERATION CLIP boundaries. Internal cuts stay
 inside that clip's prompt and do not create new shots-array items. Use cut at
@@ -145,7 +161,7 @@ Do not invent unheard lyrics, singers,
 beat timings or transcriptions. Music is one continuous original track under every
 shot, never a fresh song or loop per shot. lip_sync=true only for visible performance
 requested by the user; other shots keep the music without forcing singing.
-Image labels, if used, must refer to images selected in that shot. No Audio labels
+Use <Picture N> tags, not plain Image N aliases. Labels must refer to images selected in that shot. No Audio labels
 are needed in your prompts. Fill creative gaps only where the user left them open.
 Before returning check EXACT generation clip count, full time coverage, internal
 cut clocks, scene progression, complete ending and image assignments.'''
@@ -190,15 +206,15 @@ cut clocks, scene progression, complete ending and image assignments.'''
 def local_plan(storyboard,shot,global_plan,refs,soundtrack_index,audio_start):
     images=[r for r in refs if r['mime'].startswith('image/')];audios=[r for r in refs if r['mime'].startswith('audio/')]
     chosen=shot['images'];mapping={entry['index']:i for i,entry in enumerate(chosen,1)}
-    def remap(match):
-        index=int(match[1])
-        if index not in mapping:raise ValueError('Immagine non selezionata nell’inquadratura.')
-        return f'<Picture {mapping[index]}>'
     from .video_timing import localize
-    description=localize(re.sub(r'<Picture\s+(\d+)>',remap,shot['prompt'],flags=re.I),shot,basis=shot.get('time_basis','auto'),audio_start=audio_start)
+    description=localize(remap_images(shot['prompt'],mapping),shot,basis=shot.get('time_basis','auto'),audio_start=audio_start)
+    style=style_for_clip(storyboard['style'],mapping)
     keep='; '.join(f'<Picture {i}> fully_preserved identity/style' for i in range(1,len(chosen)+1))
     start=audio_start+shot['start']
-    prompt=f'subject_definitions: {storyboard["style"]}\nsummary: {description}\nretention_analysis: {keep}; <Audio {soundtrack_index}> fully_copy original audio.\ndetailed_description: {description}\noverall_soundscape: Original <Audio {soundtrack_index}> from source seconds {start:g} to {start+shot["duration"]:g}, unchanged.\nnon_diegetic_music: Preserve the original supplied track continuously; no replacement music or extra dialogue.'
+    reference_rules="Use each supplied image for its assigned subject or location. Its actual face, hairstyle, proportions and distinguishing features are authoritative; do not restore a familiar character's default appearance. Keep reference clothing and location details unless the requested shot explicitly changes them. Character sheets guide identity, never the output layout."
+    prompt=f'subject_definitions: {style}\nsummary: {description}\nretention_analysis: {keep}; {reference_rules} <Audio {soundtrack_index}> fully_copy original audio.\ndetailed_description: {description}\noverall_soundscape: Original <Audio {soundtrack_index}> from source seconds {start:g} to {start+shot["duration"]:g}, unchanged.\nnon_diegetic_music: Preserve the original supplied track continuously; no replacement music or extra dialogue.'
+    if storyboard.get('direct'):
+        prompt=f'subject_definitions: {style}\n<Audio {soundtrack_index}> is the original soundtrack, preserved unchanged; the shot directions assign visible performers and off-screen voices.\nsummary: [reference generation + audio reuse] Render only the following clip in playback order.\nretention_analysis: {keep}. {reference_rules} <Audio {soundtrack_index}>: fully_copy this clip\'s original soundtrack segment.\ndetailed_description: {description}\noverall_soundscape: Preserve the original audio segment unchanged; add no speech or sound effects.\nnon_diegetic_music: <Audio {soundtrack_index}> supplies the complete original song. No replacement music.'
     plan={'prompt':prompt,'images':[{'index':i,'role':entry['role'],'seconds':0} for i,entry in enumerate(chosen,1)],
           'audios':[entry|({'start':start,'role':'lipsync' if shot['lip_sync'] else 'reuse'} if entry['index']==soundtrack_index else {'role':'reference'}) for entry in global_plan['audios']]}
     selected=[images[entry['index']-1] for entry in chosen]+audios

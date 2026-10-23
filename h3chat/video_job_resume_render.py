@@ -9,7 +9,7 @@ from .video_resume import checkpoint
 
 CONTEXT_KEYS = ('_video_soundtrack', '_video_duration', '_video_audio_start',
                 '_video_audio_source_duration', '_video_segment_seconds',
-                '_video_editing', '_video_aspect', '_video_loras')
+                '_video_editing', '_video_aspect', '_video_loras','video_overrides','_video_quality','_video_steps','_video_batch_id')
 
 
 def render(app, job, payload, settings, cancel, stage, log_path):
@@ -19,6 +19,18 @@ def render(app, job, payload, settings, cancel, stage, log_path):
     settings = copy.deepcopy(settings)
     settings.update({k:copy.deepcopy(v) for k,v in context.get('settings', {}).items() if k in CONTEXT_KEYS})
     refs = copy.deepcopy(context.get('references', payload.get('media', [])))
+    if saved.get('batch_standalone'):
+        from .video_batch import finish_standalone
+        plan=saved.get('batch_source_plan',saved['plan'])
+        media=app.engine.generate_video(model,settings,plan,refs,job['id'],cancel,stage,prompt=payload['prompt'])
+        plan,refs=finish_standalone(app,media,plan,refs,job,cancel,stage,log_path)
+        meta={'intent':'video','canvas':bool(payload.get('canvas')),'model':model['name'],'execution_mode':'Standalone · batch · ripresa varianti mancanti',
+            'references':refs,'video_plan':plan,'video_parameters':media['generation'],'assistant_on':False}
+        if payload.get('canvas'):
+            app.save_artifact(job['chat_id'],'Video · varianti','',[media]);meta['artifact']={'title':'Video · varianti','content':'','media':[media]}
+        app.store.update_answer(job,'Ho completato le varianti mancanti, conservando quelle già generate.','done',[] if payload.get('canvas') else [media],meta)
+        app.store.execute("UPDATE jobs SET status='done',stage='Varianti video recuperate' WHERE id=?",(job['id'],))
+        return
     # Legacy checkpoints predate stored runtime references. Resolve the same
     # original history snapshot, never newer prompts or generated answers.
     history = app.store.messages(job['chat_id'], payload['until'])

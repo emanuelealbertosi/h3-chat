@@ -456,27 +456,13 @@ class Worker:
             if entry['role'] in ('lipsync','reuse'):master,master_z=audio,z
         # Internal memory follows explicit references, preserving Picture ordinals.
         # Opening anchor and two recent endings are visible to the text encoder.
-        if request.get('scene_index',0)>0 and request.get('continuity')!='cut' and not opts.get('longtake_enabled'):
+        if request.get('scene_index',0)>0 and request.get('continuity')!='cut':
             memory=[self.anchor,*self.recent]
             for image in memory:
                 if image is not None:items.append({'type':'image','data':image})
             if self.recent and not any(g['resolved_frame_index']==0 for g in guides):
                 z=self.vae.encode(self.fit_frame(self.recent[-1],opts))
                 guides.append({'resolved_frame_index':0,'latent':z})
-        if opts.get('longtake_enabled'):
-            from h3chat.video_longtake import load_context,signature
-            self.longtake_report={'enabled':True,'context_frames':0,'context_saved':False,
-                'refine_steps':5,'denoise':.55,'blend_frames':[22,44],'mask':None,
-                'audio_source':'base','context_origin':'before_clip','context_source':None}
-            if request.get('longtake_context'):
-                try:
-                    guides=load_context(request['longtake_context'],signature(self.files,opts),torch)+guides
-                    self.longtake_report.update(context_frames=22,context_source=request['longtake_context'])
-                    emit('stage',message='LongTakeNoCuts · contesto movimento · 22 fotogrammi prima della clip')
-                except (ValueError,OSError,KeyError) as exc:
-                    self.longtake_report['context_reset_reason']=str(exc)
-                    emit('stage',message='LongTakeNoCuts · nuovo tratto · contesto precedente incompatibile o non disponibile')
-            else:emit('stage',message='LongTakeNoCuts · inizio tratto · nessun contesto precedente')
         tokens=self.clip.tokenize(plan['prompt'],minimax_ref_items=items) if items else self.clip.tokenize(plan['prompt'])
         positive=self.clip.encode_from_tokens_scheduled(tokens)
         import node_helpers
@@ -629,21 +615,6 @@ class Worker:
             finally:
                 if probe is not None and not probe.closed:probe.close('boundary_not_reached')
             sampling_seconds=time.monotonic()-sampling_started
-            if opts.get('longtake_enabled'):
-                from h3chat.video_longtake import refine
-                emit('stage',message='LongTakeNoCuts · rifinitura sperimentale · 5 passi aggiuntivi')
-                self.phase='LongTakeNoCuts · rifinitura'
-                refine_started=time.monotonic();refine_last=refine_started;refine_seconds=[]
-                def refine_progress(step,x0,x,total):
-                    nonlocal refine_last
-                    now=time.monotonic();seconds=now-refine_last;refine_last=now;refine_seconds.append(seconds)
-                    emit('stage',message=f'LongTakeNoCuts · rifinitura · passo {step+1}/{total}')
-                samples=refine(comfy.sample.sample,comfy.sample.prepare_noise,comfy.nested_tensor.NestedTensor,
-                    torch,model,samples,positive,negative,opts,refine_progress)
-                self.longtake_report.update(refine_seconds=time.monotonic()-refine_started,
-                    step_seconds=refine_seconds,base_sampling_seconds=sampling_seconds)
-                timings['longtake_refine']=self.longtake_report['refine_seconds']
-                sampling_seconds=time.monotonic()-sampling_started
             veda_result={}
             if getattr(self,'veda_patch',None) is not None:
                 from h3chat.veda import report
@@ -670,12 +641,6 @@ class Worker:
             pixels=self.vae.decode(samples.unbind()[0])
             if pixels.ndim==5:pixels=pixels.reshape(-1,*pixels.shape[-3:])
             if len(pixels)<opts['frames']:raise RuntimeError('Il VAE non ha decodificato tutti i fotogrammi.')
-            longtake_tail=None
-            if opts.get('longtake_enabled') and not extension:
-                from h3chat.video_longtake import CONTEXT_FRAMES
-                # Only actual delivered frames, before spatial crop; no padded tail.
-                emit('stage',message='LongTakeNoCuts · salvataggio contesto delle clip modificabili')
-                longtake_tail=self.vae.encode(pixels[opts['frames']-CONTEXT_FRAMES:opts['frames']]).detach().cpu()
             left=(opts['width']-opts['output_width'])//2;top=(opts['height']-opts['output_height'])//2
             pixels=pixels[:,top:top+opts['output_height'],left:left+opts['output_width'],:]
             if request.get('sequence'):
@@ -698,16 +663,9 @@ class Worker:
                 master=trim_audio(master,extension)
                 opts=opts|{'frames':extension['output_frames']}
             write_video(request['output'],pixels,master,opts['frames'])
-            if longtake_tail is not None:
-                from h3chat.video_longtake import save_context,signature
-                save_context(Path(request['output']).with_name('longtake-tail.safetensors'),longtake_tail,
-                    signature(self.files,opts),request['output'])
-                self.longtake_report['context_saved']=True
             timings['saving']=time.monotonic()-saving_started
         timings['sampling']=sampling_seconds;timings['generation']=time.monotonic()-generation_started
-        if opts.get('longtake_enabled'):
-            Path(request['output']).with_name('longtake-result.json').write_text(json.dumps(self.longtake_report,ensure_ascii=False,indent=2),encoding='utf-8')
-        emit('done',parameters={**({'longtake':self.longtake_report} if opts.get('longtake_enabled') else {}),'fps':24,'duration':opts['frames']/24,'model_frames':grid_frames,'output_frames':opts['frames'],'width':opts['output_width'],'height':opts['output_height'],'canvas_width':opts['width'],'canvas_height':opts['height'],'aspect':opts['aspect'],'aspect_source':opts['aspect_source'],'format_image':opts['format_image'],'engine':'minimax-h3','attention_backend':attention_backend,'attention_requested':opts.get('attention','auto'),'veda':veda_result,'attention_chunks':self.attention_chunks,'attention_chunks_requested':opts.get('attention_chunks',0),'mlp_chunk_mb':getattr(self,'mlp_chunk_mb',0),'activation_memory':getattr(self,'activation_memory_report',{'active':False,'temporaries_released':[],'source_guard':'not_loaded'}),'sampling_seconds':sampling_seconds,'step_seconds':step_seconds,'timings':timings,'loras_applied':lora_result,'memory':[x for x in memory if x is not None],'audio_sample_rate':master['sample_rate'],'audio_preserved':any(x['role'] in ('lipsync','reuse') for x in request['plan']['audios']),**({'video_edit_mode':'source','source_video':self.source_info} if self.source_info else {})})
+        emit('done',parameters={'fps':24,'duration':opts['frames']/24,'model_frames':grid_frames,'output_frames':opts['frames'],'width':opts['output_width'],'height':opts['output_height'],'canvas_width':opts['width'],'canvas_height':opts['height'],'aspect':opts['aspect'],'aspect_source':opts['aspect_source'],'format_image':opts['format_image'],'engine':'minimax-h3','attention_backend':attention_backend,'attention_requested':opts.get('attention','auto'),'veda':veda_result,'attention_chunks':self.attention_chunks,'attention_chunks_requested':opts.get('attention_chunks',0),'mlp_chunk_mb':getattr(self,'mlp_chunk_mb',0),'activation_memory':getattr(self,'activation_memory_report',{'active':False,'temporaries_released':[],'source_guard':'not_loaded'}),'sampling_seconds':sampling_seconds,'step_seconds':step_seconds,'timings':timings,'loras_applied':lora_result,'memory':[x for x in memory if x is not None],'audio_sample_rate':master['sample_rate'],'audio_preserved':any(x['role'] in ('lipsync','reuse') for x in request['plan']['audios']),**({'video_edit_mode':'source','source_video':self.source_info} if self.source_info else {})})
 
 def main():
     emit('hello');worker=Worker()

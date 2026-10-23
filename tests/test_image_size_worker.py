@@ -6,13 +6,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import PIL
-from PIL import Image
+from runtime_test_support import cpu_package
+
+PIL=cpu_package('PIL')
 
 ROOT = Path(__file__).resolve().parents[1]
 
 class ImageSizeWorkerTests(unittest.TestCase):
+    @unittest.skipUnless(PIL is not None,'Install the private documents runtime for the Pillow integration test')
     def test_isolated_runtime_reads_all_references_and_exif_without_torch(self):
+        from PIL import Image
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             worker = root/'native/image-size-worker.py'

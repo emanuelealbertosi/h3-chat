@@ -1,5 +1,8 @@
 import {uploadFile} from './file-upload.js';
 import {renderToolsSettings,appendToolsDetails} from './tools-settings.js';
+import {apiOnlySettings,apiOnlyCard} from './api-only-setup.js';
+import {canvasFingerprint,savedCanvasArtifact} from './slide-generation-state.js';
+import {logoutAccount} from './account-session.js';
 import {renderProviders} from './api-providers.js';
 import {renderLlmPreferences,selectLlmPreferencesModel,syncLlmDraft,llmOptions} from './llm-settings.js';
 import {renderVideoSettings,appendVideoDetails,selectVideoPreferencesModel} from './video-settings.js';
@@ -16,6 +19,7 @@ import {initLocalModels} from './local-models.js';
 import {initLoras} from './loras.js';
 import {initVisualControls,renderVisualSetup} from './visual-controls.js';
 import {renderImagePreferences,selectImagePreferencesModel} from './image-settings.js';
+import {imageRecipeParameters,imageRecipePrompt} from './creation-details.js';
 import {initProjects} from './projects.js';
 import {renderWorkspaceSettings} from './workspace-settings.js';
 import {renderMediaProviders,renderServer} from './media-providers.js';
@@ -83,7 +87,7 @@ const localModels=initLocalModels({api,getState:()=>state,notify:toast,onChange:
 const loraUI=initLoras({api,getState:()=>state,getChatId:()=>current,pickDirectory:(path,callback)=>localModels.pickDirectory(path,callback),openPreferences:()=>openSettings('advanced'),notify:toast,onChange:()=>scheduleAssessment()});
 const projects=initProjects({api,getState:()=>state,getChat:()=>chat,refresh,notify:toast,act,select:act(async id=>{project=id;collection=null;filter='all';lastSidebar='';renderSidebar();if(id&&chat?.project_id!==id){const existing=state.chats.find(c=>c.project_id===id&&!c.archived);if(existing)await openChat(existing.id);else await newChat();}}),showCanvas:value=>value===null?($('#canvas-panel').hidden=!canvasOpen,$('#workspace').classList.toggle('has-canvas',canvasOpen)):toggleCanvas(value),pickDirectory:(path,callback)=>localModels.pickDirectory(path,callback)});
 chatModels=initChatModels({api,getState:()=>state,notify:toast,onChange:settings=>{if(settings)state.settings=settings;renderStatus();}});
-$('#rag-enabled').closest('label').insertAdjacentHTML('afterend','<label class="think-control">Strumenti <select id="lab-tool" aria-label="Strumenti della chat"><option value="auto">Automatico · dal prompt</option><option value="calculate">Interprete numerico</option><option value="manim">Animazione Manim</option><option value="slides">Slide · HTML in tempo reale</option><option value="infographic">Infografica animata</option></select></label><span id="slides-options" hidden><label>Slide <input id="slides-count" aria-label="Numero di slide" type="number" min="1" max="30" value="8" style="width:65px"></label> <label>Formato <select id="slides-format" aria-label="Formato slide"><option>16:9</option><option>9:16</option><option>4:3</option><option>16:10</option><option>1:1</option></select></label></span>');
+$('#rag-enabled').closest('label').insertAdjacentHTML('afterend','<label class="think-control">Strumenti <select id="lab-tool" aria-label="Strumenti della chat"><option value="auto">Automatico · dal prompt</option><option value="calculate">Interprete numerico</option><option value="manim">Animazione Manim</option><option value="slides">Slide · HTML in tempo reale</option><option value="infographic">Infografica animata</option></select></label><span id="slides-options" hidden><label>Quantità <select id="slides-count-mode" aria-label="Come scegliere il numero di slide"><option value="fixed">Numero fisso</option><option value="auto">Automatico · dai contenuti</option></select></label><label>Slide <input id="slides-count" aria-label="Numero di slide" type="number" min="1" max="50" value="8" style="width:65px"></label><p class="small-note prompt-slide-count-note">Da 1 a 50 slide. In automatico il modello sceglie in base ai contenuti e alle fonti. Il numero o la scelta automatica richiesti nel prompt hanno la precedenza.</p> <label>Formato <select id="slides-format" aria-label="Formato slide"><option>16:9</option><option>9:16</option><option>4:3</option><option>16:10</option><option>1:1</option></select></label></span>');
 $('#lab-tool').onchange=()=>{manimPresentation?.render();infographicsUI?.render();$('#slides-options').hidden=$('#lab-tool').value!=='slides';visualControls.render();};
 $('#slides-options').insertAdjacentHTML('beforeend',' <label>Motore <select id="slides-engine" aria-label="Motore slide"><option value="llm">LLM · HTML libero</option><option value="deterministic">Deterministico</option></select></label> <label>Stile <select id="slides-design"><option value="professional">Serio / professionale</option><option value="playful">Giocoso / colorato</option><option value="comic">Fumettoso</option></select></label> <label>Contenuto <select id="slides-detail"><option value="concise">Sintesi</option><option value="full">Testi completi</option></select></label>');
 $('#slides-options').insertAdjacentHTML('beforeend',' <label title="Rapida analizza fino a 8 figure nuove, dando precedenza alle fonti della richiesta. Le descrizioni già disponibili vengono riutilizzate; tutte le figure restano inseribili.">Figure Vision <select id="slides-vision" aria-label="Analisi figure slide"><option value="relevant">Rapida · max 8 nuove</option><option value="all">Completa · tutte</option></select></label>');
@@ -97,8 +101,9 @@ function localCard(model){
   const m=model;
   return `<article class="model-card" data-external-card="${m.id}"><div class="model-top"><h3>${esc(modelLabel(m))}</h3><div class="model-link-actions"><button type="button" class="btn small" data-model-parameters="${m.id}">Parametri del modello</button><button type="button" class="btn small" data-edit-external="${m.id}">Modifica collegamento</button><button type="button" class="text-button" data-remove-external="${m.id}">Scollega</button></div></div><p>${esc(m.description)}</p>${modelIdentityHtml(m)}<div class="model-meta"><span class="badge">PERCORSO ESTERNO</span><span class="badge ${m.ready?'ready':'warning'}">${m.ready?'Disponibile':'Non disponibile'}</span>${m.vision?`<span class="badge ${m.vision.enabled?'ready':'warning'}">${m.vision.enabled?'Vision attiva':'Non vision'}</span>`:''}${m.thinking?.supported?'<span class="badge">THINK</span>':''}${m.mtp?.supported?'<span class="badge">MTP</span>':''}${m.capabilities.map(c=>`<span class="badge">${({chat:'CHAT',create:'CREA',edit:'MODIFICA',music:'MUSICA',video:'VIDEO'})[c]||esc(c)}</span>`).join('')}</div>${m.external_problems?.length?`<p class="local-error">${esc(m.external_problems.join(' '))}</p>`:''}${m.vision?.warning?`<p class="small-note">${esc(m.vision.warning)}</p>`:''}<details><summary>Percorsi collegati e componenti</summary>${m.files.map(f=>`<div class="external-path"><strong>${esc(state.model_role_labels[f.role]||f.role)}</strong><span>${esc(f.path)}</span><small>${gb(f.size)}</small></div>`).join('')}${m.vision?.projector&&!m.files.some(f=>f.role==='mmproj')?`<div class="external-path"><strong>mmproj automatico</strong><span>${esc(m.vision.projector)}</span></div>`:''}<p class="small-note">${esc(m.license)}</p></details></article>`;
 }
-function activeJob(){return state?.jobs.find(j=>j.chat_id===current&&['queued','running'].includes(j.status));}
-function userJob(){return state?.jobs.find(j=>['queued','running'].includes(j.status));}
+function activeJob(){return state?.jobs.find(j=>j.chat_id===current&&['queued','running','cancelling'].includes(j.status));}
+function userJob(){return state?.jobs.find(j=>['queued','running','cancelling'].includes(j.status));}
+function queuedCanvasJob(result,chatId,stage){if(result?.job_id&&state&&!state.jobs.some(job=>job.id===result.job_id))state.jobs.unshift({id:result.job_id,chat_id:chatId,status:'queued',canvas:true,stage});}
 const editVideo=act(async(media,options={})=>{
   await chatModels.wait();if(!current)await newChat();
   if(!media){chooseVideoForEdit({api,onSelect:(chosen,importOptions)=>editVideo(chosen,{...options,...importOptions})});return;}
@@ -121,7 +126,8 @@ async function refresh(){
     state=await api('/state');renderSidebar();renderStatus();
     if(current){const id=current;const fresh=await api('/chats/'+id);if(current===id){chat=fresh;await renderChat();}
       if(canvasOpen){await loadCanvasHistory(id);
-        if(canvasFollow&&!canvasDirty&&!canvasEditing){const selection=canvasSelection,c=await api('/canvas/'+id);if(current===id&&canvasFollow&&selection===canvasSelection)await setCanvas(c,false);}}}
+        if(canvasFollow&&!canvasDirty&&!canvasEditing){const selection=canvasSelection,c=await api('/canvas/'+id);if(current===id&&canvasFollow&&selection===canvasSelection)await setCanvas(c,false);}
+        else if(!canvasDirty&&!canvasEditing)await setCanvas(canvas,false);}}
     updateDownloads();
     await projects.poll();
     if($('#settings').open&&Date.now()-lastAssessment>10000)scheduleAssessment();
@@ -221,7 +227,12 @@ async function reloadRequest(message){
   $('#lab-tool').value=draft.lab||'auto';$('#lab-tool').dispatchEvent(new Event('change',{bubbles:true}));
   manimPresentation?.set(draft.manim_presentation?{enabled:true,...draft.manim_presentation}:null);
   loraUI.setSelections(draft.loras||[]);visualControls.set(draft.controls);
-  if(draft.slides)for(const [key,id] of Object.entries({count:'slides-count',format:'slides-format',engine:'slides-engine',design:'slides-design',detail:'slides-detail',composition:'slides-composition',vision_scope:'slides-vision'})){
+  if(draft.slides?.count!=null){
+    $('#slides-count-mode').value=draft.slides.count==='auto'?'auto':'fixed';
+    if(draft.slides.count!=='auto')$('#slides-count').value=String(draft.slides.count);
+    $('#slides-count-mode').dispatchEvent(new Event('change',{bubbles:true}));
+  }
+  if(draft.slides)for(const [key,id] of Object.entries({format:'slides-format',engine:'slides-engine',design:'slides-design',detail:'slides-detail',composition:'slides-composition',vision_scope:'slides-vision'})){
     const input=$('#'+id);if(input&&draft.slides[key]!=null){input.value=String(draft.slides[key]);input.dispatchEvent(new Event('change',{bubbles:true}));}
   }
   renderAttachments();composerUI?.render();$('#prompt').scrollIntoView({block:'center'});$('#prompt').focus();
@@ -256,7 +267,7 @@ async function renderChat(){
       activity.innerHTML=`<div class="thinking" aria-hidden="true"><i></i><i></i><i></i></div><div><strong>${esc(title)}</strong><span class="activity-stage">${esc(job?.stage||'Preparazione del motore…')}</span><small class="activity-elapsed">${esc(timing?.text||'Preparazione del cronometro…')}</small></div>`;
       content.append(activity);
     }
-    appendMedia(content,inputMedia(message),{api,videoMeta:message.role==='assistant'?message.meta:undefined,onEditVideo:message.role==='assistant'&&message.status==='done'?editVideo:null,onRecreateVideo:message.role==='assistant'&&message.status==='done'?recreateVideo:null,onUpscaleVideo:upscaleVideo,onRemixVideo:remixVideo});appendMusicDetails(content,message,state.settings.chat_advanced);appendVideoDetails(content,message,state.settings.chat_advanced);appendToolsDetails(content,message,state.settings.chat_advanced);
+    appendMedia(content,inputMedia(message),{api,onReuseImage:reuseImageRecipe,videoMeta:message.role==='assistant'?message.meta:undefined,onEditVideo:message.role==='assistant'&&message.status==='done'?editVideo:null,onRecreateVideo:message.role==='assistant'&&message.status==='done'?recreateVideo:null,onUpscaleVideo:upscaleVideo,onRemixVideo:remixVideo});appendMusicDetails(content,message,state.settings.chat_advanced);appendVideoDetails(content,message,state.settings.chat_advanced);appendToolsDetails(content,message,state.settings.chat_advanced);
     if(pending&&message.meta.intent==='video'){
       const inputs=message.meta.references||chat.messages.slice(0,chat.messages.indexOf(message)).filter(m=>m.role==='user').at(-1)?.media||[];
       appendVideoProgress(content,{job,message,audios:inputs.filter(m=>m.mime.startsWith('audio/'))});
@@ -318,7 +329,7 @@ async function send(event){event.preventDefault();if(userJob())return;const prom
       const videos=attachments.filter(x=>x.mime?.startsWith('video/'));if(videos.length>1)throw Error('Scegli un solo video da modificare.');
       await editVideo(videos[0],{initialPrompt:prompt,initialReferences:attachments.filter(x=>x.mime?.startsWith('image/')),initialSteps:controls.video_steps,initialAssistant:controls.assistant,initialModel:controls.video_model||undefined,initialParameters:controls.video_parameters||{},onQueued:async()=>{$('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);}});return;
     }
-    const presentation=await manimPresentation.prepare();const sent=await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,...presentation,...visualControls.request(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='infographic'?{infographic:infographicsUI.read()}:{}),...($('#lab-tool').value==='slides'?{slides:{engine:$('#slides-engine').value,count:Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value,composition:$('#slides-composition').value,vision_scope:$('#slides-vision').value,...slideColors.read(),...slideImages.read()}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()});
+    const presentation=await manimPresentation.prepare();const sent=await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,...presentation,...visualControls.request(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='infographic'?{infographic:infographicsUI.read()}:{}),...($('#lab-tool').value==='slides'?{slides:{engine:$('#slides-engine').value,count:$('#slides-count-mode').value==='auto'?'auto':Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value,composition:$('#slides-composition').value,vision_scope:$('#slides-vision').value,...slideColors.read(),...slideImages.read()}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()});
     if(['slides','infographic','image_batch'].includes(sent.intent)){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}
     $('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);await refresh();
   }finally{$('#send').disabled=false;}
@@ -381,24 +392,29 @@ async function followCanvas(){
 }
 async function toggleCanvas(value=!canvasOpen){projects.hide();canvasOpen=value;$('#canvas-panel').hidden=!value;$('#workspace').classList.toggle('has-canvas',value);$('#canvas-toggle').setAttribute('aria-pressed',value);
   if(value&&current){await loadCanvasHistory();if(canvasFollow&&!canvasDirty&&!canvasEditing)await setCanvas(await api('/canvas/'+current),true);}if(value)await renderCanvas();renderStatus();}
-async function setCanvas(value,force=true){if(!current){canvasHistory={items:[],active_id:null};canvasFollow=true;canvasSelection++;}const signature=JSON.stringify([value.id,value.title,value.content,value.media]);if(!force&&signature===lastCanvas)return;canvas={id:value.id||null,title:value.title||'Canvas',content:value.content||'',media:value.media||[]};lastCanvas=signature;$('#canvas-title').value=canvas.title;$('#canvas-source').value=canvas.content;renderCanvasHistory();await renderCanvas();}
+async function setCanvas(value,force=true){if(!current){canvasHistory={items:[],active_id:null};canvasFollow=true;canvasSelection++;}const signature=canvasFingerprint(value,state?.jobs,current);if(!force&&signature===lastCanvas)return;canvas={id:value.id||null,title:value.title||'Canvas',content:value.content||'',media:value.media||[]};lastCanvas=signature;$('#canvas-title').value=canvas.title;$('#canvas-source').value=canvas.content;renderCanvasHistory();await renderCanvas();}
 async function renderCanvas(){
   const empty=!canvas.content&&!canvas.media.length;$('#canvas-empty').hidden=!empty||canvasEditing;$('#canvas-preview').hidden=canvasEditing||empty;$('#canvas-source').hidden=!canvasEditing;
   $('#canvas-preview-tab').classList.toggle('active',!canvasEditing);$('#canvas-source-tab').classList.toggle('active',canvasEditing);
   const isDeck=canvas.content.startsWith('```h3-slides\n');$('#canvas-source-tab').textContent=isDeck?'Sorgente slide':'Modifica';$('#canvas-source').ariaLabel=isDeck?'Sorgente della presentazione':'Sorgente canvas';
   for(const kind of ['html','pptx']){const button=document.querySelector('[data-export="'+kind+'"]');if(button)button.hidden=!isDeck;}
-  if(!canvasEditing){const value={...canvas,media:[...canvas.media]},entry=canvasHistory.items.find(x=>x.id===value.id),message=(chat?.messages||[]).find(m=>m.id===entry?.message_id)||[...(chat?.messages||[])].reverse().find(m=>m.meta?.artifact?.content===value.content||m.content===value.content);renderQueue=renderQueue.catch(()=>{}).then(async()=>{const options={final:!activeJob()?.canvas||value.id!==canvasHistory.active_id,sources:message?.meta?.rag_sources||[],onCitation:(s,all)=>projects.citation(s,all,message),onExecute:act(executeArtifact)};
-    if(isDeck){try{await renderSlides($('#canvas-preview'),value,{...options,api,chatId:current,editable:!userJob(),onTimelineQueued:async()=>{await refresh();toast('Sostituzione nella timeline in coda. Il montaggio finale resta separato.');},onRegenerate:async(page,prompt)=>{
+  if(!canvasEditing){const chatId=current,value={...canvas,media:[...canvas.media]},entry=canvasHistory.items.find(x=>x.id===value.id),message=(chat?.messages||[]).find(m=>m.id===entry?.message_id)||[...(chat?.messages||[])].reverse().find(m=>m.meta?.artifact?.content===value.content||m.content===value.content);renderQueue=renderQueue.catch(()=>{}).then(async()=>{if(current!==chatId||canvas.id!==value.id||canvas.content!==value.content)return;const options={final:!activeJob()?.canvas||value.id!==canvasHistory.active_id,sources:message?.meta?.rag_sources||[],onCitation:(s,all)=>projects.citation(s,all,message),onExecute:act(executeArtifact)};
+    if(isDeck){try{await renderSlides($('#canvas-preview'),value,{...options,api,chatId:current,editable:!userJob(),busy:!!userJob(),job:canvasFollow&&activeJob()?.canvas?activeJob():null,onResume:async()=>{
       if(userJob())throw Error('Attendi o interrompi la tua richiesta in corso.');
-      await chatModels.wait();await persistCanvas();
-      await api('/canvas/'+current+'/slides/regenerate',{artifact_id:canvas.id,page,prompt,think_level:$('#think-level').value});
-      canvasFollow=true;canvasEditing=false;await toggleCanvas(true);await refresh();
+      const artifact_id=await savedCanvasArtifact(value.id,()=>({artifactId:canvas.id,chatId:current,selection:canvasSelection}),persistCanvas,()=>chatModels.wait());
+      const result=await api('/chats/'+chatId+'/slides/resume',{artifact_id});queuedCanvasJob(result,chatId,'Slide · ripresa in coda');
+      canvasFollow=true;canvasEditing=false;await refresh();await toggleCanvas(true);toast('Ripresa delle slide mancanti in coda.');
+    },onTimelineQueued:async()=>{await refresh();toast('Sostituzione nella timeline in coda. Il montaggio finale resta separato.');},onRegenerate:async(page,prompt)=>{
+      if(userJob())throw Error('Attendi o interrompi la tua richiesta in corso.');
+      const artifact_id=await savedCanvasArtifact(value.id,()=>({artifactId:canvas.id,chatId:current,selection:canvasSelection}),persistCanvas,()=>chatModels.wait());
+      const result=await api('/canvas/'+chatId+'/slides/regenerate',{artifact_id,page,prompt,think_level:$('#think-level').value});queuedCanvasJob(result,chatId,'Slide · revisione in coda');
+      canvasFollow=true;canvasEditing=false;await refresh();await toggleCanvas(true);
     },onChange:async (content,media)=>{
       if(activeJob()?.canvas)throw Error('Attendi la fine della generazione prima di modificare.');
       canvasFollow=false;canvasSelection++;canvas.content=content;if(media)canvas.media=media;canvasDirty=true;$('#canvas-source').value=content;
       await persistCanvas();await renderCanvas();
     }});}catch(e){$('#canvas-preview').textContent=e.message;}}
-    else{$('#canvas-preview').classList.remove('slides-preview');await renderRich($('#canvas-preview'),value.content,options);appendMedia($('#canvas-preview'),value.media,{api,onEditVideo:editVideo,onRecreateVideo:recreateVideo,onUpscaleVideo:upscaleVideo,onRemixVideo:remixVideo});}
+    else{$('#canvas-preview').classList.remove('slides-preview');await renderRich($('#canvas-preview'),value.content,options);appendMedia($('#canvas-preview'),value.media,{api,onReuseImage:reuseImageRecipe,onEditVideo:editVideo,onRecreateVideo:recreateVideo,onUpscaleVideo:upscaleVideo,onRemixVideo:remixVideo});}
   });await renderQueue;}
 }
 async function persistCanvas(){clearTimeout(canvasSaveTimer);if(canvasSaving){await canvasSaving;if(canvasDirty)return persistCanvas();return;}if(!canvasDirty)return;
@@ -461,6 +477,9 @@ function renderSettings(){
     const modelSelect=(key,label,cap)=>settingSelect(key,label,[['','Scegli dal catalogo…'],...state.models.filter(m=>m.capabilities.includes(cap)).map(m=>[m.id,modelLabel(m)+(cap==='chat'?(m.vision?.enabled?' · Vision':m.vision?.expected?' · Vision da completare':' · Non vision'):'')+(m.ready?'':m.external?' · percorso non disponibile':' · da scaricare')])]);
     body.innerHTML=`<div class="hardware-note" id="hardware-info">Scegli l'hardware. CPU, NVIDIA, AMD e Intel condividono la stessa interfaccia.</div><div class="settings-grid"><section class="card"><h3>01 · Il tuo computer</h3>${settingSelect('profile','Profilo memoria',[['cpu','Solo CPU / nessuna GPU'],['low','GPU · 4–8 GB VRAM'],['balanced','GPU · 12–24 GB VRAM']],'Il profilo imposta valori iniziali modificabili nelle Preferenze.')}${settingSelect('backend','Motore di calcolo',[['cpu','CPU · massima compatibilità'],['vulkan','Vulkan · NVIDIA / AMD / Intel'],['cuda','CUDA · NVIDIA']],'Il profilo Solo CPU usa sempre il backend CPU.')}<div class="runtime-actions"><button id="install-runtime" class="btn">Installa motori</button><span class="small-note" id="runtime-ready"></span></div><div id="runtime-downloads"></div></section><section class="card"><h3>02 · I tuoi modelli</h3>${modelSelect('chat_model','Chat, router e visione','chat')}${modelIdentityHtml(state.models.find(m=>m.id===settingsDraft.chat_model))}<p id="setup-vision-note" class="vision-warning"></p>${modelSelect('create_model','Creazione immagini','create')}${modelSelect('edit_model','Modifica e riferimenti','edit')}<p>Un'unica chat. Il router sceglie cosa fare dal prompt; la modalità memoria decide quali modelli conservare.</p><button id="go-catalog" class="text-button">Catalogo e modelli già scaricati →</button></section></div><div class="note">Con 4–8 GB scegli modelli quantizzati e pochi riferimenti. FLUX usa anche la RAM di sistema; CPU e offload riducono la VRAM ma aumentano i tempi. MiniMax H3 video si configura nella sezione Video qui sotto.</div>`;
     body.insertAdjacentHTML('beforeend',`<section class="card memory-settings"><h3>03 · Modelli in memoria</h3><div class="settings-grid">${settingSelect('memory_policy','Caricamento dei modelli',[['on_demand','A richiesta · un modello alla volta'],['resident','Residenti · tutti i modelli scelti']],'A richiesta conserva il modello corrente e lo scarica prima di caricarne uno diverso. Residenti carica i modelli installati al prossimo messaggio e li mantiene in VRAM (o RAM con CPU).')}${settingSelect('ram_cache_gb','Cache file in RAM recuperabile',[[0,'Disattivata'],[2,'Fino a 2 GiB'],[4,'Fino a 4 GiB'],[8,'Fino a 8 GiB'],[16,'Fino a 16 GiB'],[32,'Fino a 32 GiB']],'Conserva mapping recuperabili dei pesi. Con cache attiva mantiene inizializzato anche il motore Ming/Qwen dopo aver liberato i pesi: evita di ricaricare Python e le librerie a ogni cambio. Il motore usa ancora RAM e un piccolo contesto CUDA; la lettura dei pesi e i trasferimenti GPU restano necessari. Disattiva la cache o premi Libera memoria per chiuderlo.')}</div><p>Se creazione ed editing usano lo stesso modello, condividono il caricamento. In Residenti tutti i layer LLM usano la GPU; il proiettore vision resta sempre sulla CPU; il numero di layer nelle Preferenze vale per A richiesta. Per MiniMax H3 vale anche l’opzione di offload del suo preset: componenti caricati a richiesta e liberati dopo la loro fase quando è attiva. Le modifiche si applicano dopo il lavoro in corso.</p><div class="memory-live"><span id="resident-models"></span><button type="button" id="release-memory" class="btn small">Libera memoria</button></div></section>`);
+    body.insertAdjacentHTML('afterbegin',apiOnlyCard);
+    $('#setup-api-only').onclick=()=>{collectSettings();Object.assign(settingsDraft,apiOnlySettings(settingsDraft,state.models));selectLlmPreferencesModel(settingsDraft.chat_model);renderSettings();toast('Configurazione API pronta. Collega i provider mancanti e salva le impostazioni.');};
+    $('#setup-api-providers').onclick=()=>{collectSettings();settingsTab='providers';renderSettings();};
     const visuals=document.createElement('section');visuals.className='visual-setup';body.append(visuals);
     renderVisualSetup(visuals,{state,draft:settingsDraft,link:kind=>localModels.open(null,kind),edit:localModels.open,
       preferences:id=>{collectSettings();selectImagePreferencesModel(id);settingsTab='advanced';renderSettings();},
@@ -506,7 +525,7 @@ function renderSettings(){
       download:act(async()=>{await api('/downloads',{id:'yue2-q8',kind:'model'});await refresh();})});
   }
   if(settingsTab==='advanced')renderLlmPreferences($('#llm-settings-card'),settingsDraft,state,scheduleAssessment);
-  if(settingsTab==='advanced')renderImagePreferences($('#image-settings-card'),settingsDraft,state,scheduleAssessment);
+  if(settingsTab==='advanced')renderImagePreferences($('#image-settings-card'),settingsDraft,state,scheduleAssessment,{getLastSeed:model=>api('/images/last-seed?model='+encodeURIComponent(model))});
   if(settingsTab==='advanced'){const folders=document.createElement('section');folders.className='card lora-folder-settings';body.append(folders);loraUI.renderFolders(folders,settingsDraft);}
   if(settingsTab!=='providers')body.insertAdjacentHTML('beforeend','<section id="memory-assessment" class="memory-assessment" aria-live="polite">Rilevamento del computer e stima della memoria…</section>');
   const updateVision=()=>{const m=state.models.find(m=>m.id===settingsDraft.chat_model),el=$('#setup-vision-note');if(el){el.textContent=m?.api?(m.vision?.enabled?'Vision tramite API: le immagini vengono inviate al provider.':'LLM via API · solo testo. Conversazione ed estratti vengono inviati al provider.'):m?.vision?.enabled?'Vision attiva: mmproj caricato automaticamente.':m?.vision?.warning||'Scegli un modello vision per leggere immagini e grafici.';el.classList.toggle('vision-ok',!!m?.vision?.enabled);}};
@@ -547,8 +566,20 @@ document.addEventListener('click',e=>{if(!e.target.closest('#context-menu,[data-
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();act(newChat)();}if(e.key==='Escape'){$('#context-menu').hidden=true;$('#sidebar').classList.remove('visible');}});
 $('#mobile-nav').onclick=()=>$('#sidebar').classList.toggle('visible');
 $('#attach').onclick=()=>$('#file-input').click();$('#file-input').onchange=act(async e=>{await uploadFiles([...e.target.files]);e.target.value='';});
+async function reuseImageRecipe(value){
+ const recipe=await api('/media/'+value.asset.id+'/generation'),parameters=imageRecipeParameters(recipe);
+ if(!current)await newChat();
+ const refs=recipe.references.length?await api('/gallery/select',{ids:recipe.references.map(r=>r.id)}):[];
+ const controls=visualControls.read(),id=recipe.model.id;
+ const history=[...(controls.image_history?.[id]||[]),controls.image_presets?.[id]??null].slice(-20);
+ visualControls.set({...controls,image_model:id,assistant:false,music:false,video:false,voice:false,transcribe:false,image_presets:{...controls.image_presets,[id]:parameters},image_history:{...controls.image_history,[id]:history}});
+ loraUI.setSelections(recipe.loras);attachments=refs;renderAttachments();
+ $('#lab-tool').value='auto';$('#lab-tool').dispatchEvent(new Event('change'));
+ $('#prompt').value=imageRecipePrompt(recipe);$('#prompt').dispatchEvent(new Event('input',{bubbles:true}));composerUI?.render();$('#prompt').focus();
+ toast('Ricetta recuperata · seed '+parameters.seed+' fissato · Assistant Off. Controlla la bozza e premi Invia.');
+}
 initGallery({api,getAttachments:()=>attachments,setAttachments:items=>{attachments=items;renderAttachments();},notify:toast,
- actions:{edit:async(media,item)=>{if(item.chat_id&&item.chat_id!==current)await openChat(item.chat_id);await editVideo(media);},recreate:recreateVideo,remix:remixVideo,upscale:upscaleVideo}});
+ actions:{reuseImage:reuseImageRecipe,edit:async(media,item)=>{if(item.chat_id&&item.chat_id!==current)await openChat(item.chat_id);await editVideo(media);},recreate:recreateVideo,remix:remixVideo,upscale:upscaleVideo}});
 const upscaleOpen=document.createElement('button');upscaleOpen.type='button';upscaleOpen.className='btn small';upscaleOpen.id='upscale-open';upscaleOpen.textContent='↗ Upscale';upscaleOpen.title='Migliora un video dalla galleria o dal PC';$('#gallery-open').after(upscaleOpen);upscaleOpen.onclick=()=>upscaleVideo();
 const recreateOpen=document.createElement('button');recreateOpen.type='button';recreateOpen.className='btn small';recreateOpen.id='video-recreate-open';recreateOpen.textContent='↻ Ricrea video';recreateOpen.title='Recupera prompt, riferimenti e audio di un video MiniMax dalla galleria';upscaleOpen.after(recreateOpen);recreateOpen.onclick=()=>recreateVideo();
 const remixOpen=document.createElement('button');remixOpen.type='button';remixOpen.className='btn small';remixOpen.id='video-remix-open';remixOpen.textContent='♫ Remix';recreateOpen.after(remixOpen);remixOpen.onclick=()=>remixVideo();
@@ -592,6 +623,8 @@ composerUI=initComposerPanel({getState:()=>state,visualControls,getAttachments:(
 infographicsUI=initInfographics({getState:()=>state,getAttachments:()=>attachments,uploadVideo:uploadFiles,notify:toast});
 manimPresentation=initManimPresentation({getAttachments:()=>attachments,getCanvas:()=>canvas,getState:()=>state,getChatId:()=>current,api,notify:toast});
 document.querySelector('#composer').addEventListener('change',()=>manimPresentation.render());
+const accountActions=document.createElement('div');accountActions.className='account-actions';accountActions.innerHTML='<a class="settings-button" href="/access">♙ <span>Account e accessi</span></a><button type="button" id="account-logout" class="settings-button">↪ <span>Esci dall’account</span></button>';$('#settings-open').after(accountActions);
+$('#account-logout').onclick=act(async()=>{const button=$('#account-logout');button.disabled=true;try{await logoutAccount({before:persistCanvas,clear:()=>{clearTimeout(pollTimer);drafts.clear();attachments=[];state=null;chat=null;}});}finally{button.disabled=false;}});
 initWorkspaceLayout();
 await refresh();
 window.addEventListener('beforeunload',e=>{if(canvasDirty){e.preventDefault();e.returnValue='';}});

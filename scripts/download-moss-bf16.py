@@ -1,15 +1,15 @@
-"""Download and verify the official Comfy-Org SFT BF16 diffusion weights."""
-import hashlib,importlib.util,json,shutil,urllib.request,time,threading,subprocess,os
+"""Explicit download/verification of pinned MOSS BF16 weights; no GPU or registration."""
+import argparse,hashlib,json,shutil,urllib.request,time,threading
 from concurrent.futures import ThreadPoolExecutor,as_completed
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
-PATH=Path('F:/sd-webui-forge-neo/models/Stable-diffusion/moss_image_sft_bf16.safetensors')
+FILENAME='moss_image_sft_bf16.safetensors'
 REV='3284a1dbb351e3396d70f39f2a71cbf6ed2ef1bb'
 SHA='f96738d8116d78b7316b57c663d8c98591ddafab7488f48e3099b7655e34ab6f'
 SIZE=10164655808
 
-def transfer(url):
-    part=PATH.with_suffix(PATH.suffix+'.part');journal=part.with_suffix('.chunks.json');chunk=8*1024**2
+def transfer(url,target):
+    part=target.with_suffix(target.suffix+'.part');journal=part.with_suffix('.chunks.json');chunk=8*1024**2
     saved=json.loads(journal.read_text()) if journal.exists() else {}
     if saved and (saved.get('size')!=SIZE or saved.get('url')!=url):raise RuntimeError('Unexpected resume journal')
     previous=saved.get('chunk',32*1024**2)
@@ -39,18 +39,28 @@ def transfer(url):
             if time.monotonic()-last>15:print(f'MOSS BF16: {len(done)/count:.1%} ({len(done)}/{count} blocks)',flush=True);last=time.monotonic()
     with part.open('rb') as stream:
         if hashlib.file_digest(stream,'sha256').hexdigest()!=SHA:raise RuntimeError('BF16 hash mismatch')
-    part.replace(PATH);journal.unlink()
+    part.replace(target);journal.unlink(missing_ok=True)
 
-def main():
-    work=ROOT/'work/moss-bf16-2026-10-18';work.mkdir(parents=True,exist_ok=True)
-    if shutil.disk_usage(PATH.parent).free<SIZE+8*1024**3:raise RuntimeError('Not enough space with reserve')
-    if not PATH.exists():transfer(f'https://huggingface.co/Comfy-Org/MOSS-Image/resolve/{REV}/diffusion_models/{PATH.name}')
-    with PATH.open('rb') as stream:
-        if PATH.stat().st_size!=SIZE or hashlib.file_digest(stream,'sha256').hexdigest()!=SHA:raise RuntimeError('BF16 hash mismatch')
-    (work/'installed.json').write_text(json.dumps({'done':True,'path':str(PATH),'revision':REV,'bytes':SIZE,'sha256':SHA,'precision':'BF16','variant':'SFT','gpu_tested':False},indent=2))
-    env=os.environ.copy();env.update(CUDA_VISIBLE_DEVICES='-1',OMP_NUM_THREADS='2')
-    bootstrap="import os,sys,runpy;handle=os.add_dll_directory(sys.argv[1]);sys.path[:0]=sys.argv[2:5];runpy.run_path(sys.argv[5],run_name='__main__')"
-    subprocess.run([str(ROOT/'runtime/python/python.exe'),'-X','utf8','-c',bootstrap,str(ROOT/'runtime/vision/dlls'),str(ROOT),str(ROOT/'runtime/vision/packages'),str(ROOT/'runtime/vision/core'),str(work/'check-metadata.py')],env=env,cwd=ROOT,check=True)
-    print('MOSS SFT BF16 installed, official SHA256 verified. No GPU used.',flush=True)
+def main(argv=None):
+    parser=argparse.ArgumentParser(description=__doc__)
+    location=parser.add_mutually_exclusive_group(required=True)
+    location.add_argument('--output',type=Path,help='Absolute destination file; filename may be customized.')
+    location.add_argument('--model-root',type=Path,help='Absolute model root; writes Stable-diffusion/'+FILENAME)
+    parser.add_argument('--verify-only',action='store_true',help='Only verify an existing file; never download or create files.')
+    args=parser.parse_args(argv)
+    target=args.output if args.output is not None else args.model_root/'Stable-diffusion'/FILENAME
+    if not target.is_absolute():raise ValueError('Specify an absolute --output or --model-root path.')
+    target=target.expanduser().resolve()
+    if not target.exists():
+        if args.verify_only:raise FileNotFoundError('BF16 file not found: '+str(target))
+        target.parent.mkdir(parents=True,exist_ok=True)
+        if shutil.disk_usage(target.parent).free<SIZE+8*1024**3:raise RuntimeError('Not enough space with reserve')
+        transfer(f'https://huggingface.co/Comfy-Org/MOSS-Image/resolve/{REV}/diffusion_models/{FILENAME}',target)
+    with target.open('rb') as stream:
+        if target.stat().st_size!=SIZE or hashlib.file_digest(stream,'sha256').hexdigest()!=SHA:raise RuntimeError('BF16 hash mismatch; file not registered or modified.')
+    # Attest the full pinned file without loading tensors or a private work script.
+    print(json.dumps({'verified':True,'path':str(target),'revision':REV,'bytes':SIZE,'sha256':SHA,
+                      'precision':'BF16','variant':'SFT','gpu_used':False,'registered':False}),flush=True)
+    return 0
 
-if __name__=='__main__':main()
+if __name__=='__main__':raise SystemExit(main())

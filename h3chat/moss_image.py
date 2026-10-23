@@ -60,13 +60,14 @@ def load_diffuser(root,path,dtype='default'):
     try:return plugin.load_model_state(state,plugin.DTYPES[dtype],True,metadata=metadata)
     finally:comfy.model_base.BaseModel.load_model_weights=original
 
-def sampling(model):
+def sampling(model,turbo=False):
     import comfy.model_sampling
     import comfy.model_patcher
     import comfy.samplers
     class Sampling(comfy.model_sampling.ModelSamplingDiscreteFlow,comfy.model_sampling.CONST):pass
     configured=model.clone();flow=Sampling(model.model.model_config);flow.set_parameters(shift=5,multiplier=1000)
     configured.add_object_patch('model_sampling',flow)
+    if turbo:return configured
     # Official workflow: Simple SLG, only the negative branch skips block 22.
     # Adapted from ComfyUI nodes_slg.py (GPL-3.0).
     def skip(args,extra):return args

@@ -2,6 +2,13 @@
 
 Gli utenti eseguono `install.bat`: tutti i componenti sono precompilati. Python e motori CPU sono scaricati con revisioni e SHA-256 fissati; i pesi restano separati. `distribution/windows-bootstrap.zip` contiene launcher, worker nativo e interfaccia; il manifest controlla anche che i sorgenti corrispondano.
 
+Per un PC senza GPU che usa soltanto modelli esterni, **Installa-API-senza-GPU.bat**
+richiama `scripts/install.ps1 -ApiOnly` (`scripts/install.py --api-only`): salta
+i motori CPU generativi e tutte le loro verifiche, mantenendo strumenti documenti.
+Scrive solo il marker `runtime/installation-profile.json`; il servizio ne usa i
+default CPU/API quando crea un nuovo database. I database esistenti non vengono
+modificati. Gli embedding RAG si installano separatamente nelle Preferenze.
+
 Per sviluppare servono Node.js 22+, Python 3.13 e MSVC Build Tools x64. Dalla cartella del progetto:
 
 1. `npm ci` e `npm run build`.

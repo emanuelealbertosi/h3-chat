@@ -5,7 +5,7 @@ import math
 import statistics
 from . import execution, platform_runtime, transcription, cloning, mixing
 
-MAX_SECONDS = 240
+MAX_SECONDS = 300
 DURATION_TOLERANCE = .5
 
 
@@ -34,7 +34,7 @@ def validate_fields(req):
 def preflight(app, req):
     source=app.original
     duration=app.audio_info(source)['duration']
-    if not 3<=duration<=240.5:raise ValueError('Il nuovo canto richiede un tratto da 3 secondi a 4 minuti.')
+    if not 3<=duration<=MAX_SECONDS+DURATION_TOLERANCE:raise ValueError('Il nuovo canto richiede un tratto da 3 secondi a 5 minuti.')
     return source,{'duration':duration,'id':'excerpt'},0,duration
 
 

@@ -13,6 +13,7 @@ from h3chat.image_options import options
 from h3chat.store import DEFAULTS
 from h3chat.qwen_image21 import TURBO_SCHEDULER,TURBO_SIGMAS,validate_schedule
 from test_external_models import safetensors
+from runtime_test_support import cpu_package
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -44,11 +45,12 @@ class TurboTests(unittest.TestCase):
                 validate_schedule(arch,value|{'scheduler':TURBO_SCHEDULER})
 
     def test_native_generation_passes_exact_sigmas_without_shifting_named_scheduler(self):
-        import numpy as np
+        np=cpu_package('numpy');pil=cpu_package('PIL')
+        if np is None or pil is None:self.skipTest('Install the private documents runtime for the CPU image integration check')
         tree=ast.parse((ROOT/'native/vision-worker.py').read_text(encoding='utf-8'))
         cls=next(n for n in tree.body if isinstance(n,ast.ClassDef) and n.name=='Worker')
         cls.body=[n for n in cls.body if isinstance(n,ast.FunctionDef) and n.name=='generate']
-        events=[];namespace={'Path':Path,'time':time,'TURBO_SIGMAS':TURBO_SIGMAS,'TURBO_SCHEDULER':TURBO_SCHEDULER,'validate_schedule':validate_schedule,'emit':lambda event,**kw:events.append((event,kw))}
+        events=[];namespace={'Path':Path,'time':time,'nullcontext':contextlib.nullcontext,'TURBO_SIGMAS':TURBO_SIGMAS,'TURBO_SCHEDULER':TURBO_SCHEDULER,'validate_schedule':validate_schedule,'emit':lambda event,**kw:events.append((event,kw))}
         exec(compile(ast.Module(body=[cls],type_ignores=[]),'<native worker>', 'exec'),namespace)
         for scheduler,steps in ((TURBO_SCHEDULER,8),('simple',25)):
             with self.subTest(scheduler=scheduler),tempfile.TemporaryDirectory() as folder:

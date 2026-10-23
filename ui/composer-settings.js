@@ -1,4 +1,5 @@
 import {videoRequestSummary} from './video-request.js';
+import {chosenMusicModel} from './music-request.js';
 const $=selector=>document.querySelector(selector);
 const selected=selector=>$(selector)?.selectedOptions?.[0]?.textContent?.trim()||'';
 const chosen=selector=>$(selector)?.querySelector('[aria-pressed="true"]')?.textContent?.trim()||'';
@@ -12,7 +13,7 @@ export function initComposerSettings({context,getState,onChange,visualControls})
  let current=null,opener=null;
  const definitions=[
   ['prompt-image-panel','Immagini',()=>[selected('#image-model'),selected('[data-image-request="aspect"]')].filter(Boolean).join(' · ')],
-  ['slides-options','Slide',()=>[$('#slides-count')?.value+' slide',selected('#slides-format'),selected('#slides-design'),selected('#slides-detail'),selected('#slides-composition'),$('#slides-engine')?.value==='llm'?'Sfondo '+($('#slides-background')?.value==='custom'?$('#slides-background-color')?.value:selected('#slides-background').toLowerCase()):'',$('#slides-engine')?.value==='llm'?'Palette '+selected('#slides-palette').toLowerCase():'',$('#slides-generate-images')?.checked?'Illustrazioni AI':''].filter(Boolean).join(' · ')],
+  ['slides-options','Slide',()=>[$('#slides-count-mode')?.value==='auto'?'Numero automatico · max 50':$('#slides-count')?.value+' slide',selected('#slides-format'),selected('#slides-design'),selected('#slides-detail'),selected('#slides-composition'),$('#slides-engine')?.value==='llm'?'Sfondo '+($('#slides-background')?.value==='custom'?$('#slides-background-color')?.value:selected('#slides-background').toLowerCase()):'',$('#slides-engine')?.value==='llm'?'Palette '+selected('#slides-palette').toLowerCase():'',$('#slides-generate-images')?.checked?'Illustrazioni AI':''].filter(Boolean).join(' · ')],
   ['music-inputs','Music',()=>[chosen('#music-inputs [data-music-quality]'),$('#music-inputs [data-duration-enable="chat"]')?.checked?'Max '+$('#music-inputs [data-duration-seconds="chat"]')?.value+' s':'',$('#music-inputs [data-music-field="instrumental"]')?.checked?'Strumentale':'Con voce',$('#music-inputs [data-music-field="title"]')?.value,$('#music-inputs [data-music-field="style"]')?.value?.slice(0,100)].filter(Boolean).join(' · ')],
   ['voice-inputs','Voice',()=>['gender','delivery','emotion','expressiveness'].map(key=>selected('#voice-inputs [data-voice-field="'+key+'"]').replace('Auto · segue l’interpretazione','Auto')).filter(Boolean).join(' · ')],
   ['video-hint','Video',()=>[selected('#video-quality'),selected('#video-steps'),selected('#video-editing'),videoRequestSummary(visualControls.read(),getState())].filter(Boolean).join(' · ')],
@@ -26,6 +27,10 @@ export function initComposerSettings({context,getState,onChange,visualControls})
    const row=document.createElement('div');row.className='prompt-settings-row';
    const button=document.createElement('button');button.type='button';button.className='prompt-choice';button.textContent='⚙ Impostazioni '+title;button.dataset.modeSettings=id;button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-controls',dialog.id);
    const text=document.createElement('span');text.className='prompt-settings-summary';row.append(button,text);context.append(row);
+   if(id==='music-inputs'){
+    const resing=document.createElement('button');resing.type='button';resing.className='prompt-choice';resing.dataset.musicResing='';resing.textContent='Re-sing';button.after(resing);
+    resing.onclick=()=>{visualControls.set({...visualControls.read(),music_resing:!visualControls.read().music_resing});onChange();render();};
+   }
    const tab=document.createElement('button');tab.type='button';tab.className='prompt-choice';tab.textContent=title;tab.dataset.modeTab=id;tabs.append(tab);
    const entry={id,title,describe,panel,wrapper,row,button,text,tab};entries.push(entry);
    button.onclick=()=>{current=id;opener=button;render();dialog.showModal();};tab.onclick=()=>{current=id;render();};
@@ -37,6 +42,7 @@ export function initComposerSettings({context,getState,onChange,visualControls})
   for(const entry of entries){
    const enabled=active.includes(entry);entry.row.hidden=!enabled;entry.tab.hidden=!enabled;entry.wrapper.hidden=!enabled||current!==entry.id;
    entry.tab.setAttribute('aria-pressed',String(current===entry.id));entry.text.textContent=entry.describe();entry.text.title=entry.text.textContent;
+   const resing=entry.row.querySelector('[data-music-resing]');if(resing){const model=chosenMusicModel(getState(),visualControls.read());resing.disabled=!getState()?.music_options?.resing||model?.architecture==='minimax-music'||!!model?.remote_media;resing.title=!getState()?.music_options?.resing?'Novità pronta: riavvia il server quando i lavori in corso sono terminati.':resing.disabled?'Re-sing sulla melodia originale richiede YuE2 locale. Sceglilo nelle impostazioni Music.':'Usa una canzone allegata come base originale e canta il nuovo testo. Da 3 secondi a 5 minuti. Se Testo è vuoto, Assistant lo inventa dal prompt.';resing.setAttribute('aria-pressed',String(!!visualControls.read().music_resing));}
   }
   const entry=entries.find(e=>e.id===current);dialog.querySelector('h2').textContent='Impostazioni '+(entry?.title||'della modalità');tabs.hidden=active.length<2;
   if(!active.length&&dialog.open)dialog.close();

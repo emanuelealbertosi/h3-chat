@@ -3,8 +3,7 @@ import json,logging,os,sys,traceback
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1];VISION=ROOT/'runtime/vision';RUNTIME=ROOT/'runtime/embeddinggemma2'
-dll=os.add_dll_directory(str(VISION/'dlls')) if os.name=='nt' and (VISION/'dlls').is_dir() else None
-sys.path[:0]=[str(ROOT),str(RUNTIME/'packages'),str(VISION/'packages')]
+sys.path.insert(0,str(ROOT))
 os.environ.update(HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1',HF_HUB_DISABLE_TELEMETRY='1',HF_HUB_DISABLE_XET='1',HF_HOME=str(RUNTIME/'cache'))
 wire=sys.stdout;sys.stdout=sys.stderr
 logging.basicConfig(level=logging.WARNING,stream=sys.stderr)
@@ -12,11 +11,19 @@ def emit(event,**values):wire.write(json.dumps({'event':event,**values},ensure_a
 
 class Worker:
     def load(self,request):
+        from h3chat.embeddinggemma2 import runtime_paths
+        device=request['device']
+        if device not in ('cpu','cuda'):raise ValueError('Dispositivo embedding non valido.')
+        paths=runtime_paths(ROOT,device)
+        sys.path[:0]=[str(path) for path in paths]
+        self.dlls=[]
+        if os.name=='nt':
+            for directory in (RUNTIME/'dlls',*(path/'torch/lib' for path in paths)):
+                if directory.is_dir():self.dlls.append(os.add_dll_directory(str(directory)))
         import torch
         from transformers import AutoConfig,AutoModel,AutoTokenizer,AutoProcessor
         from h3chat.embeddinggemma2 import checkpoint,DIMENSIONS
-        folder,_=checkpoint(request['path']);device=request['device']
-        if device not in ('cpu','cuda'):raise ValueError('Dispositivo embedding non valido.')
+        folder,_=checkpoint(request['path'])
         if device=='cuda' and not torch.cuda.is_available():raise ValueError('EmbeddingGemma 2 GPU richiede NVIDIA CUDA. Seleziona CPU nelle Preferenze.')
         torch.set_num_threads(max(1,min(int(request.get('threads',4)),16)))
         self.visual=bool(request.get('visual'));self.device=device;self.torch=torch
@@ -31,7 +38,7 @@ class Worker:
         self.model.to(device).eval()
         self.tokenizer=AutoTokenizer.from_pretrained(str(folder),local_files_only=True,trust_remote_code=False)
         self.processor=AutoProcessor.from_pretrained(str(folder),local_files_only=True,trust_remote_code=False) if self.visual else None
-        emit('loaded',dimensions=DIMENSIONS,device=device)
+        emit('loaded',dimensions=DIMENSIONS,device=device,torch_version=torch.__version__,cuda_runtime=torch.version.cuda)
 
     def encode(self,request):
         from h3chat.embeddinggemma2 import formatted,DIMENSIONS

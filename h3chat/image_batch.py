@@ -211,6 +211,8 @@ def build(app,job,payload,history,settings,cancel,stage,log_path,meta):
         media.update(name=f'Immagine {index} · {model["name"]}.png',batch_id=job['id'],batch_index=index,batch_total=len(tasks))
         media['generation']=effective|{'model':model['name'],'image_model_id':model['id'],'prompt':task['prompt'],
                                        'references':task['reference_numbers'],'loras':public(loras),'completed_at':time.time()}
+        from .media_generation import record_image
+        record_image(app,media,model,effective,task['prompt'],task['references'],loras)
         complete[index]=media
         publish()
     meta.pop('batch_active_index',None)

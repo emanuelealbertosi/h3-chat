@@ -201,18 +201,7 @@ def assess_model(model, settings, hardware, references=1):
         frac=1
         assumptions.append('MiniMax H3: stima prudente da pesi, durata, risoluzione e riferimenti; non è una garanzia contro OOM. Calcolo CUDA per encoder, diffusore e VAE.')
         assumptions.append('Offload attivo: i pesi inattivi restano in RAM e vengono trasferiti alla GPU. Il processo residente non implica tutti i pesi in VRAM.' if opts['offload'] else 'Offload disattivo: tutti i componenti devono entrare in VRAM.')
-    elif model.get('architecture')=='fibo2':
-        pixels=settings['width']*settings['height']/1e6
-        grouped=settings.get('fibo_offload') in ('group','resident')
-        workspace=(9 if grouped else 3)+pixels*2+references*.5
-        if model.get('quantization')=='int8_convrot':workspace=8+pixels*2+references*.5
-        needed_ram=weights*1.1+4 if backend!='cpu' else weights*2.3+5
-        full=settings.get('fibo_offload')=='full' and not model.get('quantization')
-        cpu_ram=weights*2.3+5;vram=(weights+workspace if full else workspace) if backend!='cpu' else 0;frac=1
-        assumptions.append('FIBO 2.0: caricamento completo BF16 su CUDA. La memoria condivisa dipende dal driver: può rallentare o non evitare OOM; non equivale a VRAM fisica.' if full else 'FIBO 2.0: BF16 con offload '+('parzialmente residente sulla GPU' if settings.get('fibo_offload')=='resident' else 'a gruppi di 16 blocchi' if grouped else 'sequenziale dei moduli')+' fra RAM e CUDA; non carica tutti i pesi insieme in VRAM. Stime iniziali da verificare sul render.')
-        if model.get('quantization')=='int8_convrot':
-            assumptions[-1]='FIBO INT8: i pesi restano quantizzati. Encoder, diffusore e VAE vengono trasferiti su CUDA tra le fasi, senza offload di ogni blocco a ogni passo. Stima iniziale da verificare sul render.'
-        else:assumptions.append('La modalità CPU usa FP32 e può richiedere oltre il doppio della memoria dei pesi BF16.')
+
     else:
         main=sizes.get('diffusion',sizes.get('model',0))
         companions=weights-main
@@ -272,10 +261,8 @@ def assess_model(model, settings, hardware, references=1):
         elif status=='oom':title='Rischio OOM video';advice='Riduci durata, risoluzione o dimensione dei pesi, libera RAM/VRAM o attiva offload nel preset video.'
     if music and backend!='cpu' and gpu and gpu.get('free_mb') is not None and vram>max(0,gpu['free_mb']/1024-.5):
         status='oom';title='Rischio OOM musica';advice='La VRAM stimata non basta a YuE2: seleziona CPU nel motore Musica oppure pesi più piccoli.';risk=True;patches={'music_backend':'cpu'}
-    if model.get('engine') in ('vision','music','fibo2') and backend not in ('cpu','cuda'):
+    if model.get('engine') in ('vision','music') and backend not in ('cpu','cuda'):
         status='unknown';title='Backend incompatibile';advice='Questo modello richiede CUDA NVIDIA oppure CPU; Vulkan non è supportato.';patches={'backend':'cuda'} if any(g.get('vendor')=='NVIDIA' for g in hardware['gpu']) else {'profile':'cpu','backend':'cpu'}
-    if model.get('engine')=='fibo2' and model.get('quantization') and backend!='cuda':
-        status='unknown';title='Backend incompatibile';advice='FIBO INT8 richiede NVIDIA CUDA in questa integrazione.';patches={'backend':'cuda','profile':'balanced'}
     return {'id':model['id'],'name':model['name'],'status':status,'title':title,'advice':advice,
             'oom_risk':risk,'ram_gb':round(needed_ram,2),'vram_gb':round(vram,2),'cpu_ram_gb':round(cpu_ram,2),
             'gpu_name':gpu['name'] if gpu else None,'assumptions':assumptions,'recommended_patch':patches}

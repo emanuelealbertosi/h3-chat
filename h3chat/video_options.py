@@ -9,12 +9,12 @@ DEFAULTS = {'duration':12, 'megapixels':.7, 'aspect':'16:9', 'steps':12, 'cfg':1
             'shift_video':12, 'shift_audio':3, 'offload':True, 'attention':'auto','attention_chunks':0,'attention_chunks_mode':'auto',
             'veda_predictor':'', 'veda_sparsity':90, 'veda_reference_sparsity':90,
             'pdd_enabled':False,'pdd_lora':'','experimental_resolution':False,
-            'loras':[],'source_conditioning':'reference','longtake_enabled':False}
+            'loras':[],'source_conditioning':'reference','variants':1,'variants_mode':'clip'}
 ASPECTS = ('16:9','9:16','1:1','4:3','3:4')
 NATIVE_MEGAPIXELS = .98
 NATIVE_PIXELS = 1344 * 768
 ACCELERATION_KEYS = ('attention','attention_chunks','attention_chunks_mode','veda_predictor','veda_sparsity','veda_reference_sparsity')
-REQUEST_KEYS = ('duration','megapixels','aspect','attention','attention_chunks','attention_chunks_mode','pdd_enabled','pdd_lora','seed','longtake_enabled')
+REQUEST_KEYS = ('duration','megapixels','aspect','attention','attention_chunks','attention_chunks_mode','pdd_enabled','pdd_lora','seed','variants','variants_mode')
 
 
 def validate_segment_seconds(value):
@@ -28,12 +28,16 @@ def capture_request(settings,body,require_model):
     selection=body.get('video_model','')
     if not isinstance(selection,str):raise ValueError('Selezione modello video non valida.')
     changes=body.get('video_parameters',{})
+    if isinstance(changes,dict):changes={k:v for k,v in changes.items() if k!='longtake_enabled'}
     segment_seconds=validate_segment_seconds(body.get('video_segment_seconds'))
     if not isinstance(changes,dict) or set(changes)-set(REQUEST_KEYS):
         raise ValueError('Parametri della richiesta video non validi.')
     if body.get('video') and isinstance(body.get('prompt'),str) and 'attention' not in changes:
         from .video_attention import prompt_choice
         changes=prompt_choice(body['prompt'])|changes
+    if body.get('video') and isinstance(body.get('prompt'),str):
+        from .video_batch import prompt_options
+        changes=changes|prompt_options(body['prompt'])
     if not selection and not changes and segment_seconds is None:return settings
     if not body.get('video',False):raise ValueError('Seleziona Video per usare le impostazioni video della richiesta.')
     model_id=selection or settings['video_model']
@@ -79,12 +83,15 @@ def apply_quality(parameters,value='high',steps=None):
     return result
 
 def validate(value):
+    # Retired option in saved presets and timeline recipes has no effect.
+    if isinstance(value,dict):value={k:v for k,v in value.items() if k!='longtake_enabled'}
     if not isinstance(value,dict) or set(value)-set(DEFAULTS):raise ValueError('Parametri video non riconosciuti.')
     result=DEFAULTS|value
+    from .video_batch import validate_count
+    validate_count(result['variants'])
+    if result['variants_mode'] not in ('clip','video'):raise ValueError('Batch video: scegli varianti per clip oppure versioni dell’intero video.')
     from .video_attention import validate as validate_attention
     validate_attention(result)
-    from .video_longtake import validate as validate_longtake
-    validate_longtake(result)
     from .video_loras import validate as validate_loras,aligned
     result['loras']=validate_loras(result['loras'])
     if result['source_conditioning'] not in ('reference','aligned'):raise ValueError('Guida video: scegli riferimento leggero o allineata.')

@@ -2,6 +2,7 @@ import {uploadFile} from './file-upload.js';
 import {escape as esc} from './render.js';
 import {addBrowserPreview} from './video-browser-preview.js';
 import {appendGalleryDetails} from './gallery-details.js';
+import {appendCreationDetails} from './creation-details.js';
 
 export function openGallery({api,onSelect,kind='all',multiple=true,browse=false,actions={}}){
  const dialog=document.createElement('dialog');dialog.className='gallery-dialog';dialog.ariaLabel='Galleria';
@@ -72,6 +73,7 @@ export function openGallery({api,onSelect,kind='all',multiple=true,browse=false,
   const type=item.mime.split('/')[0],tag=item.timeline_only?null:['image','video','audio'].includes(type)?({image:'img',video:'video',audio:'audio'})[type]:item.mime==='application/pdf'?'iframe':null;
   if(tag){const view=document.createElement(tag);view.src=item.url;if(tag==='img')view.alt=item.name;else if(['video','audio'].includes(tag)){view.controls=true;view.preload='metadata';view.playsInline=true;}else view.title=item.name;p('[data-preview]').append(view);}
   else p('[data-preview]').textContent=item.timeline_only?'La timeline e le clip completate sono salvate. Aprila per vedere le versioni e continuare a modificarle. Il filmato completo non è ancora stato esportato.':'Anteprima non disponibile per questo formato. Puoi scaricarlo o usarlo in chat.';
+  appendCreationDetails(p('[data-actions]'),item,{api,load:true,onReuseImage:actions.reuseImage?async recipe=>{await actions.reuseImage(recipe);d.close();dialog.close();}:undefined});
   if(tag==='video'&&canManage)addBrowserPreview(p('[data-actions]'),p('video'),item,api);
   p('[data-download]').href=item.url;p('[data-download]').download=item.name;
   p('[data-download]').hidden=!!item.timeline_only;if(item.timeline_only)p('[data-download]').removeAttribute('href');

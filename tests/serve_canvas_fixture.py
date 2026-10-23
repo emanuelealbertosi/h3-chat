@@ -84,6 +84,24 @@ def main():
                 nonlocal active
                 if self.path.startswith('/fixture/'):
                     self.guard(); fixture_body=self.read_body()
+                    if self.path.startswith('/fixture/slide-recovery/'):
+                        from h3chat.slides import encode
+                        phase=self.path.rsplit('/',1)[-1]
+                        if active is None:
+                            ident=app.store.enqueue(chat,'Slide recovery fixture',[],DEFAULTS|{'_lab':'slides'},True)
+                            active=app.store.one('SELECT * FROM jobs WHERE id=?',(ident,))
+                        app.store.execute("UPDATE jobs SET status='running',stage=? WHERE id=?",('Slide · revisione 2/2 · '+('200' if phase=='stream' else '40')+' caratteri',active['id']))
+                        ready=phase in ('rendered','done')
+                        html='<style>body{font:32px Arial;color:#123456}</style><h1>Seconda pagina</h1>'
+                        if phase in ('stream','rendered','done'):html+='<p>Testo progressivo aggiornato</p>'
+                        deck={'version':1,'engine':'llm','format':'16:9','title':'Ripresa e revisione','references':[],'active':1,
+                              'pages':[{'title':'Prima','status':'ready','html':'<style>body{font:32px Arial}</style><h1>Prima pagina salvata</h1>','sources':[],'notes':'Prima nota'},
+                                       {'title':'Seconda','status':'ready' if ready else 'interrupted' if phase=='interrupted' else 'writing','html':html,'sources':[],'notes':'Seconda nota'}]}
+                        value={'title':deck['title'],'content':encode(deck),'media':[]}
+                        terminal='cancelled' if phase=='interrupted' else 'done' if phase=='done' else 'running'
+                        app.store.update_answer(active,'Slide di collaudo.',terminal,[],{'canvas':True,'intent':'slides','artifact':value})
+                        app.store.execute('UPDATE jobs SET status=? WHERE id=?',(terminal,active['id']))
+                        return self.json({'ok':True})
                     if self.path=='/fixture/manim-duration':
                         import av
                         ident=app.store.enqueue(chat,'Manim 20 secondi',[],DEFAULTS|{'_lab':'manim'},True)

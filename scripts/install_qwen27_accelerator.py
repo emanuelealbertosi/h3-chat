@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import sys
@@ -27,16 +28,18 @@ def digest(path):
  with Path(path).open('rb') as stream:return hashlib.file_digest(stream,'sha256').hexdigest()
 
 
-def main():
- p=argparse.ArgumentParser()
- p.add_argument('--source',type=Path,default=Path(r'F:\AI\Qwen27B\engine-mtp-window-nativefa'))
- p.add_argument('--cuda',type=Path,default=Path(r'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8'))
- p.add_argument('--license',type=Path,default=Path(r'D:\AI\QwenFlash\llama.cpp\LICENSE'))
- args=p.parse_args()
+def main(argv=None):
+ p=argparse.ArgumentParser(description=__doc__)
+ p.add_argument('--source',type=Path,required=True,help='Directory containing the exact verified compiled engine.')
+ p.add_argument('--cuda',type=Path,required=True,help='Existing CUDA 12.8 Toolkit directory containing bin and original licenses.')
+ p.add_argument('--license',type=Path,required=True,help='Original llama.cpp LICENSE matching this engine build.')
+ p.add_argument('--system32',type=Path,default=Path(os.environ.get('WINDIR','C:/Windows'))/'System32',help='Microsoft CRT source directory.')
+ args=p.parse_args(argv)
+ for key in ('source','cuda','license','system32'):setattr(args,key,getattr(args,key).expanduser().resolve())
  target=ROOT/FOLDER
  sources={name:args.source/name for name in EXPECTED}
  sources.update({name:args.cuda/'bin'/name for name in ('cublas64_12.dll','cublasLt64_12.dll','cudart64_12.dll')})
- sources.update({name:Path(r'C:\Windows\System32')/name for name in ('vcomp140.dll','msvcp140.dll','vcruntime140.dll','vcruntime140_1.dll')})
+ sources.update({name:args.system32/name for name in ('vcomp140.dll','msvcp140.dll','vcruntime140.dll','vcruntime140_1.dll')})
  if set(sources)!=set(RUNTIME_FILES):raise RuntimeError('Incomplete runtime definition')
  # Validate before touching the installation; never overwrite a different/live build.
  hashes={name:digest(path) for name,path in sources.items()}

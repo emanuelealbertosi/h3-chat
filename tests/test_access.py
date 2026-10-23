@@ -73,6 +73,17 @@ class AccessTests(unittest.TestCase):
 
 
 class AccessHttpTests(unittest.TestCase):
+    def test_creation_recipes_are_private_to_the_asset_workspace(self):
+        csrf=self.setup_owner()
+        self.request('/api/auth/users',{'name':'amico','password':PASSWORD},client=self.owner,csrf=csrf)
+        self.request('/api/auth/login',{'name':'amico','password':PASSWORD},client=self.guest)
+        raw='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aL3sAAAAASUVORK5CYII='
+        media=self.app.upload({'name':'owned.png','data':raw})
+        path='/api/media/'+media['id']+'/generation'
+        self.assertEqual(self.request(path,client=self.owner)[0],200)
+        self.assertEqual(self.request(path,client=self.guest)[0],400)
+        self.assertEqual(self.request(path)[0],401)
+
     def test_removed_3d_endpoints_are_unavailable(self):
         csrf=self.setup_owner()
         self.assertEqual(self.request('/api/mesh3d/options',client=self.owner)[0],404)

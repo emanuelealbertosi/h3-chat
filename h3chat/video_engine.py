@@ -66,11 +66,17 @@ class VideoEngine:
         return plan,{'model':llm['name'],'max_tokens':tuning['max_tokens']}
 
     def generate_video(self,model,settings,plan,refs,job_id,cancel,stage,*,prompt=None,scene=None):
+        from .video_batch import generate
+        if options(model,settings,False)['variants']>1:
+            return generate(self,model,settings,plan,refs,job_id,cancel,stage,prompt=prompt,scene=scene)
+        return self._generate_video_once(model,settings,plan,refs,job_id,cancel,stage,prompt=prompt,scene=scene)
+
+    def _generate_video_once(self,model,settings,plan,refs,job_id,cancel,stage,*,prompt=None,scene=None):
         if model.get('remote_media'):
-            if options(model,settings,False).get('longtake_enabled'):raise ValueError('LongTakeNoCuts richiede MiniMax H3 standalone.')
             if scene and scene.get('source_video'):raise ValueError('Modifica video richiede MiniMax H3 standalone con riferimenti video.')
             return self.remote_generate(model,settings,prompt if prompt is not None else plan['prompt'],refs,job_id,cancel,stage,plan=plan)
         opts=options(model,settings)
+        opts.pop('variants',None);opts.pop('variants_mode',None)
         if settings.get('_video_loras'):
             from .video_loras import validate as validate_loras,aligned
             opts['loras']=validate_loras(settings['_video_loras'])
@@ -110,8 +116,6 @@ class VideoEngine:
                 request['source_video']=source
             if 'continuity' in scene:request['continuity']=scene['continuity']
             if scene.get('resume_memory'):request['resume_memory']=scene['resume_memory']
-            if opts.get('longtake_enabled') and scene.get('longtake_context'):
-                request['longtake_context']=scene['longtake_context']
             if scene.get('extension_context'):
                 from .video_extension import window,CONTEXT_FRAMES
                 context=scene['extension_context'];window(scene['frames'],context.get('side'))
@@ -132,8 +136,6 @@ class VideoEngine:
         actual=opts|done.get('parameters',{})|{'startup_seconds':startup_seconds,'quality':settings.get('_video_quality','high'),
             'model_id':model['id'],'model_name':model['name'],'model_file':Path(session.files['diffusion']).name,
             'lip_sync':any(a['role']=='lipsync' for a in plan['audios'])}
-        if actual.get('longtake',{}).get('context_saved'):
-            actual['longtake']['context_file']=(folder/'longtake-tail.safetensors').relative_to(self.data).as_posix()
         if scene and scene.get('source_video'):actual['source_video_recipe']=scene['source_video']
         (folder/'video-plan.json').write_text(json.dumps({'plan':plan,'parameters':actual},ensure_ascii=False,indent=2),encoding='utf-8')
         return {'id':job_id,'name':'Video MiniMax H3.mp4','mime':'video/mp4','path':output.relative_to(self.data).as_posix(),'generation':actual}
@@ -210,6 +212,7 @@ class VideoEngine:
         scripts=[plan['prompt']]*len(scenes)
         folder=self.data/'outputs'/job_id;folder.mkdir(parents=True,exist_ok=True)
         resumed=checkpoint(self.data,settings['_video_resume']) if settings.get('_video_resume') else None
+        settings=settings|{'_video_batch_id':(resumed or {}).get('batch_id') or settings.get('_video_batch_id') or job_id}
         storyboard=None
         if settings.get('_video_editing')=='storyboard':
             from .video_storyboard import build
@@ -260,6 +263,9 @@ class VideoEngine:
         if parameters and 'canvas_width' in parameters[0]:canvas=saved_canvas(parameters[0])
         def relative_output(path):return path.resolve().relative_to(self.data.resolve()).as_posix()
         record={'timeline':scenes,'prompts':scripts,'plan':plan,'model':model.get('id',''),'audio_start':audio_start,'completed':len(outputs),'parameters':parameters,'outputs':[relative_output(p) for p in outputs]}
+        if resumed:
+            for key in ('clip_versions','selected_versions','batch_requested','batch_mode','batch_id'):
+                if key in resumed:record[key]=resumed[key]
         from .video_job_resume_render import CONTEXT_KEYS
         record['request_context']={'references':refs,'settings':{k:settings[k] for k in CONTEXT_KEYS if k in settings}}
         if storyboard:record['storyboard']=storyboard
@@ -269,9 +275,10 @@ class VideoEngine:
             if position<completed:continue
             if cancel.is_set():raise Cancelled()
             scoped=scene|{'last':position==len(scenes)-1,'sequence':job_id,'canvas':canvas}
-            if options(model,settings,False).get('longtake_enabled') and position and scene.get('continuity')!='cut':
-                from .video_longtake import attach
-                attach(self.data,scoped,parameters[position-1])
+            batch=options(model,settings,False)
+            if batch['variants']>1 and position and scene.get('continuity')!='cut':
+                from .video_batch import memory_for
+                scoped['batch_memories']={str(n):memory_for(record,position,n,batch['variants_mode'],self.data) for n in range(1,batch['variants']+1)}
             if resumed and completed and position==completed and scene.get('continuity')!='cut':
                 anchor=max((i for i in range(position) if scenes[i].get('continuity')=='cut'),default=0) if storyboard else 0
                 scoped['resume_memory']={'opening':str(outputs[anchor]),'recent':[str(p) for p in outputs[anchor:][-2:]]}
@@ -281,6 +288,10 @@ class VideoEngine:
             item=self.generate_video(model,settings,local,local_refs,job_id+f'/scene-{position+1:03d}',cancel,report,prompt=prompt,scene=scoped)
             outputs.append(safe_join(self.data,item['path']));p=item['generation'];parameters.append(p)
             if not canvas and 'canvas_width' in p:canvas=saved_canvas(p)
-            record.update(completed=position+1,outputs=[relative_output(p) for p in outputs]);save_checkpoint(folder,record)
+            record.update(completed=position+1,outputs=[relative_output(p) for p in outputs])
+            from .video_batch import register
+            register(record,position,item,refs);save_checkpoint(folder,record)
         result=compose(self,outputs,safe_join(self.data,soundtrack['path']),folder/'video.mp4',cancel,stage,folder/'engine.log',audio_start=audio_start,audio_duration=settings['_video_duration'])
-        return {'id':job_id,'name':'Video MiniMax H3.mp4','mime':'video/mp4','path':(folder/'video.mp4').relative_to(self.data).as_posix(),'generation':parameters[0]|{'duration':result['duration'],'audio_start':audio_start,'scenes':len(scenes),'scene_parameters':parameters,'audio_preserved':True,'visual_memory':len(scenes)>1,'recovered_scenes':completed,'editing':'storyboard' if storyboard else 'continuous',**({'storyboard':storyboard} if storyboard else {})}}
+        from .video_batch import compose_branches
+        compose_branches(self,record,folder,soundtrack,cancel,stage,folder/'engine.log',audio_start,settings['_video_duration'])
+        return {'id':job_id,'name':'Video MiniMax H3.mp4','mime':'video/mp4','path':(folder/'video.mp4').relative_to(self.data).as_posix(),'generation':parameters[0]|{'duration':result['duration'],'audio_start':audio_start,'scenes':len(scenes),'scene_parameters':parameters,'audio_preserved':True,'visual_memory':len(scenes)>1,'recovered_scenes':completed,'editing':'storyboard' if storyboard else 'continuous',**({'batch_movies':record['batch_movies']} if record.get('batch_movies') else {}),**({'storyboard':storyboard} if storyboard else {})}}

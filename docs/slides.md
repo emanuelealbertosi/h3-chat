@@ -30,8 +30,23 @@ con temi, colonne e impaginazione automatica. Le presentazioni già salvate senz
 un motore esplicito continuano a usare questo percorso. La loro modifica tramite
 prompt conserva il motore precedente.
 
-Sono disponibili 1–30 slide (default 8) e formati 16:9 (default), 4:3, 16:10 e
-1:1. Le istruzioni esplicite nel prompt prevalgono per numero, formato e stile.
+Sono disponibili **1–50 slide** (numero fisso iniziale 8) e formati 16:9
+(default), 9:16, 4:3, 16:10 e 1:1. In **Slide → Impostazioni → Numero di slide**
+puoi scegliere **Numero fisso** oppure **Automatico · dai contenuti**. In automatico
+il modello sceglie il numero durante la scaletta, sulla base di richiesta, fonti,
+pubblico ed eventuale durata, senza mirare automaticamente a 50 o aggiungere
+riempitivi. Il numero effettivo viene poi usato per contenuti, note, immagini e
+composizione; la richiesta automatica resta recuperabile con **Ricarica richiesta**.
+
+Le istruzioni esplicite nel prompt prevalgono per numero, formato e stile:
+«Crea 40 slide» impone 40 anche se nelle impostazioni è selezionato Automatico;
+«Scegli tu quante slide servono» attiva il conteggio autonomo anche partendo da un
+numero fisso. Un numero esplicito superiore a 50 viene segnalato, senza ridurlo
+silenziosamente. Le presentazioni già salvate restano valide; una modifica di
+testo o grafica conserva il numero attuale, salvo richiesta esplicita di cambiarlo.
+In automatico puoi anche indicare un vincolo: «Scegli tu, massimo 20 slide»
+oppure «Decidi tu quante slide servono, tra 15 e 25 slide»; il piano deve restare
+entro quell'intervallo e comunque entro il limite generale di 50.
 Nel motore LLM la pagina mantiene il formato richiesto: eventuali elementi oltre
 i bordi vengono segnalati. Puoi correggerli graficamente o chiedere al modello
 di adattare la pagina. Il motore deterministico può creare continuazioni per
@@ -91,6 +106,24 @@ In **Modifica grafica → Immagini · PC, allegati, RAG, Internet** puoi inserir
 - **Internet** cerca su Wikimedia Commons, conservando autore, licenza e origine.
 
 ## Modificare le slide HTML
+
+Se la generazione viene interrotta, apri la presentazione nella cronologia del
+canvas e premi **Completa slide mancanti**. Il numero sul pulsante indica le
+pagine da completare: quelle già pronte vengono conservate. La ripresa usa il
+modello LLM attualmente scelto in chat; non occorre reinviare tutta la richiesta.
+Il pulsante resta disabilitato mentre è già in corso un lavoro del tuo account.
+
+Per correggere una sola pagina, selezionala e apri **Ricrea questa slide con AI**.
+Scrivi le modifiche e premi **Ricrea solo questa slide**. Le istruzioni restano
+separate per pagina quando passi da una slide all'altra. La nuova versione resta
+nella cronologia; non sostituisce le altre pagine. Le modifiche locali non ancora
+salvate vengono salvate prima dell'invio e diventano la base della revisione.
+
+Durante generazione, ripresa e revisione il canvas mostra la fase corrente e i
+caratteri dell'anteprima; la grafica si aggiorna man mano che arriva HTML valido.
+**Segui scrittura** segue la pagina in lavorazione; puoi disattivarlo scegliendo
+una pagina diversa. A lavoro terminato i controlli di modifica tornano attivi
+anche quando l'ultimo aggiornamento non cambia ulteriormente il contenuto.
 
 Nel canvas scegli la pagina e premi **Modifica grafica**. Clicca un elemento:
 la maniglia **↕** lo sposta e **↘** ne cambia larghezza e altezza. Apri **Testo e

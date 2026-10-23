@@ -21,7 +21,7 @@ export function reloadEditDraft(data,edit,{model,parameters,steps,assistant,refe
   const patch=edit.patches.find(p=>p.clip===c.clip),frames=Math.round((c.end-c.start)*24);
   if(patch&&patch.end!=null&&Math.round(patch.end*24)>frames)throw Error('La durata della clip è cambiata: ricontrolla il tratto prima di rilanciare.');
   return {enabled:!!patch,clip:c.clip,prompt:text(patch?.prompt),images:(patch?.images||[]).map(number),lip_sync:patch?.lip_sync??false,audio_guide:patch?.audio_guide??true,
-   range:patch?.start!=null,first:Math.round((patch?.start||0)*24),last:patch?.end!=null?Math.round(patch.end*24):frames,frames,
+   ...(data.memory_recovery?{recover_memory:patch?.recover_memory??!!c.memory?.default}:{}),...(data.end_frame_recovery?{end_frame:typeof patch?.end_frame==='number'?number(patch.end_frame):(patch?.end_frame??'none')}:{}),range:patch?.start!=null,first:Math.round((patch?.start||0)*24),last:patch?.end!=null?Math.round(patch.end*24):frames,frames,
    mode:patch?.mode||'video',anchors:patch?.anchors||'none',anchor_image:number(patch?.anchor_image),start_image:number(patch?.start_image),
    auto_anchors:patch?.auto_anchors||false,anchor_edit_model:patch?.anchor_edit_model||'',anchor_images:Object.fromEntries(Object.entries(patch?.anchor_images||{}).map(([k,n])=>[k,number(n)]))};
  });

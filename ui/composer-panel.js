@@ -54,7 +54,8 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  pills($('#video-steps'),'Passi');
  pills($('#video-editing'),'Regia');
  slides.classList.add('prompt-slide-options');
- const count=$('#slides-count'),countLabel=count.closest('label');countLabel.classList.add('prompt-count');const minus=button('−'),plus=button('＋');minus.ariaLabel='Meno slide';plus.ariaLabel='Più slide';count.before(minus);count.after(plus);for(const [item,delta] of [[minus,-1],[plus,1]])item.onclick=()=>{count.value=Math.max(1,Math.min(30,(Number(count.value)||8)+delta));count.dispatchEvent(new Event('change',{bubbles:true}));render();};
+ const countMode=$('#slides-count-mode');pills(countMode,'Numero di slide');
+ const count=$('#slides-count'),countLabel=count.closest('label');countLabel.classList.add('prompt-count');const minus=button('−'),plus=button('＋');minus.ariaLabel='Meno slide';plus.ariaLabel='Più slide';count.before(minus);count.after(plus);for(const [item,delta] of [[minus,-1],[plus,1]])item.onclick=()=>{count.value=Math.max(1,Math.min(50,(Number(count.value)||8)+delta));count.dispatchEvent(new Event('change',{bubbles:true}));render();};
  const slideTechnical=field('Presentazioni · opzioni tecniche');slides.append(slideTechnical);
  for(const id of ['slides-engine','slides-vision'])slideTechnical.append($('#'+id).closest('label'));
  for(const [id,title] of [['slides-format','Formato'],['slides-design','Stile'],['slides-detail','Contenuto'],['slides-composition','Composizione'],['slides-background','Sfondo'],['slides-palette','Palette']])pills($('#'+id),title);
@@ -87,6 +88,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
   auto.setAttribute('aria-pressed',String(mode==='auto'&&!value.image_model&&!value.music&&!value.video&&!value.voice&&!value.transcribe));images.setAttribute('aria-pressed',String(!!value.image_model));
   for(const [name,item] of tools)item.setAttribute('aria-pressed',String(mode===name));
   imagePanel.hidden=!value.image_model;slides.hidden=mode!=='slides';slideTechnical.hidden=mode!=='slides';generatedModels.hidden=!$('#slides-generate-images').checked;
+  countLabel.hidden=countMode.value==='auto';count.disabled=countMode.value==='auto';minus.disabled=plus.disabled=count.disabled;
   voiceMode.hidden=!!value.voice&&mode==='manim';context.hidden=!(mode==='slides'||mode==='manim'||mode==='infographic'||value.image_model||value.voice||value.music||value.video);
   const infographic=document.querySelector('#infographic-options');if(infographic)infographic.hidden=mode!=='infographic';
   const manim=document.querySelector('#manim-presentation-options');if(manim)manim.hidden=mode!=='manim';

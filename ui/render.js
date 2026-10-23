@@ -8,6 +8,7 @@ import {validateChart} from './chart-schema.js';
 import {addVideoAudioControl} from './video-playback.js';
 import {videoTimelineSource} from './video-timeline-source.js';
 import {appendGenerationDetails} from './video-generation-details.js';
+import {appendCreationDetails} from './creation-details.js';
 import {addBrowserPreview} from './video-browser-preview.js';
 import {openImageZoom,bindImageZoom} from './image-zoom.js';
 import {appendImageBatch} from './image-batch.js';
@@ -79,8 +80,8 @@ export async function renderRich(target,text,{final=true,sources=[],onCitation=n
   }
 }
 
-export function appendMedia(target,media,{api,onEditVideo,onRecreateVideo,onUpscaleVideo,onRemixVideo,videoMeta}={}) {
-  if(appendImageBatch(target,media))return;
+export function appendMedia(target,media,{api,onEditVideo,onRecreateVideo,onUpscaleVideo,onRemixVideo,videoMeta,onReuseImage}={}) {
+  if(appendImageBatch(target,media,{api,onReuseImage}))return;
   for(const m of media||[]){
     const figure=document.createElement('figure'),url='/media/'+escape(m.path);
     if(m.mime==='model/gltf-binary'){figure.className='file-output';const caption=document.createElement('figcaption');caption.textContent=m.name+' ';const link=document.createElement('a');link.href='/media/'+m.path;link.download=m.name;link.textContent='Scarica GLB';caption.append(link);figure.append(caption);}
@@ -109,6 +110,7 @@ export function appendMedia(target,media,{api,onEditVideo,onRecreateVideo,onUpsc
     if(onEditVideo&&timeline){
       const resume=document.createElement('button');resume.type='button';resume.className='text-button';resume.textContent='Riprendi timeline';resume.onclick=()=>onEditVideo({...m,id:timeline.id,timeline_recovery:timeline.recover});figure.querySelector('figcaption').append(resume);
     }
+    if(m.mime?.startsWith('image/')||m.mime?.startsWith('video/'))appendCreationDetails(figure,m,{api,meta:videoMeta,onReuseImage});
     if(m.mime?.startsWith('video/')){appendGenerationDetails(figure,m,videoMeta);addBrowserPreview(figure.querySelector('figcaption'),figure.querySelector('video'),m,api);figure.querySelector('figcaption a[download]').textContent=m.path.toLowerCase().endsWith('.mp4')?'Scarica MP4':'Scarica originale';}
     target.append(figure);
   }

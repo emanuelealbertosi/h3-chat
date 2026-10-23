@@ -38,8 +38,10 @@ class MossImg2ImgTests(unittest.TestCase):
             sample=Mock(wraps=instance.comfy.sample.sample);instance.comfy.sample.sample=sample
             original=instance.generate
             instance.generate=lambda request:original(request|{'strength':.35})
-            with patch('h3chat.moss_image.sampling',side_effect=lambda model:model),patch('h3chat.image_canvas.crop_canvas',side_effect=lambda array,*size:array):
+            with patch('h3chat.moss_image.sampling',side_effect=lambda model,*,turbo=False:model) as sampling,patch('h3chat.image_canvas.crop_canvas',side_effect=lambda array,*size:array):
                 fixture.generate(instance)
+            if arch=='moss':self.assertFalse(sampling.call_args.kwargs['turbo'])
+            else:sampling.assert_not_called()
             self.assertEqual(sample.call_args.kwargs['denoise'],expected)
             emitted=original.__func__.__globals__['emit'].call_args
             self.assertEqual(emitted.args,('done',));self.assertEqual(emitted.kwargs['parameters']['strength'],expected)

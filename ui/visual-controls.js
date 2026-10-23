@@ -5,6 +5,7 @@ import {initVoiceControls} from './voice.js';
 import {initVideoQuality} from './video-quality.js';
 import {initMusicQuality} from './music-quality.js';
 import {initMusicDuration} from './music-duration.js';
+import {initMusicRequest,musicParameters} from './music-request.js';
 
 function normalizeVoice(value){return {...value,voice_fields:{...value.voice_fields,engine:'higgs',params:{}}};}
 
@@ -23,12 +24,14 @@ export function initVisualControls({getState,getChatId,pickFile}){
  const videoQuality=initVideoQuality({read,save,getState,pickFile});
  const musicQuality=initMusicQuality({read,save,getState});
  const musicDuration=initMusicDuration({read,save,getState});
+ const musicRequest=initMusicRequest({read,save,getState});
  function render(){
   const state=getState();if(!state)return;
   voice.render();
   videoQuality.render();
   musicQuality.render();
   musicDuration.render();
+  musicRequest.render();
   const value=read(),items=state.models.filter(m=>m.capabilities.some(c=>['create','edit'].includes(c)));
   const signature=JSON.stringify(items.map(m=>[m.id,m.name,m.ready]));
   if(model.dataset.signature!==signature){model.innerHTML='<option value="">Automatico · dal prompt</option>'+items.map(m=>`<option value="${esc(m.id)}" ${m.ready?'':'disabled'}>${esc(m.name)}${m.ready?'':' · non disponibile'}</option>`).join('');model.dataset.signature=signature;}
@@ -52,7 +55,7 @@ export function initVisualControls({getState,getChatId,pickFile}){
  document.querySelector('#transcribe-toggle').onclick=()=>save({...read(),transcribe:!read().transcribe,image_model:'',music:false,video:false,voice:false});
  for(const input of document.querySelectorAll('[data-music-field]'))input.oninput=()=>save({...read(),music_fields:{...read().music_fields,[input.dataset.musicField]:input.type==='checkbox'?input.checked:input.value}});
  assistant.onchange=()=>save({...read(),assistant:assistant.checked});
- return {render,read,request(){const value={...read(),video_parameters:{...read().video_parameters}},state=getState(),options=state?.video_options,videoModel=state?.models.find(m=>m.id===(value.video_model||state.settings.video_model));if(!value.video||!options?.request_controls){delete value.video_model;delete value.video_parameters;}else{videoQuality.validate();if(!options.format_control)delete value.video_parameters.aspect;if(!options.seed_control||videoModel?.remote_media)delete value.video_parameters.seed;}if(!value.video||!options?.segment_controls)delete value.video_segment_seconds;if(value.image_model&&state?.image_options?.request_controls)value.image_parameters=imageRequestParameters(state,value);else delete value.image_parameters;delete value.image_presets;delete value.image_history;delete value.moss_negative_defaults;return value;},set:save,migrateNew(id){const value=read();localStorage.setItem(key(id),JSON.stringify(value));localStorage.removeItem(key(null));}};
+ return {render,read,request(){const value={...read(),video_parameters:{...read().video_parameters}},state=getState(),options=state?.video_options,videoModel=state?.models.find(m=>m.id===(value.video_model||state.settings.video_model));if(!value.video||!options?.request_controls){delete value.video_model;delete value.video_parameters;}else{videoQuality.validate();if(!options.format_control)delete value.video_parameters.aspect;if(!options.seed_control||videoModel?.remote_media)delete value.video_parameters.seed;}if(!value.video||!options?.segment_controls)delete value.video_segment_seconds;if(value.image_model&&state?.image_options?.request_controls)value.image_parameters=imageRequestParameters(state,value);else delete value.image_parameters;if(value.music){const p=musicParameters(state,value);if(p)value.music_parameters=p;if(state.models.find(m=>m.id===(value.music_model||state.settings.music_model))?.architecture==='minimax-music')value.music_fields={...value.music_fields,abc:''};}else{delete value.music_model;delete value.music_resing;}delete value.music_presets;delete value.image_presets;delete value.image_history;delete value.moss_negative_defaults;return value;},set:save,migrateNew(id){const value=read();localStorage.setItem(key(id),JSON.stringify(value));localStorage.removeItem(key(null));}};
 }
 
 export function renderVisualSetup(container,{state,draft,link,edit,preferences,changed,install}){

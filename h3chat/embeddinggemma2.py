@@ -24,13 +24,23 @@ def formatted(text,query=False,image=False):
     prefix='task: search result | query: ' if query else 'title: none | text: '
     return prefix+text if not image else '<|image|>'+(' '+prefix+text if text else '')
 
-def runtime_ready(root):
+def runtime_paths(root,device='cpu'):
+    """Prefer standalone CPU Torch; never shadow GPU Torch with a CPU wheel."""
+    root=Path(root);runtime=root/'runtime/embeddinggemma2'
+    if device=='cpu' and (runtime/'cpu/torch/__init__.py').is_file():
+        return [runtime/'cpu',runtime/'packages']
+    return [runtime/'packages',root/'runtime/vision/packages']
+
+
+def runtime_ready(root,device=None):
     root=Path(root)
-    return all((root/path).is_file() for path in (
-        'runtime/vision/packages/torch/__init__.py',
+    common=all((root/path).is_file() for path in (
         'runtime/embeddinggemma2/packages/transformers/models/embedding_gemma2/modeling_embedding_gemma2.py',
         'runtime/embeddinggemma2/packages/tokenizers/__init__.py',
         'runtime/embeddinggemma2/packages/huggingface_hub/__init__.py'))
+    cpu=(root/'runtime/embeddinggemma2/cpu/torch/__init__.py').is_file()
+    legacy=(root/'runtime/vision/packages/torch/__init__.py').is_file()
+    return common and (legacy if device=='cuda' else cpu or legacy)
 
 def memory_assessment(settings,hardware):
     if settings.get('rag_embedding_profile')!='embeddinggemma2' or not settings.get('rag_embedding_model'):return None

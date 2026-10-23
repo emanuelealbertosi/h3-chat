@@ -24,9 +24,6 @@ def assistant_format(model):
 
 def image_brief(model):
     """Choose the contract from the actual generation target, not chat defaults."""
-    if model.get('architecture')=='fibo2':
-        from .fibo2 import ASSISTANT_BRIEF
-        return ASSISTANT_BRIEF,{'type':'object','properties':{'prompt':{'type':'string'}},'required':['prompt'],'additionalProperties':False}
     if assistant_format(model) == 'tags':
         family = 'Anima' if model.get('architecture') == 'anima' else 'Stable Diffusion / SDXL'
         schema = {'type':'object','properties':{'tags':{'type':'array','items':{'type':'string'},'minItems':1}},

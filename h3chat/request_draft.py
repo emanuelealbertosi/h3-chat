@@ -20,6 +20,10 @@ def load(app,chat_id,message_id):
         ('music_max_duration','_music_max_duration',None),('video_quality','_video_quality','high'),
         ('video_steps','_video_steps',None),('video_editing','_video_editing','continuous'),
         ('video_segment_seconds','_video_segment_seconds',None))}
+    if controls['music']:
+        controls['music_model']=settings['music_model']
+        controls['music_resing']=bool(settings.get('_music_resing'))
+        controls['music_presets']={settings['music_model']:settings.get('_music_request_parameters',settings.get('music_overrides',{}).get(settings['music_model'],{}))}
     if controls['image_model'] and settings.get('_image_request_parameters'):
         controls['image_presets']={controls['image_model']:settings['_image_request_parameters']}
     if controls['video']:

@@ -21,7 +21,7 @@ try{
  const dialog=page.locator('#prompt-mode-settings');
  const seeds=dialog.getByRole('group',{name:'Seed video',exact:true});
  await seeds.getByRole('button',{name:'Fisso',exact:true}).click();await dialog.getByRole('spinbutton',{name:'Seed video fisso',exact:true}).fill('734');
- assert.match(await dialog.locator('.video-seed-options').textContent(),/stesso seed/);
+ assert.match(await dialog.locator('.video-seed-options').textContent(),/Tutte le clip selezionate usano questo seed/);
  await seeds.getByRole('button',{name:'Casuale · nuova variante',exact:true}).click();
  assert.equal(await dialog.locator('[data-seed-fixed]').isVisible(),false);
  const resolutions=dialog.getByRole('group',{name:'Risoluzione video',exact:true});
@@ -36,6 +36,7 @@ try{
  assert.equal(await dialog.locator('#video-request-fields').isVisible(),false);
  await dialog.locator('#video-request-toggle').click();assert.equal(await dialog.locator('#video-request-fields').isVisible(),true);
  assert.equal(await dialog.locator('#video-request-model').inputValue(),'');
+ assert.equal(await dialog.locator('#video-request-longtake').count(),0);
  assert.match(await dialog.locator('[data-video-request-ready]').textContent(),/VEDA.*PDD Off/);
  await dialog.locator('#video-request-model').selectOption('second-h3');
  assert.match(await dialog.locator('#video-quality-summary').textContent(),/0,7 MP.*16 passi/);
@@ -52,7 +53,7 @@ try{
  await page.route('**/api/chats/*/messages',route=>route.fulfill({json:{job_id:'synthetic-only',intent:'video',canvas:false}}));
  const send=async prompt=>{const posted=page.waitForRequest(r=>r.method()==='POST'&&r.url().endsWith('/messages'));await page.fill('#prompt',prompt);await page.locator('#composer').evaluate(e=>e.requestSubmit());return (await posted).postDataJSON();};
  const body=await send('Synthetic video');assert.equal(body.video_model,'second-h3');assert.equal(body.video_steps,8);
- assert.equal(body.video_segment_seconds,10);assert.deepEqual(body.video_parameters,{aspect:'16:9',megapixels:.98,seed:-1,attention:'veda',attention_chunks:0,attention_chunks_mode:'auto',pdd_enabled:true,longtake_enabled:false,pdd_lora:'F:/fixture/Ref2VA.safetensors'});
+ assert.equal(body.video_segment_seconds,10);assert.deepEqual(body.video_parameters,{aspect:'16:9',megapixels:.98,seed:-1,attention:'veda',attention_chunks:0,attention_chunks_mode:'auto',pdd_enabled:true,pdd_lora:'F:/fixture/Ref2VA.safetensors'});
  await page.reload();await page.click(`[data-chat="${fixture.chat}"]`);await page.click('[data-mode-settings="video-hint"]');
  assert.equal(await dialog.locator('#video-request-model').inputValue(),'second-h3');assert.equal(await dialog.locator('#video-request-pdd').inputValue(),'on');
  assert.equal(await dialog.locator('#video-format').inputValue(),'16:9');assert.equal(await dialog.locator('#video-segments').inputValue(),'10');

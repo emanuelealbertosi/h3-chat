@@ -7,7 +7,7 @@ from .downloads import Cancelled, safe_join
 from .video_options import DEFAULTS, ACCELERATION_KEYS, options, resolve_canvas, validate, validate_plan
 from .video_resume import checkpoint, save
 
-EDITABLE = ('megapixels','steps','cfg','sampler','scheduler','seed','offload','attention','pdd_enabled','pdd_lora','experimental_resolution','loras','source_conditioning','longtake_enabled','attention_chunks','attention_chunks_mode','veda_predictor','veda_sparsity','veda_reference_sparsity','shift_video','shift_audio')
+EDITABLE = ('megapixels','steps','cfg','sampler','scheduler','seed','offload','attention','pdd_enabled','pdd_lora','experimental_resolution','loras','source_conditioning','attention_chunks','attention_chunks_mode','veda_predictor','veda_sparsity','veda_reference_sparsity','shift_video','shift_audio','variants','variants_mode')
 
 
 def load(app, chat_id, ident):
@@ -134,7 +134,7 @@ def describe(app,chat_id,ident):
     value=load(app,chat_id,ident);p=tuning(value)
     from .video_edit import model_choices
     from .video_loras import choices
-    return {'attention_choices':True,'longtake_experimental':True,'source':ident,'model':value['model']['name'],'model_id':value['model']['id'],'models':model_choices(app),'loras':choices(app),'duration':value['duration'],
+    return {'attention_choices':True,'batch_variants':'variants' in DEFAULTS,'source':ident,'model':value['model']['name'],'model_id':value['model']['id'],'models':model_choices(app),'loras':choices(app),'duration':value['duration'],
         'aspect':value['record']['parameters'][0].get('aspect','16:9'),
         'parameters':{k:min(p[k],.98) if k=='megapixels' and not p.get('experimental_resolution') else p[k] for k in EDITABLE},'clips':len(value['recipes']),
         'references':[{'name':x['name'],'mime':x['mime']} for x in value['refs']],
@@ -146,6 +146,7 @@ def describe(app,chat_id,ident):
 def request(app,chat_id,body):
     if not isinstance(body,dict) or set(body)-{'source','parameters','canvas','model'}:raise ValueError('Richiesta di ricreazione non valida.')
     value=load(app,chat_id,body.get('source'));changes=body.get('parameters',{})
+    if isinstance(changes,dict):changes={k:v for k,v in changes.items() if k!='longtake_enabled'}
     original_model=value['model']['id']
     if not isinstance(body.get('model',''),str):raise ValueError('Selezione modello video non valida.')
     if body.get('model'):
@@ -194,6 +195,7 @@ def render(app,job,payload,settings,cancel,stage,log):
         resumed=checkpoint(app.data,settings['_video_resume'])
         if resumed.get('recreate_source')!=command['source'] or resumed.get('recreate_parameters')!=command['parameters']:raise ValueError('La richiesta da recuperare non coincide con la ricreazione.')
         record=resumed
+    settings=settings|{'_video_batch_id':record.get('batch_id') or job['id']}
     save(folder,record)
     completed=record['completed'];canvas=None
     for i,scene in enumerate(record['timeline']):
@@ -205,9 +207,9 @@ def render(app,job,payload,settings,cancel,stage,log):
         resolved=resolve_canvas(options(value['model'],local,False),{'images':[]},[],p.get('aspect','16:9'))
         canvas={k:resolved[k] for k in ('width','height','output_width','output_height','aspect','aspect_source','format_image')}
         scoped=scene|{'index':i,'sequence':job['id'],'canvas':canvas,'last':i==len(record['timeline'])-1}
-        if presets.get('longtake_enabled') and i and scene.get('continuity')!='cut':
-            from .video_longtake import attach
-            attach(app.data,scoped,record['parameters'][i-1])
+        if presets['variants']>1 and i and scene.get('continuity')!='cut':
+            from .video_batch import memory_for
+            scoped['batch_memories']={str(n):memory_for(record,i,n,presets['variants_mode'],app.data) for n in range(1,presets['variants']+1)}
         if completed and i==completed and scene.get('continuity')!='cut':
             anchor=max((n for n in range(i) if record['timeline'][n].get('continuity')=='cut'),default=0)
             scoped['resume_memory']={'opening':str(safe_join(app.data,record['outputs'][anchor])),
@@ -217,15 +219,20 @@ def render(app,job,payload,settings,cancel,stage,log):
         if recipe.get('extension_context'):scoped['extension_context']=recipe['extension_context']
         def report(label):stage(f'Ricreazione · clip {i+1}/{len(value["recipes"])} · '+label)
         media=app.engine.generate_video(value['model'],local,recipe['plan'],recipe['refs'],job['id']+f'/scene-{i+1:03d}',cancel,report,prompt=canvas['aspect'],scene=scoped)
-        record['outputs'].append(media['path']);record['parameters'].append(media['generation']);record['completed']=i+1;save(folder,record)
+        record['outputs'].append(media['path']);record['parameters'].append(media['generation']);record['completed']=i+1
+        from .video_batch import register
+        register(record,i,media,value['refs']);save(folder,record)
     paths=[safe_join(app.data,p) for p in record['outputs']]
     if value['audio']:
         result=compose(app.engine,paths,safe_join(app.data,value['audio']['path']),folder/'video.mp4',cancel,stage,log,audio_start=record['audio_start'],audio_duration=value['duration'])
+        from .video_batch import compose_branches
+        compose_branches(app.engine,record,folder,value['audio'],cancel,stage,log,record['audio_start'],value['duration'])
         path=folder/'video.mp4';duration=result['duration']
     elif len(paths)==1:path=paths[0];duration=value['duration']
     else:raise ValueError('Questo montaggio non contiene una traccia audio originale recuperabile.')
     params=record['parameters'][0]|{'duration':duration,'scenes':len(paths),'scene_parameters':record['parameters'],
         'audio_preserved':bool(value['audio']),'audio_start':record['audio_start'],'recreated_from':command['source'],'recovered_scenes':completed}
+    if record.get('batch_movies'):params['batch_movies']=record['batch_movies']
     media={'id':job['id'],'name':'Video MiniMax H3 · ricreato.mp4','mime':'video/mp4','path':path.relative_to(app.data).as_posix(),'generation':params}
     meta={'intent':'video','canvas':bool(payload.get('canvas')),'model':value['model']['name'],
         'execution_mode':'Standalone · GPU · ricreazione','assistant_on':False,'references':value['refs'],'video_plan':record['plan'],'video_parameters':params}

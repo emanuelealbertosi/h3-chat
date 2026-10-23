@@ -19,9 +19,13 @@ def requested(prompt):
     # A rejected count is not a second instruction. Shot / inquadratura counts
     # describe internal cuts, not additional GPU calls.
     text=re.sub(rf'\b(?:non|no|not|anziché|invece di|rather than)[ \t]+(?:(?:fare|generare|creare|make|generate)[ \t]+)?{NUMBER}[ \t]+{UNITS}\b','',text,flags=re.I)
+    # A duration breakdown is one total, not competing instructions: e.g.
+    # "12 consecutive clips: 11 clips of 15 seconds and one final clip".
+    breakdown=rf'(?<![\w:.,])({NUMBER})[ \t]+clips?[ \t]+(?:of|da)[ \t]+\d+(?:[.,]\d+)?[ \t]+(?:seconds?|second[io]|sec|s)[ \t]+(?:and|e)[ \t]+({NUMBER})[ \t]+(?:final[ \t]+clip|clip[ \t]+finale)\b'
+    text=re.sub(breakdown,lambda m:f'{number(m[1])+number(m[2])} clips',text,flags=re.I)
     # Never interpret the trailing seconds in "00:15\nCLIP 2" as "15 clip".
     def named_counts(units,prefix):
-        values={number(m[1]) for m in re.finditer(rf'(?<![\w:.,])({NUMBER})[ \t]+(?:{units})\b',text,re.I)}
+        values={number(m[1]) for m in re.finditer(rf'(?<![\w:.,])({NUMBER})[ \t]+(?:(?:consecutive|consecutiv[ei]|generation)[ \t]+)?(?:{units})\b',text,re.I)}
         values.update(number(m[1]) for m in re.finditer(rf'\b(?:{prefix})[ \t]*[:=][ \t]*({NUMBER})\b',text,re.I))
         return values
     # Explicit generation clips win over a count of narrative scenes.
@@ -75,8 +79,9 @@ def contract(prompt,duration,*,audio_start=0,segment_seconds=15):
             for index,(start,end) in enumerate(intervals):
                 a,b=round(start*24),round(end*24)
                 if a!=cursor or b<=a:raise ValueError('Gli intervalli dei clip devono essere consecutivi, senza buchi o sovrapposizioni.')
-                # The last nominal 15-second clip can end at the audio tail.
-                if index==count-1 and b>=frames and b-frames<=24:b=frames
+                # The audio can end between frames and its displayed clock can
+                # be rounded. Include its final frame, or trim a nominal tail.
+                if index==count-1 and (abs(end-duration)<=1/24+1e-6 or b>=frames and b-frames<=24):b=frames
                 if b-a>size or (b-a<24 and index!=count-1):raise ValueError(f'Ogni clip deve durare da 1 a {segment_seconds} secondi, salvo la coda finale.')
                 boundaries.append(b);cursor=b
             if cursor!=frames:raise ValueError('Gli intervalli dei clip devono coprire tutta la durata della traccia selezionata.')

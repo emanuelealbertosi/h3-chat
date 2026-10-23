@@ -1,8 +1,0 @@
-{
-  "project": "H3-LongTakeNoCuts",
-  "url": "https://github.com/xyzDist/H3-LongTakeNoCuts",
-  "commit": "0cad00ab92e4ad8de3d54ddd5254142bccb702d9",
-  "license": "MIT",
-  "adapted_file": "h3_blend_latents_by_frames.py",
-  "changes": "Bounded linear frame blend; no custom-node imports, masking or audio blend. Five-step .55 refinement uses native Comfy sampling. Motion context is freshly encoded from the delivered 22-frame tail and positioned before the next clip, preserving exact clip and soundtrack clocks. No external motion-context code is vendored."
-}

@@ -1,6 +1,7 @@
 """Bounded, cancellable Chat Completions transport; no redirects or key logging."""
 import json
 import queue
+import re
 import socket
 import threading
 import time
@@ -13,6 +14,24 @@ class EmptyCompletion(RuntimeError):
 
 class StructuredCompletionError(ValueError):
     """Usable transport, but invalid structured model output."""
+    def __init__(self,message,*,content='',reason=''):
+        super().__init__(message)
+        self.content=content
+        self.reason=reason
+
+
+def structured_text(content,schema):
+    """Accept one complete JSON document, optionally in a sole Markdown fence.
+
+    Never extract a convenient object out of prose or invent missing fields.
+    The exact decoded value must still satisfy the caller's complete schema.
+    """
+    text=content.lstrip('\ufeff').strip()
+    fenced=re.fullmatch(r'```(?:json)?[ \t]*\r?\n(.*?)\r?\n```',text,re.I|re.S)
+    if fenced:text=fenced[1].strip()
+    value=json.loads(text)
+    check_schema(value,schema)
+    return json.dumps(value,ensure_ascii=False)
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):raise ValueError('Il provider reindirizza la richiesta. Imposta direttamente il suo indirizzo API finale.')
@@ -116,6 +135,23 @@ class Client:
                 try:response.fp.raw._sock.shutdown(socket.SHUT_RDWR)
                 except (AttributeError,OSError):pass
     def completion(self,config,key,messages,settings,cancel,on_text=None,schema=None,on_reasoning=None):
+        request=messages
+        for attempt in range(2):
+            if cancel.is_set():raise Cancelled()
+            try:return self._completion_once(config,key,request,settings,cancel,on_text,schema,on_reasoning)
+            except StructuredCompletionError as exc:
+                if attempt or not schema:raise
+                if cancel.is_set():raise Cancelled()
+                # A single targeted repair, keeping the same provider, model,
+                # output budget and full original task. No retries for transport,
+                # authentication, truncation or cancellation errors.
+                request=messages+[{'role':'assistant','content':exc.content},
+                    {'role':'user','content':'Your previous response did not satisfy the required JSON schema: '+exc.reason+
+                     '. Return the COMPLETE corrected JSON object for this same request. Preserve its content, sources, language and instructions. '
+                     'Use only the required fields with the exact declared types. Do not wrap the object in Markdown or commentary; '
+                     'escape literal line breaks and double quotes inside JSON strings. Do not invent missing source IDs.'}]
+
+    def _completion_once(self,config,key,messages,settings,cancel,on_text=None,schema=None,on_reasoning=None):
         body=request_body(config,messages,settings,on_text is not None,schema);content='';finish=None
         def event(value):
             nonlocal content,finish
@@ -138,6 +174,10 @@ class Client:
         if finish is None:raise RuntimeError('Il provider ha interrotto la risposta prima di completarla.')
         if finish not in ('stop','length'):raise RuntimeError('Risposta API non completata: '+str(finish)[:60])
         if schema and finish!='length':
-            try:parsed=json.loads(content);check_schema(parsed,schema)
-            except (ValueError,TypeError,KeyError):raise StructuredCompletionError('Il provider non ha rispettato il formato JSON richiesto per router, Assistant o canvas. Cambia formato JSON nelle impostazioni API o scegli un altro modello.')
+            try:content=structured_text(content,schema)
+            except (ValueError,TypeError,KeyError) as exc:
+                reason=str(exc)[:500]
+                safe_content=content.replace(key,'[chiave]') if key else content
+                raise StructuredCompletionError('Il provider non ha rispettato il formato JSON richiesto anche dopo la verifica del formato. '+reason,
+                    content=safe_content,reason=reason) from exc
         return (content,finish) if on_text else content

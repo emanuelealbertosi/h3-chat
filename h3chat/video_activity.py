@@ -24,7 +24,7 @@ def snapshot(data,job,*,server_log):
         match=pattern.match(line)
         if not match:continue
         clock,label=match.groups()
-        if not label.startswith(('Post-produzione','Assistant','Video','LongTakeNoCuts','Generazione video','Riutilizzo modello','Caricamento','Motore','Richiesta')):continue
+        if not label.startswith(('Post-produzione','Assistant','Video','Generazione video','Riutilizzo modello','Caricamento','Motore','Richiesta')):continue
         plan=re.search(r'istruzioni clip (\d+)',label)
         clip=re.search(r'Post-produzione · clip (\d+)',label)
         if plan:planning=int(plan[1]);generating=None

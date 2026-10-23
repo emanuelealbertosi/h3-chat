@@ -11,6 +11,7 @@ from .music_runtime import backend, executable
 
 class MusicEngine:
  def start_music(self,model,settings,log_path,cancel,stage=None):
+  if model.get('architecture')=='minimax-music':return self.start_minimax_music(model,settings,log_path,cancel,stage)
   session=self._activate('music',model,settings,log_path,cancel,stage=stage)
   if session.ready and session.alive():return session
   kind=backend(settings)
@@ -27,23 +28,33 @@ class MusicEngine:
   return session
 
  def refine_music(self,history,prompt,fields,settings,cancel,log_path,stage):
-  if not settings.get('_assistant',True):return direct_composition(prompt,fields),None
+  resing=bool(settings.get('_music_resing'))
+  automatic_lyrics=resing and not fields.get('lyrics','').strip()
+  if not settings.get('_assistant',True) and not automatic_lyrics:return direct_composition(prompt,fields),None
   model=self.require_model(settings['chat_model'],'chat')
-  stage('Assistant · stile e testo del brano')
+  stage('Assistant · nuovo testo dal prompt per Re-sing' if automatic_lyrics else 'Assistant · stile e testo del brano')
   self.start_llama(model,settings,log_path,cancel,stage=stage)
   previous=[{'role':m['role'],'text':m['content'][-3000:],'composition':m.get('meta',{}).get('music_composition')} for m in history[-6:] if m['status']=='done']
   content=json.dumps({'request':prompt,'fields':fields,'conversation':previous},ensure_ascii=False)
   schema={'type':'object','properties':{k:{'type':'boolean' if k=='instrumental' else 'string'} for k in ('title','style','lyrics','abc','instrumental')},'required':['title','style','lyrics','abc','instrumental'],'additionalProperties':False}
   tuning=settings|{'think_level':'off','max_tokens':min(settings['music_prompt_max_tokens'],settings['context']//2)}
-  raw,finish=self.completion([{'role':'system','content':MUSIC_BRIEF},{'role':'user','content':content}],tuning,cancel,on_text=lambda _:None,schema=schema)
+  brief=MUSIC_BRIEF
+  if resing:brief+='\nThis is Re-sing on an existing song: always prepare sung lyrics and set instrumental=false. When the lyrics field is empty, write original lyrics based on the request, never use generation instructions as sung words. Keep abc empty unless the user explicitly supplies it; the original melody is extracted from the attached song.'
+  raw,finish=self.completion([{'role':'system','content':brief},{'role':'user','content':content}],tuning,cancel,on_text=lambda _:None,schema=schema)
   if finish=='length':raise ValueError('Assistant ha raggiunto il limite: aumenta contesto/token oppure scrivi un brano più breve.')
   try:result=validate_fields(json.loads(raw))
   except (ValueError,TypeError) as exc:raise ValueError('Assistant non ha restituito una composizione valida. Riprova o disattivalo e inserisci stile e testo.') from exc
+  if resing and result['instrumental']:raise ValueError('Re-sing richiede un testo cantato: Assistant ha proposto un brano strumentale. Specifica il tema del nuovo testo.')
   if not result['style'] or not result['lyrics']:raise ValueError('Assistant deve preparare sia stile sia testo del brano.')
   if result['instrumental']:result['lyrics']='[Instrumental]'
+  elif fields.get('lyrics'):result['lyrics']=fields['lyrics']
   return result,{'model':model['name'],'max_tokens':tuning['max_tokens']}
 
  def generate_music(self,model,settings,composition,job_id,cancel,stage):
+  if settings.get('_music_resing'):
+   from .music_resing import generate
+   return generate(self,model,settings,composition,job_id,cancel,stage)
+  if model.get('architecture')=='minimax-music':return self.generate_minimax_music(model,settings,composition,job_id,cancel,stage)
   if model.get('remote_media'):return self.remote_generate(model,settings,'',[],job_id,cancel,stage,composition=composition)
   folder=self.data/'outputs'/job_id;folder.mkdir(parents=True,exist_ok=True)
   output=folder/'audio.wav';opts=worker_options(options(model,settings))
@@ -75,3 +86,31 @@ class MusicEngine:
   session.uses+=1
   parameters=opts|actual|flags
   return {'id':job_id,'name':composition['title']+'.wav','path':output.relative_to(self.data).as_posix(),'mime':'audio/wav','generation':parameters}
+
+ def generate_minimax_music(self,model,settings,composition,job_id,cancel,stage):
+  from .minimax_music import options as minimax_options
+  from .vision_runtime import status
+  if composition['abc']:raise ValueError('MiniMax Music 3 non accetta spartiti ABC: scegli YuE2 oppure svuota ABC.')
+  if not status(self.root)['ready']:raise ValueError('Installa il motore Vision dal Setup per usare MiniMax Music 3.')
+  p=minimax_options(model,settings);folder=self.data/'outputs'/job_id;folder.mkdir(parents=True,exist_ok=True);output=folder/'audio.wav'
+  session=self.start_minimax_music(model,settings,folder/'engine.log',cancel,stage)
+  (folder/'composition.json').write_text(json.dumps(composition|{'parameters':p},ensure_ascii=False,indent=2),encoding='utf-8')
+  session.send({'op':'generate','output':str(output),'style':composition['style'],'lyrics':composition['lyrics'],'parameters':p})
+  done=session.wait('done',cancel,14400,stage)
+  if cancel.is_set():raise Cancelled()
+  with wave.open(str(output)) as audio:
+   if audio.getnframes()==0:raise RuntimeError('Audio MiniMax vuoto.')
+  session.uses+=1
+  return {'id':job_id,'name':composition['title']+'.wav','path':output.relative_to(self.data).as_posix(),'mime':'audio/wav','generation':done['parameters']}
+
+ def start_minimax_music(self,model,settings,log_path,cancel,stage=None):
+  from .vision_runtime import status
+  if not status(self.root)['ready']:raise ValueError('Installa il motore Vision dal Setup per usare MiniMax Music 3.')
+  session=self._activate('music',model,settings,log_path,cancel,stage=stage)
+  if not(session.ready and session.alive()):
+   kind=backend(settings)
+   with self.process_lock:
+    if cancel.is_set():raise Cancelled()
+    session.start([self.root/'runtime/python/python.exe','-I','-X','utf8',self.root/'native/minimax-music-worker.py'],ipc=True,cwd=self.root)
+   session.wait('hello',cancel,30);session.send({'op':'load','files':session.files,'backend':kind,'threads':settings['music_threads']});session.wait('ready',cancel,600,stage);session.ready=True
+  return session

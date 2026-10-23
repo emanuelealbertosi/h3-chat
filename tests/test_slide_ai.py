@@ -40,11 +40,13 @@ class SlideAITests(unittest.TestCase):
             sent=enqueue(self.app,chat,{'artifact_id':saved['id'],'page':0,'prompt':'Rendi il titolo più vivace'})
         job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(sent['job_id'],))
         def complete(messages,settings,cancel,**kw):
-            self.assertIn('Palette calda',messages[-1]['content']);self.assertIn('1280, 960',messages[-1]['content'])
+            self.assertIn('Palette calda',messages[-2]['content']);self.assertIn('1280, 960',messages[-2]['content'])
             self.assertIn('STILE VISIVO: giocoso / colorato',messages[0]['content'])
             self.assertIn('Illustrazioni: immaginative',messages[0]['content'])
-            self.assertIn('Spiegazione estesa.',messages[-1]['content'])
-            self.assertIn('Approfondimento del relatore',messages[-1]['content'])
+            self.assertIn('Spiegazione estesa.',messages[-2]['content'])
+            self.assertIn('Approfondimento del relatore',messages[-2]['content'])
+            self.assertIn('Rendi il titolo più vivace',messages[-1]['content'])
+            self.assertNotIn('Spiegazione estesa.',messages[-1]['content'])
             kw['on_text']('<main><h1>Nuovo')
             return '<main style="color:#123"><h1>Nuovo titolo</h1><p>Testo corretto [R1]</p></main>','stop'
         with patch.object(self.app.engine,'require_model',side_effect=self.model_for),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete):
@@ -57,6 +59,136 @@ class SlideAITests(unittest.TestCase):
         self.assertEqual(self.app.store.canvas_history.get(chat,saved['id'])['content'],encode(original))
         self.assertEqual(len(self.app.store.canvas_history.listing(chat)['items']),3)
         self.assertNotIn('<main>',answer['content'])
+
+    def test_current_edit_is_separate_and_original_html_is_not_cut_at_12000_characters(self):
+        chat=self.app.store.create_chat()['id'];_,deck=self.deck(chat)
+        original='<main><h1>Originale</h1><p>'+('Contenuto originale importante. '*1100)+'</p></main><style>body{background:purple}</style>'
+        deck['pages'][0].update(html=original,editorial={'content':'Vecchie istruzioni: sfondo viola.', 'visual_plan':'Conserva il vecchio colore.'})
+        saved=self.app.store.canvas_history.save(chat,{'title':deck['title'],'content':encode(deck),'media':[]})
+        self.app.store.save_settings({'context':80000,'max_tokens':40000})
+        prompt='Cambia lo sfondo in giallo e aggiungi un diagramma.'
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for):sent=enqueue(self.app,chat,{'artifact_id':saved['id'],'page':0,'prompt':prompt})
+        job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(sent['job_id'],));payload=json.loads(job['payload'])
+        self.assertEqual(payload['settings']['_slide_revision']['prompt'],prompt)
+        def complete(messages,settings,cancel,**kw):
+            data=json.loads(messages[-2]['content'].split('\n',1)[1])
+            self.assertEqual(data['original_html'],original)
+            self.assertIn('background:purple',messages[-2]['content'])
+            self.assertNotIn('sfondo viola',messages[-1]['content'])
+            self.assertIn(prompt,messages[-1]['content'])
+            self.assertIn('prevale',messages[0]['content'])
+            return '<main><h1>Nuova composizione</h1><svg><rect width="30" height="40"/></svg></main><style>body{background:yellow}</style>','stop'
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete):self.app.execute_job(job,threading.Event())
+        answer=self.app.store.messages(chat)[-1];self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
+        self.assertNotIn('original_html',answer['meta']['slide_revision']['input']['truncated_fields'])
+        self.assertEqual(answer['meta']['slide_revision']['input']['html_included_characters'],len(original))
+
+    def test_css_only_stream_keeps_previous_preview_and_reports_progress_before_html(self):
+        from types import SimpleNamespace
+        import itertools
+        chat=self.app.store.create_chat()['id'];saved,original=self.deck(chat)
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for):sent=enqueue(self.app,chat,{'artifact_id':saved['id'],'page':0,'prompt':'Aggiungi uno schema con tre frecce'})
+        job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(sent['job_id'],))
+        css='<style>body{background:yellow;color:black}'
+        visible=css+'</style><main><h1>Schema nuovo</h1><svg><path d="M0 0L5 5"/></svg></main>'
+        def complete(messages,settings,cancel,**kw):
+            kw['on_text'](css)
+            answer=self.app.store.messages(chat)[-1];progress=answer['meta']['slide_revision']
+            current=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4])
+            self.assertEqual(current['pages'][0]['html'],original['pages'][0]['html'])
+            self.assertEqual(progress['characters'],len(css));self.assertEqual(progress['phase'],'generating');self.assertGreater(progress['elapsed_seconds'],0)
+            self.assertIn('caratteri ricevuti',self.app.store.one('SELECT stage FROM jobs WHERE id=?',(job['id'],))['stage'])
+            kw['on_text'](visible)
+            current=json.loads(self.app.store.messages(chat)[-1]['meta']['artifact']['content'][len(PREFIX):-4])
+            self.assertEqual(current['pages'][0]['html'],visible)
+            return visible,'stop'
+        clock=SimpleNamespace(monotonic=lambda:next(ticks));ticks=iter(itertools.count(100,.5))
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete),patch('h3chat.slide_revision.time',clock):self.app.execute_job(job,threading.Event())
+        answer=self.app.store.messages(chat)[-1];self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
+        self.assertEqual(answer['meta']['slide_revision']['phase'],'ready');self.assertGreater(answer['meta']['slide_timing']['revision_seconds'],0)
+
+    def test_identical_html_gets_one_targeted_repair_for_the_current_edit(self):
+        chat=self.app.store.create_chat()['id'];_,deck=self.deck(chat)
+        original='<main style="color:purple"><h1>Prima</h1></main>'
+        deck['pages'][0]['html']=original;saved=self.app.store.canvas_history.save(chat,{'title':deck['title'],'content':encode(deck),'media':[]})
+        prompt='Usa il verde al posto del viola.'
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for):sent=enqueue(self.app,chat,{'artifact_id':saved['id'],'page':0,'prompt':prompt})
+        job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(sent['job_id'],));calls=[]
+        def complete(messages,settings,cancel,**kw):
+            calls.append(messages)
+            if len(calls)==1:return original,'stop'
+            self.assertIn('HTML identico',messages[-1]['content']);self.assertIn(prompt,messages[-1]['content'])
+            return original.replace('purple','green'),'stop'
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete):self.app.execute_job(job,threading.Event())
+        answer=self.app.store.messages(chat)[-1];self.assertEqual(answer['status'],'done',answer['meta'].get('error'));self.assertEqual(len(calls),2)
+        self.assertTrue(answer['meta']['slide_revision']['changed']);self.assertTrue(answer['meta']['slide_revision']['unchanged_response']);self.assertEqual(answer['meta']['slide_revision']['attempt'],2)
+        result=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4]);self.assertNotIn('revision_prompt',result['pages'][0]);self.assertEqual(result['pages'][1],deck['pages'][1])
+
+    def test_identical_second_response_fails_without_losing_current_edit_or_other_pages(self):
+        chat=self.app.store.create_chat()['id'];_,deck=self.deck(chat);original='<main style="color:purple"><h1>Prima</h1></main>'
+        deck['pages'][0]['html']=original;saved=self.app.store.canvas_history.save(chat,{'title':deck['title'],'content':encode(deck),'media':[]})
+        prompt='Cambia i colori e aggiungi il diagramma.'
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for):sent=enqueue(self.app,chat,{'artifact_id':saved['id'],'page':0,'prompt':prompt})
+        job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(sent['job_id'],))
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',return_value=(original,'stop')) as complete:self.app.execute_job(job,threading.Event())
+        answer=self.app.store.messages(chat)[-1];self.assertEqual(answer['status'],'failed');self.assertEqual(complete.call_count,2)
+        self.assertIn('identica',answer['meta']['error']);self.assertEqual(answer['meta']['slide_revision']['phase'],'interrupted')
+        result=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4]);self.assertEqual(result['pages'][0]['revision_prompt'],prompt);self.assertEqual(result['pages'][0]['html'],original)
+        self.assertEqual(result['pages'][1],deck['pages'][1]);self.assertEqual(self.app.store.canvas_history.get(chat,saved['id'])['content'],encode(deck))
+
+    def test_resume_may_reuse_an_already_prepared_engine(self):
+        from h3chat.slide_revision import build
+        chat=self.app.store.create_chat()['id'];saved,deck=self.deck(chat)
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for):sent=enqueue(self.app,chat,{'artifact_id':saved['id'],'page':0,'prompt':'Titolo nuovo'})
+        job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(sent['job_id'],));payload=json.loads(job['payload'])
+        with patch.object(self.app.engine,'prepare') as prepare,patch.object(self.app.engine,'start_llama') as start,patch.object(self.app.engine,'completion',return_value=('<main style="color:green"><h1>Nuovo</h1></main>','stop')):
+            artifact=build(self.app,job,payload,payload['settings'],self.model,threading.Event(),lambda value:None,Path(self.temp.name)/'resume.log',{},prepare_engine=False)
+        prepare.assert_not_called();start.assert_not_called();result=json.loads(artifact['content'][len(PREFIX):-4]);self.assertEqual(result['pages'][0]['status'],'ready');self.assertEqual(result['pages'][1],deck['pages'][1])
+
+    def test_resume_can_validate_unchanged_complete_html_without_treating_it_as_ignored_edit(self):
+        from h3chat.slide_revision import build
+        chat=self.app.store.create_chat()['id'];_,deck=self.deck(chat)
+        html='<main style="color:purple"><h1>Pagina già ricevuta per intero</h1></main>'
+        deck['pages'][0].update(html=html,status='interrupted')
+        saved=self.app.store.canvas_history.save(chat,{'title':deck['title'],'content':encode(deck),'media':[]})
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for):sent=enqueue(self.app,chat,{'artifact_id':saved['id'],'page':0,'prompt':'Completa la pagina interrotta.'})
+        job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(sent['job_id'],));payload=json.loads(job['payload'])
+        settings=payload['settings'];settings['_slide_revision']['allow_unchanged']=True;meta={}
+        with patch.object(self.app.engine,'completion',return_value=(html,'stop')) as complete:
+            artifact=build(self.app,job,payload,settings,self.model,threading.Event(),lambda value:None,Path(self.temp.name)/'resume.log',meta,prepare_engine=False)
+        self.assertEqual(complete.call_count,1);result=json.loads(artifact['content'][len(PREFIX):-4])
+        self.assertEqual(result['pages'][0]['status'],'ready');self.assertEqual(result['pages'][0]['html'],html)
+        self.assertNotIn('revision_prompt',result['pages'][0]);self.assertEqual(result['pages'][1],deck['pages'][1]);self.assertFalse(meta['slide_revision']['changed'])
+
+    def test_cancelled_completion_does_not_persist_a_machine_prompt_as_a_human_edit(self):
+        from h3chat.slide_revision import build
+        chat=self.app.store.create_chat()['id'];saved,deck=self.deck(chat)
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for):sent=enqueue(self.app,chat,{'artifact_id':saved['id'],'page':0,'prompt':'Completa la pagina.'})
+        job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(sent['job_id'],));payload=json.loads(job['payload']);settings=payload['settings'];settings['_slide_revision']['allow_unchanged']=True;meta={}
+        def complete(*args,**kwargs):kwargs['on_text']('<style>body{color:green}');raise Cancelled()
+        with patch.object(self.app.engine,'completion',side_effect=complete),self.assertRaises(Cancelled):
+            build(self.app,job,payload,settings,self.model,threading.Event(),lambda value:None,Path(self.temp.name)/'resume.log',meta,prepare_engine=False)
+        result=json.loads(meta['artifact']['content'][len(PREFIX):-4]);self.assertEqual(result['pages'][0]['status'],'interrupted');self.assertNotIn('revision_prompt',result['pages'][0]);self.assertEqual(result['pages'][1],deck['pages'][1])
+
+    def test_only_explicit_resume_plan_reinserts_an_assigned_image(self):
+        from h3chat.slide_revision import build
+        chat=self.app.store.create_chat()['id'];_,deck=self.deck(chat)
+        picture=self.app.upload({'name':'diagram.png','data':'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aOKsAAAAASUVORK5CYII='})
+        saved=self.app.store.canvas_history.save(chat,{'title':deck['title'],'content':encode(deck),'media':[picture]})
+        for planned in (False,True):
+            with patch.object(self.app.engine,'require_model',side_effect=self.model_for):sent=enqueue(self.app,chat,{'artifact_id':saved['id'],'page':0,'prompt':'Ricrea la composizione.'})
+            job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(sent['job_id'],));payload=json.loads(job['payload']);settings=payload['settings'];meta={};calls=[]
+            if planned:settings['_slide_revision']['planned_images']=[{'slide':1,'asset_id':picture['id'],'description':'Diagramma assegnato'}]
+            def complete(messages,settings,cancel,**kw):
+                calls.append(messages);figure=''
+                if len(calls)==2:
+                    self.assertIn('illustrazioni già generate',messages[-1]['content']);self.assertIn(picture['id'],messages[-1]['content'])
+                    figure='<img data-asset-id="'+picture['id']+'">'
+                return '<main style="color:green"><h1>Nuova composizione</h1>'+figure+'</main>','stop'
+            with patch.object(self.app.engine,'completion',side_effect=complete):
+                artifact=build(self.app,job,payload,settings,self.model,threading.Event(),lambda value:None,Path(self.temp.name)/'resume.log',meta,prepare_engine=False)
+            self.app.store.execute("UPDATE jobs SET status='done' WHERE id=?",(job['id'],))
+            result=json.loads(artifact['content'][len(PREFIX):-4]);self.assertEqual(len(calls),2 if planned else 1);self.assertEqual(picture['id'] in result['pages'][0]['html'],planned);self.assertEqual(result['pages'][1],deck['pages'][1])
 
     def test_revision_uses_saved_slide_colors_not_current_infographic_palette(self):
         chat=self.app.store.create_chat()['id'];_,deck=self.deck(chat)

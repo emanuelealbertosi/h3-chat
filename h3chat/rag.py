@@ -138,8 +138,8 @@ class Embeddings:
         from .rag_profiles import visual_enabled
         entries=items if items is not None else texts
         with self.lock:
-            if not runtime_ready(self.root):raise ValueError('Installa i componenti EmbeddingGemma 2 nelle Preferenze per usare questo embedding.')
             key=self.key(settings);device='cuda' if settings.get('rag_device')=='gpu' else 'cpu'
+            if not runtime_ready(self.root,device):raise ValueError('Installa i componenti EmbeddingGemma 2 nelle Preferenze; per la GPU servono anche i componenti Ovis / Vision. CPU resta disponibile senza CUDA.')
             try:
                 if not self.session or self.session.key!=key or not self.session.alive():
                     self.close();s=Session(key,'embedding-gemma2',{}, {},settings,self.data/'logs/embeddings.log');self.session=s

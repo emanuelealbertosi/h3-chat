@@ -1,5 +1,6 @@
 """Idempotent clone setup. No Node, compiler, system Python or personal data writes."""
 import json
+import argparse
 import os
 import subprocess
 import sys
@@ -77,20 +78,35 @@ def install_runtime(key,root=ROOT):
         mark_ready(root,key.removeprefix('tools_'))
 
 
-def main():
+def install_components(api_only=False):
+    """The API path needs document tools, but no local generative engine."""
+    print('[1] Interfaccia e launcher precompilati',flush=True);install_bundle()
+    if not api_only:
+        print('[2] Motori chat e immagini CPU',flush=True);install_runtime('cpu')
+        print('[3] Motore musicale CPU',flush=True);install_runtime('music_cpu')
+    print('[4] PDF, Word e conversione audio WAV/MP3',flush=True);install_runtime('tools_documents')
+    if not api_only:
+        print('[5] Verifica motori',flush=True)
+        subprocess.run([sys.executable,'-X','utf8',str(ROOT/'scripts/check_native.py')],check=True)
+        worker=ROOT/'runtime/music/cpu/h3-music-worker.exe'
+        result=subprocess.run([str(worker)],input=b'',capture_output=True,cwd=worker.parent,timeout=30)
+        if result.returncode or json.loads(result.stdout).get('event')!='hello': raise ValueError('Verifica motore musicale fallita.')
+    from h3chat.installation_profile import write_profile
+    write_profile(ROOT,api_only)
+    if api_only:
+        print('H3-Chat pronto per API senza GPU. Collega il provider LLM e gli eventuali server immagini/musica/video nel Setup. RAG locale opzionale dalle Preferenze. Nessun modello generativo locale scaricato.',flush=True)
+    else:
+        print('H3-Chat pronto. Scegli modelli e GPU nel Setup. Preferenze e dati esistenti conservati.',flush=True)
+
+
+def main(argv=None):
+    parser=argparse.ArgumentParser(description='Installa H3-Chat su Windows senza compilatori o Python di sistema.')
+    parser.add_argument('--api-only',action='store_true',help='Solo API e documenti: nessun motore generativo locale o componente GPU; RAG locale installabile dal Setup.')
+    args=parser.parse_args(argv)
     if sys.platform!='win32' or sys.maxsize<=2**32: raise ValueError('Questo pacchetto richiede Windows x64.')
     from launcher import running_servers
     if running_servers(8787): raise ValueError('H3-Chat e aperto. Termina i lavori, esegui stop.bat e rilancia install.bat.')
-    print('[1/5] Interfaccia e launcher precompilati',flush=True);install_bundle()
-    print('[2/5] Motori chat e immagini CPU',flush=True);install_runtime('cpu')
-    print('[3/5] Motore musicale CPU',flush=True);install_runtime('music_cpu')
-    print('[4/5] PDF, Word e conversione audio WAV/MP3',flush=True);install_runtime('tools_documents')
-    print('[5/5] Verifica motori',flush=True)
-    subprocess.run([sys.executable,'-X','utf8',str(ROOT/'scripts/check_native.py')],check=True)
-    worker=ROOT/'runtime/music/cpu/h3-music-worker.exe'
-    result=subprocess.run([str(worker)],input=b'',capture_output=True,cwd=worker.parent,timeout=30)
-    if result.returncode or json.loads(result.stdout).get('event')!='hello': raise ValueError('Verifica motore musicale fallita.')
-    print('H3-Chat pronto. Scegli modelli e GPU nel Setup. Preferenze e dati esistenti conservati.',flush=True)
+    install_components(args.api_only)
 
 if __name__=='__main__':
     try: main()

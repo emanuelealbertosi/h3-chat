@@ -1,0 +1,33 @@
+import {spawn} from 'node:child_process';
+import {createRequire} from 'node:module';
+import {once} from 'node:events';
+import {createInterface} from 'node:readline';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
+const child=spawn('runtime/python/python.exe',['-X','utf8','tests/serve_canvas_fixture.py'],{stdio:['ignore','pipe','pipe']});let diagnostics='';child.stderr.on('data',x=>diagnostics+=x);
+const lines=createInterface({input:child.stdout}),first=await Promise.race([once(lines,'line'),once(child,'exit').then(()=>{throw Error(diagnostics);})]);const fixture=JSON.parse(first[0]);lines.close();
+const browser=await chromium.launch({channel:'msedge',headless:true,args:['--disable-gpu']}).catch(error=>{child.kill();throw error;}),page=await browser.newPage({viewport:{width:1500,height:1000}}),errors=[];
+page.on('pageerror',error=>errors.push(error.message));
+const post=phase=>page.evaluate(async phase=>{const {token}=await(await fetch('/api/state')).json();const result=await fetch('/fixture/slide-recovery/'+phase,{method:'POST',headers:{'Content-Type':'application/json','X-H3-Token':token},body:'{}'});if(!result.ok)throw Error(await result.text());},phase);
+const revision=()=>page.getByRole('button',{name:'Ricrea solo questa slide',exact:true});
+const input=()=>page.getByRole('textbox',{name:'Istruzioni AI per questa slide',exact:true});
+try{
+ await page.goto(fixture.url);await page.click(`[data-chat="${fixture.chat}"]`);await post('interrupted');await page.click('#canvas-toggle');
+ const resume=page.locator('[data-slides-resume]');await resume.waitFor();assert.equal(await resume.isEnabled(),true);assert.match(await page.locator('.slide-generation-progress').innerText(),/1\/2 slide complete/);
+ await page.route('**/api/chats/*/slides/resume',route=>route.fulfill({json:{job_id:'resume-fixture',canvas:true,intent:'slides'}}));
+ const resumed=page.waitForRequest(request=>request.method()==='POST'&&request.url().endsWith('/slides/resume'));await resume.click();assert.ok((await resumed).postDataJSON().artifact_id);
+ await post('start');await page.waitForFunction(()=>document.querySelector('[data-slides-resume]')?.disabled);assert.match(await page.locator('.slide-generation-progress').innerText(),/40 caratteri/);
+ await post('stream');await page.frameLocator('.h3-html-page iframe').getByText('Testo progressivo aggiornato').waitFor();assert.match(await page.locator('.slide-generation-progress').innerText(),/200 caratteri/);
+ await post('rendered');await page.waitForFunction(()=>document.querySelector('.slides-navigation select')?.selectedOptions[0]?.textContent==='2. Seconda');
+ await page.locator('.slide-ai-revision summary').click();assert.equal(await revision().isDisabled(),true);
+ await post('done');await page.waitForFunction(()=>!document.querySelector('.slide-ai-revision button')?.disabled);assert.equal(await page.locator('[data-slides-resume]').count(),0);
+ if(!await input().isVisible())await page.locator('.slide-ai-revision summary').click();await input().fill('Correggi la seconda pagina');
+ await page.selectOption('.slides-navigation select','0');if(!await input().isVisible())await page.locator('.slide-ai-revision summary').click();assert.equal(await input().inputValue(),'');await input().fill('Correggi solo la prima');
+ await page.selectOption('.slides-navigation select','1');assert.equal(await input().inputValue(),'Correggi la seconda pagina');assert.equal(await revision().isEnabled(),true);
+ await page.route('**/api/canvas/*/slides/regenerate',route=>route.fulfill({json:{job_id:'revision-fixture',canvas:true,intent:'slides'}}));
+ const changed=page.waitForRequest(request=>request.method()==='POST'&&request.url().endsWith('/slides/regenerate'));await revision().click();const body=(await changed).postDataJSON();assert.equal(body.page,1);assert.equal(body.prompt,'Correggi la seconda pagina');
+ await page.route('**/api/auth/me',route=>route.fulfill({json:{configured:true,user:{id:'fixture-owner'},csrf:'fixture-csrf'}}));
+ await page.route('**/api/auth/logout',route=>route.fulfill({json:{ok:true}}));await page.route('**/login',route=>route.fulfill({contentType:'text/html',body:'<h1>Login fixture</h1>'}));
+ const logout=page.waitForRequest(request=>request.method()==='POST'&&request.url().endsWith('/auth/logout'));await page.locator('#account-logout').click();assert.equal((await logout).headers()['x-h3-token'],'fixture-csrf');await page.waitForURL('**/login');
+ assert.deepEqual(errors,[]);console.log('Slide recovery button, progressive preview, unchanged-HTML terminal reenabling, per-page prompts and logout passed. Synthetic fixture only.');
+}catch(error){console.error(diagnostics);throw error;}finally{await browser.close();child.kill();}

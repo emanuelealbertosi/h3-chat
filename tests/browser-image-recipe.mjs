@@ -1,0 +1,36 @@
+import {spawn} from 'node:child_process';
+import {createRequire} from 'node:module';
+import {once} from 'node:events';
+import {createInterface} from 'node:readline';
+import {mkdir,readFile} from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
+const child=spawn('runtime/python/python.exe',['-X','utf8','tests/serve_canvas_fixture.py'],{stdio:['ignore','pipe','pipe']});let log='';child.stderr.on('data',v=>log+=v);
+const lines=createInterface({input:child.stdout});const [line]=await Promise.race([once(lines,'line'),once(child,'exit').then(()=>{throw Error(log);})]);lines.close();const fixture=JSON.parse(line);
+const model='recipe-model',id='a'.repeat(32),p={width:1024,height:576,steps:25,cfg:1,sampler:'euler',scheduler:'simple',seed:12345,negative_prompt:'',aspect:'16:9',strength:1};
+const recipe={version:1,kind:'image',asset:{id,name:'Immagine preferita.png'},model:{id:model,name:'Qwen recipe fixture'},parameters:p,prompt:'A pear on a table',references:[],loras:[],warnings:[],reusable:true};
+const browser=await chromium.launch({channel:'msedge',headless:true,args:['--disable-gpu']}),page=await browser.newPage({viewport:{width:1400,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));let submissions=0,lastSeed=0;
+try{
+ await page.route('**/api/state',async route=>{const response=await route.fetch(),s=await response.json();s.models.push({id:model,name:'Qwen recipe fixture',ready:true,local:true,engine:'vision',architecture:'qwen21',capabilities:['create','edit'],width:1024,height:576,steps:25,cfg:1,sampler:'euler',scheduler:'simple'});s.settings.create_model=model;s.settings.seed=-1;await route.fulfill({response,json:s});});
+ await page.route('**/api/chats/'+fixture.chat,async route=>{const response=await route.fetch(),chat=await response.json();chat.messages=[{id:'old-recipe',role:'assistant',content:'Immagine salvata',status:'done',created:1,meta:{image_model_id:model,image_parameters:p,image_prompt:recipe.prompt},media:[{id,name:recipe.asset.name,path:'outputs/fixture.png',mime:'image/png',generation:p}]}];await route.fulfill({response,json:chat});});
+ await page.route('**/api/media/'+id+'/generation',route=>route.fulfill({json:recipe}));
+ await page.route('**/api/images/last-seed?*',route=>route.fulfill({json:{model_id:model,seed:lastSeed}}));
+ await page.route('**/api/chats/*/messages',route=>{submissions++;return route.fulfill({json:{job_id:'forbidden-test-submission'}});});
+ await page.goto(fixture.url);await page.locator('[data-chat="'+fixture.chat+'"]').click();
+ const details=page.locator('#msg-old-recipe .creation-details');await details.locator('summary').click();await details.getByRole('button',{name:'Riusa impostazioni',exact:true}).waitFor();
+ await page.waitForFunction(()=>!document.querySelector('#msg-old-recipe .creation-details button')?.disabled);
+ assert.match(await details.locator('summary').textContent(),/12345/);
+ const downloading=page.waitForEvent('download');await details.getByRole('button',{name:'Scarica dati (.json)',exact:true}).click();const file=await downloading;const json=JSON.parse(await readFile(await file.path(),'utf8'));assert.equal(json.parameters.seed,12345);assert.equal(json.prompt,recipe.prompt);
+ await details.getByRole('button',{name:'Riusa impostazioni',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#prompt').value==='A pear on a table');
+ assert.equal(await page.locator('#image-model').inputValue(),model);assert.equal(await page.locator('#image-assistant').isChecked(),false);assert.equal(submissions,0);
+ await page.click('#canvas-toggle');await page.waitForFunction(()=>document.querySelector('#canvas-title').value==='Documento recente');await page.click('#canvas-previous');
+ const canvas=page.locator('#canvas-preview .creation-details');await canvas.locator('summary').click();await canvas.getByRole('button',{name:'Riusa impostazioni',exact:true}).waitFor({state:'visible'});
+ await page.waitForFunction(()=>!document.querySelector('#canvas-preview .creation-details button')?.disabled);
+ await page.locator('#prompt').fill('Bozza da sostituire');await canvas.getByRole('button',{name:'Riusa impostazioni',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#prompt').value==='A pear on a table');assert.equal(submissions,0);await page.click('#canvas-close');
+ await page.locator('[data-mode-settings="prompt-image-panel"]').click();const chat=page.locator('#prompt-mode-settings');assert.equal(await chat.locator('[data-image-request="seed"]').inputValue(),'12345');assert(await chat.locator('[data-image-seed-fixed]').isChecked());
+ await chat.locator('[data-image-seed-fixed]').uncheck();assert.equal(await chat.locator('[data-image-request="seed"]').inputValue(),'-1');await chat.locator('[data-image-last-seed]').click();await page.waitForFunction(()=>document.querySelector('[data-image-request="seed"]')?.value==='0');assert(await chat.locator('[data-image-seed-fixed]').isChecked());await chat.locator('footer button').click();
+ await page.locator('#settings-open').click();await page.locator('[data-tab="advanced"]').click();const preferences=page.locator('#image-settings-card');await preferences.locator('#image-settings-model').selectOption(model);
+ assert(await preferences.locator('[data-image-setting="seed"]').isVisible());await preferences.locator('[data-image-preferences-last-seed]').click();await page.waitForFunction(()=>document.querySelector('#image-settings-card [data-image-setting="seed"]')?.value==='0');assert(await preferences.locator('[data-image-seed-fixed]').isChecked());await preferences.locator('[data-image-seed-fixed]').uncheck();assert.equal(await preferences.locator('[data-image-setting="seed"]').inputValue(),'-1');
+ await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);await mkdir('work/image-recipes-2026-10-21',{recursive:true});await page.screenshot({path:'work/image-recipes-2026-10-21/settings-mobile.png'});assert.deepEqual(errors,[]);assert.equal(submissions,0);
+ console.log('PASS: selected-image JSON, exact seed and prompt reuse without sending, Assistant Off, fixed/random seed in chat and global settings, seed zero and mobile.');
+}finally{await browser.close();child.kill();}

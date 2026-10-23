@@ -140,6 +140,9 @@ def apply(value, selected, data):
         record['parameters'][index]=copy.deepcopy(variant['parameters']);record['outputs'][index]=variant['output']
         record['clip_sources'][index]=copy.deepcopy(source) if source['path']!=variant['output'] or start else None
         record['selected_versions'][key]=ident
+        if record.get('batch_generated_audio') and len(record['timeline'])==1 and variant.get('audio'):
+            previous=value['audio'];value['audio']=copy.deepcopy(variant['audio'])
+            value['refs']=[copy.deepcopy(value['audio']) if r['id']==previous['id'] else r for r in value['refs']]
         if record.get('storyboard'):record['storyboard']['shots'][index]=copy.deepcopy(scene)
     if selected:record.pop('recreate_recipes',None)
     record['edited_clips']=[i+1 for i,variants in enumerate(record['clip_versions']) if record['selected_versions'][str(i+1)]!=variants[0]['id']]
@@ -147,12 +150,13 @@ def apply(value, selected, data):
 
 def describe(value,index):
     history=value['record']['clip_versions'][index]
-    return [{'id':v['id'],'label':('Originale' if n==0 else f'Versione {n}')+
+    return [{'id':v['id'],'label':(f"Batch · variante {v['parameters']['variant_index']}/{v['parameters'].get('variants',1)}" if v['parameters'].get('variant_index') else 'Originale' if n==0 else f'Versione {n}')+
         (' · '+v['parameters']['timeline_label'] if n and v['parameters'].get('timeline_label') else '')+
         (f" · {v['parameters']['steps']} passi" if n and v['parameters'].get('steps') else ''),
         'url':'/media/'+v['source']['path'],'preview_start':v['source']['start'],
         'source_interval':v['source']['path']!=v['output'] or bool(v['source']['start']),
         'created':v.get('created'),'created_source':v.get('created_source'),'seed':v['parameters'].get('seed'),
+        'variant_index':v['parameters'].get('variant_index'),'variants_mode':v['parameters'].get('variants_mode'),'variant_batch_id':v['parameters'].get('variant_batch_id'),
         'prompt':remap_prompt(v['prompt'],merge_images(value,v))} for n,v in enumerate(history)]
 
 

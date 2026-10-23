@@ -7,19 +7,59 @@ from pathlib import Path
 import re
 import secrets
 import socket
+import struct
 import subprocess
 import sys
 import tempfile
 import threading
 import time
 import urllib.request
+import zlib
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from h3chat.engine import Engine
 from h3chat.models import inspect_model
 from h3chat.store import DEFAULTS
-from h3chat.llm_acceleration import FILENAME, ORCA_FILENAME, PROFILES
+from h3chat.llm_acceleration import PROFILES
+
+
+def benchmark_inputs(args):
+    """Resolve explicit weights and portable CPU-only fixtures before GPU use."""
+    model_path=args.model_path.expanduser().resolve()
+    if not model_path.is_file():raise ValueError('Model file not found: '+str(model_path))
+    if model_path.name!=PROFILES[args.model]['filename']:
+        raise ValueError('--model-path does not match the selected --model profile.')
+    projector=None
+    if args.vision:
+        projector=(args.mmproj or model_path.parent/'mmproj-Qwen3.8-27B-BF16.gguf').expanduser().resolve()
+        if not projector.is_file():raise ValueError('Vision projector not found; supply --mmproj: '+str(projector))
+    if args.corpus:
+        source=args.corpus.expanduser().resolve().read_text(encoding='utf-8-sig')
+    else:
+        # Real, distinct source text; never inspect personal app data or models.
+        parts=[];size=0
+        for path in sorted((ROOT/'h3chat').glob('*.py')):
+            value='\nDOCUMENTO '+path.name+'\n'+path.read_text(encoding='utf-8',errors='replace')
+            parts.append(value);size+=len(value)
+            if size>=1600000:break
+        source=''.join(parts)
+    image=args.vision_image.expanduser().resolve().read_bytes() if args.vision and args.vision_image else geometry_image()
+    return model_path,projector,source,image
+
+
+def geometry_image():
+    """Small PNG fixture: red square left, blue circle right; no image runtime."""
+    rows=[]
+    for y in range(128):
+        row=bytearray(b'\0')
+        for x in range(256):
+            color=(220,30,30) if 20<=x<100 and 24<=y<104 else (30,60,220) if (x-190)**2+(y-64)**2<40**2 else (255,255,255)
+            row.extend(color)
+        rows.append(row)
+    def chunk(kind,value):
+        return struct.pack('>I',len(value))+kind+value+struct.pack('>I',zlib.crc32(kind+value)&0xffffffff)
+    return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',256,128,8,2,0,0,0))+chunk(b'IDAT',zlib.compress(b''.join(rows)))+chunk(b'IEND',b'')
 
 
 def gpu():
@@ -45,30 +85,32 @@ def listening(port):
         return probe.connect_ex(('127.0.0.1',port))==0
 
 
-def main():
+def main(argv=None):
     parser=argparse.ArgumentParser()
     parser.add_argument('--label',required=True)
     parser.add_argument('--model',choices=('ista-iq3s','orca-iq3xxs'),default='ista-iq3s')
+    parser.add_argument('--model-path',type=Path,required=True,help='Existing GGUF for the selected profile; no automatic download.')
+    parser.add_argument('--mmproj',type=Path,help='Vision projector; defaults to the original mmproj name beside the GGUF.')
+    parser.add_argument('--corpus',type=Path,help='Optional UTF-8 long-context corpus; defaults to this checkout\'s h3chat sources.')
+    parser.add_argument('--vision-image',type=Path,help='Optional red-square/blue-circle fixture; otherwise generated on CPU.')
     parser.add_argument('--vision',action='store_true')
     parser.add_argument('--context',type=int,default=131072)
     parser.add_argument('--short-tokens',type=int,default=2048)
     parser.add_argument('--arithmetic-tokens',type=int,default=512)
     parser.add_argument('--long',type=int,nargs='*',default=[8000,126000])
-    args=parser.parse_args()
+    args=parser.parse_args(argv)
     if not re.fullmatch(r'[a-zA-Z0-9_-]+',args.label):raise ValueError('Invalid label')
     if not 16384<=args.context<=131072:raise ValueError('Invalid context size')
     if not 128<=args.short_tokens<=8192 or not 512<=args.arithmetic_tokens<=4096:raise ValueError('Invalid output budget')
     if any(n<1000 or n>min(126000,args.context-1500) for n in args.long):raise ValueError('Invalid prompt size')
+    model_path,projector,source,image=benchmark_inputs(args)
     folder=ROOT/'work/accelerator-benchmarks';folder.mkdir(parents=True,exist_ok=True)
     report_path=folder/(args.label+'.json');log=folder/(args.label+'.log')
     if report_path.exists() or log.exists():raise ValueError('Existing report: choose a new label')
     if any(listening(port) for port in (8081,8096)):raise ValueError('Another benchmark/standalone server is active')
-    model_path=(Path(r'C:\Users\emanu\.lmstudio\models\RentedNoodle\Qwen3.8-27B-OrcaRouter-GSQ-RCO-IQ3_XXS-Uncensored')/ORCA_FILENAME
-                if args.model=='orca-iq3xxs' else Path(r'C:\Users\emanu\.lmstudio\models\ISTA-DASLab\Qwen3.8-27B-GSQ-RCO-GGUF')/FILENAME)
     draft=PROFILES[args.model]['draft']
     files=[{'role':'model','path':str(model_path),'size':model_path.stat().st_size}]
     if args.vision:
-        projector=model_path.parent/'mmproj-Qwen3.8-27B-BF16.gguf'
         files.append({'role':'mmproj','path':str(projector),'size':projector.stat().st_size})
     model={'id':'integrated-fixture','name':model_path.name,'local':True,'external':True,
            'capabilities':['chat'],'projector_mode':'manual' if args.vision else 'off','files':files}
@@ -136,11 +178,6 @@ def main():
             request('short',[{'role':'user','content':'Scrivi un programma Python completo per una agenda settimanale: importa appuntamenti da JSON, rileva sovrapposizioni, stampa il calendario e includi esempi e test con unittest. Spiega brevemente le scelte.'}],limit=args.short_tokens)
             engine.start_llama(model,settings,log,cancel)
             report['checks']['reused_owned_session']=engine.active is session and engine.process.pid==pid
-            source=(Path(r'F:\AI\Qwen27B\scripts')/'corpus-source.txt').read_text(encoding='utf-8-sig')
-            if any(n>8000 for n in args.long):
-                for path in sorted(Path(r'D:\AI\QwenFlash\llama.cpp\src').rglob('*.cpp')):
-                    source+='\nDOCUMENTO '+path.name+'\n'+path.read_text(encoding='utf-8',errors='replace')
-                    if len(source)>1600000:break
             source=source.replace('<|','< | ').replace('|>',' | >').replace('<think>','< think >').replace('</think>','< /think >')
             for target in args.long:
                 print('Preparazione prompt '+str(target),flush=True)
@@ -164,7 +201,6 @@ def main():
             try:report['checks']['arithmetic_low']=json.loads(row['content'].strip().removeprefix('```json').removesuffix('```').strip())=={'totale':400,'metri':3400}
             except ValueError:report['checks']['arithmetic_low']=False
             if args.vision:
-                image=Path(r'F:\AI\Qwen27B\logs\vision-test.png').read_bytes()
                 row=request('vision',[{'role':'user','content':[
                     {'type':'text','text':'Descrivi in italiano le due forme geometriche, i loro colori e le posizioni sinistra e destra. Rispondi in una sola frase.'},
                     {'type':'image_url','image_url':{'url':'data:image/png;base64,'+base64.b64encode(image).decode()}}]}],limit=256,think='off')

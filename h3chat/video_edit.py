@@ -37,6 +37,15 @@ def source(app, chat_id, ident,segment_seconds=None,*,import_layout_version=2):
     images=[r for r in refs if r['mime'].startswith('image/')]
     audios=[r for r in refs if r['mime'].startswith('audio/')]
     track=next((a for a in record['plan']['audios'] if a['role'] in ('reuse','lipsync')),None)
+    if not track:
+        # Older storyboard jobs preserved an exact master during composition
+        # but left the preliminary plan's audio role at "reference". Recover
+        # only the explicitly saved soundtrack identity, never a guessed file.
+        master=record.get('request_context',{}).get('settings',{}).get('_video_soundtrack',{})
+        ordinal=next((i for i,a in enumerate(audios,1) if a['id']==master.get('id')),None)
+        if ordinal is not None:
+            track=next((a for a in record['plan']['audios'] if a['index']==ordinal),None)
+            if track is not None:track.update(role='reuse',start=record.get('audio_start',0))
     if not track or not 1<=track['index']<=len(audios):raise ValueError('La canzone originale non è disponibile.')
     for item in refs:
         if not safe_join(app.data,item['path']).is_file():raise ValueError('Un riferimento originale non è più disponibile.')
@@ -90,12 +99,14 @@ def describe(app,chat_id,ident,segment_seconds=None):
     try:editor_draft=load_editor_draft(app,chat_id,ident,value)
     except ValueError as exc:editor_draft=None;draft_error=str(exc)
     from .video_loras import choices
-    from .video_longtake import stale_contexts
     from .video_editor_launch import load as load_last_launch
+    from .video_edit_memory import describe as describe_memory
     return {'source':ident,'model_id':record['model'],'models':model_choices(app),'loras':choices(app),'duration':value['duration'],'partial_edit':True,
-        'last_launch':load_last_launch(app,chat_id,ident,value),'launch_settings':True,
+        'last_launch':load_last_launch(app,chat_id,ident,value),'launch_settings':True,'batch_variants':'variants' in DEFAULTS,
+        'batch_requested':record.get('batch_requested',1),'batch_mode':record.get('batch_mode','clip'),'batch_id':record.get('batch_id'),
+        'batch_movies':[{'variant_index':m['variant_index'],'url':'/media/'+m['path']} for m in record.get('batch_movies',[])],
         'preview_audio':{'url':'/media/'+value['audio']['path'],'start':record.get('audio_start',0)},
-        'attention_choices':True,'longtake_experimental':True,'longtake_stale_clips':stale_contexts(app.data,record),'draft_supported':True,'editor_draft':editor_draft,'draft_error':draft_error,'clip_tools':True,
+        'attention_choices':True,'draft_supported':True,'editor_draft':editor_draft,'draft_error':draft_error,'clip_tools':True,'memory_recovery':True,'end_frame_recovery':True,
         'extension_modes':['extension','clip','frames'],
         'anchor_edit_model':app.store.settings().get('edit_model',''),
         'anchor_edit_models':[{'id':m['id'],'name':m['name'],'max_refs':m.get('max_refs',1)} for m in app.catalog.values() if 'edit' in m.get('capabilities',[]) and m.get('ready')],
@@ -111,6 +122,7 @@ def describe(app,chat_id,ident,segment_seconds=None):
             'source_interval':bool(record.get('clip_sources',[None]*len(record['timeline']))[i]) or bool(value.get('imported')),'prompt':record['prompts'][i],
             'images':[x['index'] for x in s.get('images',record['plan']['images'])],
             'mode':s.get('generation_mode','reference'),
+            'memory':describe_memory(record,i),
             'start_image':next((x['index'] for x in s.get('images',[]) if x['role']=='keyframe'),None),
             'lip_sync':s.get('lip_sync',any(a['role']=='lipsync' for a in record['plan']['audios']))}
             for i,s in enumerate(record['timeline'])]}
@@ -121,7 +133,7 @@ def validate_edits(patches,value):
         raise ValueError('Seleziona almeno un clip da modificare.')
     result=[];seen=set()
     for item in patches:
-        if not isinstance(item,dict) or set(item)-{'clip','prompt','images','lip_sync','audio_guide','start','end','mode','start_image','reference_megapixels','anchors','anchor_image','anchor_images','auto_anchors','anchor_edit_model'}:
+        if not isinstance(item,dict) or set(item)-{'clip','prompt','images','lip_sync','audio_guide','start','end','mode','start_image','reference_megapixels','anchors','anchor_image','anchor_images','auto_anchors','anchor_edit_model','recover_memory','end_frame'}:
             raise ValueError('Modifica clip non valida.')
         clip=item.get('clip');prompt=item.get('prompt');lip=item.get('lip_sync',False)
         if type(clip) is not int or not 1<=clip<=len(value['record']['timeline']) or clip in seen:
@@ -165,6 +177,10 @@ def validate_edits(patches,value):
         elif guide is not None:raise ValueError('Il fotogramma iniziale richiede la modalità I2V.')
         scene=value['record']['timeline'][clip-1]
         images=[guide] if mode=='i2v' else item.get('images',[] if mode=='video' else [x['index'] for x in scene.get('images',value['record']['plan']['images'])])
+        end_frame=item.get('end_frame','none')
+        if type(end_frame) is int and isinstance(images,list) and end_frame not in images:images=[*images,end_frame]
+        if isinstance(end_frame,str) and end_frame in ('original','next') and isinstance(images,list) and len(images)>=9:
+            raise ValueError('Il fotogramma finale richiede uno dei nove posti immagine: riduci i riferimenti selezionati.')
         if isinstance(images,list):images=list(anchor_images.values())+[n for n in images if n not in anchor_images.values()]
         if not isinstance(images,list) or len(images)>9 or any(type(n) is not int or not 1<=n<=len(value['images']) for n in images) or len(set(images))!=len(images):
             raise ValueError('Scegli fino a nove riferimenti validi per il clip.')
@@ -197,7 +213,16 @@ def validate_edits(patches,value):
             if auto:
                 mode_values['auto_anchors']=True
                 if editor is not None:mode_values['anchor_edit_model']=editor
-        seen.add(clip);result.append({'clip':clip,'prompt':prompt.strip(),'images':images,'lip_sync':lip}|({'audio_guide':audio_guide} if 'audio_guide' in item else {})|span|mode_values)
+        resolved={'clip':clip,'prompt':prompt.strip(),'images':images,'lip_sync':lip}|({'audio_guide':audio_guide} if 'audio_guide' in item else {})|span|mode_values
+        if 'recover_memory' in item:resolved['recover_memory']=item['recover_memory']
+        from .video_edit_memory import validate as validate_memory
+        validate_memory(resolved,scene,clip-1)
+        if resolved.get('recover_memory'):resolved['mode']='reference'
+        from .video_edit_end_frame import validate as validate_end_frame
+        validate_end_frame(end_frame,resolved,scene,clip-1,len(value['record']['timeline']),len(value['images']))
+        if 'end_frame' in item:resolved['end_frame']=end_frame
+        if end_frame!='none':resolved['mode']='reference'
+        seen.add(clip);result.append(resolved)
     return sorted(result,key=lambda x:x['clip'])
 
 
@@ -210,6 +235,7 @@ def edited_anchors(patch,scene):
     first,last=interval(patch,scene);count=last-first
     positions={'first':0,'middle':count//2,'last':count-1}
     images=dict(patch.get('anchor_images',{}))
+    if type(patch.get('end_frame')) is int:images['last']=patch['end_frame']
     if patch.get('anchor_image'):images['first']=patch['anchor_image']
     return {image:positions[name]/24 for name,image in images.items()}
 
@@ -232,6 +258,7 @@ def supplied_plans(value,patches,plans):
         key=str(patch['clip'])
         if key not in plans:continue
         if patch.get('auto_anchors'):raise ValueError('Le guide automatiche richiedono nuove istruzioni per i fotogrammi modificati.')
+        if patch.get('end_frame','none') in ('original','next'):raise ValueError('Prepara nuove istruzioni per il fotogramma finale estratto dalla timeline.')
         scene=value['record']['timeline'][patch['clip']-1];first,last=interval(patch,scene)
         chosen=[value['images'][n-1] for n in patch['images']]+([value['audio']] if patch.get('audio_guide',True) else [])
         plan=validate_plan(plans[key],chosen,(last-first)/24,source_video=patch.get('mode')=='video')
@@ -282,6 +309,7 @@ def request(app,chat_id,body):
     if assistant and len(plans)!=len(patches):app.engine.require_model(settings['chat_model'],'chat')
     parameters=body.get('parameters',{})
     from .video_recreate import EDITABLE
+    if isinstance(parameters,dict):parameters={k:v for k,v in parameters.items() if k!='longtake_enabled'}
     if not isinstance(parameters,dict) or set(parameters)-set(EDITABLE):raise ValueError('Parametri di modifica video non validi.')
     preset=validate(settings.get('video_overrides',{}).get(selected,{})|parameters)
     from .video_loras import aligned,profile
@@ -301,23 +329,22 @@ def request(app,chat_id,body):
     return {'job_id':ident,'canvas':canvas}
 
 
-def install_clip(app,value,record,patch,item,generated_path,folder,cancel,stage,log):
+def install_clip(app,value,record,patch,item,generated_path,folder,cancel,stage,log,*,complete=True):
     """Commit an already generated interval to a new timeline, never its source."""
     original=value['record'];number=patch['clip'];scene=record['timeline'][number-1]
-    first,last=interval(patch,scene);p=original['parameters'][number-1]
+    first,last=interval(patch,scene);p={k:v for k,v in original['parameters'][number-1].items() if not k.startswith('variant_') and k not in ('variants','variants_mode')}
     with generated_path.open('rb') as stream:
         if stream.read(12)[4:8]!=b'ftyp':raise ValueError('Il tratto salvato non è un MP4 valido.')
     if 'start' in patch:
-        merged=folder/f'scene-{number:03d}'/'edited.mp4';merged.parent.mkdir(parents=True,exist_ok=True)
+        branch=item['generation'].get('variant_index',1)
+        merged=folder/f'scene-{number:03d}'/(f'variant-{branch:03d}/edited.mp4' if branch>1 else 'edited.mp4');merged.parent.mkdir(parents=True,exist_ok=True)
         splice=app.engine.tool_call('video-splice-worker.py',{'original':str(safe_join(app.data,original['outputs'][number-1])),
             'replacement':str(generated_path),'output':str(merged),'start_frame':first,'end_frame':last,'total_frames':scene['frames']},cancel,stage,log,timeout=600)
         if splice['frames']!=scene['frames']:raise ValueError('Il montaggio ha cambiato la durata del clip.')
         record['outputs'][number-1]=merged.relative_to(app.data).as_posix()
-        record['parameters'][number-1]=p|{'duration':scene['duration'],'output_frames':scene['frames'],'post_edit_interval':{'start':first/24,'end':last/24,'generation':item['generation']}}
+        record['parameters'][number-1]=p|{k:v for k,v in item['generation'].items() if k.startswith('variant_') or k in ('seed','steps','variants','variants_mode')}|{'duration':scene['duration'],'output_frames':scene['frames'],'post_edit_interval':{'start':first/24,'end':last/24,'generation':item['generation']}}
     else:
         record['outputs'][number-1]=item['path'];record['parameters'][number-1]=p|item['generation']
-    if 'start' in patch or not item['generation'].get('longtake_enabled'):
-        record['parameters'][number-1].pop('longtake',None)
     if record.get('clip_sources') is not None:record['clip_sources'][number-1]=None
     plan=record['revision_plans'][str(number)]
     def global_picture(match):return f"<Picture {patch['images'][int(match[1])-1]}>"
@@ -325,18 +352,47 @@ def install_clip(app,value,record,patch,item,generated_path,folder,cancel,stage,
     if 'start' in patch:description=original['prompts'][number-1]+f'\nUPDATED INTERVAL (clip-local {first/24:g}–{last/24:g} seconds; the following direction uses interval-local clocks):\n'+description
     record['prompts'][number-1]=description
     anchors=edited_anchors(patch,scene)
-    scene.update(prompt=description,images=[{'index':n,'role':'keyframe' if patch.get('mode')=='i2v' or n in anchors else 'reference','seconds':(first/24+anchors.get(n,0)) if patch.get('mode')=='i2v' or n in anchors else 0} for n in patch['images']],lip_sync=patch['lip_sync'],continuity='cut',generation_mode=patch.get('mode','reference'))
+    scene.update(prompt=description,images=[{'index':n,'role':'keyframe' if patch.get('mode')=='i2v' or n in anchors else 'reference','seconds':(first/24+anchors.get(n,0)) if patch.get('mode')=='i2v' or n in anchors else 0} for n in patch['images']],lip_sync=patch['lip_sync'],continuity='continue' if patch.get('recover_memory') else 'cut',generation_mode=patch.get('mode','reference'),recover_memory=bool(patch.get('recover_memory')))
     record.pop('recreate_recipes',None)
     if record.get('storyboard'):record['storyboard']['shots'][number-1]=copy.deepcopy(scene)
     record['edited_clips']=sorted(set(record.get('edited_clips',[]))|{number})
     from .video_versions import remember
     remember(value,record,number-1)
-    record['revision_completed'].append(number);save(folder,record)
+    if complete and number not in record['revision_completed']:record['revision_completed'].append(number)
+    save(folder,record)
+
+
+def install_variants(app,value,record,patch,item,canvas,p,folder,cancel,report,log):
+    """Every interval alternative is spliced against the same selected source."""
+    takes=item.get('batch_variants',[item]);primary=None;number=patch['clip'];index=number-1
+    for ordinal,take in enumerate(takes):
+        if cancel.is_set():raise Cancelled()
+        take=copy.deepcopy(take);generated_path=safe_join(app.data,take['path'])
+        changed_size=(canvas['output_width'],canvas['output_height'])!=(p['width'],p['height'])
+        if value.get('source_size') or changed_size:
+            suffix=f'-v{ordinal+1:03d}' if ordinal else ''
+            fitted=folder/f'fitted-{number:03d}{suffix}.mp4';shape=value.get('source_size') or p
+            app.engine.tool_call('video-remix-worker.py',{'op':'fit_video','runtime':{'backend':'cpu','threads':4},'folder':str(folder),
+                'source':str(generated_path),'output':str(fitted),'width':shape['width']//2*2,'height':shape['height']//2*2},cancel,report,log,timeout=600)
+            generated_path=fitted;take['path']=fitted.relative_to(app.data).as_posix()
+            if not value.get('source_size'):take['generation'].update({k:p[k] for k in ('width','height','canvas_width','canvas_height','aspect') if k in p})
+        install_clip(app,value,record,patch,take,generated_path,folder,cancel,report,log,complete=len(takes)==1)
+        if primary is None:
+            primary={k:copy.deepcopy(record[k][index]) for k in ('outputs','parameters','prompts','timeline')}
+            primary['selected']=record['selected_versions'][str(number)]
+    if len(takes)>1:
+        for k in ('outputs','parameters','prompts','timeline'):record[k][index]=primary[k]
+        record['selected_versions'][str(number)]=primary['selected']
+        if record.get('storyboard'):record['storyboard']['shots'][index]=copy.deepcopy(primary['timeline'])
+        record.update(batch_requested=len(takes),batch_mode=takes[0]['generation']['variants_mode'],batch_id=takes[0]['generation'].get('variant_batch_id'))
+        if number not in record['revision_completed']:record['revision_completed'].append(number)
+        save(folder,record)
 
 
 def render(app,job,payload,settings,cancel,stage,log):
     edit=settings['_video_edit']
     resumed=checkpoint(app.data,settings['_video_resume']) if settings.get('_video_resume') else None
+    settings=settings|{'_video_batch_id':(resumed or {}).get('batch_id') or job['id']}
     # Resuming must retain original frame boundaries, thumbnail identities and
     # source offsets even when the importer has since gained a newer layout.
     layout=resumed.get('import_layout_version',1) if resumed and resumed.get('imported_size') else 2
@@ -363,7 +419,13 @@ def render(app,job,payload,settings,cancel,stage,log):
         first,last=interval(patch,scene)
         validate_audio_interval(info['duration'],audio_start+scene['start']+first/24,(last-first)/24,tail=patch['clip']==len(original['timeline']) and last==scene['frames'])
     from .video_import import prepare
-    prepare(app,value,cancel,stage,log,clips=[p['clip'] for p in patches if 'start' in p])
+    from .video_edit_memory import source_indices as memory_indices
+    memory_sources=set()
+    for patch in patches:
+        if patch.get('recover_memory'):
+            anchor,recent=memory_indices(original,patch['clip']-1)
+            memory_sources.update([anchor+1,*[i+1 for i in recent]])
+    prepare(app,value,cancel,stage,log,clips=sorted(memory_sources|{p['clip'] for p in patches if 'start' in p}))
     folder=app.data/'outputs'/job['id'];folder.mkdir(parents=True,exist_ok=True)
     record=copy.deepcopy(original)
     record.pop('revision_resolved_request',None)
@@ -375,6 +437,8 @@ def render(app,job,payload,settings,cancel,stage,log):
         record=resumed
     from .video_auto_guides import prepare as prepare_guides
     patches=prepare_guides(app,job,value,record,patches,settings,cancel,stage,log,folder)
+    from .video_edit_end_frame import prepare as prepare_end_frames
+    patches=prepare_end_frames(app,value,record,patches,folder,cancel,stage,log)
     refs=value['images']+[r for r in value['refs'] if not r['mime'].startswith('image/')]
     # Prepare all edits before loading the video model, keeping one batch of GPU work.
     for patch in patches:
@@ -429,6 +493,9 @@ def render(app,job,payload,settings,cancel,stage,log):
             plan['prompt']='SOURCE VIDEO EDIT: The target is an edited version of <Video 1>. Preserve its movements, camera, cuts and timing; change only the requested attributes.\n'+plan['prompt']
         # Reference identity, exact audio offset and lip-sync are explicit UI contracts.
         plan['images']=[{'index':i,'role':'keyframe' if i2v or patch['images'][i-1] in anchors else 'reference','seconds':anchors.get(patch['images'][i-1],0)} for i in range(1,len(chosen)+1)]
+        if type(patch.get('end_frame')) is int:
+            label=mapping[patch['end_frame']]
+            plan['prompt']+=f'\n<Picture {label}> is the requested FINAL FRAME at local {(scene["frames"]-1)/24:g} seconds. Progress naturally toward its composition and pose; do not start from this ending image. The previous visual memory, when supplied, guides the opening.'
         plan['audios']=[{'index':1,'role':'lipsync' if patch['lip_sync'] else 'reuse','start':audio_start+start}] if patch.get('audio_guide',True) else []
         plan=validate_plan(plan,local_refs,duration,source_video=video_edit)
         record['revision_plans'][key]=plan
@@ -448,28 +515,29 @@ def render(app,job,payload,settings,cancel,stage,log):
         if patch.get('mode')=='video':
             scoped['source_video']=source_interval(value,patch)
             if not safe_join(app.data,scoped['source_video']['path']).is_file():raise ValueError('Il video sorgente non è più disponibile.')
-        if options(model,settings,False).get('longtake_enabled') and number>1 and first==0 and not (record.get('storyboard') and scene.get('continuity')=='cut'):
-            from .video_longtake import attach
-            attach(app.data,scoped,record['parameters'][number-2])
         chosen=[value['images'][n-1] for n in patch['images']]+([value['audio']] if patch.get('audio_guide',True) else [])
         plan=record['revision_plans'][str(number)]
         def report(label):stage(f'Post-produzione · clip {number} · modifica {patches.index(patch)+1}/{len(patches)}'+(f' · tratto {first/24:g}–{last/24:g} s' if 'start' in patch else '')+' · '+label)
         generated=record.setdefault('revision_generated',{})
         item=generated.get(str(number))
         if item is None:
+            memory_info=None
+            if patch.get('recover_memory'):
+                from .video_edit_memory import restore as restore_edit_memory
+                memory,memory_info=restore_edit_memory(app.data,record,number-1)
+                scoped.update(continuity='continue',resume_memory=memory)
+                batch=options(model,settings,False)
+                if batch['variants']>1:
+                    from .video_batch import memory_for
+                    scoped['batch_memories']={str(n):memory_for(record,number-1,n,batch['variants_mode'],app.data) for n in range(1,batch['variants']+1)}
+                plan=copy.deepcopy(plan)
+                plan['prompt']+='\nContinue from the supplied previous ending. Internal visual memory preserves identity, clothing and established props; develop the requested new action instead of replaying earlier actions. Do not copy the opening location if the new direction changes it.'
+                report('Recupero memoria precedente · apertura e ultime due clip disponibili')
             item=app.engine.generate_video(model,settings,plan,chosen,job['id']+f'/scene-{number:03d}',cancel,report,prompt=plan['prompt'],scene=scoped)
             item['generation']['audio_guide']=patch.get('audio_guide',True)
+            if memory_info:item['generation']['visual_memory_recovered']=memory_info
             generated[str(number)]=item;save(folder,record)
-        generated_path=safe_join(app.data,item['path'])
-        changed_size=(canvas['output_width'],canvas['output_height'])!=(p['width'],p['height'])
-        if value.get('source_size') or changed_size:
-            fitted=folder/f'fitted-{number:03d}.mp4';shape=value.get('source_size') or p
-            app.engine.tool_call('video-remix-worker.py',{'op':'fit_video','runtime':{'backend':'cpu','threads':4},'folder':str(folder),
-                'source':str(generated_path),'output':str(fitted),'width':shape['width']//2*2,'height':shape['height']//2*2},cancel,report,log,timeout=600)
-            generated_path=fitted;item=copy.deepcopy(item);item['path']=fitted.relative_to(app.data).as_posix()
-            if not value.get('source_size'):
-                item['generation']=item['generation']|{k:p[k] for k in ('width','height','canvas_width','canvas_height','aspect') if k in p}
-        install_clip(app,value,record,patch,item,generated_path,folder,cancel,report,log)
+        install_variants(app,value,record,patch,item,canvas,p,folder,cancel,report,log)
         if not remount:
             try:
                 exported=export_segment(app,job,value,record,patch,folder,cancel,report,log)
@@ -485,12 +553,16 @@ def render(app,job,payload,settings,cancel,stage,log):
     stage('Post-produzione · montaggio della nuova versione')
     prepare(app,value|{'record':record},cancel,stage,log);save(folder,record)
     result=compose(app.engine,[safe_join(app.data,p) for p in record['outputs']],safe_join(app.data,value['audio']['path']),folder/'video.mp4',cancel,stage,log,audio_start=audio_start,audio_duration=value['duration'])
+    from .video_batch import compose_branches
+    compose_branches(app.engine,record,folder,value['audio'],cancel,stage,log,audio_start,value['duration'])
     parameters=value['meta'].get('video_parameters',{})|{'duration':result['duration'],'scene_parameters':record['parameters'],
         'scenes':len(record['timeline']),'audio_preserved':True,'audio_start':audio_start,'post_edit':True,
         'revision_source':edit['source'],'replaced_clips':[p['clip'] for p in patches],'reused_clips':len(record['timeline'])-len(patches),
         'replaced_intervals':[{'clip':p['clip'],'start':p['start'],'end':p['end']} for p in patches if 'start' in p]}
     for key in ('clip_only','timeline_id','source_intervals','source_interval'):parameters.pop(key,None)
     parameters.update(remount=True,engine='minimax-h3',imported_video=bool(record.get('imported_size')))
+    if record.get('batch_requested'):parameters.update(variants=record['batch_requested'],variants_mode=record['batch_mode'])
+    if record.get('batch_movies'):parameters['batch_movies']=record['batch_movies']
     if record.get('storyboard'):parameters['storyboard']=record['storyboard']
     parameters['edited_steps']=sorted({record['parameters'][p['clip']-1].get('post_edit_interval',{}).get('generation',record['parameters'][p['clip']-1]).get('steps',12) for p in patches})
     media={'id':job['id'],'name':'Video MiniMax H3 · nuova versione.mp4','mime':'video/mp4','path':(folder/'video.mp4').relative_to(app.data).as_posix(),'generation':parameters}

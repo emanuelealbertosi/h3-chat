@@ -58,6 +58,9 @@ def validate(value, *, partial=False):
 
 
 def options(model,settings,*,randomize=True):
+ if model.get('architecture')=='minimax-music':
+  from .minimax_music import options as minimax_options
+  return minimax_options(model,settings,randomize=randomize)
  value=validate(settings.get('music_overrides',{}).get(model['id'],{}))
  if randomize and value['seed']==-1:value['seed']=secrets.randbelow(2**31)
  if value['max_duration'] is None:value.pop('max_duration')

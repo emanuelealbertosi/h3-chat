@@ -7,6 +7,7 @@ import json
 import re
 import time
 from .downloads import Cancelled
+from .slide_count import MAX_SLIDES, MAX_DECK_CHARACTERS, requested_count, outline_count_instruction, outline_bounds
 
 PREFIX = '```h3-slides\n'
 FORMATS = {'16:9': (1280, 720), '9:16': (1280, 1280*16/9), '4:3': (1280, 960), '16:10': (1280, 800), '1:1': (1280, 1280)}
@@ -99,14 +100,12 @@ def edit_options(prompt,content):
 def options(prompt, body=None):
     body = body or {}
     if not isinstance(body,dict):raise ValueError('Impostazioni slide non valide.')
-    count = body.get('count', 8)
+    count = requested_count(prompt, body.get('count', 8))
     aspect = body.get('format', '16:9')
-    match = re.search(r'\b(\d+)\s*(?:slides?|diapositive)\b', prompt, re.I)
-    if match: count = int(match[1])
     match = re.search(r'\b(16\s*:\s*9|9\s*:\s*16|4\s*:\s*3|16\s*:\s*10|1\s*:\s*1)\b', prompt)
     if match: aspect = re.sub(r'\s', '', match[1])
-    if type(count) is not int or not 1 <= count <= 30 or not isinstance(aspect,str) or aspect not in FORMATS:
-        raise ValueError('Slide: scegli da 1 a 30 pagine e un formato 16:9, 9:16, 4:3, 16:10 oppure 1:1.')
+    if not isinstance(aspect,str) or aspect not in FORMATS:
+        raise ValueError('Slide: scegli un formato 16:9, 9:16, 4:3, 16:10 oppure 1:1.')
     result={'count': count, 'format': aspect}
     if 'generate_images' in body:
         if type(body['generate_images']) is not bool:raise ValueError('Immagini AI: scegli attivo o disattivo.')
@@ -293,15 +292,16 @@ def partial_page(raw, assets, references):
 
 def encode(deck):
     content=PREFIX+json.dumps(deck, ensure_ascii=False, separators=(',', ':'))+'\n```'
-    if len(content)>2600000: raise ValueError('Presentazione troppo grande: usa meno slide o meno testo.')
+    if len(content)>MAX_DECK_CHARACTERS: raise ValueError('Presentazione troppo grande: usa meno slide o meno testo.')
     return content
 
 
 def validate_content(content, media):
     if not content.startswith(PREFIX): return
+    if len(content)>MAX_DECK_CHARACTERS:raise ValueError('Presentazione troppo grande: usa meno slide o meno testo.')
     if not content.endswith('\n```'): raise ValueError('Sorgente slide incompleto.')
     deck=json.loads(content[len(PREFIX):-4]); assets={m['id'] for m in media if m['mime'].startswith('image/')}
-    if not isinstance(deck, dict) or deck.get('version')!=1 or deck.get('format') not in FORMATS or not isinstance(deck.get('pages'), list) or not 1<=len(deck['pages'])<=30:
+    if not isinstance(deck, dict) or deck.get('version')!=1 or deck.get('format') not in FORMATS or not isinstance(deck.get('pages'), list) or not 1<=len(deck['pages'])<=MAX_SLIDES:
         raise ValueError('Presentazione non valida.')
     if deck.get('infographic'):
         from .infographics import validate_motion
@@ -336,6 +336,9 @@ def validate_content(content, media):
 
 def build(app, job, payload, history, settings, model, cancel, stage, log_path, meta):
     opts=options('', settings['_slides']) if settings.get('_slides') else options(payload['prompt'])
+    requested_opts=opts.copy()
+    auto_count=opts['count']=='auto'
+    min_count,max_count=outline_bounds(payload['prompt'],opts['count'])
     assets=[];seen=set()
     # All supplied chat images and extracted document figures are reusable assets.
     for message in history:
@@ -390,15 +393,16 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
         from .slide_colors import brief as color_brief
         base[0]['content']+=color_brief(opts)
     base[-1]['content']+='\nCATALOGO IMMAGINI:\n'+catalog+'\nFONTI CITABILI:\n'+json.dumps(references,ensure_ascii=False)
-    planning=settings|{'think_level':'off','temperature':.2,'max_tokens':min(settings['max_tokens'],max(768,min(3500,384+opts['count']*96))),
+    planning_count=max_count
+    planning=settings|{'think_level':'off','temperature':.2,'max_tokens':min(settings['max_tokens'],max(768,min(6000,384+planning_count*96))),
                        'llm_timeout':min(settings.get('llm_timeout',1800),300)}
     stage('Slide · scaletta breve · lettura delle fonti · Think Off')
-    outline_schema={'type':'object','properties':{'title':TEXT,'slides':{'type':'array','minItems':opts['count'],'maxItems':opts['count'],
+    outline_schema={'type':'object','properties':{'title':TEXT,'slides':{'type':'array','minItems':min_count,'maxItems':max_count,
         'items':{'type':'object','properties':{'title':TEXT,'purpose':TEXT},'required':['title','purpose'],'additionalProperties':False}}},'required':['title','slides'],'additionalProperties':False}
     if opts['engine']=='llm':
         outline_schema['properties']['visual_direction']=TEXT
         outline_schema['required'].append('visual_direction')
-    request=base+[{'role':'user','content':f"Progetta esattamente {opts['count']} slide, formato {opts['format']}. Solo titolo della presentazione e scaletta con titolo/obiettivo di ogni pagina. Rispetta la richiesta e le fonti già fornite."}]
+    request=base+[{'role':'user','content':outline_count_instruction(opts['count'])+f" Formato {opts['format']}. Solo titolo della presentazione e scaletta con titolo/obiettivo di ogni pagina. Rispetta la richiesta e le fonti già fornite."}]
     if opts['engine']=='llm':request[-1]['content']+=' In visual_direction rendi concreto lo STILE VISIVO scelto: indica palette con colori, font e gerarchie, forme, ritmo dei layout e trattamento delle immagini. Non usare una direzione generica intercambiabile tra serio, giocoso e fumettoso. Niente template di card ripetute. La composizione richiesta per questo lancio prevale sui vecchi artefatti: non ereditare da essi limiti di parole, divieti di immagini o regole minimaliste. La direzione artistica non deve introdurre nuovi limiti ai contenuti.'
     started=time.monotonic();last=0
     def plan_progress(text):
@@ -411,19 +415,25 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
         if finish!='length':break
         meta['slide_outline_truncated']={'budget':planning['max_tokens'],'characters':len(raw)}
         if attempt or planning['max_tokens']>=ceiling:
-            raise ValueError(f"Scaletta interrotta dopo {planning['max_tokens']} token di output: il modello non ha completato {opts['count']} titoli e obiettivi. Riduci la verbosità o scegli un modello che rispetti lo schema; aumenta Max token solo se inferiore a questo budget.")
+            target='la scaletta automatica' if auto_count else f"{opts['count']} titoli e obiettivi"
+            raise ValueError(f"Scaletta interrotta dopo {planning['max_tokens']} token di output: il modello non ha completato {target}. Riduci la verbosità o scegli un modello che rispetti lo schema; aumenta Max token solo se inferiore a questo budget.")
         planning=planning|{'max_tokens':min(ceiling,max(4096,planning['max_tokens']*2))}
         stage(f"Slide · scaletta troncata · nuovo tentativo con {planning['max_tokens']} token")
         request=request+[{'role':'user','content':'La scaletta precedente si è interrotta al limite interno di output. Riscrivi il JSON completo: titoli brevi, un solo obiettivo conciso per pagina, direzione visiva compatta. Non sviluppare ancora i contenuti delle slide e non ripetere le fonti in ogni obiettivo.'}]
     meta.setdefault('slide_timing',{})['planning_seconds']=round(time.monotonic()-started,2)
     outline=json.loads(raw)
-    if not isinstance(outline,dict) or not isinstance(outline.get('title'),str) or not isinstance(outline.get('slides'),list) or len(outline['slides'])!=opts['count']: raise ValueError('Scaletta slide non valida.')
+    if not isinstance(outline,dict) or not isinstance(outline.get('title'),str) or not isinstance(outline.get('slides'),list): raise ValueError('Scaletta slide non valida.')
+    actual_count=len(outline['slides'])
+    if not min_count<=actual_count<=max_count:raise ValueError('Scaletta slide non valida: il numero deve rispettare la richiesta e il limite di 50.')
     for row in outline['slides']:
         if not isinstance(row,dict) or any(not isinstance(row.get(k),str) or len(row[k])>1500 for k in ('title','purpose')): raise ValueError('Scaletta slide non valida.')
+    opts=opts|{'count':actual_count}
+    meta['slide_count']={'mode':'auto' if auto_count else 'fixed','requested':requested_opts['count'],'resolved':actual_count}
+    if auto_count:stage(f'Slide · numero automatico · {actual_count} pagine pianificate')
     if opts['engine']=='llm':
         from .slide_editorial import prepare as prepare_editorial,recover_drafts
         started=time.monotonic();meta['slide_editorial_plan']=[]
-        recovery_job,recovery_plans=recover_drafts(app,job,payload,opts)
+        recovery_job,recovery_plans=recover_drafts(app,job,payload,opts,requested_opts=requested_opts)
         if recovery_plans:meta['slide_editorial_recovery']={'job_id':recovery_job,'draft_pages':len(recovery_plans),'mode':'rechecked_drafts'}
         meta['slide_outline']=outline
         meta['slide_editorial_catalog']=references
@@ -459,6 +469,7 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     deck={'version':1,'engine':opts['engine'],'format':opts['format'],'theme':opts.get('theme','lagoon'),'typography':opts.get('typography','modern'),
           'design':opts.get('design','professional'),'detail':opts.get('detail','concise'),'composition':opts.get('composition','standard'),'vision_scope':opts.get('vision_scope','relevant'),
           'title':outline['title'][:150] or 'Presentazione','references':references,'pages':pages,'active':0}
+    deck['count_mode']='auto' if auto_count else 'fixed'
     direction=outline.get('visual_direction','')
     if not isinstance(direction,str):raise ValueError('Direzione artistica delle slide non valida.')
     if opts['engine']=='llm':

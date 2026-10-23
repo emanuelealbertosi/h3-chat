@@ -6,13 +6,14 @@ import {layoutSlide} from './slide-layout.js';
 import {validateDesign,applyOverride} from './slide-design.js';
 import {repairSlideContrast} from './slide-contrast.js';
 import {mountInfographic} from './infographics.js';
+import {slideProgress} from './slide-generation-state.js';
 
 export const slideFormats={'16:9':720,'9:16':1280*16/9,'4:3':960,'16:10':800,'1:1':1280};
 export function readDeck(content){
   if(!content.startsWith('```h3-slides\n'))return null;
-  if(content.length>2600000||!content.endsWith('\n```'))throw Error('Sorgente slide incompleto o troppo grande.');
+  if(content.length>4600000||!content.endsWith('\n```'))throw Error('Sorgente slide incompleto o troppo grande.');
   const deck=JSON.parse(content.slice(13,-4));
-  if(deck.version!==1||!Object.hasOwn(slideFormats,deck.format)||!Array.isArray(deck.pages)||!deck.pages.length||deck.pages.length>30)throw Error('Presentazione non valida.');
+  if(deck.version!==1||!Object.hasOwn(slideFormats,deck.format)||!Array.isArray(deck.pages)||!deck.pages.length||deck.pages.length>50)throw Error('Presentazione non valida.');
   if(deck.title!==undefined&&(typeof deck.title!=='string'||deck.title.length>150))throw Error('Titolo presentazione non valido.');
   deck.title||='Presentazione';deck.references||=[];
   if(!['llm','deterministic'].includes(deck.engine||'deterministic'))throw Error('Motore slide non valido.');
@@ -84,6 +85,12 @@ export async function renderSlides(target,value,options={}){
   picker.value=selected.index;prev.disabled=selected.index===0;next.disabled=selected.index===deck.pages.length-1;follow.textContent=selected.follow?'Segui scrittura ✓':'Segui scrittura';
   const change=index=>{selected.index=index;selected.follow=false;renderSlides(target,value,options);};prev.onclick=()=>change(selected.index-1);next.onclick=()=>change(selected.index+1);picker.onchange=()=>change(Number(picker.value));follow.onclick=()=>{selected.follow=true;renderSlides(target,value,options);};
   controls.append(prev,picker,next,follow);target.append(controls);
+  const progress=slideProgress(deck,selected.index,options.job);
+  if(progress.text){const status=document.createElement('p');status.className='slide-generation-progress small-note no-export';status.setAttribute('role','status');status.textContent=progress.text;target.append(status);}
+  if(progress.missing&&!deck.infographic&&options.onResume){
+    const resume=document.createElement('button');resume.type='button';resume.className='btn small no-export';resume.dataset.slidesResume='';resume.textContent='Completa slide mancanti · '+progress.missing;resume.disabled=!!options.busy;
+    resume.onclick=async()=>{resume.disabled=true;try{selected.follow=true;await options.onResume();}catch(error){const message=document.createElement('p');message.className='message-error';message.textContent=error.message;resume.after(message);}finally{resume.disabled=!!options.busy;}};target.append(resume);
+  }
   const edit=document.createElement('button');edit.id='slide-edit';edit.textContent=selected.editing?'Termina modifica':'Modifica grafica';edit.disabled=!options.editable||!options.onChange||pageNotReady(deck.pages[selected.index]);
   edit.onclick=()=>{selected.editing=!selected.editing;renderSlides(target,value,options);};controls.append(edit);
   if(deck.engine==='llm'){

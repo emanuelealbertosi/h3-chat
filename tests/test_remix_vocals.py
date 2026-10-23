@@ -1,9 +1,19 @@
 import sys,unittest
+from types import SimpleNamespace
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"native"))
 from remix import resinging
 
 class VocalAlignmentTests(unittest.TestCase):
+ def test_resing_preflight_accepts_five_minutes_without_trimming(self):
+   for duration in (3,240,300,300.5):
+    app=SimpleNamespace(original=Path('source.wav'),audio_info=lambda _: {'duration':duration})
+    source,info,start,end=resinging.preflight(app,{})
+    self.assertEqual((source,start,end),(app.original,0,duration));self.assertEqual(info['duration'],duration)
+   for duration in (2.9,300.6):
+    app=SimpleNamespace(original=Path('source.wav'),audio_info=lambda _: {'duration':duration})
+    with self.assertRaisesRegex(ValueError,'5 minuti'):resinging.preflight(app,{})
+
  def test_alignment_accepts_constant_positive_and_negative_delays_and_repeated_notes(self):
    original = [(i*.4,i*.4+.3,60+i%5) for i in range(30)]
    for delay in (.12, -.1):

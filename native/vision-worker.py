@@ -12,6 +12,7 @@ from pathlib import Path
 import sys
 import time
 import traceback
+from contextlib import nullcontext
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / 'runtime/vision'
@@ -95,7 +96,7 @@ class Worker:
         # This is not CPU inference, and does not keep a second model loaded.
         import gc
         if hasattr(self, 'comfy'):
-            for name in ('base_model', 'base_clip', 'vae'):
+            for name in ('base_model', 'base_clip', 'vae','dmd2_adapter'):
                 setattr(self, name, None)
             gc.collect()
             self.comfy.model_management.cleanup_models()
@@ -246,7 +247,7 @@ class Worker:
         model, clip = self.base_model, self.base_clip
         if self.architecture=='moss':
             from h3chat.moss_image import sampling
-            model=sampling(model)
+            model=sampling(model,turbo=bool(request.get('moss_turbo')))
         # Each request starts from the base patchers: a removed LoRA cannot leak
         # into the following image or alter the on-disk model.
         for lora in request.get('loras', []):
@@ -298,9 +299,17 @@ class Worker:
                 # KSampler's named scheduler is only a constructor placeholder;
                 # passing sigmas overrides it without another time shift.
                 sampling={'sigmas':torch.tensor(TURBO_SIGMAS,dtype=torch.float32)} if turbo else {}
-                samples = comfy.sample.sample(model, noise, request['steps'], request['cfg'], sampler, 'simple' if turbo else scheduler,
-                    positive, negative, latent, denoise=denoise, disable_pbar=True, seed=request['seed'],
-                    callback=progress,**sampling)
+                dmd2_info={}
+                if request.get('moss_turbo'):
+                    if self.architecture!='moss':raise ValueError('DMD2 richiede un modello MOSS.')
+                    from h3chat.moss_dmd2_runtime import cached_adapter
+                    emit('stage',message='Turbo DMD2 · LoRA FP32 separato')
+                    scope=cached_adapter(self,request['moss_dmd2_path']).apply(model.model.diffusion_model)
+                else:scope=nullcontext({})
+                with scope as dmd2_info:
+                    samples = comfy.sample.sample(model, noise, request['steps'], request['cfg'], sampler, 'simple' if turbo else scheduler,
+                        positive, negative, latent, denoise=denoise, disable_pbar=True, seed=request['seed'],
+                        callback=progress,**sampling)
             finally:
                 self.release_gpu(model)
             del positive, negative, noise, latent, images
@@ -325,7 +334,8 @@ class Worker:
              'steps':request['steps'], 'cfg':request['cfg'], 'sampler':sampler, 'scheduler':scheduler,
              'seed':request['seed'], 'strength':denoise, 'engine':'vision', 'reference_count':reference_count,
              **({'reference_mode':'img2img-experimental' if reference_count else 'text-to-image'} if self.architecture=='moss' else {}),
-             **({'flow_shift':5,'slg_negative_skip_layers':[22],'vae_dtype':'float32'} if self.architecture=='moss' else {}),
+             **({'flow_shift':5,'slg_negative_skip_layers':[] if request.get('moss_turbo') else [22],'vae_dtype':'float32',
+                 'moss_turbo':bool(request.get('moss_turbo')),'moss_dmd2':dmd2_info} if self.architecture=='moss' else {}),
              **({'sigmas':list(TURBO_SIGMAS)} if turbo else {})})
 
 

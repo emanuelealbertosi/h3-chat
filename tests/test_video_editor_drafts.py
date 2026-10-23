@@ -11,6 +11,18 @@ class EditorDraftTests(unittest.TestCase):
     tearDown=fixture.VideoEditTests.tearDown
     original=fixture.VideoEditTests.original
 
+    def test_memory_and_final_frame_choices_survive_draft_reload(self):
+        chat,ident,*_=self.original();body=self.editor(chat,ident)
+        body['state']['clips'][1].update(recover_memory=True,end_frame=2)
+        saved=save(self.app,chat,ident,body)
+        loaded=load(self.app,chat,ident,source(self.app,chat,ident))
+        self.assertTrue(loaded['state']['clips'][1]['recover_memory'])
+        self.assertEqual(loaded['state']['clips'][1]['end_frame'],2)
+        for value in (True,999,'C:/unowned.png'):
+            bad=copy.deepcopy(body);bad['state']['clips'][1]['end_frame']=value
+            with self.subTest(value=value),self.assertRaises(ValueError):save(self.app,chat,ident,bad)
+        self.assertEqual(load(self.app,chat,ident,source(self.app,chat,ident))['state'],saved['state'])
+
     def editor(self,chat,ident):
         manifest=describe(self.app,chat,ident)
         state={'signature':[[round(c['start']*24),round((c['end']-c['start'])*24)] for c in manifest['clips']],

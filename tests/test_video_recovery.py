@@ -3,12 +3,24 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock,patch
 from h3chat.video_timeline import timeline,validate_audio_interval,tail_padding_samples
+from h3chat.video_request import audio_window
 from h3chat.video_resume import checkpoint,save
 from h3chat.video_engine import VideoEngine
 from h3chat.store import Store,DEFAULTS
 ROOT=Path(__file__).resolve().parents[1]
 
 class RecoveryTests(unittest.TestCase):
+    def test_rounded_requested_audio_end_snaps_to_decoded_tail_only(self):
+        actual=8438336/48000
+        for prompt,start in (('TOTAL AUDIO DURATION: 175.8 seconds.',0),('AUDIO: 00:00–02:55.8',0),('AUDIO: 00:15–02:55.8',15)):
+            with self.subTest(prompt=prompt):
+                window=audio_window(prompt,actual,storyboard=True)
+                self.assertEqual(window['start'],start);self.assertEqual(window['duration'],actual-start)
+                self.assertEqual(window['source_duration'],actual);self.assertTrue(window['explicit'])
+        self.assertEqual(audio_window('AUDIO: 00:15–00:30',actual)['duration'],15)
+        for prompt in ('Durata 176 secondi','AUDIO: 00:00–02:55.85','AUDIO: 02:55.8–03:00'):
+            with self.subTest(prompt=prompt),self.assertRaisesRegex(ValueError,'non copre'):audio_window(prompt,actual,storyboard=True)
+
     def test_only_subframe_final_tail_is_tolerated_at_audio_sample_precision(self):
         self.assertEqual(tail_padding_samples(714176,716000,48000,tail=True),1824)
         self.assertEqual(tail_padding_samples(716000,716000,48000),0)

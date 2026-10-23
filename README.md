@@ -60,6 +60,12 @@ Il RAG mantiene l’argomento nelle richieste successive come «ricrea l’anima
 anche cambiando LLM. Domande nuove con un argomento esplicito avviano una nuova
 ricerca; progetto e selezione delle fonti rimangono vincolanti.
 
+Il RAG offre anche **EmbeddingGemma 2**, il modello Google con modulo testuale
+da 270M parametri e Vision opzionale. Pesi e componenti CPU si installano dalle
+Preferenze, senza CUDA o GPU; i vettori restano sul PC. Gli estratti inseriti nel
+prompt vengono invece inviati al provider LLM selezionato.
+[Configurazione EmbeddingGemma 2](docs/projects-and-animations.md#embeddinggemma-2).
+
 Il RAG supporta anche **Ovis-Omni-Embedding-3B**, scaricabile dalle Preferenze o
 collegabile alla sua cartella originale. CPU/GPU sono selezionabili; la stima
 di memoria è visibile prima dell'uso. Questa integrazione cerca nel testo
@@ -67,7 +73,7 @@ estratto dai documenti. [Configurazione Ovis](docs/projects-and-animations.md#ov
 
 Ovis ora indicizza anche **foto, grafici e diagrammi**: crea un embedding delle pagine illustrate PDF, delle immagini incorporate Word e dei file PNG/JPEG/WebP caricati nel progetto. Le fonti mostrano le immagini recuperate con pagina/blocco; il modello chat le riceve quando Vision è attivo e compatibile. In **Progetto → Documenti** trovi i pulsanti **CPU / GPU NVIDIA CUDA** e l’opzione **Indicizza immagini e pagine illustrate con Ovis**, attiva di default. La scelta vale per tutti i progetti e si salva subito. Per i documenti già presenti premi **Aggiorna indice**. La GPU viene condivisa con le generazioni senza usarla contemporaneamente per due motori; la memoria dei modelli caricati a richiesta viene liberata prima del RAG.
 
-**Slide dal vivo:** chiedi «Crea 10 slide dal PDF» oppure scegli
+**Slide dal vivo:** fino a 50 pagine, con numero fisso o automatico dai contenuti; il prompt prevale. Chiedi «Crea 40 slide dal PDF» oppure «Decidi tu quante slide servono, massimo 25», oppure scegli
 **Strumenti → Slide · HTML in tempo reale**. Il canvas compone le pagine mentre
 il modello scrive, usando documenti, figure, immagini della chat, RAG e fonti
 web. Testi completi o sintesi, stili professionale/giocoso/fumettoso, temi e
@@ -89,7 +95,15 @@ Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle 
 
 ## Installazione
 
-**Pacchetto Windows:** scarica [H3-Chat-0.16.16-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.16.16/H3-Chat-0.16.16-windows-x64.zip) dalla [release v0.16.16](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.16.16), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Windows senza GPU, solo API:** apri **`Installa-API-senza-GPU.bat`** dal
+repository. Installa Python, interfaccia e strumenti documenti; evita motori
+generativi locali, CUDA e pesi. Collega il tuo LLM in **Provider LLM** e gli
+eventuali server immagini/musica/video nelle impostazioni. Il RAG resta sul PC,
+con ricerca per parole immediata ed embedding CPU opzionale. Anche nel pacchetto
+portabile trovi **Setup → Configura per API · nessuna GPU**.
+[Procedura completa e protocolli supportati](docs/api-only-windows.md).
+
+**Pacchetto Windows:** scarica [H3-Chat-0.18.51-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.18.51/H3-Chat-0.18.51-windows-x64.zip) dalla [release v0.18.51](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.18.51), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 

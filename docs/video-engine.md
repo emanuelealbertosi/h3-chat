@@ -165,8 +165,24 @@ frame unless identified as a reference. Other images are references. `lip-sync`
 assigns the first audio as the exact source; `audio originale` requests reuse.
 Other audio is treated as a sound/voice reference. Explicit soundtrack windows
 such as `AUDIO: 00:15–00:30` work with Assistant On or Off; more complex reference
-plans require Assistant On. Advanced details in chat display the resolved plan
+plans can use an explicitly authored storyboard below. Advanced details in chat display the resolved plan
 and actual generation parameters.
+
+For a pre-authored music video, Assistant Off also accepts one fenced
+`h3-storyboard` JSON block with `style` and `shots`, using the storyboard schema
+(`end`, `prompt`, `time_basis`, `continuity`, `lip_sync`, `images`). Declare the
+complete duration and clip count in the text before the block. Clip ends are
+global film seconds; `time_basis: local` makes action clocks local to each clip.
+Every selected image uses its original one-based attachment index and an explicit
+`reference` or `keyframe` role. This automatically selects storyboard execution
+without loading or calling the Assistant. The app validates complete audio
+coverage, clip lengths, reference bindings and clocks before GPU generation.
+Each direct description is sent once in the native six-section prompt, with
+Picture labels remapped to that clip's actual selected images. `continue` retains
+the native opening/two-recent-endings memory; `cut` clears it and avoids forcing
+the previous final frame into a new location. The original track remains exact
+reuse even when a clip requests closed mouths. Playback quality and selective
+lip motion remain generative; these directives are not per-speaker mouth masks.
 
 ## Audio conditioning and export
 
@@ -404,3 +420,14 @@ it is separate from output resolution. A custom guide value is optional.
 L’attenzione del diffusore è scelta nello stesso worker per generazione, modifica locale, ricreazione e inserimento: Automatico/Sage, VEDA automatico o esplicito a 8/56 gruppi, Sage, ComfyKitchen INT8 e PyTorch. La scelta è salvata nei parametri della richiesta; dettagli e direttive del prompt sono descritti in [Impostazioni della singola richiesta](video-request-options.md). ComfyKitchen non sostituisce il motore video e non viene usato come ripiego implicito di VEDA. Il backend realmente selezionato è registrato nei log e nei risultati.
 
 Ogni video generato mostra il pannello chiuso **Impostazioni di generazione**, indipendente dal flag Avanzate. I valori provengono dai metadati del file: modello, dimensioni, durata, passi, seed, campionamento, attenzione effettiva, offload, PDD, LoRA e guida sorgente quando registrati. I filmati composti permettono di aprire le impostazioni di ciascuna clip. Le nuove generazioni conservano anche nome, identificativo e file del modello e stato lip-sync. I campi mancanti nei video storici non sono dedotti dai preset correnti.
+# Associazione delle immagini nello storyboard
+
+Ogni clip usa soltanto i riferimenti selezionati dal regista. Gli indici globali
+del prompt vengono convertiti negli slot locali `<Picture N>` nello stesso ordine
+dei file passati al motore. Anche gli alias `Image N`, `Picture N` e `Immagine N`
+vengono normalizzati e controllati: un alias non può citare un allegato assente.
+Le vecchie descrizioni globali del cast vengono limitate ai soggetti selezionati;
+le nuove istruzioni separano lo stile visivo dai dettagli dei singoli personaggi.
+L'aspetto effettivo nelle reference ha priorità sul design noto del personaggio,
+salvo cambi di abbigliamento o ambiente richiesti esplicitamente. Questo corregge
+il collegamento dei riferimenti, senza garantire la fedeltà visiva del modello.
