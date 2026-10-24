@@ -3,7 +3,7 @@ import json
 import time
 from uuid import uuid4
 from .downloads import Cancelled
-from .image_options import options as image_options
+from .image_options import options as image_options, configured, ASPECTS
 from .visual_routing import assistant_format
 from .loras import for_model as loras_for_model
 from .slide_style import brief as style_brief,image_prompt
@@ -22,13 +22,14 @@ def plan_images(engine,outline,history,settings,image_model,cancel,stage):
     common='Prepara le immagini della presentazione. Massimo una per slide. Se l’utente chiede una immagine per ogni slide, pianificale per tutte; altrimenti ometti quelle dove non aiutano.\n'+\
         'Scaletta completa: '+json.dumps({k:v for k,v in outline.items() if k!='slides'}|{'slides':[{k:row[k] for k in ('title','purpose')} for row in outline['slides']]},ensure_ascii=False)+'\nStile: '+opts.get('design','professional')+'\n'+\
         style_brief(opts.get('design','professional'))+(color_brief(opts) if opts.get('engine','llm')=='llm' else '')+'\n'+\
+        'Scegli aspect per il riquadro previsto: 16:9 o 3:2 per immagini ampie, 3:4 o 2:3 per un pannello laterale verticale, 4:3 per una figura orizzontale. Usa 1:1 solo quando il layout richiede davvero un quadrato. Pianifica insieme formato e proposta grafica della pagina; rispetta eventuali proporzioni delle immagini richieste esplicitamente dall’utente. Componi il soggetto con margini utili a un lieve ritaglio, senza scritte.\n'+\
         'Il campo prompt deve contenere '+style+'. description è una breve descrizione italiana dell’illustrazione.\n'+\
         'Ogni prompt deve essere autosufficiente: traduci in inglese lo stile visivo e la direzione artistica della scaletta, includendo palette, trattamento e composizione coerenti. Il motore immagini non vede questa conversazione: non scrivere soltanto «come le slide» o un soggetto senza stile. Mantieni una stessa famiglia visiva per tutte le illustrazioni, variando soggetti e composizione.\n'+\
         'Genera soltanto illustrazioni, scene o metafore pertinenti, MAI slide o infografiche con scritte. Nessun testo, neppure grande: vietati titoli, sottotitoli, parole, lettere, numeri, etichette, formule, citazioni, loghi e watermark dentro immagini. Mantieni cartelli e schermi vuoti. Tutte le scritte saranno HTML/SVG precisi separati. Non attribuire valore documentale alle illustrazioni generate.'
     def produce(numbers):
         schema={'type':'object','properties':{'images':{'type':'array','minItems':0,'maxItems':len(numbers),
             'items':{'type':'object','properties':{'slide':{'type':'integer','enum':numbers},
-                 'prompt':{'type':'string'},'description':{'type':'string'}},'required':['slide','prompt','description'],'additionalProperties':False}}},
+                 'prompt':{'type':'string'},'description':{'type':'string'},'aspect':{'type':'string','enum':list(ASPECTS[1:])}},'required':['slide','prompt','description','aspect'],'additionalProperties':False}}},
             'required':['images'],'additionalProperties':False}
         tuning=settings|{'think_level':'off','temperature':.3,'max_tokens':min(limit,max(1024,len(numbers)*240))}
         label=f'Slide · piano illustrazioni · pagine {numbers[0]}–{numbers[-1]}/{count} · '+image_model['name'];last=0
@@ -62,6 +63,8 @@ def plan_images(engine,outline,history,settings,image_model,cancel,stage):
                     raise ValueError('Il piano immagini contiene una slide non valida o ripetuta.')
                 for key,max_size in (('prompt',4000),('description',800)):
                     if not isinstance(item.get(key),str) or not item[key].strip() or len(item[key])>max_size:raise ValueError('Descrizione immagine non valida.')
+                item.setdefault('aspect','3:4' if opts.get('format')=='9:16' else '4:3')
+                if item['aspect'] not in ASPECTS[1:]:raise ValueError('Formato dell’illustrazione slide non valido.')
                 item['prompt']=image_prompt(item['prompt'],opts.get('design','professional'),form);seen.add(item['slide'])
             plan.extend(items);return
     for start in range(1,count+1,size):produce(list(range(start,min(count+1,start+size))))
@@ -88,7 +91,10 @@ def create(app,job,outline,history,settings,model,cancel,stage,log_path,meta):
         if cancel.is_set():raise Cancelled()
         label=f'Slide · immagini {index+1}/{len(plan)} · {image_model["name"]}'
         stage(label)
-        tuning['_image_options']=image_options(image_model,settings)
+        saved=configured(image_model,settings)
+        area=saved.get('megapixels',saved['width']*saved['height']/1_000_000)
+        tuning['_image_options']=image_options(image_model,settings,f"Formato {item['aspect']} {area:g} MP")
+        item.update(width=tuning['_image_options']['width'],height=tuning['_image_options']['height'])
         image=app.engine.generate(image_model,tuning,item['prompt'],[],uuid4().hex,cancel,lambda step:stage(label+' · '+step))
         image['name']=f"Slide {item['slide']} · illustrazione generata: "+item['description']
         assets.append(image)
@@ -102,4 +108,4 @@ def create(app,job,outline,history,settings,model,cancel,stage,log_path,meta):
         app.engine.stop();app.engine.start_llama(model,settings,log_path,cancel,stage=stage)
     meta.setdefault('slide_timing',{})['images_seconds']=round(time.monotonic()-started,2)
     meta['slide_image_model']=image_model['name']
-    return assets,{item['asset_id']:f"Illustrazione generata per la slide {item['slide']}: "+item['description'] for item in plan}
+    return assets,{item['asset_id']:f"Illustrazione generata per la slide {item['slide']}: "+item['description']+f". Formato {item['aspect']}, {item['width']}×{item['height']} px." for item in plan}

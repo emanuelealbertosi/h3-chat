@@ -73,6 +73,8 @@ export async function htmlPage(deck,page,index,media,mount){
   if(doc.querySelector('.katex')){const style=document.createElement('style');style.dataset.h3Trusted='';style.textContent=await localMathCSS();doc.head.append(style);await doc.fonts.ready;}
   readableText(doc);
   if(deck.infographic)H3Motion.configure(doc,deck.infographic.options||{});
+  const generated=new Set((deck.image_generation?.plan||[]).map(item=>item.asset_id));
+  for(const img of doc.images)if(generated.has(img.dataset.assetId)&&!img.dataset.imageFit&&doc.defaultView.getComputedStyle(img).objectFit==='cover')img.dataset.imageFit='cover';
   if(fitMediaBounds(doc,height,!deck.infographic))frame.dataset.layoutAdjusted='true';
   if(deck.infographic&&page.status==='ready'&&portraitLayout(doc,height,deck.infographic.options).issue)frame.dataset.portraitSparse='true';
   sessions.set(frame,{iframe,doc});return frame;

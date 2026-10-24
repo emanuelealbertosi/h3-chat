@@ -61,7 +61,7 @@ export function editHtmlSlide(target,deck,index,frame,onChange,options,media,{do
     <p class="slide-editor-help">Seleziona un elemento nella slide. Usa ↕ per spostarlo e ↘ per ridimensionarlo. Con un layout automatico, lo spostamento cambia l’ordine dei blocchi.</p>
     <div class="slide-editor-top"><span id="slide-html-selection">Nessun elemento selezionato</span><button id="slide-html-parent">Seleziona gruppo</button><button id="slide-html-previous">Sposta prima</button><button id="slide-html-next">Sposta dopo</button></div>
     <div class="slide-html-layout"><label>Impaginazione<select id="slide-html-layout"><option value="stack">Una colonna</option><option value="columns-2">Due colonne</option><option value="columns-3">Tre colonne</option><option value="free">Libero · trascinamento</option></select></label><label>Applica a<select id="slide-html-scope"><option value="slide">Intera slide</option><option value="group">Gruppo selezionato</option></select></label><button id="slide-html-arrange">Applica impaginazione</button></div>
-    <details id="slide-html-properties"><summary>Testo e dimensioni</summary><div class="slide-html-properties"><label class="slide-editor-text">Testo<textarea id="slide-html-text" rows="3"></textarea></label><label>Carattere<select id="slide-html-font"><option>Segoe UI</option><option>Arial</option><option>Georgia</option><option>Manrope</option><option>Cormorant</option><option>Consolas</option><option>Comic Sans MS</option></select></label><label>Dimensione carattere<input id="slide-html-size" type="number" min="8" max="160"></label><label>Colore testo<input id="slide-html-color" type="color"></label><label>Sfondo<input id="slide-html-bg" type="color"></label><label>Larghezza<input id="slide-html-width" type="number" min="10" max="1280"></label><label>Altezza<input id="slide-html-height" type="number" min="10" max="1280"></label></div></details><p id="slide-html-status" role="status" aria-live="polite"></p>`;
+    <div id="slide-image-fit-controls" hidden><label>Adattamento immagine<select id="slide-image-fit"><option value="contain">Intera · nessun ritaglio</option><option value="cover">Riempi riquadro · ritaglio proporzionale</option></select></label><label>Centro orizzontale<input id="slide-image-x" type="range" min="0" max="100" value="50"></label><label>Centro verticale<input id="slide-image-y" type="range" min="0" max="100" value="50"></label></div><details id="slide-html-properties"><summary>Testo e dimensioni</summary><div class="slide-html-properties"><label class="slide-editor-text">Testo<textarea id="slide-html-text" rows="3"></textarea></label><label>Carattere<select id="slide-html-font"><option>Segoe UI</option><option>Arial</option><option>Georgia</option><option>Manrope</option><option>Cormorant</option><option>Consolas</option><option>Comic Sans MS</option></select></label><label>Dimensione carattere<input id="slide-html-size" type="number" min="8" max="160"></label><label>Colore testo<input id="slide-html-color" type="color"></label><label>Sfondo<input id="slide-html-bg" type="color"></label><label>Larghezza<input id="slide-html-width" type="number" min="10" max="1280"></label><label>Altezza<input id="slide-html-height" type="number" min="10" max="1280"></label></div></details><p id="slide-html-status" role="status" aria-live="polite"></p>`;
   target.querySelector('.slides-navigation').after(toolbar);
   const q=s=>toolbar.querySelector(s),status=q('#slide-html-status');
   q('#slide-html-height').max=String(Math.ceil(frame.offsetHeight));
@@ -86,11 +86,13 @@ export function editHtmlSlide(target,deck,index,frame,onChange,options,media,{do
   const rgbHex=value=>{const m=value.match(/\d+/g);return m?'#'+m.slice(0,3).map(x=>Math.min(255,Number(x)).toString(16).padStart(2,'0')).join(''):'#ffffff';};
   const select=element=>{
     selected=element;
+    q('#slide-image-fit-controls').hidden=element?.tagName!=='IMG';
     if(!element){q('#slide-html-selection').textContent='Nessun elemento selezionato';updateOverlay();return;}
     const css=doc.defaultView.getComputedStyle(element),r=element.getBoundingClientRect();
     q('#slide-html-selection').textContent=(element.matches(containerTags)?'Blocco / gruppo':element.tagName==='IMG'?'Immagine':'Elemento')+' · '+(element.textContent.trim().slice(0,55)||element.getAttribute('alt')||element.tagName.toLowerCase());
     q('#slide-html-text').value=element.textContent;q('#slide-html-text').disabled=element.matches('img,svg')||!!element.querySelector('img,svg,div,section,article,h1,h2,p,ul,ol');
     q('#slide-html-size').value=Math.round(parseFloat(css.fontSize));q('#slide-html-color').value=rgbHex(css.color);q('#slide-html-bg').value=rgbHex(css.backgroundColor);
+    if(element.tagName==='IMG'){q('#slide-image-fit').value=element.dataset.imageFit==='cover'?'cover':'contain';const position=css.objectPosition.match(/([\d.]+)%\s+([\d.]+)%/);q('#slide-image-x').value=position?.[1]||50;q('#slide-image-y').value=position?.[2]||50;}
     q('#slide-html-width').value=Math.round(r.width);q('#slide-html-height').value=Math.round(r.height);
     q('#slide-html-font').value=[...q('#slide-html-font').options].map(x=>x.value).find(x=>css.fontFamily.includes(x))||'Arial';updateOverlay();
     const layout=element.closest('[data-h3-layout]')?.dataset.h3Layout;if(layout)q('#slide-html-layout').value=layout;
@@ -137,6 +139,8 @@ export function editHtmlSlide(target,deck,index,frame,onChange,options,media,{do
     if(!automaticParent(parent))element.style.cssText+=`position:absolute;left:80px;top:140px;width:${kind==='block'?480:600}px;max-width:100%;`;
     parent.append(element);select(element);
   });
+  const fitImage=()=>change(()=>{if(selected?.tagName!=='IMG')return;selected.dataset.imageFit=q('#slide-image-fit').value;selected.style.setProperty('object-fit',q('#slide-image-fit').value,'important');selected.style.objectPosition=q('#slide-image-x').value+'% '+q('#slide-image-y').value+'%';});
+  for(const id of ['slide-image-fit','slide-image-x','slide-image-y'])q('#'+id).onchange=fitImage;
   q('#slide-html-add').onclick=()=>add('text');q('#slide-html-heading').onclick=()=>add('heading');q('#slide-html-block').onclick=()=>add('block');
   q('#slide-html-copy').onclick=()=>change(()=>{
     if(!selected)return;const copy=selected.cloneNode(true);copy.removeAttribute('id');copy.querySelectorAll('[id]').forEach(n=>n.removeAttribute('id'));
@@ -173,7 +177,7 @@ export function editHtmlSlide(target,deck,index,frame,onChange,options,media,{do
   doc.addEventListener('pointerup',()=>finish(false));doc.addEventListener('pointercancel',()=>finish(true));
   const images=document.createElement('details');images.id='slide-html-images';images.innerHTML='<summary>Immagini · PC, allegati, RAG, Internet</summary>';toolbar.append(images);
   if(options.api)imagePicker(images,{api:options.api,chatId:options.chatId,media,onSelect:async asset=>{
-    if(!media.some(m=>m.id===asset.id)&&media.length>=64)throw Error('Massimo 64 immagini per presentazione.');
+    if(!media.some(m=>m.id===asset.id)&&media.length>=128)throw Error('Massimo 128 risorse per presentazione.');
     const blob=await fetch('/media/'+asset.path).then(r=>{if(!r.ok)throw Error('Immagine non disponibile.');return r.blob();}),src=await new Promise(resolve=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.readAsDataURL(blob);});
     const preload=doc.createElement('img');preload.src=src;await preload.decode();
     const replacing=selected?.tagName==='IMG';

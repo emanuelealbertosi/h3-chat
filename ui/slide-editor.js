@@ -32,7 +32,7 @@ export function mountEditor(target,deck,index,frames,onChange,session={},options
   for(const node of page.nodes){const option=document.createElement('option');option.value=node.id;option.textContent=node.kind+' · '+(node.text.slice(0,55)||node.id);q('slide-element').append(option);}
   let selected=null;
   if(options.api)imagePicker(target,{api:options.api,chatId:options.chatId,media,onSelect:async asset=>{
-    if(!media.some(m=>m.id===asset.id)){if(media.length>=64)throw Error('Massimo 64 immagini per presentazione.');media.push(asset);}
+    if(!media.some(m=>m.id===asset.id)){if(media.length>=128)throw Error('Massimo 128 risorse per presentazione.');media.push(asset);}
     let node=selected?.kind==='image'?selected:null;
     if(!node){if(page.nodes.length>=40)throw Error('La pagina contiene già 40 elementi.');node={id:newId(),parent:'root',kind:'image',text:asset.name,asset_id:'',language:'text',style:{flow:'stack',columns:[1,1],surface:'plain',gap:16}};page.nodes.push(node);}
     node.asset_id=asset.id;session.selected=node.id;await onChange(encodeDeck(deck),media);

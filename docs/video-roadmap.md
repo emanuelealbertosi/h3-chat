@@ -10,3 +10,6 @@ Per le capacità correnti consulta:
 
 La continuità fra clip usa la memoria interna H3 e le guide esplicite supportate.
 LongTakeNoCuts è stato rimosso e non è una modalità disponibile.
+
+## Animazioni native delle slide in PowerPoint
+2026-10-24: differite su esplicita richiesta dell’utente. Il PPTX resta statico e modificabile; si lavora prima su HTML sfogliabile con animazioni CSS esistenti.

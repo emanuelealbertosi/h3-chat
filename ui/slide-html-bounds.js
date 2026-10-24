@@ -44,18 +44,18 @@ export function fitMediaBounds(doc,height,wholeImages=false){
  if(contentOverflows(doc,height)){relax();relax();}
  for(const element of doc.body.querySelectorAll('img,svg')){
   const parent=element.parentElement;if(!parent)continue;
-  // Static slide illustrations are source content, not cropped backgrounds.
-  // object-fit:cover clips pixels even when the image element fits perfectly.
-  // Preserve authored cropping in animated infographics unless requested.
-  if(wholeImages&&element.tagName.toLowerCase()==='img'&&css(element).objectFit!=='contain'){
-   element.style.setProperty('object-fit','contain','important');changed=true;
+  // Preserve complete source figures by default. Explicit image-fit choices
+  // may fill the box with a proportional crop, also after saving and reloading.
+  const imageFit=element.dataset.imageFit==='cover'?'cover':'contain';
+  if(wholeImages&&element.tagName.toLowerCase()==='img'&&css(element).objectFit!==imageFit){
+   element.style.setProperty('object-fit',imageFit,'important');changed=true;
   }
   const box=element.getBoundingClientRect(),outer=parent.getBoundingClientRect(),style=css(parent);
   if(outer.width>0&&outer.height>0&&(box.right>1282||box.bottom>height+2||box.width>outer.width+2||box.height>outer.height+2)){
    const width=Math.max(1,Math.min(1280,outer.right)-Math.max(0,outer.left)-parseFloat(style.paddingLeft||0)-parseFloat(style.paddingRight||0));
    const room=Math.max(1,Math.min(height,outer.bottom)-Math.max(0,outer.top)-parseFloat(style.paddingTop||0)-parseFloat(style.paddingBottom||0));
    element.style.setProperty('max-width',width+'px','important');element.style.setProperty('max-height',room+'px','important');
-   if(element.tagName.toLowerCase()==='img')element.style.setProperty('object-fit','contain','important');changed=true;
+   if(element.tagName.toLowerCase()==='img')element.style.setProperty('object-fit',imageFit,'important');changed=true;
   }
   if(element.tagName.toLowerCase()!=='svg'||!element.querySelector('text'))continue;
   // getBBox includes labels outside viewBox, which would otherwise be silently cropped.

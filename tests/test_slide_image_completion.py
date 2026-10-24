@@ -24,7 +24,7 @@ class CompletionStub(BaseHTTPRequestHandler):
         self.server.calls.append(body)
         text = json.dumps({'images': [
             {'slide': slide, 'prompt': 'colorful illustration, ' * 30,
-             'description': 'Illustrazione sintetica ' + str(slide)} for slide in (1, 8)]})
+             'aspect':'16:9' if slide==1 else '3:4','description': 'Illustrazione sintetica ' + str(slide)} for slide in (1, 8)]})
         self.send_response(200)
         self.send_header('Content-Type', 'text/event-stream' if body.get('stream') else 'application/json')
         self.end_headers()

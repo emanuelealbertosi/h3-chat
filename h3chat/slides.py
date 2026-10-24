@@ -485,7 +485,7 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
         deck['visual_direction']=direction[:2500]
         deck.update({k:opts[k] for k in ('background','background_color','palette') if k in opts})
     if opts.get('generate_images'):deck['image_generation']={'model':meta['slide_image_model'],'count':len(generated),
-        'plan':[{k:item[k] for k in ('slide','asset_id','description')} for item in meta['slide_image_plan']]}
+        'plan':[{k:item[k] for k in ('slide','asset_id','description','aspect','width','height') if k in item} for item in meta['slide_image_plan']]}
     def publish():
         content=encode(deck)
         meta['artifact']={'title':deck['title'],'content':content,'media':assets}
@@ -502,8 +502,8 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
             request=base+([{'role':'assistant','content':previous}] if previous else [])+[{'role':'user','content':f"Crea SOLO la pagina {index+1}/{len(pages)}: {page['title']}\nObiettivo: {page['purpose']}\nViewport {FORMATS[opts['format']][0]}x{FORMATS[opts['format']][1]} px.\nSequenza completa: "+json.dumps([{k:row[k] for k in ('title','purpose')} for row in outline['slides']],ensure_ascii=False)+"\nMantieni coerenza con la pagina precedente, ma inventa una composizione adatta a questo contenuto. Restituisci subito HTML e CSS completi."}]
             request[-1]['content']+='\nCONTENUTI EDITORIALI PREPARATI PER QUESTA PAGINA:\n'+json.dumps(page['editorial'],ensure_ascii=False)+'\nComponi i contenuti visibili preparati: conserva spiegazioni, esempi e fonti, senza ridurli a slogan o sostituirli con una sola illustrazione. Non stampare istruzioni grafiche. Le note relatore sono già salvate separatamente; non trasferire nelle note il testo destinato alla slide. Rispetta comunque i vincoli espliciti della richiesta.'
             request[-1]['content']+='\nDirezione artistica: '+deck['visual_direction']
-            planned=[{'id':item['asset_id'],'description':item['description']} for item in meta.get('slide_image_plan',[]) if item['slide']==index+1]
-            if planned:request[-1]['content']+='\nIllustrazioni già generate PER QUESTA PAGINA: '+json.dumps(planned,ensure_ascii=False)+'\nIncludile tutte come <img data-asset-id="ID">, conservando le proporzioni e i limiti della pagina.'
+            planned=[{'id':item['asset_id'],'description':item['description'],**{k:item[k] for k in ('aspect','width','height') if k in item}} for item in meta.get('slide_image_plan',[]) if item['slide']==index+1]
+            if planned:request[-1]['content']+='\nIllustrazioni già generate PER QUESTA PAGINA: '+json.dumps(planned,ensure_ascii=False)+'\nIncludile tutte come <img data-asset-id="ID">, progettando riquadri adatti al loro formato reale. Rendile protagoniste, senza ridurle a miniature: riserva circa 35–55% della pagina quando la figura è importante. Per queste illustrazioni generate puoi usare data-image-fit="cover" con object-fit:cover per riempire il riquadro senza deformare, mantenendo visibili i soggetti principali. Per documenti e figure informative conserva l’immagine intera.'
             updated=0
             def stream_html(raw):
                 nonlocal updated

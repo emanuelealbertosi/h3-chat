@@ -182,8 +182,10 @@ Documenti è incluso nell'installazione; per il PDF serve Microsoft Edge.
 
 ### Esportazione
 
-PowerPoint conserva testi e grafica modificabili, ma non esporta le animazioni CSS come animazioni native di PowerPoint. Anche HTML e PDF sono copie statiche. Per il movimento va usata la riproduzione o l’esportazione video prevista dalla modalità.
+PowerPoint conserva testi e grafica modificabili, ma non esporta le animazioni CSS come animazioni native di PowerPoint. Il PDF resta statico. L’HTML delle presentazioni è invece sfogliabile e conserva le animazioni CSS già presenti nelle pagine; le frecce, la tastiera e il selettore permettono di consultare una pagina alla volta. «Ripeti animazioni» riapre la pagina. Il file funziona offline e mantiene isolate le slide, senza eseguire codice generato. Le animazioni native del PPTX sono rinviate per scelta dell’utente.
 
-Gli export HTML e PDF eliminano le proprietà grafiche predefinite duplicate, conservando lo stile calcolato di ciascun elemento. Il limite rimane 64 MiB di contenuto HTML, incluse le immagini incorporate.
+Il PDF elimina le proprietà grafiche predefinite duplicate conservando lo stile calcolato. L’HTML conserva HTML/CSS delle pagine e incorpora immagini e font, condividendo i font comuni per ridurre le dimensioni. Il limite rimane 64 MiB di contenuto HTML, incluse le immagini incorporate.
 
 La durata indicativa della presentazione si imposta da 1 a 20 minuti (0 = Automatico). La durata esplicita nel prompt prevale. Il planner adatta scaletta, contenuti e note, incluse pause e attività. Non imposta un timeout né una riproduzione automatica di quella durata.
+
+Le illustrazioni AI vengono pianificate con un formato per ciascun riquadro (orizzontale, verticale o quadrato), mantenendo il budget di pixel scelto. Nel canvas, selezionando un’immagine in Modifica grafica, puoi scegliere Intera oppure Riempi riquadro e spostare il centro del ritaglio. Il riempimento conserva le proporzioni, senza deformare. Le figure originali restano intere finché non scegli un ritaglio.

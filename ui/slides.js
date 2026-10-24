@@ -140,16 +140,15 @@ export async function exportSlides(value,kind,token){
       await pageElement(deck,page,i,value.media,{},root);
     }
     await document.fonts.ready;await Promise.all([...root.querySelectorAll('img')].map(img=>img.decode().catch(()=>{})));
-    for(const frame of [...root.children]){if(deck.engine==='llm')flattenHtml(frame);else layoutSlide(frame,deck.pages[Number(frame.dataset.page)-1].title);}
+    for(const frame of [...root.children])if(deck.engine!=='llm')layoutSlide(frame,deck.pages[Number(frame.dataset.page)-1].title);
+    if(kind==='html'&&!deck.infographic)return await (await import('./slide-presentation-export.js')).exportPresentation(root,deck,value.title,token);
+    for(const frame of [...root.children])if(deck.engine==='llm')flattenHtml(frame);
+    if(kind==='html'){const html=await (await import('./exports.js')).printableHtml(root);const response=await fetch('/api/export/html',{method:'POST',headers:{'Content-Type':'application/json','X-H3-Token':token},body:JSON.stringify({title:value.title,html,slide_format:deck.format})});const result=await response.json();if(!response.ok)throw Error(result.error);const blob=await fetch(result.url).then(r=>r.blob());saveBlob(blob,value.title+'.html');return;}
     if(kind==='pptx')return await (await import('./slide-pptx.js')).exportPowerPoint(root,deck,value.title);
     if(kind==='pdf')return await exportPdf(root,value.title,token,{slide_format:deck.format});
     if(kind==='source-pdf'){const url=await exportPdf(root,value.title,token,{slide_format:deck.format,download:false});const response=await fetch(url);if(!response.ok)throw Error('PDF della presentazione non disponibile.');return await response.blob();}
     if(kind==='docx')return await exportDocx(root,value.title);
     if(kind==='png')return await exportPng(root,value.title);
-    if(kind==='html'){
-      const html=await (await import('./exports.js')).printableHtml(root);
-      const response=await fetch('/api/export/html',{method:'POST',headers:{'Content-Type':'application/json','X-H3-Token':token},body:JSON.stringify({title:value.title,html,slide_format:deck.format})});const result=await response.json();if(!response.ok)throw Error(result.error);
-      const blob=await fetch(result.url).then(r=>r.blob());saveBlob(blob,value.title+'.html');
-    }
+
   }finally{await renderRich(root,'');root.remove();}
 }

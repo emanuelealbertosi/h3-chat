@@ -44,6 +44,26 @@ class ImagePlanningTests(unittest.TestCase):
         self.assertEqual([p['slide'] for p in meta['slide_image_plan']],list(range(1,16)))
         self.assertEqual(self.engine.stop.call_count,2);self.engine.start_llama.assert_called_once()
         self.assertEqual(self.settings,before)
+    def test_each_planned_aspect_reaches_generation_without_losing_pixel_budget(self):
+        self.outline['slides']=self.outline['slides'][:2]
+        self.engine.completion.return_value=(json.dumps({'images':[
+            {'slide':1,'prompt':'wide scene','description':'Ampia','aspect':'16:9'},
+            {'slide':2,'prompt':'upright subject','description':'Verticale','aspect':'3:4'}]}),'stop')
+        captured=[]
+        def generate(model,settings,*args):
+            captured.append(copy.deepcopy(settings['_image_options']))
+            return {'id':str(len(captured)),'mime':'image/png','path':'synthetic.png'}
+        self.engine.generate.side_effect=generate;meta={}
+        create(SimpleNamespace(engine=self.engine,store=Mock()),{'payload':'{}'},self.outline,self.history,
+            self.settings,{'name':'LLM'},self.cancel,self.stage,Path('synthetic.log'),meta)
+        self.assertGreater(captured[0]['width'],captured[0]['height'])
+        self.assertLess(captured[1]['width'],captured[1]['height'])
+        for params in captured:
+            self.assertGreaterEqual(params['width']*params['height'],self.settings['width']*self.settings['height'])
+        self.assertEqual([item['aspect'] for item in meta['slide_image_plan']],['16:9','3:4'])
+        for item,params in zip(meta['slide_image_plan'],captured):
+            self.assertEqual((item['width'],item['height']),(params['width'],params['height']))
+
     def test_truncated_groups_are_split_without_reusing_partial_json_or_duplicate_pages(self):
         self.outline['slides']=self.outline['slides'][:6]
         def complete(messages,tuning,cancel,**kwargs):
