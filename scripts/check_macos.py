@@ -27,10 +27,12 @@ class FakeProvider(BaseHTTPRequestHandler):
     def log_message(self,*args):pass
     def do_POST(self):
         request=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        schema=request.get('response_format',{}).get('json_schema',{}).get('schema')
+        text=json.dumps({'intent':'chat','prompt':''}) if schema and 'intent' in schema.get('properties',{}) else 'Risposta del provider di prova Mac.'
         if request.get('stream'):
-            data=('data: '+json.dumps({'choices':[{'delta':{'content':'Risposta del provider di prova Mac.'},'finish_reason':'stop'}]})+'\n\ndata: [DONE]\n\n').encode();content_type='text/event-stream'
+            data=('data: '+json.dumps({'choices':[{'delta':{'content':text},'finish_reason':'stop'}]})+'\n\ndata: [DONE]\n\n').encode();content_type='text/event-stream'
         else:
-            data=json.dumps({'choices':[{'message':{'role':'assistant','content':'Risposta del provider di prova Mac.'},'finish_reason':'stop'}]}).encode();content_type='application/json'
+            data=json.dumps({'choices':[{'message':{'role':'assistant','content':text},'finish_reason':'stop'}]}).encode();content_type='application/json'
         self.send_response(200);self.send_header('Content-Type',content_type);self.send_header('Content-Length',str(len(data)));self.end_headers();self.wfile.write(data)
 
 server=ThreadingHTTPServer(('127.0.0.1',0),FakeProvider);thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
@@ -39,7 +41,7 @@ try:
     data=Path(folder);app=Service(STAGE,data,start_worker=False)
     try:
         state=app.state();assert state['platform']['system']=='darwin';assert state['runtimes']['cpu']['ready'];assert state['runtimes']['metal']['ready']
-        provider=app.provider_request({'name':'Mac test','base_url':f'http://127.0.0.1:{server.server_port}/v1','model':'test','vision':False,'max_refs':4,'thinking':'none','format':'prompt','api_key':'disposable-macos-key'})
+        provider=app.provider_request({'name':'Mac test','base_url':f'http://127.0.0.1:{server.server_port}/v1','model':'test','vision':False,'max_refs':4,'thinking':'none','format':'json_schema','api_key':'disposable-macos-key'})
         app.save_settings({'chat_model':provider['id'],'web_auto':False})
         chat=app.store.create_chat()['id'];sent=app.send(chat,{'prompt':'Rispondi in italiano','canvas':False})
         job=app.store.one('SELECT * FROM jobs WHERE id=?',(sent['job_id'],));app.execute_job(job,threading.Event())
