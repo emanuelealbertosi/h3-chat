@@ -1,0 +1,37 @@
+import {spawn} from 'node:child_process';
+import {once} from 'node:events';
+import {createInterface} from 'node:readline';
+import {createRequire} from 'node:module';
+import {mkdirSync} from 'node:fs';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
+const child=spawn('runtime/python/python.exe',['-X','utf8','tests/serve_execution_fixture.py'],{stdio:['ignore','pipe','pipe']});
+let diagnostics='';child.stderr.on('data',x=>diagnostics+=x);
+const lines=createInterface({input:child.stdout});
+const first=await Promise.race([once(lines,'line'),once(child,'exit').then(()=>{throw Error(diagnostics);})]);
+const fixture=JSON.parse(first[0]);lines.close();
+let browser;
+try{
+ browser=await chromium.launch({channel:'msedge',headless:true,args:['--disable-gpu']});
+ const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(fixture.url);await page.locator('#prompt-slides').click();
+ await page.locator('[data-mode-settings=slides-options]').click();
+ const timeout=page.getByRole('spinbutton',{name:'Tempo massimo per fase LLM delle slide in secondi',exact:true});
+ await timeout.scrollIntoViewIfNeeded();assert.equal(await timeout.isVisible(),true);assert.equal(await timeout.inputValue(),'0');
+ await timeout.fill('6000');await timeout.dispatchEvent('change');
+ await page.locator('#prompt-mode-settings').getByRole('button',{name:'Fatto',exact:true}).click();
+ assert.match(await page.locator('[data-mode-settings=slides-options]').locator('..').innerText(),/6000 s/);
+ await page.locator('[data-mode-settings=slides-options]').click();assert.equal(await timeout.inputValue(),'6000');
+ await page.setViewportSize({width:390,height:844});await timeout.scrollIntoViewIfNeeded();assert.equal(await timeout.isVisible(),true);
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+ mkdirSync('work/slide-timeout-2026-10-24',{recursive:true});await page.screenshot({path:'work/slide-timeout-2026-10-24/mobile.png'});
+ await page.locator('#prompt-mode-settings').getByRole('button',{name:'Fatto',exact:true}).click();
+ await page.setViewportSize({width:1280,height:900});
+ let body;
+ await page.route('**/api/chats/*/messages',async route=>{body=route.request().postDataJSON();await route.fulfill({status:400,contentType:'application/json',body:JSON.stringify({error:'Invio simulato: nessuna generazione.'})});});
+ await page.locator('#prompt').fill('Crea due slide di prova');await page.locator('#send').click();
+ await page.waitForFunction(()=>document.body.innerText.includes('Invio simulato'));
+ assert.equal(body.slides.llm_timeout,6000);assert.deepEqual(errors,[]);
+ console.log('Slide timeout: modal visible, 0 inheritance, 6000-second value retained, mobile layout and actual request payload passed. No generation sent.');
+}catch(e){console.error(diagnostics);throw e;}finally{await browser?.close();child.kill();}

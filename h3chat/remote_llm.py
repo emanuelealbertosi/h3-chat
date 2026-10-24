@@ -89,7 +89,7 @@ class Client:
                 headers={'Accept':'text/event-stream, application/json','Content-Type':content_type,'User-Agent':'H3-Chat'}
                 if key:headers['Authorization']='Bearer '+key
                 request=urllib.request.Request(config['base_url']+path,data=None if body is None else body if isinstance(body,bytes) else json.dumps(body,ensure_ascii=False).encode('utf-8'),headers=headers)
-                response=urllib.request.build_opener(NoRedirect()).open(request,timeout=min(timeout,300))
+                response=urllib.request.build_opener(NoRedirect()).open(request,timeout=timeout)
                 with self.lock:self.requests[stop]=response
                 if stop.is_set():return
                 if isinstance(body,dict) and body.get('stream'):

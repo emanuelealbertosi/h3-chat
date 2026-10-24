@@ -33,6 +33,9 @@ def render(app,job,payload,settings,model,cancel,stage,log_path,meta):
     from . import slide_revision
     snapshot=payload['canvas_snapshot'];media=json.loads(snapshot['media'])
     deck=copy.deepcopy(json.loads(snapshot['content'][len(PREFIX):-4]))
+    from .slide_timeout import apply as timeout_settings
+    settings=timeout_settings(settings,deck)
+    meta['slide_llm_timeout']=settings['llm_timeout']
     missing=[i for i,p in enumerate(deck['pages']) if p.get('status')!='ready']
     if not missing:raise ValueError('Non ci sono slide mancanti da completare.')
     provenance=settings['_slide_resume'].get('provenance',{})

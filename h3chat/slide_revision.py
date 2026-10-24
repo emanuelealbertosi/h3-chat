@@ -98,6 +98,10 @@ def build(app,job,payload,settings,model,cancel,stage,log_path,meta,*,prepare_en
     started=time.monotonic()
     snapshot=payload['canvas_snapshot'];media=json.loads(snapshot['media'])
     deck=copy.deepcopy(json.loads(snapshot['content'][len(PREFIX):-4]))
+    if not deck.get('infographic'):
+        from .slide_timeout import apply as timeout_settings
+        settings=timeout_settings(settings,deck)
+        meta['slide_llm_timeout']=settings['llm_timeout']
     index=settings['_slide_revision']['page'];page=deck['pages'][index]
     meta.update(settings['_slide_revision'].get('provenance',{}))
     prompt=settings['_slide_revision'].get('prompt') or payload['prompt']

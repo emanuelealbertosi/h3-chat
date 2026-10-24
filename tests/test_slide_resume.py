@@ -63,6 +63,18 @@ class SlideResumeTests(unittest.TestCase):
     def result(self, answer):
         return json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4])
 
+    def test_saved_phase_timeout_is_used_by_resume_and_page_revision(self):
+        saved,deck=self.saved();deck['llm_timeout']=6000
+        saved=self.app.store.canvas_history.save(self.chat,{'title':deck['title'],'content':encode(deck),'media':[]})
+        job=self.queue(saved);seen=[]
+        def complete(messages,settings,cancel,**kw):
+            seen.append(settings['llm_timeout'])
+            return '<main style="color:blue"><h1>Pagina completata</h1><p>Testo aggiornato.</p></main>','stop'
+        answer,_,start,_=self.execute(job,complete)
+        self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
+        self.assertEqual(seen,[6000,6000]);self.assertEqual(start.call_args.args[1]['llm_timeout'],6000)
+        self.assertEqual(self.result(answer)['llm_timeout'],6000)
+
     def test_only_missing_pages_change_and_sources_history_survive(self):
         saved, original = self.saved()
         job = self.queue(saved)

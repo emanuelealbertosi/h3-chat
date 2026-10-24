@@ -11,6 +11,25 @@ def editorial_response():
         'notes':'Note del relatore, attività e approfondimenti.','sources':[]}),'stop'
 
 class HTMLTests(fixtures.GenerationTests):
+    def test_phase_timeout_covers_outline_editorial_and_html(self):
+        for override in (0,3600):
+            with self.subTest(override=override):
+                job=self.enqueue(slides={'llm_timeout':override})
+                payload=json.loads(job['payload']);payload['settings']['llm_timeout']=6000
+                job=job|{'payload':json.dumps(payload)};seen=[]
+                def complete(messages,settings,cancel,**kw):
+                    properties=kw.get('schema',{}).get('properties',{})
+                    phase='outline' if 'slides' in properties else 'editorial' if 'content' in properties else 'html'
+                    seen.append((phase,settings['llm_timeout']))
+                    if phase=='outline':return json.dumps({'title':'Corso','visual_direction':'Chiaro','slides':[{'title':t,'purpose':'Spiega'} for t in ('A','B')]}),'stop'
+                    if phase=='editorial':return editorial_response()
+                    return '<main style="color:blue"><h1>Pagina completa</h1></main>','stop'
+                with patch.object(self.app.engine,'require_model',return_value=self.model),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete):
+                    self.app.execute_job(job,threading.Event())
+                answer=self.app.store.messages(job['chat_id'])[-1]
+                self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
+                self.assertEqual(seen,[(phase,override or 6000) for phase in ('outline','editorial','editorial','html','html')])
+
     def test_editorial_notes_and_sources_survive_interrupted_html(self):
         job=self.enqueue('Crea 2 slide con testi completi e note del relatore')
         def complete(messages,settings,cancel,**kw):

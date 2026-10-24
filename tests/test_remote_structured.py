@@ -1,5 +1,5 @@
 import json,threading,unittest
-from unittest.mock import Mock
+from unittest.mock import Mock,patch
 from h3chat.remote_llm import Client,StructuredCompletionError,structured_text
 from h3chat.downloads import Cancelled
 
@@ -10,6 +10,14 @@ SETTINGS={'max_tokens':3500,'temperature':.2,'think_level':'off'}
 def reply(text,finish='stop'):return {'choices':[{'message':{'content':text},'finish_reason':finish}]}
 
 class StructuredTests(unittest.TestCase):
+    def test_configured_timeout_also_reaches_transport_socket(self):
+        response=Mock();response.read.return_value=b'{}'
+        opener=Mock();opener.open.return_value=response
+        with patch('h3chat.remote_llm.urllib.request.build_opener',return_value=opener):
+            result=Client().exchange(CONFIG,'',threading.Event(),timeout=6000)
+        self.assertEqual(result,{})
+        self.assertEqual(opener.open.call_args.kwargs['timeout'],6000)
+
     def test_only_complete_fence_is_unwrapped_and_schema_stays_strict(self):
         self.assertEqual(json.loads(structured_text('```json\n'+json.dumps(GOOD)+'\n```',SCHEMA)),GOOD)
         for value in ['Explanation\n'+json.dumps(GOOD),json.dumps(GOOD)+'\nExplanation','```json\n{}\n```',json.dumps(GOOD|{'extra':1}),json.dumps(GOOD|{'sources':['R2']})]:

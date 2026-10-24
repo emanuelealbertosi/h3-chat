@@ -70,8 +70,7 @@ def prepare(engine,base,outline,settings,cancel,stage,refs,on_page,on_invalid=No
     # single JSON response or force the planner to sacrifice later pages.
     sequence=[{k:p[k] for k in ('title','purpose')} for p in outline['slides']]
     tuning=settings|{'think_level':'off','temperature':.2,
-        'max_tokens':min(settings['max_tokens'],3500),
-        'llm_timeout':min(settings.get('llm_timeout',1800),300)}
+        'max_tokens':min(settings['max_tokens'],3500)}
     for index,row in enumerate(outline['slides']):
         if cancel.is_set():raise Cancelled()
         label=f'Slide · contenuti e note {index+1}/{len(sequence)}';stage(label);last=0

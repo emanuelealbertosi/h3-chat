@@ -94,7 +94,7 @@ def edit_options(prompt,content):
     if extra:count+=1 if extra[1].lower() in ('un','una') else int(extra[1])
     # An addition specifies an increment, not the new total.
     return options(prompt[:extra.start()]+prompt[extra.end():] if extra else prompt,
-                   {'count':count,'format':deck['format'],'engine':deck.get('engine','deterministic')}|{k:deck[k] for k in ('theme','typography','design','detail','composition','engine','vision_scope','background','background_color','palette','text_tone','duration_minutes') if k in deck})
+                   {'count':count,'format':deck['format'],'engine':deck.get('engine','deterministic')}|{k:deck[k] for k in ('theme','typography','design','detail','composition','engine','vision_scope','background','background_color','palette','text_tone','duration_minutes','llm_timeout') if k in deck})
 
 
 def options(prompt, body=None):
@@ -107,6 +107,9 @@ def options(prompt, body=None):
     if not isinstance(aspect,str) or aspect not in FORMATS:
         raise ValueError('Slide: scegli un formato 16:9, 9:16, 4:3, 16:10 oppure 1:1.')
     result={'count': count, 'format': aspect}
+    if 'llm_timeout' in body:
+        from .slide_timeout import value as timeout_value
+        result['llm_timeout']=timeout_value(body)
     from .slide_duration import requested as requested_duration
     minutes=requested_duration(prompt,body)
     if minutes or 'duration_minutes' in body:result['duration_minutes']=minutes
@@ -322,6 +325,8 @@ def validate_content(content, media):
     if deck.get('composition','standard') not in ('standard','rich'):raise ValueError('Composizione slide non valida.')
     from .slide_duration import requested as requested_duration
     requested_duration('',deck)
+    from .slide_timeout import value as timeout_value
+    timeout_value(deck)
     from .slide_colors import options as color_options
     color_options(deck)
     if 'title' in deck and (not isinstance(deck['title'],str) or len(deck['title'])>150):raise ValueError('Titolo presentazione non valido.')
@@ -345,6 +350,9 @@ def validate_content(content, media):
 
 def build(app, job, payload, history, settings, model, cancel, stage, log_path, meta):
     opts=options('', settings['_slides']) if settings.get('_slides') else options(payload['prompt'])
+    from .slide_timeout import apply as timeout_settings
+    settings=timeout_settings(settings,opts)
+    meta['slide_llm_timeout']=settings['llm_timeout']
     requested_opts=opts.copy()
     auto_count=opts['count']=='auto'
     min_count,max_count=outline_bounds(payload['prompt'],opts['count'])
@@ -405,8 +413,7 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
         base[0]['content']+=color_brief(opts)
     base[-1]['content']+='\nCATALOGO IMMAGINI:\n'+catalog+'\nFONTI CITABILI:\n'+json.dumps(references,ensure_ascii=False)
     planning_count=max_count
-    planning=settings|{'think_level':'off','temperature':.2,'max_tokens':min(settings['max_tokens'],max(768,min(6000,384+planning_count*96))),
-                       'llm_timeout':min(settings.get('llm_timeout',1800),300)}
+    planning=settings|{'think_level':'off','temperature':.2,'max_tokens':min(settings['max_tokens'],max(768,min(6000,384+planning_count*96)))}
     stage('Slide · scaletta breve · lettura delle fonti · Think Off')
     outline_schema={'type':'object','properties':{'title':TEXT,'slides':{'type':'array','minItems':min_count,'maxItems':max_count,
         'items':{'type':'object','properties':{'title':TEXT,'purpose':TEXT},'required':['title','purpose'],'additionalProperties':False}}},'required':['title','slides'],'additionalProperties':False}
@@ -482,6 +489,7 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
           'design':opts.get('design','professional'),'detail':opts.get('detail','concise'),'composition':opts.get('composition','standard'),'vision_scope':opts.get('vision_scope','relevant'),
           'title':outline['title'][:150] or 'Presentazione','references':references,'pages':pages,'active':0}
     deck['count_mode']='auto' if auto_count else 'fixed'
+    if 'llm_timeout' in opts:deck['llm_timeout']=opts['llm_timeout']
     if opts.get('duration_minutes'):deck['duration_minutes']=opts['duration_minutes']
     direction=outline.get('visual_direction','')
     if not isinstance(direction,str):raise ValueError('Direzione artistica delle slide non valida.')

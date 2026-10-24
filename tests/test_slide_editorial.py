@@ -34,8 +34,14 @@ class EditorialTests(unittest.TestCase):
             self.assertIn('Massimo 35 parole',messages[0]['content'])
             self.assertIn('limiti espliciti',messages[-1]['content'])
             self.assertEqual(settings['think_level'],'off');self.assertEqual(settings['max_tokens'],3500)
+            self.assertEqual(settings['llm_timeout'],1800)
         self.assertEqual(self.outline['slides'][1]['editorial'],self.plan)
         self.assertNotIn('editorial',seen[1][0][-1]['content'])
+
+    def test_long_timeout_reaches_editorial_without_a_five_minute_cap(self):
+        engine=Mock();engine.completion.return_value=(json.dumps(self.plan),'stop')
+        prepare(engine,[],self.outline,self.settings|{'llm_timeout':6000},threading.Event(),lambda _:None,{'R1'},lambda i,v:None)
+        self.assertEqual([c.args[1]['llm_timeout'] for c in engine.completion.call_args_list],[6000,6000])
 
     def test_unknown_source_and_truncated_plan_never_reach_composition(self):
         with self.assertRaisesRegex(ValueError,'fonti'):validate(self.plan|{'sources':['inventata']},{'R1'})

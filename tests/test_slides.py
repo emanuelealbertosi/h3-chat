@@ -19,6 +19,23 @@ def node(kind='text',text='Fonte [R1]',**kw):
     return {'id':'n1','parent':'root','kind':kind,'text':text,'asset_id':'','language':'text','style':{'flow':'stack','columns':[1,1],'surface':'plain','gap':20}}|kw
 
 class SchemaTests(unittest.TestCase):
+    def test_phase_timeout_validates_and_survives_deck_edits(self):
+        from h3chat.slide_timeout import apply
+        for seconds in (0,60,6000,14400):
+            chosen=options('',{'llm_timeout':seconds})
+            self.assertEqual(chosen['llm_timeout'],seconds)
+            deck={'version':1,'format':'16:9','llm_timeout':seconds,'pages':[{'title':'A','nodes':[]}]}
+            validate_content(encode(deck),[])
+            self.assertEqual(edit_options('Cambia il titolo',encode(deck))['llm_timeout'],seconds)
+        for invalid in (-1,1,59,14401,True,6000.0,'6000',None):
+            with self.subTest(invalid=invalid),self.assertRaises(ValueError):options('',{'llm_timeout':invalid})
+            with self.assertRaises(ValueError):validate_content(encode(deck|{'llm_timeout':invalid}),[])
+        settings={'llm_timeout':3600}
+        self.assertEqual(apply(settings,{})['llm_timeout'],3600)
+        self.assertEqual(apply(settings,{'llm_timeout':0})['llm_timeout'],3600)
+        self.assertEqual(apply(settings,{'llm_timeout':6000})['llm_timeout'],6000)
+        self.assertEqual(settings,{'llm_timeout':3600})
+
     def test_rich_composition_is_independent_of_text_and_survives_edits(self):
         from h3chat.slide_style import composition_brief
         chosen=options('',{'composition':'rich','engine':'deterministic','detail':'concise','generate_images':False})
@@ -177,7 +194,7 @@ class GenerationTests(unittest.TestCase):
         self.assertIn('NON ridurli a headline',instructions)
 
     def test_planning_does_not_inherit_final_answer_thinking_and_token_budget(self):
-        job=self.enqueue();payload=json.loads(job['payload']);payload['settings'].update(max_tokens=25000,context=50000,think_level='xhigh')
+        job=self.enqueue();payload=json.loads(job['payload']);payload['settings'].update(max_tokens=25000,context=50000,think_level='xhigh',llm_timeout=6000)
         job=job|{'payload':json.dumps(payload)};seen=[]
         original=self.completion
         def complete(messages,settings,cancel,**kw):
@@ -187,9 +204,26 @@ class GenerationTests(unittest.TestCase):
         with patch.object(self.app.engine,'require_model',return_value=self.model),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete):
             self.app.execute_job(job,self.cancel)
         planning=next(settings for settings,is_plan in seen if is_plan)
-        self.assertEqual(planning['think_level'],'off');self.assertLessEqual(planning['max_tokens'],1000);self.assertLessEqual(planning['llm_timeout'],300)
+        self.assertEqual(planning['think_level'],'off');self.assertLessEqual(planning['max_tokens'],1000);self.assertEqual(planning['llm_timeout'],6000)
         for settings,is_plan in seen:
+            self.assertEqual(settings['llm_timeout'],6000)
             if not is_plan:self.assertEqual((settings['max_tokens'],settings['think_level']),(25000,'xhigh'))
+
+    def test_slide_timeout_override_reaches_outline_and_pages_without_changing_defaults(self):
+        job=self.enqueue(slides={'llm_timeout':6000});seen=[]
+        self.calls=[];self.job=job;self.progress=0;self.fail_generation=False;self.documents=False
+        def complete(messages,settings,cancel,**kw):
+            seen.append(settings['llm_timeout'])
+            return self.completion(messages,settings,cancel,**kw)
+        before=self.app.store.settings()['llm_timeout']
+        with patch.object(self.app.engine,'require_model',return_value=self.model),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete):
+            self.app.execute_job(job,self.cancel)
+        answer=self.app.store.messages(job['chat_id'])[-1]
+        self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
+        self.assertEqual(seen,[6000,6000,6000])
+        self.assertEqual(json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4])['llm_timeout'],6000)
+        self.assertEqual(answer['meta']['slide_llm_timeout'],6000)
+        self.assertEqual(self.app.store.settings()['llm_timeout'],before)
 
     def test_truncated_outline_retries_once_with_more_output_within_user_budget(self):
         job=self.enqueue();payload=json.loads(job['payload']);payload['settings'].update(max_tokens=10000,context=30000)
