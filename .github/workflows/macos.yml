@@ -21,8 +21,23 @@ jobs:
       - run: uname -m
       - run: npm ci
       - run: npm run build
+      - uses: actions/cache/restore@v4
+        id: native-cache
+        with:
+          path: |
+            build/macos-downloads
+            build/macos/H3-Chat/runtime/browser
+          key: macos-arm64-${{ hashFiles('scripts/macos-sources.json') }}
       - name: Build native self-contained distribution
+        id: build
         run: python scripts/build_macos.py
+      - uses: actions/cache/save@v4
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            build/macos-downloads
+            build/macos/H3-Chat/runtime/browser
+          key: macos-arm64-${{ hashFiles('scripts/macos-sources.json') }}
       - name: Verify actual packaged components on Apple Silicon
         run: build/macos/H3-Chat/runtime/python/bin/python3 -X utf8 scripts/check_macos.py
       - name: Verify ZIP members and create checksum

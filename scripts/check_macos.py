@@ -81,7 +81,7 @@ def linked_copy(source,target):
     except OSError:return shutil.copy2(source,target)
 
 with tempfile.TemporaryDirectory(prefix='h3-macos-relocated-') as folder:
-    relocated=Path(folder)/'H3 Chat with spaces'
+    relocated=Path(folder).resolve()/'H3 Chat with spaces'
     shutil.copytree(STAGE,relocated,symlinks=True,copy_function=linked_copy,ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
     executable=relocated/'H3-Chat.app/Contents/MacOS/H3-Chat'
     with (Path(folder)/'launcher.log').open('wb') as log:

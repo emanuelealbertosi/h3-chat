@@ -68,7 +68,7 @@ def package(stage):
     for path in sorted(stage.rglob('*')):
         if path.is_file() or path.is_symlink():
             relative=path.relative_to(stage)
-            if '__pycache__' in relative.parts or path.suffix in ('.pyc','.pyo'):continue
+            if '__pycache__' in relative.parts or '.links' in relative.parts or path.suffix in ('.pyc','.pyo'):continue
             if relative.parts[0] in ('data','models','work') or path.suffix in ('.sqlite','.log'):
                 raise ValueError('Private or temporary package member: '+relative.as_posix())
             if path.is_symlink():
