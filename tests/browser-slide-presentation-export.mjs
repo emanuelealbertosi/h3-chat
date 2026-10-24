@@ -18,6 +18,19 @@ try{
  const first=await frame().locator('#dot').evaluate(e=>e.getBoundingClientRect().x);await page.waitForTimeout(220);const second=await frame().locator('#dot').evaluate(e=>e.getBoundingClientRect().x);assert.ok(Math.abs(second-first)>5,'Authored CSS animation must run offline');
  await page.getByRole('button',{name:'Slide successiva',exact:true}).click();await frame().getByText('Seconda pagina').waitFor();assert.equal(await page.locator('#counter').innerText(),'2 / 2');assert.equal(await page.locator('#next').isDisabled(),true);
  await page.keyboard.press('ArrowLeft');await frame().locator('#dot').waitFor();await page.getByRole('button',{name:'Ripeti animazioni'}).click();await frame().locator('#dot').waitFor();assert.equal(await page.locator('#counter').innerText(),'1 / 2');
+ // Use the real fullscreen API on the offline exported file.
+ await page.setViewportSize({width:1280,height:720});
+ await page.getByRole('button',{name:'Schermo intero',exact:true}).click();await page.waitForFunction(()=>!!document.fullscreenElement);
+ await page.mouse.move(640,450);await page.waitForTimeout(1900);
+ const full=await page.evaluate(()=>{const r=document.getElementById('stage').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,viewport:[innerWidth,innerHeight],header:getComputedStyle(document.querySelector('header')).visibility,footer:getComputedStyle(document.querySelector('footer')).visibility};});
+ assert.equal(full.x,0);assert.equal(full.y,0);assert.deepEqual([full.width,full.height],full.viewport);assert.equal(full.header,'hidden');assert.equal(full.footer,'hidden');
+ await page.keyboard.press('ArrowRight');await frame().getByText('Seconda pagina').waitFor();assert.equal(await page.locator('#counter').textContent(),'2 / 2');
+ await page.mouse.move(640,full.height-8);await page.locator('#previous').waitFor();
+ const overlay=await page.locator('#stage').boundingBox();assert.deepEqual([overlay.width,overlay.height],full.viewport);
+ await page.locator('#previous').click();await frame().locator('#dot').waitFor();await page.mouse.move(640,450);await page.waitForTimeout(1900);assert.equal(await page.locator('footer').isVisible(),false);
+ await page.screenshot({path:'work/slide-html-presentation-qa/fullscreen.png'});
+ await page.keyboard.press('Tab');await page.locator('footer').waitFor();
+ await page.evaluate(()=>document.exitFullscreen());await page.waitForFunction(()=>!document.fullscreenElement);assert.equal(await page.locator('header').isVisible(),true);assert.equal(await page.locator('footer').isVisible(),true);
  await page.setViewportSize({width:390,height:844});await page.waitForTimeout(100);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);await page.screenshot({path:'work/slide-html-presentation-qa/mobile.png'});assert.deepEqual(errors,[]);
- console.log('Offline paged HTML: navigation, keyboard, CSS motion, replay, sandbox isolation, escaped data and mobile passed.');
+ console.log('Offline paged HTML: true fullscreen without reserved chrome space, controls reveal/autohide, fullscreen keyboard navigation, exit restoration, CSS motion, replay, sandbox isolation and mobile passed.');
 }finally{await browser.close();}
