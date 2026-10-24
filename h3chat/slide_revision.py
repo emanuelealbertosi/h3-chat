@@ -23,7 +23,7 @@ def revision_context(deck,index,media,meta,settings,system,instruction):
     """Keep the whole selected HTML when it fits, rather than a fixed 12K slice."""
     page=deck['pages'][index];original=page.get('html','')
     data={'page':index+1,'pages':len(deck['pages']),'viewport':FORMATS[deck['format']],
-          'title':page['title'],
+          'title':page['title'],'duration_minutes':deck.get('duration_minutes',0),
           'style':{k:deck.get(k,'') for k in ('visual_direction','design','detail','composition')},
           'image_catalog':[{'asset_id':m['id'],'description':m['name']} for m in media if m['mime'].startswith('image/')],
           'sources':'\n\n'.join(f"[{s['citation']}] {s['name']} · {s['location']}\n{s['text']}" for s in meta.get('rag_sources',[])),

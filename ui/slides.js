@@ -15,6 +15,7 @@ export function readDeck(content){
   const deck=JSON.parse(content.slice(13,-4));
   if(deck.version!==1||!Object.hasOwn(slideFormats,deck.format)||!Array.isArray(deck.pages)||!deck.pages.length||deck.pages.length>(deck.infographic?30:100))throw Error('Presentazione non valida.');
   if(deck.title!==undefined&&(typeof deck.title!=='string'||deck.title.length>150))throw Error('Titolo presentazione non valido.');
+  if(deck.duration_minutes!==undefined&&(typeof deck.duration_minutes!=='number'||!Number.isFinite(deck.duration_minutes)||deck.duration_minutes<0||deck.duration_minutes>20))throw Error('Durata indicativa slide non valida.');
   deck.title||='Presentazione';deck.references||=[];
   if(!['llm','deterministic'].includes(deck.engine||'deterministic'))throw Error('Motore slide non valido.');
   for(const page of deck.pages){

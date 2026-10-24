@@ -185,3 +185,5 @@ Documenti è incluso nell'installazione; per il PDF serve Microsoft Edge.
 PowerPoint conserva testi e grafica modificabili, ma non esporta le animazioni CSS come animazioni native di PowerPoint. Anche HTML e PDF sono copie statiche. Per il movimento va usata la riproduzione o l’esportazione video prevista dalla modalità.
 
 Gli export HTML e PDF eliminano le proprietà grafiche predefinite duplicate, conservando lo stile calcolato di ciascun elemento. Il limite rimane 64 MiB di contenuto HTML, incluse le immagini incorporate.
+
+La durata indicativa della presentazione si imposta da 1 a 20 minuti (0 = Automatico). La durata esplicita nel prompt prevale. Il planner adatta scaletta, contenuti e note, incluse pause e attività. Non imposta un timeout né una riproduzione automatica di quella durata.

@@ -28,6 +28,20 @@ class CountOptionsTests(unittest.TestCase):
         self.assertEqual(outline_bounds('Massimo 20 slide','auto'),(1,20))
         with self.assertRaises(ValueError):options('Decidi tu quante slide servono, da 40 a 20 slide')
 
+    def test_duration_prompt_priority_validation_and_saved_deck(self):
+        from h3chat.slide_duration import brief
+        for prompt in ('Presentazione di 20 minuti','Durata totale 20 min','20 minuti di presentazione'):
+            self.assertEqual(options(prompt,{'duration_minutes':5})['duration_minutes'],20)
+        self.assertEqual(options('',{'duration_minutes':12})['duration_minutes'],12)
+        self.assertEqual(options('',{'duration_minutes':0})['duration_minutes'],0)
+        for value in (-1,21,True,'20',float('nan'),float('inf')):
+            with self.assertRaises(ValueError):options('',{'duration_minutes':value})
+        with self.assertRaises(ValueError):options('Presentazione di 21 minuti',{'duration_minutes':10})
+        deck={'version':1,'format':'16:9','duration_minutes':20,'pages':[{'title':'Pagina','nodes':[]}]}
+        content=encode(deck);validate_content(content,[])
+        self.assertEqual(edit_options('Cambia il colore',content)['duration_minutes'],20)
+        self.assertIn('1200 secondi',brief(20,100));self.assertIn('12 secondi',brief(20,100))
+
     def test_decks_edits_and_context_include_all_100_pages(self):
         pages=[{'title':f'Pagina {i+1}','nodes':[]} for i in range(100)]
         content=encode({'version':1,'format':'16:9','pages':pages})
@@ -78,13 +92,15 @@ class CountGenerationTests(unittest.TestCase):
                 self.assertEqual(load(self.app,job['chat_id'],job['message_id'])['slides']['count'],'auto')
 
     def test_100_page_generation_and_explicit_prompt_overrides_automatic_setting(self):
-        job=self.enqueue('Crea 100 slide',slides={'count':'auto','engine':'deterministic'})
+        job=self.enqueue('Crea 100 slide per una presentazione di 20 minuti',slides={'count':'auto','engine':'deterministic','duration_minutes':5})
         answer,calls=self.execute_count(job,100)
         self.assertEqual(answer['status'],'done',answer['meta'].get('error'))
         self.assertEqual(calls[0][1]['properties']['slides']['minItems'],100)
         self.assertEqual(calls[0][1]['properties']['slides']['maxItems'],100)
         deck=json.loads(answer['meta']['artifact']['content'][len(PREFIX):-4])
         self.assertEqual(len(deck['pages']),MAX_SLIDES)
+        self.assertEqual(deck['duration_minutes'],20)
+        self.assertIn('1200 secondi',calls[0][0][0]['content'])
         self.assertEqual(deck['pages'][-1]['status'],'ready')
         validate_content(answer['meta']['artifact']['content'],[])
 

@@ -22,11 +22,12 @@ try{
  await page.route('**/api/chats/*/messages',route=>route.request().method()==='POST'?route.fulfill({json:{job_id:'synthetic-only',intent:'slides',canvas:true}}):route.continue());
  await page.goto(fixture.url);await page.click(`[data-chat="${fixture.chat}"]`);await page.click('#prompt-slides');await openSlides();
  assert.equal(await page.inputValue('#slides-count'),'8');assert.equal(await page.getAttribute('#slides-count','max'),'100');
+ await page.fill('#slides-duration','20');
  await page.fill('#slides-count','99');await page.getByRole('button',{name:'Più slide',exact:true}).click();
  assert.equal(await page.inputValue('#slides-count'),'100');await page.getByRole('button',{name:'Più slide',exact:true}).click();assert.equal(await page.inputValue('#slides-count'),'100');
  await page.getByRole('button',{name:'Meno slide',exact:true}).click();assert.equal(await page.inputValue('#slides-count'),'99');
  await page.fill('#slides-count','100');await closeSettings();assert.match(await page.locator('[data-mode-settings="slides-options"]').locator('..').textContent(),/100 slide/);
- assert.equal((await send('Crea una presentazione')).slides.count,100);
+ const timed=await send('Crea una presentazione');assert.equal(timed.slides.count,100);assert.equal(timed.slides.duration_minutes,20);
  await openSlides();await countChoices().getByRole('button',{name:'Automatico · dai contenuti',exact:true}).click();
  assert.equal(await page.locator('#slides-count').isVisible(),false);assert.equal(await page.locator('#slides-count').isDisabled(),true);
  await closeSettings();assert.match(await page.locator('[data-mode-settings="slides-options"]').locator('..').textContent(),/Numero automatico · max 100/);

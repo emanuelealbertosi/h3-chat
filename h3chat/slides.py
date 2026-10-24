@@ -94,7 +94,7 @@ def edit_options(prompt,content):
     if extra:count+=1 if extra[1].lower() in ('un','una') else int(extra[1])
     # An addition specifies an increment, not the new total.
     return options(prompt[:extra.start()]+prompt[extra.end():] if extra else prompt,
-                   {'count':count,'format':deck['format'],'engine':deck.get('engine','deterministic')}|{k:deck[k] for k in ('theme','typography','design','detail','composition','engine','vision_scope','background','background_color','palette') if k in deck})
+                   {'count':count,'format':deck['format'],'engine':deck.get('engine','deterministic')}|{k:deck[k] for k in ('theme','typography','design','detail','composition','engine','vision_scope','background','background_color','palette','duration_minutes') if k in deck})
 
 
 def options(prompt, body=None):
@@ -107,6 +107,9 @@ def options(prompt, body=None):
     if not isinstance(aspect,str) or aspect not in FORMATS:
         raise ValueError('Slide: scegli un formato 16:9, 9:16, 4:3, 16:10 oppure 1:1.')
     result={'count': count, 'format': aspect}
+    from .slide_duration import requested as requested_duration
+    minutes=requested_duration(prompt,body)
+    if minutes or 'duration_minutes' in body:result['duration_minutes']=minutes
     if 'generate_images' in body:
         if type(body['generate_images']) is not bool:raise ValueError('Immagini AI: scegli attivo o disattivo.')
         result['generate_images']=body['generate_images']
@@ -314,6 +317,8 @@ def validate_content(content, media):
     if deck.get('theme','lagoon') not in THEMES or deck.get('typography','modern') not in TYPOGRAPHY:raise ValueError('Tema slide non valido.')
     if deck.get('design','professional') not in DESIGNS or deck.get('detail','concise') not in ('concise','full'):raise ValueError('Stile o dettaglio slide non valido.')
     if deck.get('composition','standard') not in ('standard','rich'):raise ValueError('Composizione slide non valida.')
+    from .slide_duration import requested as requested_duration
+    requested_duration('',deck)
     from .slide_colors import options as color_options
     color_options(deck)
     if 'title' in deck and (not isinstance(deck['title'],str) or len(deck['title'])>150):raise ValueError('Titolo presentazione non valido.')
@@ -386,6 +391,8 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     from .slide_html import BRIEF as HTML_BRIEF
     base[0]['content']+='\n'+(HTML_BRIEF if opts['engine']=='llm' else BRIEF)
     base[0]['content']+='\nOPZIONI DELLA PRESENTAZIONE: '+json.dumps({k:opts.get(k,default) for k,default in (('design','professional'),('detail','concise'))},ensure_ascii=False)+'. detail=full richiede testi e spiegazioni completi, non una lista di headline.'
+    from .slide_duration import brief as duration_brief
+    base[0]['content']+=duration_brief(opts.get('duration_minutes',0),opts['count'])
     from .slide_style import brief as style_brief,composition_brief
     base[0]['content']+='\n'+style_brief(opts.get('design','professional'))
     base[0]['content']+='\n'+composition_brief(opts.get('composition','standard'))
@@ -428,6 +435,7 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     for row in outline['slides']:
         if not isinstance(row,dict) or any(not isinstance(row.get(k),str) or len(row[k])>1500 for k in ('title','purpose')): raise ValueError('Scaletta slide non valida.')
     opts=opts|{'count':actual_count}
+    base[0]['content']+=duration_brief(opts.get('duration_minutes',0),actual_count)
     meta['slide_count']={'mode':'auto' if auto_count else 'fixed','requested':requested_opts['count'],'resolved':actual_count}
     if auto_count:stage(f'Slide · numero automatico · {actual_count} pagine pianificate')
     if opts['engine']=='llm':
@@ -470,6 +478,7 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
           'design':opts.get('design','professional'),'detail':opts.get('detail','concise'),'composition':opts.get('composition','standard'),'vision_scope':opts.get('vision_scope','relevant'),
           'title':outline['title'][:150] or 'Presentazione','references':references,'pages':pages,'active':0}
     deck['count_mode']='auto' if auto_count else 'fixed'
+    if opts.get('duration_minutes'):deck['duration_minutes']=opts['duration_minutes']
     direction=outline.get('visual_direction','')
     if not isinstance(direction,str):raise ValueError('Direzione artistica delle slide non valida.')
     if opts['engine']=='llm':

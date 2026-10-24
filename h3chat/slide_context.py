@@ -43,7 +43,7 @@ def artifact_summary(content):
             return json.dumps({'title':deck.get('title'), 'engine':deck.get('engine'),
                 'design':deck.get('design'), 'detail':deck.get('detail'),
                 'visual_direction':deck.get('visual_direction','')[:800],
-                'pages':[{'title':p.get('title'), 'purpose':p.get('purpose','')[:250]} for p in deck.get('pages',[])[:100]]},ensure_ascii=False)
+                'duration_minutes':deck.get('duration_minutes',0),'pages':[{'title':p.get('title'), 'purpose':p.get('purpose','')[:250]} for p in deck.get('pages',[])[:100]]},ensure_ascii=False)
         except (ValueError,TypeError,AttributeError):pass
     return content[:1200]
 

@@ -16,7 +16,7 @@ try{
  const compactBytes=await page.evaluate(()=>{h3Test.flattenHtml(frame);return frame.outerHTML.length;});
  const after=await page.screenshot();
  mkdirSync('work/slide-export-2026-10-24',{recursive:true});writeFileSync('work/slide-export-2026-10-24/before.png',before);writeFileSync('work/slide-export-2026-10-24/after.png',after);
- assert.deepEqual(after,before,'Static slide appearance must remain pixel-identical');assert.ok(compactBytes<originalBytes*.35,{compactBytes,originalBytes});
+ assert.ok(after.equals(before),'Static slide appearance must remain pixel-identical');assert.ok(compactBytes<originalBytes*.35,{compactBytes,originalBytes});
  console.log(JSON.stringify({visual:'pixel-identical',originalBytes,compactBytes,reduction:1-compactBytes/originalBytes}));
 }finally{await browser.close();}
 

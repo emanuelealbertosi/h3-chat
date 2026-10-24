@@ -46,6 +46,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - run: python scripts/bootstrap_bundle.py
       - run: python scripts/package.py
+      - name: Verify every packaged file and exclude private data
+        run: python scripts/verify_package.py
       - uses: actions/upload-artifact@v4
         with:
           name: H3-Chat-windows-x64
