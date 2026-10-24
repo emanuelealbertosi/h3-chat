@@ -117,6 +117,32 @@ def export_pdf(root,data,body):
     args=[str(edge),'--headless','--disable-gpu','--no-first-run','--no-pdf-header-footer','--print-to-pdf='+str(target),
           '--user-data-dir='+str(folder/'browser-profile'),'--virtual-time-budget=2500',source_file.as_uri()]
     if is_macos():args[1:1]=['--use-mock-keychain','--password-store=basic','--disable-background-networking','--no-default-browser-check']
+    if is_macos():
+        import signal,tempfile
+        def complete():
+            try:
+                with target.open('rb') as stream:
+                    if stream.read(5)!=b'%PDF-':return False
+                    stream.seek(max(0,target.stat().st_size-256));return b'%%EOF' in stream.read()
+            except OSError:return False
+        with tempfile.TemporaryFile() as errors:
+            process=subprocess.Popen(args,stdout=subprocess.DEVNULL,stderr=errors,start_new_session=True)
+            try:
+                deadline=time.monotonic()+90
+                while time.monotonic()<deadline and not complete():
+                    if process.poll() is not None:break
+                    time.sleep(.15)
+            finally:
+                try:os.killpg(process.pid,signal.SIGTERM)
+                except ProcessLookupError:pass
+                try:process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    try:os.killpg(process.pid,signal.SIGKILL)
+                    except ProcessLookupError:pass
+                    process.wait(timeout=5)
+            errors.seek(0,2);errors.seek(max(0,errors.tell()-1600));error=errors.read().decode('utf-8','replace')
+        if not complete():raise RuntimeError('Esportazione PDF Mac non riuscita. '+error[-800:])
+        return {'url':'/exports/'+key+'/document.pdf','name':title+'.pdf'}
     result=subprocess.run(args,capture_output=True,timeout=90,creationflags=CREATE_NO_WINDOW)
     # Windows Edge may return from its launcher while the browser child is still printing.
     deadline=time.monotonic()+60

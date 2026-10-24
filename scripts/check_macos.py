@@ -11,6 +11,7 @@ from h3chat.engine import runtime_executable
 from h3chat.tools_runtime import status
 
 assert sys.platform=='darwin' and platform.machine()=='arm64'
+errors=[]
 subprocess.run(['codesign','--verify','--deep','--strict',STAGE/'H3-Chat.app'],check=True)
 for backend in ('cpu','metal'):
     exe=runtime_executable(STAGE,backend,'llama');assert exe
@@ -51,9 +52,6 @@ try:
         path=data/'uploads/mac-test.docx';path.parent.mkdir(exist_ok=True);doc=Document();doc.add_paragraph('Documento Mac: velocità 42 e colore blu.');doc.save(path)
         read=app.engine.read_document({'id':'mac-test','name':path.name,'path':'uploads/mac-test.docx','mime':'application/vnd.openxmlformats-officedocument.wordprocessingml.document'},threading.Event(),lambda _:None,data/'logs/document-test.log')
         assert 'velocità 42' in str(read)
-        from h3chat.pdf_export import export_pdf
-        result=export_pdf(STAGE,data,{'title':'Mac PDF','html':'<h1>PDF vettoriale di prova Mac</h1><p>Contenuto verificato.</p>'})
-        assert (data/result['url'].lstrip('/')).read_bytes().startswith(b'%PDF-'),result
         project=app.knowledge.save({'name':'Mac RAG','instructions':'Usa soltanto le fonti.','sources_only':True})
         app.store.execute('INSERT INTO project_sources(id,project_id,path,name) VALUES (?,?,?,?)',('mac-rag-source',project['id'],str(path),path.name))
         rows,mode=app.knowledge.retrieve(project['id'],'colore',app.store.settings(),threading.Event(),lambda _:None)
@@ -71,6 +69,12 @@ try:
         try:
             with urllib.request.urlopen(f'http://127.0.0.1:{http.server_port}/api/health',timeout=5) as response:assert json.load(response)['app']=='h3-chat'
         finally:http.shutdown();http.server_close();http.workspaces.close()
+        from h3chat.pdf_export import export_pdf
+        try:
+            result=export_pdf(STAGE,data,{'title':'Mac PDF','html':'<h1>PDF vettoriale di prova Mac</h1><p>Contenuto verificato.</p>'})
+            assert (data/result['url'].lstrip('/')).read_bytes().startswith(b'%PDF-'),result
+        except Exception as exc:
+            errors.append('PDF: '+str(exc));print(errors[-1],flush=True)
     finally:app.close()
 finally:server.shutdown();server.server_close()
 
@@ -105,4 +109,5 @@ with tempfile.TemporaryDirectory(prefix='h3-macos-relocated-') as folder:
             subprocess.run([executable,'--stop'],capture_output=True,timeout=50)
             try:process.wait(timeout=12)
             except subprocess.TimeoutExpired:process.terminate();process.wait(timeout=5)
+assert not errors,errors
 print('macOS arm64: native CPU/Metal startup, Keychain, API chat, documents, RAG, PDF, loopback HTTP and relocated native app launcher/stop passed. No model weights loaded.')
