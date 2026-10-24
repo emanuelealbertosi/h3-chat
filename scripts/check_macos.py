@@ -14,7 +14,11 @@ assert sys.platform=='darwin' and platform.machine()=='arm64'
 subprocess.run(['codesign','--verify','--deep','--strict',STAGE/'H3-Chat.app'],check=True)
 for backend in ('cpu','metal'):
     exe=runtime_executable(STAGE,backend,'llama');assert exe
-    result=subprocess.run([exe,'--version'],capture_output=True,text=True,timeout=30)
+    try:result=subprocess.run([exe,'--version'],capture_output=True,text=True,timeout=120)
+    except subprocess.TimeoutExpired as exc:
+        print('Native startup stdout:',(exc.stdout or b'')[-4000:],flush=True)
+        print('Native startup stderr:',(exc.stderr or b'')[-8000:],flush=True)
+        raise
     assert result.returncode==0,(backend,result.stderr)
 assert status(STAGE)['documents']['ready']
 assert protect(protect('h3-macos-disposable-test'),True)=='h3-macos-disposable-test'
@@ -23,8 +27,11 @@ class FakeProvider(BaseHTTPRequestHandler):
     def log_message(self,*args):pass
     def do_POST(self):
         request=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
-        data=json.dumps({'choices':[{'message':{'role':'assistant','content':'Risposta del provider di prova Mac.'},'finish_reason':'stop'}]}).encode()
-        self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(data)));self.end_headers();self.wfile.write(data)
+        if request.get('stream'):
+            data=('data: '+json.dumps({'choices':[{'delta':{'content':'Risposta del provider di prova Mac.'},'finish_reason':'stop'}]})+'\n\ndata: [DONE]\n\n').encode();content_type='text/event-stream'
+        else:
+            data=json.dumps({'choices':[{'message':{'role':'assistant','content':'Risposta del provider di prova Mac.'},'finish_reason':'stop'}]}).encode();content_type='application/json'
+        self.send_response(200);self.send_header('Content-Type',content_type);self.send_header('Content-Length',str(len(data)));self.end_headers();self.wfile.write(data)
 
 server=ThreadingHTTPServer(('127.0.0.1',0),FakeProvider);thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
 try:

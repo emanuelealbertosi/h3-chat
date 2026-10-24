@@ -52,7 +52,7 @@ def build():
     from h3chat.tools_runtime import mark_ready
     mark_ready(stage,'documents')
     app=stage/'H3-Chat.app/Contents';(app/'MacOS').mkdir(parents=True)
-    (app/'Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier':'org.h3-chat.desktop','CFBundleName':'H3-Chat','CFBundleDisplayName':'H3-Chat','CFBundleExecutable':'H3-Chat','CFBundlePackageType':'APPL','CFBundleShortVersionString':__version__,'CFBundleVersion':__version__,'LSMinimumSystemVersion':'15.0','NSHighResolutionCapable':True}))
+    (app/'Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier':'org.h3-chat.desktop','CFBundleName':'H3-Chat','CFBundleDisplayName':'H3-Chat','CFBundleExecutable':'H3-Chat','CFBundlePackageType':'APPL','CFBundleShortVersionString':__version__,'CFBundleVersion':__version__,'LSMinimumSystemVersion':'15.0','NSHighResolutionCapable':True,'LSBackgroundOnly':True}))
     launch=app/'MacOS/H3-Chat'
     run(['clang','-O2','-arch','arm64','-mmacosx-version-min=15.0',ROOT/'scripts/macos-launcher.c','-o',launch])
     stop=stage/'Ferma-H3-Chat.command';stop.write_text('#!/bin/zsh\nset -eu\nROOT="$(cd "$(dirname "$0")" && pwd)"\nexec "$ROOT/runtime/python/bin/python3" -X utf8 "$ROOT/launcher.py" --stop\n');stop.chmod(0o755)
