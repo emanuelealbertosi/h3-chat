@@ -1,5 +1,7 @@
 """Project knowledge on local SQLite; optional GGUF semantic retrieval."""
 from __future__ import annotations
+
+from .platform_runtime import python_executable
 import hashlib
 import heapq
 import base64
@@ -144,7 +146,7 @@ class Embeddings:
                 if not self.session or self.session.key!=key or not self.session.alive():
                     self.close();s=Session(key,'embedding-gemma2',{}, {},settings,self.data/'logs/embeddings.log');self.session=s
                     stage('RAG · avvio EmbeddingGemma 2 · '+device.upper())
-                    s.start([self.root/'runtime/python/python.exe','-X','utf8',self.root/'native/embeddinggemma-worker.py'],ipc=True,cwd=self.root)
+                    s.start([python_executable(self.root),'-X','utf8',self.root/'native/embeddinggemma-worker.py'],ipc=True,cwd=self.root)
                     s.wait('hello',cancel,90,stage)
                     s.send({'op':'load','path':settings['rag_embedding_model'],'device':device,'threads':settings['threads'],'visual':visual_enabled(settings)})
                     s.wait('loaded',cancel,300,stage)
@@ -169,7 +171,7 @@ class Embeddings:
                 if not self.session or self.session.key!=key or not self.session.alive():
                     self.close();s=Session(key,'embedding-ovis',{}, {},settings,self.data/'logs/embeddings.log');self.session=s
                     stage('RAG · avvio motore Ovis · '+device.upper())
-                    s.start([self.root/'runtime/python/python.exe','-X','utf8',self.root/'native/embedding-worker.py'],ipc=True,cwd=self.root)
+                    s.start([python_executable(self.root),'-X','utf8',self.root/'native/embedding-worker.py'],ipc=True,cwd=self.root)
                     s.wait('hello',cancel,90,stage)
                     s.send({'op':'load','path':settings['rag_embedding_model'],'device':device,'threads':settings['threads'],'visual':visual_enabled(settings)})
                     s.wait('loaded',cancel,600,stage)
@@ -334,7 +336,7 @@ class Knowledge:
         output=safe_join(self.data,'project-cache/'+source['id']+'.json');session=Session(('project-read',source['id']),'documents',{}, {},{},self.data/'logs'/('project-'+source['id']+'.log'))
         with self.lock:self.readers.add(session)
         try:
-            session.start([self.root/'runtime/python/python.exe','-X','utf8',self.root/'native/document-worker.py'],ipc=True,cwd=self.root)
+            session.start([python_executable(self.root),'-X','utf8',self.root/'native/document-worker.py'],ipc=True,cwd=self.root)
             session.wait('hello',cancel,30,stage);session.send({'op':'read','profile':'rag','path':str(path),'output':str(output)});session.wait('result',cancel,1800,stage)
             document=json.loads(output.read_text(encoding='utf-8'));return document['blocks'],document['warnings']
         finally:

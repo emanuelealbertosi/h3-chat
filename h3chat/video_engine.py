@@ -1,5 +1,7 @@
 """MiniMax H3 uses the private inference runtime and the shared process pool."""
 import json
+from .platform_runtime import python_executable
+
 import time
 from pathlib import Path
 from .downloads import Cancelled, safe_join
@@ -15,7 +17,7 @@ class VideoEngine:
         if session.ready and session.alive():return session
         with self.process_lock:
             if cancel.is_set():raise Cancelled()
-            session.start([self.root/'runtime/python/python.exe','-I','-X','utf8',self.root/'native/video-worker.py'],ipc=True,cwd=self.root)
+            session.start([python_executable(self.root),'-I','-X','utf8',self.root/'native/video-worker.py'],ipc=True,cwd=self.root)
         session.wait('hello',cancel,60)
         session.send({'op':'load','files':session.files,'offload':options(model,settings,False)['offload'],'threads':settings['threads']})
         session.wait('ready',cancel,1800,stage)

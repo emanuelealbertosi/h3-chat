@@ -1,5 +1,7 @@
 """Explicit canvas image selection: project visuals and Wikimedia Commons."""
 import base64
+from .platform_runtime import python_executable
+
 import json
 import re
 import subprocess
@@ -30,7 +32,7 @@ def raster(app,raw,thumbnail=False):
     cache=app.data/'document-cache';cache.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(dir=cache,prefix='slide-image-') as folder:
         source=safe_join(Path(folder),'input');target=safe_join(Path(folder),'output.jpg');source.write_bytes(raw)
-        result=subprocess.run([str(app.root/'runtime/python/python.exe'),'-X','utf8',str(app.root/'native/slide-image-worker.py')],input=json.dumps({'path':str(source),'output':str(target),'thumbnail':thumbnail}),text=True,capture_output=True,timeout=45,creationflags=CREATE_NO_WINDOW)
+        result=subprocess.run([str(python_executable(app.root)),'-X','utf8',str(app.root/'native/slide-image-worker.py')],input=json.dumps({'path':str(source),'output':str(target),'thumbnail':thumbnail}),text=True,capture_output=True,timeout=45,creationflags=CREATE_NO_WINDOW)
         if result.returncode:raise ValueError('Immagine non decodificabile. Verifica che il motore Documenti sia installato.')
         return target.read_bytes()
 

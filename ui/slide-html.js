@@ -48,7 +48,7 @@ export async function htmlPage(deck,page,index,media,mount){
   const background=deck.infographic?.video,clip=background&&media.find(m=>m.id===background.asset_id&&m.mime==='video/mp4'&&/^(uploads|outputs)\/[\w./-]+\.mp4$/i.test(m.path)&&!m.path.split('/').includes('..'));
   if(background&&!clip)throw Error('Video di sfondo non disponibile negli allegati.');
   const splitClips=(deck.infographic?.videos||[]).map(spec=>({spec,asset:media.find(m=>m.id===spec.asset_id&&m.mime==='video/mp4'&&/^(uploads|outputs)\/[\w./-]+\.mp4$/i.test(m.path)&&!m.path.split('/').includes('..'))}));if(splitClips.some(c=>!c.asset))throw Error('Video del riquadro non disponibile negli allegati.');
-  iframe.srcdoc=`<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; script-src 'none'; connect-src 'none'; ${clip||splitClips.length?"media-src 'self';":''}"><style data-h3-trusted>html,body{margin:0;width:1280px;min-height:${height}px;box-sizing:border-box}*,*:before,*:after{box-sizing:border-box}${fonts}${deck.infographic?'*,*:before,*:after{animation:none!important;transition:none!important}':''}</style></head><body>${content}</body></html>`;
+  iframe.srcdoc=`<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; script-src 'none'; connect-src 'none'; ${clip||splitClips.length?"media-src 'self';":''}"><style data-h3-trusted>html,body{margin:0;width:1280px;min-height:${height}px;box-sizing:border-box}*,*:before,*:after{box-sizing:border-box}${fonts}${deck.infographic?'*,*:before,*:after{animation:none!important;transition:none!important}':''}</style></head><body>${content}<style data-h3-trusted>html,body{overflow:hidden!important}</style></body></html>`;
   frame.append(iframe);mount.append(frame);await loaded;
   const doc=iframe.contentDocument;
   if(clip){
@@ -79,6 +79,30 @@ export async function htmlPage(deck,page,index,media,mount){
   if(fitMediaBounds(doc,height,!deck.infographic))frame.dataset.layoutAdjusted='true';
   if(deck.infographic&&page.status==='ready'&&portraitLayout(doc,height,deck.infographic.options).issue)frame.dataset.portraitSparse='true';
   sessions.set(frame,{iframe,doc});return frame;
+}
+
+// Prepare the next streamed draft without clearing the visible document. Keep
+// the iframe itself attached: replacing/reparenting it reloads its browsing
+// context and briefly exposes the unscaled 1280px page.
+export async function refreshHtmlPage(frame,deck,page,index,media,current=()=>true){
+  const session=sessions.get(frame);
+  if(!session||deck.infographic)return false;
+  const staging=document.createElement('div');
+  staging.style.cssText='position:fixed;left:-20000px;top:0;width:1280px;visibility:hidden;pointer-events:none;contain:layout paint;';
+  staging.setAttribute('aria-hidden','true');document.body.append(staging);
+  try{
+    const next=await htmlPage(deck,page,index,media,staging),prepared=sessions.get(next);
+    if(!current()||!frame.isConnected||session.iframe.contentDocument!==session.doc)return false;
+    const {doc,iframe}=session;
+    const head=doc.importNode(prepared.doc.head,true),body=doc.importNode(prepared.doc.body,true);
+    // Both replacements are synchronous, so the browser paints only the fully
+    // prepared draft; generated scripts remain blocked by the existing sandbox.
+    doc.head.replaceWith(head);doc.body.replaceWith(body);
+    doc.documentElement.dataset.h3TextTone=prepared.doc.documentElement.dataset.h3TextTone;
+    iframe.title=page.title;
+    if(next.dataset.layoutAdjusted)frame.dataset.layoutAdjusted='true';else delete frame.dataset.layoutAdjusted;
+    return true;
+  }finally{staging.remove();}
 }
 
 export function htmlOverflow(frame){

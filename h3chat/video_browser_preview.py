@@ -1,5 +1,7 @@
 """Cached CPU browser copy; models and original source files are untouched."""
 import threading
+from .platform_runtime import python_executable
+
 from .downloads import safe_join
 
 LOCK=threading.Lock()
@@ -28,7 +30,7 @@ def prepare(app, ident):
             # cancellation handle (or activate/offload any GPU model).
             session=Session(('preview',ident),'tool',{'id':'video-browser-worker.py','name':'Anteprima video'},{},{},output.parent/'preview.log')
             try:
-                session.start([app.root/'runtime/python/python.exe','-X','utf8',app.root/'native/video-browser-worker.py'],ipc=True,cwd=app.root)
+                session.start([python_executable(app.root),'-X','utf8',app.root/'native/video-browser-worker.py'],ipc=True,cwd=app.root)
                 session.wait('hello',app.closed,30);session.send({'source':str(source),'output':str(output)})
                 session.wait('result',app.closed,7200)
             except Exception:

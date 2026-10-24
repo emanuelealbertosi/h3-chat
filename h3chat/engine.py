@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .platform_runtime import python_executable
+
 import base64
 import json
 import logging
@@ -294,6 +296,8 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
             require_model(self.execution_settings(),model,capability)
         if not model or capability not in model["capabilities"]:
             raise ValueError(f"Scegli un modello per {capability} nelle impostazioni.")
+        from .platform_runtime import require_local_model
+        require_local_model(model)
         model = model | inspect_model(self.root, model)
         if not model["ready"] and model.get("external"):
             raise ValueError("Collegamento non disponibile: " + " ".join(model.get("external_problems",[])) + " Controlla i percorsi in Catalogo modelli → Modifica collegamento.")
@@ -588,7 +592,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         backend = 'cpu' if settings['profile']=='cpu' else settings['backend']
         if backend not in ('cpu','cuda'):
             raise ValueError('Ming, Qwen Image 2.1 e Krea 2 usano CPU oppure CUDA NVIDIA. Scegli il motore adatto nel Setup.')
-        python = self.root / 'runtime/python/python.exe'
+        python = python_executable(self.root)
         worker = self.root / 'native/vision-worker.py'
         started = time.monotonic()
         with self.process_lock:

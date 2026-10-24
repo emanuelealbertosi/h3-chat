@@ -35,8 +35,11 @@ def endpoint(value):
     return urlunsplit((p.scheme,p.netloc,path,'',''))
 
 def protect(value,decode=False):
-    # This application is distributed for Windows: DPAPI binds keys to the OS user.
     if not value:return ''
+    from .platform_runtime import is_macos
+    if is_macos():
+        from .macos_keychain import protect as keychain_protect
+        return keychain_protect(value,decode)
     if os.name!='nt':raise ValueError('La protezione delle chiavi API richiede Windows.')
     raw=base64.b64decode(value) if decode else value.encode('utf-8')
     buffer=C.create_string_buffer(raw);source=Blob(len(raw),C.cast(buffer,C.POINTER(C.c_ubyte)));target=Blob()

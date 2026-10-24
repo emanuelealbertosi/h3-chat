@@ -1,5 +1,7 @@
 """Document, speech and web context for the existing chat LLM."""
 import hashlib
+from .platform_runtime import python_executable
+
 import json
 import re
 import secrets
@@ -12,6 +14,9 @@ from .web_search import requested,search
 
 class ToolsEngine:
     def tool_call(self,worker,request,cancel,stage,log_path,timeout=90):
+        from .platform_runtime import is_macos
+        if is_macos() and worker not in ('document-worker.py',):
+            raise ValueError('Questo motore locale non è disponibile nella versione macOS. La chat e le presentazioni con API o LLM locale restano utilizzabili.')
         if hasattr(self,'execution_settings'):
             from .execution_mode import cpu,guard_intent
             live=self.execution_settings(request.get('settings'))
@@ -22,7 +27,7 @@ class ToolsEngine:
         session=Session(('tool',(),()),'tool',{'id':worker,'name':worker},{},{},log_path)
         with self.process_lock:self.tool_session=session
         try:
-            session.start([self.root/'runtime/python/python.exe','-X','utf8',self.root/'native'/worker],ipc=True,cwd=self.root)
+            session.start([python_executable(self.root),'-X','utf8',self.root/'native'/worker],ipc=True,cwd=self.root)
             session.wait('hello',cancel,30,stage);session.send(request)
             return session.wait('result',cancel,timeout,stage)['result']
         finally:

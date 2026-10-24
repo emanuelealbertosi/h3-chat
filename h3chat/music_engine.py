@@ -1,5 +1,7 @@
 """Music-specific operations share Engine's LLM and resident process pool."""
 import array
+from .platform_runtime import python_executable
+
 import base64
 import json
 import wave
@@ -111,6 +113,6 @@ class MusicEngine:
    kind=backend(settings)
    with self.process_lock:
     if cancel.is_set():raise Cancelled()
-    session.start([self.root/'runtime/python/python.exe','-I','-X','utf8',self.root/'native/minimax-music-worker.py'],ipc=True,cwd=self.root)
+    session.start([python_executable(self.root),'-I','-X','utf8',self.root/'native/minimax-music-worker.py'],ipc=True,cwd=self.root)
    session.wait('hello',cancel,30);session.send({'op':'load','files':session.files,'backend':kind,'threads':settings['music_threads']});session.wait('ready',cancel,600,stage);session.ready=True
   return session

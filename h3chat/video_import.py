@@ -1,5 +1,7 @@
 """Import external footage for the existing clip editor, within its user's area."""
-import json,math,subprocess,threading
+import json,math,os,subprocess,threading
+from .platform_runtime import python_executable
+
 from pathlib import Path
 from .downloads import safe_join
 from .video_options import options,resolve_canvas
@@ -34,7 +36,7 @@ def import_timeout(info,segment_seconds=15):
     return max(120,math.ceil(info['duration']/segment_seconds)*2+math.ceil(info['duration']/10))
 
 def invoke(app,request,*,timeout=120):
-    process=subprocess.run([str(app.root/'runtime/python/python.exe'),'-X','utf8',str(app.root/'native/video-remix-worker.py')],input=json.dumps(request)+'\n',text=True,encoding='utf-8',capture_output=True,timeout=timeout,cwd=app.root,creationflags=0x08000000)
+    process=subprocess.run([str(python_executable(app.root)),'-X','utf8',str(app.root/'native/video-remix-worker.py')],input=json.dumps(request)+'\n',text=True,encoding='utf-8',capture_output=True,timeout=timeout,cwd=app.root,creationflags=0x08000000 if os.name=="nt" else 0)
     events=[json.loads(line) for line in process.stdout.splitlines() if line.startswith('{')]
     result=next((e['result'] for e in events if e.get('event')=='result'),None)
     if result is None:raise ValueError(next((e.get('message') for e in events if e.get('event')=='error'),'Il video esterno non è leggibile.'))

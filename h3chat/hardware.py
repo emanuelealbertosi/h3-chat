@@ -73,6 +73,18 @@ def detect_hardware(refresh=False):
                 with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,r'HARDWARE\DESCRIPTION\System\CentralProcessor\0') as key:
                     result['cpu_name']=winreg.QueryValueEx(key,'ProcessorNameString')[0].strip()
             except OSError: pass
+        elif platform.system()=='Darwin':
+            try:
+                total=int(subprocess.check_output(['/usr/sbin/sysctl','-n','hw.memsize'],timeout=3))/MIB
+                raw=subprocess.check_output(['/usr/bin/vm_stat'],timeout=3).decode()
+                import re
+                page=int(re.search(r'page size of (\d+) bytes',raw)[1])
+                counts={name:int(value) for name,value in re.findall(r'([^\n:]+):\s*(\d+)\.',raw)}
+                free=sum(counts.get(name,0) for name in ('Pages free','Pages inactive','Pages speculative'))*page/MIB
+                result['ram']={'total_mb':total,'free_mb':free}
+                result['gpu']=[{'name':'Apple Silicon · Metal','vendor':'Apple','total_mb':total,'free_mb':free,'shared_mb':0,'unified_memory':True,'source':'macOS · memoria unificata'}]
+                result['note']='Memoria unificata Apple condivisa tra CPU e GPU; non è VRAM aggiuntiva. La memoria libera cambia con le altre applicazioni.'
+            except (OSError,ValueError,TypeError,subprocess.SubprocessError):pass
         else:
             try:
                 with open('/proc/meminfo') as f: mem={l.split(':')[0]:int(l.split()[1])/1024 for l in f}

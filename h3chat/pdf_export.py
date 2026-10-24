@@ -107,8 +107,10 @@ def export_html(root,data,body):
 def export_pdf(root,data,body):
     candidates=[Path(os.environ.get('PROGRAMFILES(X86)','C:/Program Files (x86)'))/'Microsoft/Edge/Application/msedge.exe',
                 Path(os.environ.get('PROGRAMFILES','C:/Program Files'))/'Microsoft/Edge/Application/msedge.exe']
+    from .platform_runtime import is_macos
+    if is_macos():candidates=list((Path(root)/'runtime/browser').glob('**/Contents/MacOS/Chromium'))+[Path('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),Path('/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge')]
     edge=next((p for p in candidates if p.exists()),None)
-    if not edge:raise ValueError('Per il PDF serve Microsoft Edge, normalmente incluso in Windows.')
+    if not edge:raise ValueError('Browser PDF non disponibile: reinstalla il pacchetto macOS.' if is_macos() else 'Per il PDF serve Microsoft Edge, normalmente incluso in Windows.')
     folder,source_file,title=export_document(root,data,body)
     key=folder.name
     target=folder/'document.pdf'

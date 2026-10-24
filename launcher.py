@@ -76,7 +76,7 @@ def follow_logs(port):
     print(f"H3-Chat · http://127.0.0.1:{port}", flush=True)
     print(f"Log: {DATA / 'server.log'}", flush=True)
     print("Log dettagliati dei motori: " + str(DATA / 'logs'), flush=True)
-    print("Questa finestra resta aperta. Per arrestare l'app usa Ferma-H3-Chat.bat.", flush=True)
+    print("Questa finestra resta aperta. Per arrestare l'app usa il comando Ferma-H3-Chat.", flush=True)
     print("Chiudere questa finestra o premere Ctrl+C chiude solo la vista dei log.\n", flush=True)
     decoder=codecs.getincrementaldecoder('utf-8')(errors='replace')
     with (DATA/'server.log').open('rb') as stream:
@@ -103,7 +103,7 @@ def follow_logs(port):
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--stop',action='store_true');parser.add_argument('--logs-only',action='store_true');args=parser.parse_args()
-    DATA.mkdir(exist_ok=True)
+    DATA.mkdir(parents=True,exist_ok=True)
     port_file=DATA/'port.json'
     try:preferred=json.loads(port_file.read_text()) if port_file.exists() else 8787
     except (OSError,ValueError):preferred=8787
@@ -160,7 +160,7 @@ if __name__=='__main__':
     code=0
     try:main()
     except KeyboardInterrupt:
-        print("\nVista log chiusa. Per arrestare H3-Chat usa Ferma-H3-Chat.bat.",flush=True)
+        print("\nVista log chiusa. Per arrestare H3-Chat usa il comando Ferma-H3-Chat.",flush=True)
     except Exception as exc:
         code=1
         print("Errore di avvio: "+str(exc),file=sys.stderr,flush=True)

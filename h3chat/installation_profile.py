@@ -32,6 +32,9 @@ def first_run_settings(root, database_existed):
     """A reinstall must not change any saved settings, including provider choices."""
     if database_existed:
         return {}
+    from .platform_runtime import is_macos
+    if is_macos():
+        return API_SETTINGS|{'profile':'low','backend':'metal','gpu_layers':20,'execution_mode':'gpu','llm_device':'inherit','vision_enabled':False,'lab_auto':False}
     try:
         value = json.loads((Path(root) / 'runtime/installation-profile.json').read_text(encoding='utf-8'))
     except (OSError, ValueError):

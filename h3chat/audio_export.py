@@ -1,5 +1,7 @@
 """Validated WAV/MP3 downloads, preserving originals and caching conversions."""
 import hashlib
+from .platform_runtime import python_executable
+
 from pathlib import Path
 import re
 import subprocess
@@ -31,7 +33,7 @@ def export_audio(root,data,item,format):
         if not target.is_file():
             folder.mkdir(parents=True,exist_ok=True);part=target.with_suffix('.partial')
             try:
-                process=subprocess.run([str(Path(root)/'runtime/python/python.exe'),'-X','utf8',str(Path(root)/'native/audio-export-worker.py'),str(source),str(part),format],
+                process=subprocess.run([str(python_executable(root)),'-X','utf8',str(Path(root)/'native/audio-export-worker.py'),str(source),str(part),format],
                     cwd=root,capture_output=True,timeout=300,creationflags=CREATE_NO_WINDOW)
                 if process.returncode or not part.is_file() or part.stat().st_size<32:
                     raise ValueError('Impossibile convertire la traccia audio. Verifica che il file sia valido.')

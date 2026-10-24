@@ -1,5 +1,7 @@
 """Local visual-document extraction, indexing metadata and LLM image handoff."""
 import hashlib,json,shutil
+from .platform_runtime import python_executable
+
 from pathlib import Path
 from .downloads import safe_join,Cancelled
 from .residency import Session
@@ -18,7 +20,7 @@ def extract(knowledge,source,blocks,cancel,stage):
         session=Session(('rag-visual',source['id']),'documents',{}, {},{},knowledge.data/'logs'/('project-'+source['id']+'-visual.log'))
         with knowledge.lock:knowledge.readers.add(session)
         try:
-            session.start([knowledge.root/'runtime/python/python.exe','-X','utf8',knowledge.root/'native/document-worker.py'],ipc=True,cwd=knowledge.root)
+            session.start([python_executable(knowledge.root),'-X','utf8',knowledge.root/'native/document-worker.py'],ipc=True,cwd=knowledge.root)
             session.wait('hello',cancel,30,stage);session.send({'op':'visuals','path':str(path),'folder':str(folder),'output':str(manifest)})
             session.wait('result',cancel,1800,stage)
         finally:

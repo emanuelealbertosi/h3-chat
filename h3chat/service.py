@@ -56,6 +56,8 @@ LOG = logging.getLogger("h3chat.jobs")
 class Service:
     def __init__(self, root, data=None, start_worker=True):
         self.root = Path(root).resolve()
+        from .platform_runtime import prepare_environment
+        prepare_environment(self.root)
         self.data = Path(data or self.root / "data").resolve()
         from .installation_profile import first_run_settings
         initial_settings = first_run_settings(self.root, (self.data / 'chat.sqlite').exists())
@@ -68,6 +70,8 @@ class Service:
         self.runtimes.update(upscale_manifests(self.root))
         remix_manifest=self.root/'remix-runtimes.json'
         if remix_manifest.is_file():self.runtimes.update(json.loads(remix_manifest.read_text(encoding='utf-8')))
+        from .platform_runtime import is_macos
+        if is_macos():self.runtimes['metal']={'files':[]}
         self.downloads = Downloads(self.root, self.catalog, self.runtimes)
         self.engine = Engine(self.root, self.data, self.catalog)
         self.providers = Providers(self.store)
@@ -110,6 +114,11 @@ class Service:
             fresh.update({p['id']:self.providers.model(p) for p in self.providers.list()})
             fresh.update({p['id']:self.media_providers.model(p) for p in self.media_providers.list()})
             fresh={key:model|inspect_model(self.root,model) for key,model in fresh.items()}
+            from .platform_runtime import is_macos
+            if is_macos():
+                for model in fresh.values():
+                    if not model.get('api') and not model.get('remote_media') and 'chat' not in model.get('capabilities',[]):
+                        model.update(ready=False,platform_unavailable=True,description='Su macOS usa un servizio esterno per questo tipo di generazione.')
             with self.engine.process_lock:
                 # Preserve the shared dictionary used by Engine and Downloads.
                 self.catalog.update(fresh)
@@ -118,6 +127,7 @@ class Service:
             return list(fresh.values())
 
     def state(self):
+        from .platform_runtime import info as platform_info,is_macos,runtime_ready as mac_runtime_ready
         from .remix_runtime import ready as remix_status
         from .slide_count import MAX_SLIDES
         def remix_ready(root,key):
@@ -127,7 +137,7 @@ class Service:
         models = self.refresh_models()
         from .execution_mode import public
         saved=self.store.settings()|{'execution_mode':getattr(self,'execution_owner',self).store.settings().get('execution_mode','gpu')}
-        return {"token": self.token, "version": __version__, "server_time":time.time(), "settings": self.store.settings(), "profiles": PROFILES,"project_limits":RAG_LIMITS,
+        return {"token": self.token, "version": __version__, "platform":platform_info(), "server_time":time.time(), "settings": self.store.settings(), "profiles": PROFILES,"project_limits":RAG_LIMITS,
                 "execution":public(saved,self.catalog),
                 "api_providers":self.providers.list(),"api_presets":API_PRESETS,"voice_runtime":{"ready":voice_ready(self.root)},
                 "voice_engines":{"higgs":{"name":"Higgs Audio v3","ready":voice_ready(self.root)}},
@@ -139,7 +149,7 @@ class Service:
                 "video_options":{"defaults":VIDEO_DEFAULTS,"aspects":VIDEO_ASPECTS,"request_controls":True,"segment_controls":True,"format_control":True,"request_draft":True,"seed_control":True,"attention_choices":True,"batch_controls":True}, "veda_runtime":veda_status(self.root),
                 "tools_runtime":tools_status(self.root),"transcription_models":[m|{'ready':all(safe_join(self.root,f['path']).is_file() for f in m['files'])} for m in self.downloads.tool_models.values() if m['id'].startswith('whisper-')],
                 "embeddinggemma2_runtime":{"ready":gemma2_runtime_ready(self.root)}, "vision_runtime":vision_status(self.root), "models": models,"image_options":{"request_controls":True,"last_seed":True,"moss_presets":MOSS_RECIPES,"moss_dmd2":moss_dmd2_status(self.root),"moss_negative_prompt":MOSS_NEGATIVE_PROMPT,"samplers":NATIVE_SAMPLERS,"schedulers":NATIVE_SCHEDULERS,"vision_samplers":VISION_SAMPLERS,"vision_schedulers":VISION_SCHEDULERS,"defaults":{k:DEFAULTS[k] for k in IMAGE_DEFAULT_KEYS}},"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
-                "runtimes": {key: {"ready": remix_ready(self.root,key) if key.startswith('remix_') else upscale_ready(self.root,key) if key.startswith('upscale_') else tools_status(self.root).get(key.removeprefix('tools_'),{}).get('ready',False) if key.startswith('tools_') else veda_status(self.root)["ready"] if key=="veda" else gemma2_runtime_ready(self.root) if key=="embeddinggemma2" else voice_ready(self.root,key.removeprefix("voice_")) if key.startswith("voice_") else voice_ready(self.root) if key=="voice" else vision_status(self.root)["ready"] if key=="vision" else music_status(self.root).get(key.removeprefix("music_"),{}).get("ready",False) if key.startswith("music_") else all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
+                "runtimes": {key: {"ready": mac_runtime_ready(self.root,key) if is_macos() else remix_ready(self.root,key) if key.startswith('remix_') else upscale_ready(self.root,key) if key.startswith('upscale_') else tools_status(self.root).get(key.removeprefix('tools_'),{}).get('ready',False) if key.startswith('tools_') else veda_status(self.root)["ready"] if key=="veda" else gemma2_runtime_ready(self.root) if key=="embeddinggemma2" else voice_ready(self.root,key.removeprefix("voice_")) if key.startswith("voice_") else voice_ready(self.root) if key=="voice" else vision_status(self.root)["ready"] if key=="vision" else music_status(self.root).get(key.removeprefix("music_"),{}).get("ready",False) if key.startswith("music_") else all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
                                     "size": sum(f["size"] for f in r["files"])} for key, r in self.runtimes.items()},
                 "chats": self.store.all("SELECT * FROM chats ORDER BY pinned DESC,updated DESC"),
                 "collections": self.store.all("SELECT * FROM collections ORDER BY name"),
@@ -245,7 +255,8 @@ class Service:
         for key,lo,hi in (('manim_duration',1,600),('manim_fps',5,30),('manim_width',320,3840),('manim_height',240,2160),('manim_timeout',30,3600),('manim_memory_gb',1,32)):
             if type(s[key]) is not int or not lo<=s[key]<=hi:raise ValueError('Parametro Manim non valido: '+key)
         validate_llm_presets(s['llm_overrides'],s['profile'])
-        if s["profile"] not in PROFILES or s["backend"] not in ("cpu","cuda","vulkan"):
+        from .platform_runtime import info as platform_info
+        if s["profile"] not in PROFILES or s["backend"] not in platform_info()['backends']:
             raise ValueError("Profilo hardware non valido.")
         for key, lo, hi in (("context", 1024, MAX_CONTEXT), ("gpu_layers", 0, 999), ("max_tokens", 64, MAX_OUTPUT_TOKENS),
                             ("width", 256, 1536), ("height", 256, 1536), ("steps", 1, 100), ("threads", 1, 64), ("ram_cache_gb", 0, 32), ("mtp_draft_tokens", 1, 8)):

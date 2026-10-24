@@ -1,0 +1,33 @@
+name: Build macOS Apple Silicon
+on:
+  workflow_dispatch:
+  push:
+    branches: ['codex/macos-apple-silicon']
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: uname -m
+      - run: npm ci
+      - run: npm run build
+      - name: Build native self-contained distribution
+        run: python scripts/build_macos.py
+      - name: Verify actual packaged components on Apple Silicon
+        run: build/macos/H3-Chat/runtime/python/bin/python3 -X utf8 scripts/check_macos.py
+      - name: Verify ZIP members and create checksum
+        run: python scripts/build_macos.py --package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: H3-Chat-macos-arm64
+          path: dist/*macos-arm64*

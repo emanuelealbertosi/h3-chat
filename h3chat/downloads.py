@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .platform_runtime import python_executable
+
 import hashlib
 import json
 import os
@@ -134,6 +136,9 @@ class Downloads:
             return [{k: v for k, v in task.items() if k != "cancel"} for task in self.tasks.values()]
 
     def start(self, key, kind="model"):
+        from .platform_runtime import is_macos,require_local_model
+        if is_macos() and kind=="runtime":raise ValueError("I motori macOS compatibili sono inclusi nel pacchetto. Aggiorna o reinstalla il pacchetto Mac; i runtime Windows non possono essere installati qui.")
+        if is_macos() and kind=="model" and key in self.catalog:require_local_model(self.catalog[key])
         with self.lock:
             if any(t["status"] == "running" for t in self.tasks.values()):
                 raise ValueError("È già in corso un download. Attendi o interrompilo.")
@@ -178,7 +183,7 @@ class Downloads:
                 from .residency import Session
                 session=Session(('remix-setup',(),()),'tool',{'id':'remix-setup','name':'Remix'},{},{},self.root/'runtime/remix/install-score.log')
                 try:
-                    session.start([self.root/'runtime/python/python.exe','-X','utf8',self.root/'native/video-remix-worker.py'],ipc=True,cwd=self.root)
+                    session.start([python_executable(self.root),'-X','utf8',self.root/'native/video-remix-worker.py'],ipc=True,cwd=self.root)
                     session.wait('hello',task['cancel'],30)
                     session.send({'op':'install_score'})
                     def stage(message):
