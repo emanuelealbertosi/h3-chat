@@ -197,7 +197,8 @@ function renderStatus(){
   $('#canvas-restore').disabled=!!canvasJob?.canvas||!canvas.id||canvas.id===canvasHistory.active_id;
   composerUI?.render();manimPresentation?.render();infographicsUI?.render();executionUI.render();
 }
-async function newChat(){if(current)await persistCanvas();const fresh=await api('/chats',{collection_id:collection,project_id:project});await openChat(fresh.id);await refresh();$('#prompt').focus();}
+function focusPrompt(){if(composerUI)composerUI.reveal();else $('#prompt').focus();}
+async function newChat(){if(current)await persistCanvas();const fresh=await api('/chats',{collection_id:collection,project_id:project});await openChat(fresh.id);await refresh();focusPrompt();}
 async function openChat(id){
   if(current){drafts.set(current,{prompt:$('#prompt').value,attachments:[...attachments]});await persistCanvas();}
   current=id;chat=await api('/chats/'+id);chatScroll.begin();$('#messages').innerHTML='';
@@ -242,7 +243,7 @@ async function reloadRequest(message){
   if(draft.slides)for(const [key,id] of Object.entries({format:'slides-format',engine:'slides-engine',design:'slides-design',detail:'slides-detail',composition:'slides-composition',vision_scope:'slides-vision'})){
     const input=$('#'+id);if(input&&draft.slides[key]!=null){input.value=String(draft.slides[key]);input.dispatchEvent(new Event('change',{bubbles:true}));}
   }
-  renderAttachments();composerUI?.render();$('#prompt').scrollIntoView({block:'center'});$('#prompt').focus();
+  renderAttachments();composerUI?.render();focusPrompt();
   toast('Richiesta caricata. Modificala e premi Invia.');
 }
 
@@ -582,7 +583,7 @@ async function reuseImageRecipe(value){
  visualControls.set({...controls,image_model:id,assistant:false,music:false,video:false,voice:false,transcribe:false,image_presets:{...controls.image_presets,[id]:parameters},image_history:{...controls.image_history,[id]:history}});
  loraUI.setSelections(recipe.loras);attachments=refs;renderAttachments();
  $('#lab-tool').value='auto';$('#lab-tool').dispatchEvent(new Event('change'));
- $('#prompt').value=imageRecipePrompt(recipe);$('#prompt').dispatchEvent(new Event('input',{bubbles:true}));composerUI?.render();$('#prompt').focus();
+ $('#prompt').value=imageRecipePrompt(recipe);$('#prompt').dispatchEvent(new Event('input',{bubbles:true}));composerUI?.render();focusPrompt();
  toast('Ricetta recuperata · seed '+parameters.seed+' fissato · Assistant Off. Controlla la bozza e premi Invia.');
 }
 initGallery({api,getAttachments:()=>attachments,setAttachments:items=>{attachments=items;renderAttachments();},notify:toast,
@@ -595,7 +596,7 @@ $('#attachments').onclick=e=>{const b=e.target.closest('[data-remove-attachment]
 $('#composer').ondragover=e=>{e.preventDefault();$('#composer').classList.add('dragging');};$('#composer').ondragleave=()=>$('#composer').classList.remove('dragging');
 $('#composer').ondrop=act(async e=>{e.preventDefault();$('#composer').classList.remove('dragging');await uploadFiles([...e.dataTransfer.files]);});
 $('#prompt').addEventListener('paste',act(async e=>{const files=[...e.clipboardData.files];if(files.length){e.preventDefault();await uploadFiles(files);}}));
-document.querySelectorAll('[data-prompt]').forEach(b=>b.onclick=()=>{$('#prompt').value=b.dataset.prompt;$('#prompt').focus();});
+document.querySelectorAll('[data-prompt]').forEach(b=>b.onclick=()=>{$('#prompt').value=b.dataset.prompt;focusPrompt();});
 $('#memory-status').onclick=()=>openSettings();
 $('#settings-open').onclick=()=>openSettings();$('#setup-nudge').onclick=()=>openSettings();$('#settings-close').onclick=()=>$('#settings').close();
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{collectSettings();settingsTab=b.dataset.tab;renderSettings();});

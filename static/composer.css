@@ -39,3 +39,23 @@
 
 .video-activity-dialog{width:min(900px,95vw);max-height:90vh;padding:0;border:1px solid #cbd5ce;border-radius:14px;background:#f7f6ef;color:#203e39}.video-activity-dialog header{display:flex;justify-content:space-between;align-items:center;padding:1rem 1.5rem;border-bottom:1px solid #d4ddd4}.video-activity-body{padding:1rem 1.5rem;overflow:auto;max-height:74vh}.video-activity-body progress{width:100%;accent-color:#21554c}.video-activity-body ol{padding:0;list-style:none;max-height:38vh;overflow:auto}.video-activity-body li{display:flex;gap:1rem;padding:.5rem 0;border-bottom:1px solid #e0e5dd;font-size:.88rem}.video-activity-body time{font-variant-numeric:tabular-nums;flex-shrink:0;color:#607b71}
 .prompt-count[hidden]{display:none!important}.prompt-slide-count-note{grid-column:1/-1;margin:0!important}
+
+/* Keep room for the conversation even when all prompt tools are available. */
+.composer-area{display:flex;flex-direction:column;min-height:0;max-height:55dvh;gap:7px}
+.composer-area>.composer{display:flex;flex-direction:column;min-height:0;overflow:hidden;flex:0 1 auto}
+.prompt-body{min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.composer-area .composer-bottom{flex-shrink:0;padding-top:6px}
+.composer-area .composer-bottom>div:first-child{flex:1;min-width:0;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin}
+.composer-area .composer-bottom>div:first-child>*{flex-shrink:0}
+.composer-area .composer-bottom>div:last-child{flex-shrink:0}
+.composer-area>#job-status,.composer-area>.prompt-bar,.composer-area>.composer-foot,.composer-area>.mode-hint{flex-shrink:0}
+.composer-area>.composer-foot{margin-top:0}
+.prompt-bar{display:flex;align-items:center;gap:10px;min-height:34px;min-width:0}
+.prompt-collapse{display:inline-flex;align-items:center;gap:7px;flex-shrink:0;border:1px solid #d4dfd5;border-radius:8px;background:#fffefa;color:#315f56;padding:6px 10px;font-size:11px;font-weight:650}
+.prompt-collapse:hover{background:#eef4ed;border-color:#74978b}
+.prompt-collapse-chevron{font-size:15px;line-height:1}
+.prompt-collapsed-summary{min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:10px}
+.prompt-bar>.stop-button{flex-shrink:0}
+.composer-area.prompt-is-collapsed>.composer-foot,.composer-area.prompt-is-collapsed>.mode-hint{display:none!important}
+.composer-area.prompt-is-collapsed{padding-top:7px;padding-bottom:10px}
+@media(max-width:640px){.composer-area{max-height:58dvh}.prompt-bar{gap:6px}.prompt-collapse{font-size:10px;padding:6px 8px}.prompt-collapsed-summary{font-size:9px}.prompt-bar>.stop-button{font-size:10px;padding:7px}}

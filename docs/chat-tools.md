@@ -1,5 +1,7 @@
 # Documents, web and speech in H3-Chat 0.11
 
+**Spazio per la conversazione:** la barra sopra il messaggio offre **Nascondi prompt / Mostra prompt**. La scelta resta salvata in questo browser. Chiudere il pannello conserva testo, allegati e impostazioni; avanzamento e **Interrompi** restano accessibili. A pannello aperto, l'altezza è limitata rispetto alla finestra: i controlli scorrono internamente, mentre **Invia** rimane visibile. Sugli schermi stretti la barra degli allegati e degli strumenti scorre anche in orizzontale. Recuperare una richiesta o una ricetta, scegliere un suggerimento o aprire una nuova chat riapre il prompt per scrivere.
+
 **Lotti immagini:** con Assistant On si possono richiedere 2–24 immagini in un solo prompt, assegnando a ognuna modello, allegati, formato, megapixel e parametri. Un piano unico, generazione sequenziale con riuso del modello e una sola risposta sfogliabile in chat e canvas. Guida: [image-batch.md](image-batch.md).
 
 These tools feed the existing chat LLM. They do not require a second chat model,

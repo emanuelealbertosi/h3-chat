@@ -1,6 +1,7 @@
 import {chatModelId,cpuMode} from './execution-mode.js';
 import {initComposerSettings} from './composer-settings.js';
 import {initImageRequest} from './image-request.js';
+import {initComposerCollapse} from './composer-collapse.js';
 const $=selector=>document.querySelector(selector);
 function button(text,id){const element=document.createElement('button');element.type='button';element.className='prompt-choice';element.textContent=text;if(id)element.id=id;return element;}
 function field(title){const element=document.createElement('div');element.className='prompt-field';const heading=document.createElement('span');heading.className='prompt-field-label';heading.textContent=title;element.append(heading);return element;}
@@ -83,6 +84,11 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  const identity=button('File e percorso del modello');identity.className='text-button';identity.onclick=()=>{dialog.close();$('#model-name').click();};llmPicker.append(identity);
  const update=()=>render();composer.addEventListener('change',update);composer.addEventListener('input',event=>{if(event.target!==$('#prompt'))render();});
  const modeSettings=initComposerSettings({context,getState,onChange:render,visualControls});
+ const collapse=initComposerCollapse({getSummary:()=>{
+  const mode=[...modes.querySelectorAll('[aria-pressed="true"]')].map(e=>e.textContent.trim()).join(' · ')||'Automatico';
+  const count=getAttachments().length;
+  return [mode,$('#prompt').value.trim()?'Bozza presente':'',count?count+' allegat'+(count===1?'o':'i'):''].filter(Boolean).join(' · ');
+ }});
  function render(){
   const state=getState();if(!state)return;
   const value=visualControls.read(),mode=lab.value,cpu=cpuMode(state);
@@ -104,6 +110,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
   modelButton.textContent='LLM · '+($('#chat-model').selectedOptions[0]?.textContent||'Scegli un modello');modelButton.title=$('#chat-model').title;modelButton.disabled=$('#chat-model').disabled;
   $('.side-bottom>small').textContent='H3 CHAT · '+state.version;
   imageRequest.render();modeSettings.render();
+  collapse.render();
  }
- return {render};
+ return {render,reveal:collapse.reveal};
 }
