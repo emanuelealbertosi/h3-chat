@@ -169,7 +169,7 @@ class Service:
             if self.current_id or self.store.one("SELECT id FROM jobs WHERE status IN ('queued','running')"):raise ValueError('Attendi o interrompi i lavori prima di rimuovere il provider.')
             if not self.store.one('SELECT id FROM api_providers WHERE id=?',(ident,)):raise ValueError('Provider non trovato.')
             self.store.execute('DELETE FROM api_providers WHERE id=?',(ident,))
-            if self.store.settings()['chat_model']==ident:self.store.save_settings({'chat_model':''})
+            self.store.save_settings({key:'' for key in ('chat_model','cpu_chat_model') if self.store.settings()[key]==ident})
             self.refresh_models();self.engine.configure(self.store.settings());self.engine.remote_config=None;return {'ok':True}
 
     def media_provider_request(self,body,operation='save'):
@@ -194,7 +194,7 @@ class Service:
             self.refresh_models()
             model=self.catalog[config['id']]
             settings=self.store.settings()
-            self.store.save_settings({key:'' for key,cap in (('chat_model','chat'),('create_model','create'),('edit_model','edit'),('diagram_model','create'),('music_model','music'),('video_model','video')) if settings[key]==config['id'] and (cap not in model['capabilities'] or (key=='diagram_model' and model.get('architecture')!='ming'))})
+            self.store.save_settings({key:'' for key,cap in (('chat_model','chat'),('cpu_chat_model','chat'),('create_model','create'),('edit_model','edit'),('diagram_model','create'),('music_model','music'),('video_model','video')) if settings[key]==config['id'] and (cap not in model['capabilities'] or (key=='diagram_model' and model.get('architecture')!='ming'))})
             if config['profile']=='minimax-h3':
                 from .video_options import inherited_acceleration
                 acceleration=inherited_acceleration(settings,model['id'])
@@ -213,7 +213,7 @@ class Service:
                 raise ValueError('Attendi o interrompi i lavori prima di scollegare il modello.')
             self.store.execute('DELETE FROM external_models WHERE id=?',(model_id,))
             settings=self.store.settings()
-            self.store.save_settings({key:'' for key in ('chat_model','create_model','edit_model','diagram_model','music_model','video_model') if settings[key]==model_id})
+            self.store.save_settings({key:'' for key in ('chat_model','cpu_chat_model','create_model','edit_model','diagram_model','music_model','video_model') if settings[key]==model_id})
             self.refresh_models()
             self.engine.configure(self.store.settings())
             self.engine.cache.clear()
@@ -227,9 +227,14 @@ class Service:
         current=self.store.settings()
         if patch.get('execution_mode',current['execution_mode']) not in ('gpu','cpu'):raise ValueError('Scegli modalità GPU oppure CPU.')
         cpu_model=patch.get('cpu_chat_model',current['cpu_chat_model'])
-        if not isinstance(cpu_model,str) or len(cpu_model)>200 or 'cpu_chat_model' in patch and cpu_model and not self.catalog.get(cpu_model,{}).get('api'):raise ValueError('In modalità CPU scegli un provider LLM esterno.')
+        if not isinstance(cpu_model,str) or len(cpu_model)>200:raise ValueError('Modello CPU non valido.')
+        if 'cpu_chat_model' in patch and cpu_model and 'chat' not in self.catalog.get(cpu_model,{}).get('capabilities',[]):
+            if cpu_model==current['cpu_chat_model'] and cpu_model not in self.catalog:patch=patch|{'cpu_chat_model':''}
+            else:raise ValueError('In modalità CPU scegli un LLM locale o un provider esterno.')
         if 'llm_overrides' in patch:validate_llm_presets(patch['llm_overrides'],patch.get('profile',current['profile']))
         s = merge_llm_settings(current,patch)
+        if s['execution_mode']=='cpu' and patch.get('chat_model') and patch['chat_model']!=current['chat_model']:
+            s['cpu_chat_model']=patch['chat_model']
         if s['llm_acceleration'] not in ('standard','qwen27'):raise ValueError('Ottimizzazione LLM non valida.')
         if type(s['llm_timeout']) is not int or not 60<=s['llm_timeout']<=14400:raise ValueError('Tempo massimo LLM: da 60 a 14400 secondi.')
         validate_tools(s)

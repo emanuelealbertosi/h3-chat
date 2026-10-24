@@ -14,14 +14,21 @@ try{
  await page.locator('#prompt-mode-settings').getByRole('button',{name:'Fatto',exact:true}).click();
  await page.locator('[data-execution=cpu]').click();await page.waitForFunction(()=>document.querySelector('[data-execution=cpu]').getAttribute('aria-pressed')==='true');
  for(const id of ['prompt-images','music-toggle','video-toggle','voice-toggle','prompt-video-edit','transcribe-toggle','upscale-open','video-recreate-open','video-remix-open','video-edit-open'])assert.equal(await page.locator('#'+id).isDisabled(),true,id);
- assert.equal(await page.locator('#chat-model').inputValue(),fixture.api);assert.equal(await page.locator('#chat-model option[value="'+fixture.local+'"]').count(),0);
+ assert.equal(await page.locator('#chat-model').inputValue(),fixture.api);assert.equal(await page.locator('#chat-model option[value="'+fixture.local+'"]').count(),1);
  let state=await page.evaluate(()=>fetch('/api/state').then(r=>r.json()));assert.equal(state.settings.chat_model,fixture.local);assert.equal(state.settings.rag_device,'gpu');assert.equal(state.execution.mode,'cpu');
  await page.reload();await page.locator('[data-execution=cpu][aria-pressed=true]').waitFor();assert.equal(await page.locator('#prompt-images').isDisabled(),true);
  await page.locator('[data-execution=gpu]').click();await page.waitForFunction(()=>document.querySelector('[data-execution=gpu]').getAttribute('aria-pressed')==='true');
  assert.equal(await page.locator('#prompt-images').isDisabled(),false);assert.equal(await page.locator('#chat-model').inputValue(),fixture.local);
  await page.locator('[data-execution=cpu]').click();await page.waitForFunction(()=>document.querySelector('[data-execution=cpu]').getAttribute('aria-pressed')==='true');
+ await page.locator('#settings-open').click();await page.locator('#settings').waitFor();await page.locator('[data-tab=advanced]').click();
+ await page.selectOption('#llm-settings-model',fixture.local);await page.locator('#llm-use-chat').click();
+ await page.locator('#settings-save').click();await page.waitForFunction(()=>!document.querySelector('#settings').open);
+ await page.waitForFunction(id=>document.querySelector('#chat-model').value===id,fixture.local);
  await page.evaluate(async id=>{const {token}=await(await fetch('/api/state')).json();const r=await fetch('/api/providers/'+id,{method:'DELETE',headers:{'X-H3-Token':token,'Content-Type':'application/json'},body:'{}'});if(!r.ok)throw Error(await r.text());},fixture.api);
- await page.reload();await page.locator('[data-execution=cpu][aria-pressed=true]').waitFor();assert.equal(await page.locator('#send').isDisabled(),true);assert.match(await page.locator('#execution-hint').innerText(),/Collega un provider/);
+ await page.locator('#prompt-llm-open').click();await page.locator('.prompt-llm-picker [data-value="'+fixture.local+'"]').click();await page.locator('#prompt-options').getByRole('button',{name:'Fatto',exact:true}).click();
+ await page.waitForFunction(id=>document.querySelector('#chat-model').value===id,fixture.local);
+ await page.reload();await page.locator('[data-execution=cpu][aria-pressed=true]').waitFor();assert.equal(await page.locator('#send').isDisabled(),false);assert.equal(await page.locator('#chat-model').inputValue(),fixture.local);
+ const selected=await page.evaluate(()=>fetch('/api/state').then(r=>r.json()));assert.equal(selected.execution.chat_model,fixture.local);assert.equal(selected.execution.chat_ready,true);
  await page.setViewportSize({width:390,height:844});await page.waitForTimeout(100);assert.equal(await page.locator('[data-execution=cpu]').isVisible(),true);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
- mkdirSync('work/execution-mode-qa',{recursive:true});await page.screenshot({path:'work/execution-mode-qa/mobile.png'});assert.deepEqual(errors,[]);console.log('CPU/GPU switch: disabled media, API-only chat selection, refresh persistence, GPU restoration, no-API guidance and mobile passed.');
+ mkdirSync('work/execution-mode-qa',{recursive:true});await page.screenshot({path:'work/execution-mode-qa/mobile.png'});assert.deepEqual(errors,[]);console.log('CPU/GPU switch: disabled media, local Gemma and API chat selection, refresh persistence, GPU restoration, deleted-API fallback and mobile passed.');
 }catch(e){console.error(diagnostics);throw e;}finally{await browser.close();child.kill();}

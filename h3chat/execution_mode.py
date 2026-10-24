@@ -2,7 +2,7 @@
 from .llm_options import merge as merge_llm_settings
 
 MEDIA_ERROR='Modalità CPU: creazione di immagini, video e audio disabilitata. Seleziona GPU per usare queste funzioni.'
-API_ERROR='Modalità CPU: collega un provider LLM esterno nelle Impostazioni API per usare chat e Assistant.'
+API_ERROR='Modalità CPU: scegli un LLM locale disponibile oppure collega un provider esterno per usare chat e Assistant.'
 MEDIA_INTENTS={'create','edit','image_batch','music','video','voice','transcribe'}
 
 def cpu(settings):
@@ -13,7 +13,7 @@ def effective(settings,catalog=None,mode=None):
     if mode is not None:settings['execution_mode']=mode
     if not cpu(settings):return settings
     if catalog is not None:
-        available=[m['id'] for m in catalog.values() if m.get('api') and m.get('ready',True) and 'chat' in m.get('capabilities',[])]
+        available=[m['id'] for m in catalog.values() if m.get('ready',True) and 'chat' in m.get('capabilities',[])]
         selected=next((key for key in (settings.get('cpu_chat_model'),settings.get('chat_model'),*available) if key in available),'')
         settings=merge_llm_settings(settings,{'chat_model':selected})
     settings.update(profile='cpu',backend='cpu',gpu_layers=0,llm_device='cpu',image_device='cpu',
@@ -26,7 +26,7 @@ def effective(settings,catalog=None,mode=None):
 def require_model(settings,model,capability):
     if not cpu(settings):return
     if capability!='chat':raise ValueError(MEDIA_ERROR)
-    if not model or not model.get('api'):raise ValueError(API_ERROR)
+    if not model or 'chat' not in model.get('capabilities',[]):raise ValueError(API_ERROR)
 
 def guard_intent(settings,intent):
     if cpu(settings) and intent in MEDIA_INTENTS:raise ValueError(MEDIA_ERROR)
@@ -45,4 +45,5 @@ def public(settings,catalog):
     live=effective(settings,catalog)
     return {'mode':settings.get('execution_mode','gpu'),'chat_model':live.get('chat_model',''),
             'api_ready':bool(catalog.get(live.get('chat_model'),{}).get('api')),
+            'chat_ready':bool(catalog.get(live.get('chat_model'),{}).get('ready',False)),
             'media_enabled':not cpu(settings)}

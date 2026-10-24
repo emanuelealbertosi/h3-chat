@@ -15,7 +15,8 @@ class ExecutionTests(unittest.TestCase):
         self.local=next(m['id'] for m in self.app.catalog.values() if 'chat' in m['capabilities'] and not m.get('api'))
         self.app.save_settings({'chat_model':self.local,'memory_policy':'resident','ram_cache_gb':2,'rag_device':'gpu','vision_device':'gpu','manim_device':'gpu'})
     def provider(self,url='http://127.0.0.1:9999/v1'):
-        return self.app.provider_request({'name':'CPU test API','base_url':url,'model':'test-model','vision':False,'max_refs':4,'thinking':'none','format':'json_object','api_key':''})['id']
+        ident=self.app.provider_request({'name':'CPU test API','base_url':url,'model':'test-model','vision':False,'max_refs':4,'thinking':'none','format':'json_object','api_key':''})['id']
+        self.app.save_settings({'cpu_chat_model':ident});return ident
     def test_switch_preserves_gpu_choices_and_forces_all_devices_without_mutation(self):
         api=self.provider();before=self.app.store.settings()
         with patch.object(self.app.engine,'stop') as stop:self.app.save_settings({'execution_mode':'cpu'});stop.assert_called_once()
@@ -26,7 +27,7 @@ class ExecutionTests(unittest.TestCase):
         self.app.save_settings({'execution_mode':'gpu'});self.assertEqual(self.app.store.settings(),before)
     def test_no_api_and_all_explicit_media_requests_are_rejected_before_queue(self):
         self.app.save_settings({'execution_mode':'cpu'});chat=self.app.store.create_chat()['id']
-        with self.assertRaisesRegex(ValueError,'provider LLM esterno'):self.app.send(chat,{'prompt':'Ciao'})
+        with patch.object(self.app,'effective_settings',return_value=effective(DEFAULTS|{'execution_mode':'cpu'},{})),self.assertRaisesRegex(ValueError,'LLM locale'):self.app.send(chat,{'prompt':'Ciao'})
         self.provider()
         for field in ('image_model','music','video','voice','transcribe'):
             with self.subTest(field=field),self.assertRaisesRegex(ValueError,'Modalità CPU'):self.app.send(chat,{'prompt':'Crea una prova',field:'anything' if field=='image_model' else True})
@@ -49,7 +50,7 @@ class ExecutionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'indicizzazioni'):self.app.save_settings({'execution_mode':'cpu'})
         self.app.knowledge.tasks.clear();self.app.save_settings({'execution_mode':'cpu'})
         with self.assertRaisesRegex(ValueError,'Modalità CPU'):guard_job(self.app.effective_settings(DEFAULTS|{'_video_edit':{'source':'old'}}))
-        with self.assertRaisesRegex(ValueError,'provider LLM esterno'):self.app.engine.require_model(self.local,'chat')
+        with self.assertRaisesRegex(ValueError,'LLM locale'):self.app.engine.require_model('','chat')
         with self.assertRaisesRegex(ValueError,'Modalità CPU'):self.app.engine.require_model('unconfigured','create')
     def test_rag_index_forces_cpu_even_with_saved_gpu_setting(self):
         self.provider();self.app.save_settings({'execution_mode':'cpu'})
@@ -82,3 +83,40 @@ class ExecutionTests(unittest.TestCase):
             self.app.execute_job(job,threading.Event())
         generate.assert_not_called();answer=self.app.store.messages(chat)[-1]
         self.assertEqual(answer['status'],'failed');self.assertIn('Modalità CPU',str(answer['meta']))
+
+    def gemma(self):
+        import struct
+        path=Path(self.temp.name)/'Gemma-4-E2B.gguf'
+        def string(value):
+            raw=value.encode();return struct.pack('<Q',len(raw))+raw
+        values={'general.architecture':'gemma4','general.name':'Gemma 4 E2B test'}
+        path.write_bytes(b'GGUF'+struct.pack('<IQQ',3,0,len(values))+b''.join(string(k)+struct.pack('<I',8)+string(v) for k,v in values.items()))
+        return self.app.external_model({'profile':'chat','name':'Gemma 4 CPU fixture','files':{'model':str(path)},'projector_mode':'off'})
+
+    def test_gemma_cpu_choice_is_visible_and_survives_api_removal_and_reload(self):
+        api=self.provider();model=self.gemma();before=self.app.store.settings()['chat_model']
+        self.app.save_settings({'execution_mode':'cpu','cpu_chat_model':model['id']})
+        self.assertEqual(self.app.effective_settings()['chat_model'],model['id']);self.assertEqual(self.app.store.settings()['chat_model'],before)
+        self.assertEqual(self.app.engine.require_model(model['id'],'chat')['id'],model['id'])
+        self.app.remove_provider(api);self.app.close();self.app=Service(ROOT,self.temp.name,start_worker=False);self.addCleanup(self.app.close)
+        self.assertEqual(self.app.state()['execution']['chat_model'],model['id']);self.assertTrue(self.app.state()['execution']['chat_ready'])
+
+    def test_preferences_choice_replaces_stale_cpu_api_and_legacy_deleted_id(self):
+        api=self.provider();model=self.gemma();self.app.save_settings({'execution_mode':'cpu','cpu_chat_model':api})
+        self.app.save_settings({'chat_model':model['id']})
+        self.assertEqual(self.app.effective_settings()['chat_model'],model['id'])
+        self.app.store.save_settings({'cpu_chat_model':'deleted-api-from-01856'})
+        self.app.save_settings(self.app.store.settings())
+        self.assertEqual(self.app.store.settings()['cpu_chat_model'],'');self.assertEqual(self.app.effective_settings()['chat_model'],model['id'])
+
+    def test_local_cpu_start_uses_cpu_binary_zero_gpu_layers_and_standard_engine(self):
+        from unittest.mock import Mock
+        model=self.gemma();self.app.save_settings({'execution_mode':'cpu','cpu_chat_model':model['id']})
+        session=Mock(ready=False,uses=0,process=Mock());session.process.poll.return_value=None
+        self.app.engine.active=session
+        response=Mock(status=200);response.__enter__=Mock(return_value=response);response.__exit__=Mock(return_value=False)
+        with patch.object(self.app.engine,'_activate',return_value=session),patch('h3chat.llm_acceleration.plan',return_value=None),patch('h3chat.engine.runtime_executable',return_value=Path('runtime/cpu/llama/llama-server.exe')) as runtime,patch('urllib.request.urlopen',return_value=response):
+            self.app.engine.start_llama(model,self.app.effective_settings(),Path(self.temp.name)/'test.log',threading.Event())
+        self.assertEqual(runtime.call_args.args[1:3],('cpu','llama'))
+        args=session.start.call_args.args[0];self.assertEqual(args[args.index('--n-gpu-layers')+1],0)
+        self.assertEqual(args[args.index('--spec-type')+1],'none')

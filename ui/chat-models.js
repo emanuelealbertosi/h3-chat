@@ -13,7 +13,7 @@ export function initChatModels({api,getState,onChange,notify}){
   function render(){
     const state=getState();if(!state){select.disabled=true;return;}
     const cpu=cpuMode(state),modelKey=cpu?'cpu_chat_model':'chat_model';
-    const models=state.models.filter(model=>model.capabilities.includes('chat')&&(!cpu||model.api));
+    const models=state.models.filter(model=>model.capabilities.includes('chat'));
     const selected=pending?.patch?.[modelKey]??chatModelId(state);
     const next=JSON.stringify(models.map(model=>[model.id,modelLabel(model),!!model.api,model.ready]));
     if(next!==signature){
@@ -43,7 +43,8 @@ export function initChatModels({api,getState,onChange,notify}){
     if(pending){render();return pending.promise;}
     const state=getState();
     if(Object.entries(patch).every(([key,value])=>value===state.settings[key]))return Promise.resolve();
-    if(patch.chat_model&&!state.models.some(model=>model.id===patch.chat_model&&model.capabilities.includes('chat')&&model.ready!==false)){render();return Promise.reject(Error('Questo modello non è disponibile.'));}
+    const chosen=patch.cpu_chat_model||patch.chat_model;
+    if(chosen&&!state.models.some(model=>model.id===chosen&&model.capabilities.includes('chat')&&model.ready!==false)){render();return Promise.reject(Error('Questo modello non è disponibile.'));}
     committed=state.settings;revision++;pending={patch,promise:null};
     pending.promise=(async()=>{
       try{
