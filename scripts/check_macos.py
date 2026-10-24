@@ -1,5 +1,5 @@
 """Smoke tests of the staged Apple distribution, with disposable user data only."""
-import json,os,platform,subprocess,sys,tempfile,threading,urllib.request
+import hashlib,json,os,platform,shutil,subprocess,sys,tempfile,threading,time,urllib.request
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 ROOT=Path(__file__).resolve().parents[1]
@@ -73,4 +73,36 @@ try:
         finally:http.shutdown();http.server_close();http.workspaces.close()
     finally:app.close()
 finally:server.shutdown();server.server_close()
-print('macOS arm64: native CPU/Metal runtime startup, Keychain, API chat, private document worker, PDF and loopback HTTP passed. No model weights loaded.')
+
+# Exercise the actual .app executable after relocating the complete portable folder.
+# Hard links avoid copying the browser twice; all mutable files go to disposable data.
+def linked_copy(source,target):
+    try:os.link(source,target);return target
+    except OSError:return shutil.copy2(source,target)
+
+with tempfile.TemporaryDirectory(prefix='h3-macos-relocated-') as folder:
+    relocated=Path(folder)/'H3 Chat with spaces'
+    shutil.copytree(STAGE,relocated,symlinks=True,copy_function=linked_copy,ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
+    executable=relocated/'H3-Chat.app/Contents/MacOS/H3-Chat'
+    with (Path(folder)/'launcher.log').open('wb') as log:
+        process=subprocess.Popen([executable,'--logs-only'],stdout=log,stderr=log)
+        try:
+            expected=hashlib.sha256(str(relocated).encode()).hexdigest()[:16]
+            ready=False;deadline=time.monotonic()+50
+            while time.monotonic()<deadline:
+                marker=relocated/'data/port.json'
+                if marker.exists():
+                    port=json.loads(marker.read_text())
+                    try:
+                        with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/health',timeout=2) as response:ready=json.load(response)['instance']==expected
+                        if ready:break
+                    except OSError:pass
+                if process.poll() is not None:break
+                time.sleep(.3)
+            assert ready,'Relocated native app launcher did not expose its owned loopback server.'
+            assert (relocated/'data').stat().st_mode&0o077==0,'Mac user data must be private.'
+        finally:
+            subprocess.run([executable,'--stop'],capture_output=True,timeout=50)
+            try:process.wait(timeout=12)
+            except subprocess.TimeoutExpired:process.terminate();process.wait(timeout=5)
+print('macOS arm64: native CPU/Metal startup, Keychain, API chat, documents, RAG, PDF, loopback HTTP and relocated native app launcher/stop passed. No model weights loaded.')

@@ -103,7 +103,7 @@ def follow_logs(port):
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--stop',action='store_true');parser.add_argument('--logs-only',action='store_true');args=parser.parse_args()
-    DATA.mkdir(parents=True,exist_ok=True)
+    DATA.mkdir(mode=0o700 if sys.platform=='darwin' else 0o777,parents=True,exist_ok=True)
     port_file=DATA/'port.json'
     try:preferred=json.loads(port_file.read_text()) if port_file.exists() else 8787
     except (OSError,ValueError):preferred=8787
