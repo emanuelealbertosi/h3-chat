@@ -46,7 +46,8 @@ posizionamento assoluto, riserva l'altezza effettiva di titolo e sottotitolo,
 più almeno 16px prima del contenuto. Nessuna immagine, pannello o decorazione
 deve coprirli; non risolvere con z-index, ritagli o nascondendo il sottotitolo.
 Il motore visualizza in un documento isolato senza JavaScript: niente script,
-iframe, eventi, link attivi, animation infinita o video. HTML statico completo.
+iframe, eventi, link attivi, animazioni infinite o video. HTML/CSS completo;
+le animazioni CSS finite richieste restano consentite.
 Scrivi anzitutto la struttura HTML e i contenuti, poi uno <style> compatto.
 Riusa classi, gradienti, pseudo-elementi e SVG per le decorazioni: evita centinaia
 di regole quasi identiche numerate. Completa contenuto e CSS nella stessa risposta.

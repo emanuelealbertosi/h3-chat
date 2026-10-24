@@ -59,7 +59,15 @@ dalla CPU, dalla RAM e dal numero di pagine.
 
 ## Aggiornamenti e verifica
 
-Termina i lavori, esegui **stop.bat**, aggiorna il repository e riapri
+Se hai scaricato lo **ZIP della release**, termina i lavori, chiudi l’app ed
+esegui **Ferma-H3-Chat.bat**. Fai un backup di `data/`, estrai il nuovo ZIP
+altrove e copia il contenuto della sua cartella `H3-Chat` dentro la vecchia
+cartella, scegliendo di sostituire i file. Conserva `data/`, `models/` e i
+runtime aggiuntivi. Riapri `H3-Chat.exe`: non devi riconfigurare provider o chat.
+Non serve Git per questo aggiornamento.
+
+Se usi invece un **clone Git**, termina i lavori, esegui **stop.bat**, aggiorna
+il repository e riapri
 **Installa-API-senza-GPU.bat**. L'installatore verifica le revisioni e i checksum,
 riutilizza componenti validi e conserva chat, credenziali, modelli e preferenze
 esistenti. Il profilo iniziale viene applicato solo alla creazione di un nuovo

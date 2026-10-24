@@ -22,15 +22,24 @@ Il flusso delle presentazioni resta invariato quando **Illustrazioni AI · tutte
 è disattivato (impostazione iniziale). Documenti, figure RAG e allegati continuano
 a essere disponibili al LLM.
 
-## Sfondo e palette
+## Sfondo, colore dei testi e palette
 
-In **Slide → Impostazioni** trovi pulsanti separati per **Sfondo** e **Palette**.
-Entrambi partono da **Automatico**: il comportamento precedente resta invariato.
+In **Slide → Impostazioni** trovi pulsanti separati per **Sfondo**, **Testi** e **Palette**.
+Le tre scelte partono da **Automatico**: il comportamento precedente resta invariato.
 Puoi scegliere sfondo chiaro, scuro o personalizzato con il selettore colore,
 e palette naturale, pastello, vivace, neon o monocromatica. Il LLM riceve queste
 preferenze nella scaletta, in ogni pagina HTML e nel piano delle illustrazioni;
 continua a comporre liberamente il layout. Le istruzioni esplicite nel prompt
 prevalgono sui selettori. Viene richiesto contrasto leggibile fra sfondo e testo.
+
+**Testi** permette Automatici, Chiari o Scuri, indipendentemente dalla palette.
+La scelta si conserva nella presentazione e nelle modifiche. Il prompt corrente
+prevale, ad esempio «testi scuri». Il controllo di contrasto del canvas considera
+anche i gradienti: corregge il testo chiaro su superfici chiare. Quando forzi testi
+chiari su fondo chiaro (o il contrario), usa una superficie locale contrastante
+dietro le scritte, mantenendo lo sfondo generale e i colori decorativi separati.
+Anche le etichette SVG ricevono la scelta del testo. L’export usa il risultato
+leggibile del canvas.
 
 Le scelte vengono salvate nel deck e riutilizzate nella ricreazione di una sola
 slide; non modificano retroattivamente le altre pagine. Questi controlli sono

@@ -107,6 +107,9 @@ def build(app,job,payload,settings,model,cancel,stage,log_path,meta,*,prepare_en
     revision=meta['slide_revision']={'page':index,'source_artifact':snapshot.get('id'),'prompt':prompt,
         'phase':'preparing','attempt':1,'characters':0,'elapsed_seconds':0}
     if not allow_unchanged:page['revision_prompt']=prompt
+    from .slide_colors import requested_tone
+    tone=requested_tone(prompt)
+    if tone is not None:page['text_tone']=tone
     allowed_images={m['id'] for m in media if m.get('mime','').startswith('image/')}
     planned=[]
     for item in settings['_slide_revision'].get('planned_images',[]):

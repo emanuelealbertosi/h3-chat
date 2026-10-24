@@ -1,3 +1,4 @@
+import {cpuControls} from './execution-mode.js';
 import {escape as esc} from './render.js';
 import {imageRequestParameters} from './image-request.js';
 import {migrateMossNegativeDefaults} from './image-negative-defaults.js';
@@ -17,7 +18,7 @@ export function initVisualControls({getState,getChatId,pickFile}){
   const value={image_model:'',assistant:true,music:false,video:false,video_quality:'high',video_editing:'continuous',web:false,transcribe:false,music_fields:{},...normalizeVoice(JSON.parse(localStorage.getItem(key(getChatId()))||'{}'))};
   const migrated=migrateMossNegativeDefaults(value,getState());
   if(migrated!==value)localStorage.setItem(key(getChatId()),JSON.stringify(migrated));
-  return migrated;
+  return cpuControls(migrated,getState());
  }catch{return {image_model:'',assistant:true,music:false,video:false,video_quality:'high',video_editing:'continuous',web:false,transcribe:false,music_fields:{}};}};
  function save(value){if(!value.video&&value.video_editing==='modify')value={...value,video_editing:'continuous'};localStorage.setItem(key(getChatId()),JSON.stringify(value));render();}
  const voice=initVoiceControls({read,save,getState});

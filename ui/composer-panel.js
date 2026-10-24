@@ -1,3 +1,4 @@
+import {chatModelId,cpuMode} from './execution-mode.js';
 import {initComposerSettings} from './composer-settings.js';
 import {initImageRequest} from './image-request.js';
 const $=selector=>document.querySelector(selector);
@@ -58,7 +59,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  const count=$('#slides-count'),countLabel=count.closest('label');countLabel.classList.add('prompt-count');const minus=button('−'),plus=button('＋');minus.ariaLabel='Meno slide';plus.ariaLabel='Più slide';count.before(minus);count.after(plus);for(const [item,delta] of [[minus,-1],[plus,1]])item.onclick=()=>{count.value=Math.max(1,Math.min(100,(Number(count.value)||8)+delta));count.dispatchEvent(new Event('change',{bubbles:true}));render();};
  const slideTechnical=field('Presentazioni · opzioni tecniche');slides.append(slideTechnical);
  for(const id of ['slides-engine','slides-vision'])slideTechnical.append($('#'+id).closest('label'));
- for(const [id,title] of [['slides-format','Formato'],['slides-design','Stile'],['slides-detail','Contenuto'],['slides-composition','Composizione'],['slides-background','Sfondo'],['slides-palette','Palette']])pills($('#'+id),title);
+ for(const [id,title] of [['slides-format','Formato'],['slides-design','Stile'],['slides-detail','Contenuto'],['slides-composition','Composizione'],['slides-background','Sfondo'],['slides-text-tone','Testi'],['slides-palette','Palette']])pills($('#'+id),title);
  for(const id of ['slides-engine','slides-vision'])pills($('#'+id),id==='slides-engine'?'Motore slide':'Analisi delle figure');
  const imageToggle=toggle($('#slides-generate-images'),'Illustrazioni AI · tutte insieme',slides);imageToggle.classList.add('prompt-slide-images');
  const imageModels=$('#slides-image-model'),generatedModels=pills(imageModels,'Modello per le illustrazioni',true);
@@ -84,7 +85,9 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  const modeSettings=initComposerSettings({context,getState,onChange:render,visualControls});
  function render(){
   const state=getState();if(!state)return;
-  const value=visualControls.read(),mode=lab.value;videoEdit.setAttribute('aria-pressed',String(value.video&&value.video_editing==='modify'));
+  const value=visualControls.read(),mode=lab.value,cpu=cpuMode(state);
+  for(const item of [images,videoEdit,$('#music-toggle'),$('#video-toggle'),$('#voice-toggle'),transcribe]){item.disabled=cpu;item.title=cpu?'Disabilitato in modalità CPU':'';}
+  imageToggle.disabled=cpu;$('#slides-generate-images').disabled=cpu;assistant.disabled=cpu&&!chatModelId(state);videoEdit.setAttribute('aria-pressed',String(value.video&&value.video_editing==='modify'));
   auto.setAttribute('aria-pressed',String(mode==='auto'&&!value.image_model&&!value.music&&!value.video&&!value.voice&&!value.transcribe));images.setAttribute('aria-pressed',String(!!value.image_model));
   for(const [name,item] of tools)item.setAttribute('aria-pressed',String(mode===name));
   imagePanel.hidden=!value.image_model;slides.hidden=mode!=='slides';slideTechnical.hidden=mode!=='slides';generatedModels.hidden=!$('#slides-generate-images').checked;
@@ -94,7 +97,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
   const manim=document.querySelector('#manim-presentation-options');if(manim)manim.hidden=mode!=='manim';
   assistant.textContent='Assistant '+(value.assistant?'On':'Off');assistant.title='Prepara le istruzioni con il LLM della chat';
   for(const update of mirrors)update();
-  const model=state.models.find(m=>m.id===state.settings.chat_model),vision=!state.settings.vision_enabled?'Vision Off':model?.vision?.enabled?'Vision '+(model.api?'API':state.settings.vision_device.toUpperCase()):'Non vision';
+  const model=state.models.find(m=>m.id===chatModelId(state)),vision=!state.settings.vision_enabled?'Vision Off':model?.vision?.enabled?'Vision '+(model.api?'API':state.settings.vision_device.toUpperCase()):'Non vision';
   const refs=model?.api?Math.min(state.settings.vision_max_refs??4,model.max_refs??model.vision?.max_refs??4):state.settings.vision_max_refs??4;
   summary.textContent=[vision+(model?.vision?.enabled&&state.settings.vision_enabled?' · max '+refs+' immagini':''),'Think '+(model?.thinking?.supported?state.settings.think_level:'Off'),Number(state.settings.context).toLocaleString('it-IT')+' contesto',state.settings.max_tokens+' max token',model?.mtp?.supported?(state.settings.mtp_enabled?'MTP On':'MTP Off'):'MTP N/D'].join(' · ');
   technical.title=summary.textContent;

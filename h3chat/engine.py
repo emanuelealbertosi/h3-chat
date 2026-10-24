@@ -171,6 +171,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         return (kind, tuple(fingerprint), runtime_options)
 
     def configure(self, settings):
+        if hasattr(self,'execution_settings'):settings=self.execution_settings(settings)
         with self.process_lock:
             self.policy = settings.get('memory_policy', 'on_demand')
             self.cache.configure(settings.get('ram_cache_gb', 0))
@@ -184,7 +185,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                     wanted.add(self.session_key(kind,model,settings))
             # Keep an explicitly selected extra image model between messages,
             # including after the queue returns to the saved global settings.
-            if self.active and self.active.kind=='image':
+            if settings.get('execution_mode')!='cpu' and self.active and self.active.kind=='image':
                 previous = self.active.settings
                 extra = previous.get('_image_model') and self.active.model['id'] not in [previous.get(k) for k in ('create_model','edit_model','diagram_model')]
                 current = self.catalog.get(self.active.model['id'])
@@ -219,6 +220,8 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         self.cache.clear()
 
     def _activate(self, kind, model, settings, log_path, cancel, stage=None):
+        from .execution_mode import require_model
+        require_model(self.execution_settings(settings) if hasattr(self,'execution_settings') else settings,model,'chat' if kind=='chat' else 'create')
         with self.process_lock:
             if cancel.is_set():
                 raise Cancelled()
@@ -286,6 +289,9 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
 
     def require_model(self, model_id, capability):
         model = self.catalog.get(model_id)
+        if hasattr(self,'execution_settings'):
+            from .execution_mode import require_model
+            require_model(self.execution_settings(),model,capability)
         if not model or capability not in model["capabilities"]:
             raise ValueError(f"Scegli un modello per {capability} nelle impostazioni.")
         model = model | inspect_model(self.root, model)
@@ -305,6 +311,9 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         return files
 
     def start_llama(self, model, settings, log_path, cancel, stage=None):
+        from .execution_mode import require_model
+        if hasattr(self,'execution_settings'):settings=self.execution_settings(settings)
+        require_model(settings,model,'chat')
         from .devices import options
         settings=options(settings,'llm')
         if model.get('api'):
@@ -665,6 +674,8 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                 'loras':[{'path':l['path'],'weight':l['weight']} for l in settings.get('_loras',[])]}
 
     def generate(self, model, settings, prompt, refs, job_id, cancel, stage):
+        from .execution_mode import guard_intent
+        guard_intent(self.execution_settings(settings) if hasattr(self,'execution_settings') else settings,'create')
         if model.get('remote_media'):return self.remote_generate(model,settings,prompt,refs,job_id,cancel,stage)
         folder = self.data / 'outputs' / job_id
         folder.mkdir(parents=True,exist_ok=True)

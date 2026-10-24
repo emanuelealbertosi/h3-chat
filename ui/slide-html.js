@@ -71,6 +71,7 @@ export async function htmlPage(deck,page,index,media,mount){
   renderMath(doc.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false});
   // Local bundled math CSS is trusted and does not enable generated scripts.
   if(doc.querySelector('.katex')){const style=document.createElement('style');style.dataset.h3Trusted='';style.textContent=await localMathCSS();doc.head.append(style);await doc.fonts.ready;}
+  doc.documentElement.dataset.h3TextTone=page.text_tone||deck.text_tone||'auto';
   readableText(doc);
   if(deck.infographic)H3Motion.configure(doc,deck.infographic.options||{});
   const generated=new Set((deck.image_generation?.plan||[]).map(item=>item.asset_id));

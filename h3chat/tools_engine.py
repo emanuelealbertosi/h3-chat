@@ -12,6 +12,12 @@ from .web_search import requested,search
 
 class ToolsEngine:
     def tool_call(self,worker,request,cancel,stage,log_path,timeout=90):
+        if hasattr(self,'execution_settings'):
+            from .execution_mode import cpu,guard_intent
+            live=self.execution_settings(request.get('settings'))
+            if cpu(live):
+                if worker in ('transcription-worker.py','voice-worker.py'):guard_intent(live,'voice')
+                if 'settings' in request:request=request|{'settings':self.execution_settings(request['settings'])}
         if cancel.is_set():raise Cancelled()
         session=Session(('tool',(),()),'tool',{'id':worker,'name':worker},{},{},log_path)
         with self.process_lock:self.tool_session=session
@@ -37,6 +43,9 @@ class ToolsEngine:
         return json.loads(target.read_text(encoding='utf-8'))
 
     def transcribe(self,item,settings,cancel,stage,log_path):
+        if hasattr(self,'execution_settings'):
+            from .execution_mode import guard_intent
+            guard_intent(self.execution_settings(settings),'transcribe')
         if not status(self.root)['asr']['ready']:raise ValueError('Installa il motore trascrizione dal Setup → Strumenti.')
         folder=model_path(self.root,settings['asr_model']);weight=folder/'model.bin';st=weight.stat()
         key=hashlib.sha256(json.dumps([item['id'],str(folder),st.st_size,st.st_mtime_ns,settings['asr_language'],settings['asr_beam'],settings.get('asr_device','cpu')]).encode()).hexdigest()

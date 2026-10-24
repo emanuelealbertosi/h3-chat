@@ -17,6 +17,7 @@ PROFILES = {
     "balanced": {"context": 8192, "gpu_layers": 99, "width": 768, "height": 768},
 }
 DEFAULTS = {
+    "execution_mode": "gpu", "cpu_chat_model": "",
     "llm_timeout": 1800,
     "vision_max_refs": 4,
     "llm_acceleration": "standard",

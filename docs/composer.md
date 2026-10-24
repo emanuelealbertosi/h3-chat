@@ -1,5 +1,9 @@
 # Controlli del prompt e disposizione della chat
 
+Lo [switch GPU / CPU](execution-mode.md) nella barra in alto permette di
+sospendere i motori locali multimediali e usare chat/Assistant solo tramite API,
+con RAG e strumenti su CPU. Le impostazioni normali sono conservate.
+
 La riga sotto il messaggio usa pulsanti: **Automatico**, **Immagini**, **Music**,
 **Video**, **Voice**, **Slide**, **Manim**, **Calcolo** e **Trascrivi**. Il pulsante
 selezionato è evidenziato. Automatico lascia al prompt la scelta del percorso.

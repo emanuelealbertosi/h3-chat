@@ -103,7 +103,7 @@ con ricerca per parole immediata ed embedding CPU opzionale. Anche nel pacchetto
 portabile trovi **Setup → Configura per API · nessuna GPU**.
 [Procedura completa e protocolli supportati](docs/api-only-windows.md).
 
-**Pacchetto Windows:** scarica [H3-Chat-0.18.55-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.18.55/H3-Chat-0.18.55-windows-x64.zip) dalla [release v0.18.55](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.18.55), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.18.56-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.18.56/H3-Chat-0.18.56-windows-x64.zip) dalla [release v0.18.56](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.18.56), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 
@@ -422,7 +422,7 @@ python scripts/install_cpu.py
 python scripts/package.py
 ```
 
-Per aggiornare una vecchia installazione, arrestala con `Ferma-H3-Chat.bat`, fai un backup di `data/`, quindi estrai i file della nuova release nella stessa cartella. Le release non contengono `data/` né pesi dei modelli.
+Per aggiornare una vecchia installazione ZIP: termina i lavori, chiudi H3-Chat ed esegui `Ferma-H3-Chat.bat`; fai un backup di `data/`. Estrai il nuovo ZIP in una cartella temporanea e copia il **contenuto** della sua cartella `H3-Chat` nella cartella già installata, sostituendo i file esistenti. Non creare una seconda cartella `H3-Chat` dentro quella attuale e non eliminare `data/`, `models/` o i runtime aggiuntivi. Le release non contengono `data/` né pesi dei modelli. Riapri `H3-Chat.exe` e premi Ctrl+F5 se una vecchia scheda del browser mostra ancora l’interfaccia precedente. Sullo stesso PC restano chat, account, chiavi API e preferenze; i collegamenti ai modelli conservano i percorsi esistenti. Per un clone aggiornato da Git, esegui invece nuovamente l’installatore del profilo scelto.
 
 Il packaging include una lista esplicita di file, esclude chat, modelli, cache e registri personali, produce uno ZIP Windows e il suo SHA-256. Il workflow GitHub costruisce l'artefatto; su un tag `v*` prepara una **release in bozza** per la revisione del proprietario del repository. Nessun repository remoto viene creato automaticamente dall'app.
 

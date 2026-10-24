@@ -1,3 +1,4 @@
+import {initExecutionMode,cpuMode,chatModelId,cpuRequest} from './execution-mode.js';
 import {uploadFile} from './file-upload.js';
 import {renderToolsSettings,appendToolsDetails} from './tools-settings.js';
 import {apiOnlySettings,apiOnlyCard} from './api-only-setup.js';
@@ -104,7 +105,9 @@ function localCard(model){
 function activeJob(){return state?.jobs.find(j=>j.chat_id===current&&['queued','running','cancelling'].includes(j.status));}
 function userJob(){return state?.jobs.find(j=>['queued','running','cancelling'].includes(j.status));}
 function queuedCanvasJob(result,chatId,stage){if(result?.job_id&&state&&!state.jobs.some(job=>job.id===result.job_id))state.jobs.unshift({id:result.job_id,chat_id:chatId,status:'queued',canvas:true,stage});}
+function requireMediaMode(){if(cpuMode(state))throw Error('Modalità CPU: creazione e modifica AI di immagini, video e audio disabilitata. Seleziona GPU.');}
 const editVideo=act(async(media,options={})=>{
+  requireMediaMode();
   await chatModels.wait();if(!current)await newChat();
   if(!media){chooseVideoForEdit({api,onSelect:(chosen,importOptions)=>editVideo(chosen,{...options,...importOptions})});return;}
   if(media.timeline_recovery){
@@ -115,9 +118,9 @@ const editVideo=act(async(media,options={})=>{
   }
   await openVideoEdit({api,pickFile:localModels.pickFile,chatId:current,source:media.id,busy:userJob,initialLoras:loraUI.getSelections(),...options,onQueued:async result=>{await options.onQueued?.(result);if(result?.intent==='infographic'){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}await refresh();toast(result?.intent==='infographic'?'Infografica dello spezzone in coda: comparirà nel canvas.':'Operazione sul video in coda.');}});
 });
-const recreateVideo=act(async media=>{await chatModels.wait();if(!current)await newChat();await openVideoRecreate({api,pickFile:localModels.pickFile,chatId:current,source:media?.id,busy:userJob,onQueued:async()=>{await refresh();toast('Ricreazione video in coda.');}});});
-const upscaleVideo=act(async media=>{if(!current)await newChat();await openUpscale({api,chatId:current,media,busy:userJob,onQueued:async()=>{await refresh();toast('Upscale in coda.');}});});
-const remixVideo=act(async media=>{if(!current)await newChat();await openVideoRemix({api,chatId:current,media,busy:userJob,onQueued:async()=>{await refresh();toast('Remix in coda.');}});});
+const recreateVideo=act(async media=>{requireMediaMode();await chatModels.wait();if(!current)await newChat();await openVideoRecreate({api,pickFile:localModels.pickFile,chatId:current,source:media?.id,busy:userJob,onQueued:async()=>{await refresh();toast('Ricreazione video in coda.');}});});
+const upscaleVideo=act(async media=>{requireMediaMode();if(!current)await newChat();await openUpscale({api,chatId:current,media,busy:userJob,onQueued:async()=>{await refresh();toast('Upscale in coda.');}});});
+const remixVideo=act(async media=>{requireMediaMode();if(!current)await newChat();await openVideoRemix({api,chatId:current,media,busy:userJob,onQueued:async()=>{await refresh();toast('Remix in coda.');}});});
 function modelName(id){return modelLabel(state?.models.find(m=>m.id===id));}
 
 async function refresh(){
@@ -146,6 +149,7 @@ function renderSidebar(){
   $('#list-label').textContent=project?state.projects.find(p=>p.id===project)?.name:collection?state.collections.find(c=>c.id===collection)?.name:'CONVERSAZIONI';
   $('#chat-list').innerHTML=chats.map(c=>`<div class="chat-row ${current===c.id?'active':''}"><button class="chat-link" data-chat="${c.id}" aria-busy="${activities.get(c.id)==='running'}">${c.pinned?'<span class="pin-mark">⌖</span>':''}<span class="chat-title">${esc(c.title)}</span>${chatActivityIcon(activities.get(c.id))}</button><button class="chat-options" data-chat-menu="${c.id}" aria-label="Opzioni ${esc(c.title)}">⋯</button></div>`).join('')||'<div class="side-empty">Le tue conversazioni appariranno qui.</div>';
 }
+const executionUI=initExecutionMode({api,getState:()=>state,onChange:refresh,notify:toast});
 function renderStatus(){
   if(!state)return;
   chatModels.render();
@@ -161,8 +165,8 @@ function renderStatus(){
   $('#memory-status').title=loaded.map(m=>m.name+' · '+m.location+(m.ready?'':' · caricamento')).join('\n')||'Apri la gestione della memoria';
   const live=$('#resident-models');if(live)live.textContent=loaded.map(m=>m.name+' · '+m.location+(m.ready?'':' · caricamento')).join(' / ')||'Nessun modello caricato';
   const release=$('#release-memory');if(release)release.disabled=state.jobs.some(j=>['running','queued'].includes(j.status));
-  $('#model-name').textContent=modelName(state.settings.chat_model);
-  const model=state.models.find(m=>m.id===state.settings.chat_model),vision=model?.vision,thinking=model?.thinking;
+  $('#model-name').textContent=modelName(chatModelId(state));
+  const model=state.models.find(m=>m.id===chatModelId(state)),vision=model?.vision,thinking=model?.thinking;
   $('#model-name').title=model?.identity?.path||'Mostra i dettagli del modello LLM';$('#model-name').disabled=!model;
   $('.local-badge').innerHTML='<i></i> '+(model?.api?'LLM tramite API':'Sul tuo computer');
   $('#engine-badge').innerHTML='<i></i> '+(any?'Lavoro in corso':model?.api?'LLM tramite API':'Motore locale');
@@ -190,7 +194,7 @@ function renderStatus(){
   $('#canvas-source').readOnly=!!canvasJob?.canvas;
   $('#canvas-title').readOnly=!!canvasJob?.canvas;
   $('#canvas-restore').disabled=!!canvasJob?.canvas||!canvas.id||canvas.id===canvasHistory.active_id;
-  composerUI?.render();manimPresentation?.render();infographicsUI?.render();
+  composerUI?.render();manimPresentation?.render();infographicsUI?.render();executionUI.render();
 }
 async function newChat(){if(current)await persistCanvas();const fresh=await api('/chats',{collection_id:collection,project_id:project});await openChat(fresh.id);await refresh();$('#prompt').focus();}
 async function openChat(id){
@@ -330,7 +334,7 @@ async function send(event){event.preventDefault();if(userJob())return;const prom
       const videos=attachments.filter(x=>x.mime?.startsWith('video/'));if(videos.length>1)throw Error('Scegli un solo video da modificare.');
       await editVideo(videos[0],{initialPrompt:prompt,initialReferences:attachments.filter(x=>x.mime?.startsWith('image/')),initialSteps:controls.video_steps,initialAssistant:controls.assistant,initialModel:controls.video_model||undefined,initialParameters:controls.video_parameters||{},onQueued:async()=>{$('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);}});return;
     }
-    const presentation=await manimPresentation.prepare();const sent=await api('/chats/'+current+'/messages',{prompt,media:attachments,canvas:canvasOpen,...presentation,...visualControls.request(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='infographic'?{infographic:infographicsUI.read()}:{}),...($('#lab-tool').value==='slides'?{slides:{duration_minutes:Number($('#slides-duration').value),engine:$('#slides-engine').value,count:$('#slides-count-mode').value==='auto'?'auto':Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value,composition:$('#slides-composition').value,vision_scope:$('#slides-vision').value,...slideColors.read(),...slideImages.read()}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()});
+    const presentation=await manimPresentation.prepare();const sent=await api('/chats/'+current+'/messages',cpuRequest({prompt,media:attachments,canvas:canvasOpen,...presentation,...visualControls.request(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='infographic'?{infographic:infographicsUI.read()}:{}),...($('#lab-tool').value==='slides'?{slides:{duration_minutes:Number($('#slides-duration').value),engine:$('#slides-engine').value,count:$('#slides-count-mode').value==='auto'?'auto':Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value,composition:$('#slides-composition').value,vision_scope:$('#slides-vision').value,...slideColors.read(),...slideImages.read()}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()},state));
     if(['slides','infographic','image_batch'].includes(sent.intent)){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}
     $('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);await refresh();
   }finally{$('#send').disabled=false;}

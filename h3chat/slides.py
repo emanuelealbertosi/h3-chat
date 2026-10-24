@@ -94,7 +94,7 @@ def edit_options(prompt,content):
     if extra:count+=1 if extra[1].lower() in ('un','una') else int(extra[1])
     # An addition specifies an increment, not the new total.
     return options(prompt[:extra.start()]+prompt[extra.end():] if extra else prompt,
-                   {'count':count,'format':deck['format'],'engine':deck.get('engine','deterministic')}|{k:deck[k] for k in ('theme','typography','design','detail','composition','engine','vision_scope','background','background_color','palette','duration_minutes') if k in deck})
+                   {'count':count,'format':deck['format'],'engine':deck.get('engine','deterministic')}|{k:deck[k] for k in ('theme','typography','design','detail','composition','engine','vision_scope','background','background_color','palette','text_tone','duration_minutes') if k in deck})
 
 
 def options(prompt, body=None):
@@ -137,6 +137,9 @@ def options(prompt, body=None):
     if result.get('composition')=='rich':result['engine']='llm'
     from .slide_colors import options as color_options
     result.update(color_options(body))
+    from .slide_colors import requested_tone
+    tone=requested_tone(prompt)
+    if tone is not None:result['text_tone']=tone
     return result
 
 
@@ -326,6 +329,7 @@ def validate_content(content, media):
     if not isinstance(refs,list) or len(refs)>100 or any(not isinstance(r,dict) or not isinstance(r.get('id'),str) or not isinstance(r.get('label'),str) or len(r['label'])>1000 for r in refs): raise ValueError('Fonti slide non valide.')
     for page in deck['pages']:
         if not isinstance(page,dict) or not isinstance(page.get('title'),str) or len(page['title'])>150: raise ValueError('Titolo slide non valido.')
+        if 'text_tone' in page:color_options({'text_tone':page['text_tone']})
         if deck.get('engine')=='llm':
             html=page.get('html','')
             if not isinstance(html,str) or len(html)>80000:raise ValueError('HTML slide non valido.')
@@ -483,7 +487,7 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     if not isinstance(direction,str):raise ValueError('Direzione artistica delle slide non valida.')
     if opts['engine']=='llm':
         deck['visual_direction']=direction[:2500]
-        deck.update({k:opts[k] for k in ('background','background_color','palette') if k in opts})
+        deck.update({k:opts[k] for k in ('background','background_color','palette','text_tone') if k in opts})
     if opts.get('generate_images'):deck['image_generation']={'model':meta['slide_image_model'],'count':len(generated),
         'plan':[{k:item[k] for k in ('slide','asset_id','description','aspect','width','height') if k in item} for item in meta['slide_image_plan']]}
     def publish():

@@ -28,11 +28,11 @@ class SlideColorTests(unittest.TestCase):
     def test_deck_edit_preserves_colors_and_legacy_decks_still_validate(self):
         deck={'version':1,'engine':'llm','format':'4:3','pages':[{'title':'A','status':'ready','html':'<main><h1>A</h1></main>'}]}
         validate_content(encode(deck), [])
-        deck.update(background='custom',background_color='#eaf0ff',palette='natural')
+        deck.update(background='custom',background_color='#eaf0ff',palette='natural',text_tone='dark')
         validate_content(encode(deck), [])
         opts=edit_options('Aggiungi una slide', encode(deck))
         self.assertEqual(opts['count'], 2)
-        for key in ('background','background_color','palette'):self.assertEqual(opts[key], deck[key])
+        for key in ('background','background_color','palette','text_tone'):self.assertEqual(opts[key], deck[key])
         deck['background_color']='#invalid'
         with self.assertRaises(ValueError):validate_content(encode(deck), [])
 
@@ -42,6 +42,16 @@ class SlideColorTests(unittest.TestCase):
         self.assertIn('Neon non obbliga uno', instruction)
         self.assertIn('prompt corrente', instruction)
         self.assertEqual(brief({'_infographic':{'palette':'neon','frame':'dark'}}), '')
+
+    def test_font_tone_is_independent_validated_and_prompt_takes_precedence(self):
+        value=options('',{'background':'light','palette':'pastel','text_tone':'light'})
+        self.assertEqual(value['text_tone'],'light');self.assertIn('COLORE DEI FONT',brief(value))
+        self.assertIn('superfici locali contrastanti',brief(value))
+        self.assertEqual(options('Usa testi scuri',value)['text_tone'],'dark')
+        self.assertEqual(options('Testi automatici',value)['text_tone'],'auto')
+        self.assertEqual(options('Font chiari',{'text_tone':'dark'})['text_tone'],'light')
+        for bad in (None,'red',[],True):
+            with self.assertRaises(ValueError):options('',{'text_tone':bad})
 
     def test_image_planner_receives_selected_slide_palette(self):
         engine=SimpleNamespace(completion=Mock(return_value=(json.dumps({'images':[

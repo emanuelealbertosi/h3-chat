@@ -6,7 +6,7 @@ import time
 from .service import Service
 from .llm_options import merge as merge_llm_settings
 
-GUEST_PREFERENCES={'chat_model','think_level','vision_enabled','vision_device','vision_max_refs','chat_advanced','rag_device','rag_visual'}
+GUEST_PREFERENCES={'cpu_chat_model','chat_model','think_level','vision_enabled','vision_device','vision_max_refs','chat_advanced','rag_device','rag_visual'}
 
 
 class Workspaces:
@@ -17,6 +17,14 @@ class Workspaces:
         self.wrap(owner)
 
     def wrap(self,app):
+        app.execution_owner=self.owner
+        def busy():
+            with self.lock:apps=[self.owner,*self.items.values()]
+            return any(other.current_id or other.store.one("SELECT id FROM jobs WHERE status IN ('queued','running','cancelling')") or any(t.get('status')=='running' for t in other.knowledge.tasks.values()) for other in apps)
+        def release():
+            with self.lock:apps=[self.owner,*self.items.values()]
+            for other in apps:other.engine.stop();other.knowledge.embeddings.close()
+        app.execution_busy=busy;app.execution_release=release
         original=app.execute_job
         app.compute_lock=self.compute;app.knowledge.compute_lock=self.compute
         for name in ('enqueue','regenerate','resume_video'):
@@ -105,6 +113,7 @@ class Workspaces:
             settings=merge_llm_settings(self.owner.store.settings(),prefs)|{'setup_done':True,'memory_policy':'on_demand','ram_cache_gb':0}
             app.store.save_settings(settings)
         self.synced[ident]=time.monotonic()
+        app.refresh_models()
 
     def preferences(self,identity,body,rag=False):
         allowed={'rag_device','rag_visual'} if rag else GUEST_PREFERENCES

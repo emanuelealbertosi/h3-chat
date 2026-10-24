@@ -82,6 +82,8 @@ class Service:
         from .file_uploads import FileUploads
         self.uploads = FileUploads(self)
         self.compute_lock=threading.RLock();self.knowledge.compute_lock=self.compute_lock;self.knowledge.release_gpu=self.engine.stop
+        self.engine.execution_settings=self.effective_settings
+        self.knowledge.execution_settings=self.effective_settings
         self.current_id, self.cancel_event = None, None
         self.worker = threading.Thread(target=self.run, daemon=True)
         # Linked models must be available before jobs run, independently of
@@ -89,6 +91,12 @@ class Service:
         self.refresh_models()
         if start_worker:
             self.worker.start()
+
+    def effective_settings(self,settings=None):
+        from .execution_mode import effective
+        owner=getattr(self,'execution_owner',self)
+        mode=owner.store.settings().get('execution_mode','gpu')
+        return effective(settings if settings is not None else self.store.settings(),self.catalog,mode)
 
     def refresh_models(self):
         with self.lock:
@@ -117,7 +125,10 @@ class Service:
             return status['media'] if key=='remix_media' else status['score'] if key=='remix_score' else (root/'runtime/remix'/key.removeprefix('remix_')/'audiocpp_cli.exe').is_file()
         from .document_limits import RAG_LIMITS
         models = self.refresh_models()
+        from .execution_mode import public
+        saved=self.store.settings()|{'execution_mode':getattr(self,'execution_owner',self).store.settings().get('execution_mode','gpu')}
         return {"token": self.token, "version": __version__, "server_time":time.time(), "settings": self.store.settings(), "profiles": PROFILES,"project_limits":RAG_LIMITS,
+                "execution":public(saved,self.catalog),
                 "api_providers":self.providers.list(),"api_presets":API_PRESETS,"voice_runtime":{"ready":voice_ready(self.root)},
                 "voice_engines":{"higgs":{"name":"Higgs Audio v3","ready":voice_ready(self.root)}},
                 "media_providers":self.media_providers.list(),
@@ -214,6 +225,9 @@ class Service:
         if not isinstance(patch, dict) or set(patch) - set(DEFAULTS):
             raise ValueError("Impostazione sconosciuta.")
         current=self.store.settings()
+        if patch.get('execution_mode',current['execution_mode']) not in ('gpu','cpu'):raise ValueError('Scegli modalità GPU oppure CPU.')
+        cpu_model=patch.get('cpu_chat_model',current['cpu_chat_model'])
+        if not isinstance(cpu_model,str) or len(cpu_model)>200 or 'cpu_chat_model' in patch and cpu_model and not self.catalog.get(cpu_model,{}).get('api'):raise ValueError('In modalità CPU scegli un provider LLM esterno.')
         if 'llm_overrides' in patch:validate_llm_presets(patch['llm_overrides'],patch.get('profile',current['profile']))
         s = merge_llm_settings(current,patch)
         if s['llm_acceleration'] not in ('standard','qwen27'):raise ValueError('Ottimizzazione LLM non valida.')
@@ -296,9 +310,21 @@ class Service:
     def save_settings(self, patch):
         settings = self.validate_settings(patch)
         with self.lock:
+            changing=settings['execution_mode']!=self.store.settings()['execution_mode']
+            if changing:
+                if not self.compute_lock.acquire(blocking=False):raise ValueError('Attendi la fine dei lavori prima di cambiare modalità GPU/CPU.')
+                try:
+                    busy=self.current_id or self.store.one("SELECT id FROM jobs WHERE status IN ('queued','running','cancelling')") or any(t.get('status')=='running' for t in self.knowledge.tasks.values())
+                    if busy or getattr(self,'execution_busy',lambda:False)():raise ValueError('Attendi la fine di tutti i lavori e delle indicizzazioni prima di cambiare modalità GPU/CPU.')
+                    self.engine.stop();self.knowledge.embeddings.close()
+                    self.store.save_settings(settings)
+                    getattr(self,'execution_release',lambda:None)()
+                finally:self.compute_lock.release()
+                self.engine.configure(self.effective_settings())
+                return self.store.settings()
             self.store.save_settings(settings)
             if not self.current_id:
-                self.engine.configure(settings)
+                self.engine.configure(self.effective_settings(settings))
         return settings
 
     def save_rag_options(self,patch):
@@ -391,7 +417,11 @@ class Service:
         if image_batch:
             from .image_batch_loras import uploaded
             attached_image_loras=uploaded(self,media)
-        settings = self.validate_settings({"think_level":body.get("think_level", self.store.settings()["think_level"])})
+        settings = self.effective_settings(self.validate_settings({"think_level":body.get("think_level", self.store.settings()["think_level"])}))
+        from .execution_mode import cpu,guard_intent,API_ERROR
+        if cpu(settings):
+            if any(body.get(k) for k in ('image_model','music','video','voice','transcribe')) or image_batch:guard_intent(settings,'create')
+            if not settings.get('chat_model'):raise ValueError(API_ERROR)
         selection = body.get('image_model','')
         if not isinstance(selection,str):raise ValueError('Selezione modello immagini non valida.')
         if selection:
@@ -498,6 +528,9 @@ class Service:
         request_history=[{'content':prompt,'media':media}]
         direct_media=voice_route(request_history,settings) or video_route(request_history,settings) or music_route(request_history,settings) or visual_route(request_history,settings) or explicit_route(request_history) in ('create','edit')
         pure=transcribe or (not direct_media and pure_transcription(prompt,[x for x in media if x['mime'].startswith('audio/')]))
+        from .execution_mode import guard_job
+        guard_job(settings)
+        if pure:guard_intent(settings,'transcribe')
         if not source and not pure and (assistant or not direct_media):
             self.engine.require_model(settings["chat_model"], "chat")
         canvas = body.get("canvas", False)
@@ -586,7 +619,9 @@ class Service:
             if cancel.is_set():raise Cancelled()
             timing=start_timing(self.store,job)
             payload = json.loads(job["payload"])
-            settings = voice_engines.normalize(DEFAULTS | payload["settings"])
+            settings = self.effective_settings(voice_engines.normalize(DEFAULTS | payload["settings"]))
+            from .execution_mode import guard_job,guard_intent
+            guard_job(settings)
             history = self.store.messages(job["chat_id"], payload["until"])
             rag_query = retrieval_query(payload['prompt'],history)
             for previous in history:
@@ -764,6 +799,7 @@ class Service:
                 stage("Comprensione della richiesta")
                 route = self.engine.route(history, settings, cancel)
             intent = route["intent"]
+            guard_intent(settings,intent)
             meta = {"intent": intent, "model": model.get("name", ""), "settings": settings, "prompt": payload["prompt"], "canvas": payload.get("canvas", False)}
             if intent=='manim' and settings.get('_manim_voice'):meta['narrated_manim']=True
             if intent == 'chat' and model.get('identity'):

@@ -307,7 +307,7 @@ class Knowledge:
             self.tasks[ident]={'status':'running','stage':'Indicizzazione in attesa','error':''}
         def work():
             try:
-                settings=self.store.settings()
+                settings=getattr(self,'execution_settings',lambda s:s)(self.store.settings())
                 with self.resource(settings,self.closed),self.index_lock:self.index(ident,settings,self.closed,lambda s:self.progress(ident,s))
                 with self.lock:self.tasks[ident].update(status='done',stage='Indice aggiornato')
             except Exception as e:
@@ -344,6 +344,7 @@ class Knowledge:
         from .rag_visual import extract
         return extract(self,source,blocks,cancel,stage)
     def index(self,ident,settings,cancel,stage,*,release=True):
+        settings=getattr(self,'execution_settings',lambda s:s)(settings)
         model_key=self.embeddings.key(settings) if settings['rag_embedding_model'] else ''
         excluded={r['path'] for r in self.store.all('SELECT path FROM project_exclusions WHERE project_id=?',(ident,))}
         with self.store.connect() as db:
@@ -411,6 +412,7 @@ class Knowledge:
             if staged:staged.close()
             temporary.unlink(missing_ok=True)
     def retrieve(self,ident,query,settings,cancel,stage,source_ids=None):
+        settings=getattr(self,'execution_settings',lambda s:s)(settings)
         with self.resource(settings,cancel),self.index_lock:
             try:return self._retrieve(ident,query,settings,cancel,stage,source_ids)
             finally:self.embeddings.close()

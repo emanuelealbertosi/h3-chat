@@ -1,5 +1,6 @@
 import {escape as esc} from './render.js';
 import {modelLabel} from './model-identity.js';
+import {cpuMode,chatModelId} from './execution-mode.js';
 
 export function initChatModels({api,getState,onChange,notify}){
   const row=document.createElement('div');row.className='chat-controls chat-model-controls';
@@ -11,8 +12,9 @@ export function initChatModels({api,getState,onChange,notify}){
 
   function render(){
     const state=getState();if(!state){select.disabled=true;return;}
-    const models=state.models.filter(model=>model.capabilities.includes('chat'));
-    const selected=pending?.patch?.chat_model??state.settings.chat_model;
+    const cpu=cpuMode(state),modelKey=cpu?'cpu_chat_model':'chat_model';
+    const models=state.models.filter(model=>model.capabilities.includes('chat')&&(!cpu||model.api));
+    const selected=pending?.patch?.[modelKey]??chatModelId(state);
     const next=JSON.stringify(models.map(model=>[model.id,modelLabel(model),!!model.api,model.ready]));
     if(next!==signature){
       signature=next;
@@ -27,7 +29,7 @@ export function initChatModels({api,getState,onChange,notify}){
     select.title=modelLabel(models.find(model=>model.id===selected));
     const model=models.find(model=>model.id===selected),settings={...state.settings,...pending?.patch};
     const gpu=settings.llm_device==='gpu'||settings.llm_device!=='cpu'&&settings.profile!=='cpu'&&['cuda','vulkan'].includes(settings.backend);
-    vision.value=settings.vision_device||'cpu';vision.disabled=!!pending||!!model?.api||!model?.vision?.enabled||!settings.vision_enabled;
+    vision.value=cpu?'cpu':settings.vision_device||'cpu';vision.disabled=cpu||!!pending||!!model?.api||!model?.vision?.enabled||!settings.vision_enabled;
     vision.querySelector('[value="gpu"]').disabled=!gpu;
     refs.value=settings.vision_max_refs??4;refs.disabled=!!pending;
     const effective=model?.api?Math.min(Number(refs.value),model.max_refs??model.vision?.max_refs??4):Number(refs.value);
@@ -52,7 +54,7 @@ export function initChatModels({api,getState,onChange,notify}){
     onChange();
     return pending.promise;
   }
-  select.onchange=()=>change({chat_model:select.value}).catch(error=>notify(error.message,true));
+  select.onchange=()=>change({[cpuMode(getState())?'cpu_chat_model':'chat_model']:select.value}).catch(error=>notify(error.message,true));
   vision.onchange=()=>change({vision_device:vision.value}).catch(error=>notify(error.message,true));
   refs.onchange=()=>{if(!refs.checkValidity()){refs.reportValidity();return;}change({vision_max_refs:Number(refs.value)}).catch(error=>{render();notify(error.message,true);});};
   return {
