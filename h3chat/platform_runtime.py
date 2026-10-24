@@ -31,6 +31,11 @@ def require_local_model(model):
         raise ValueError('Su macOS questo motore generativo locale non è ancora disponibile. Configura un servizio esterno nelle impostazioni API.')
 
 
+def guard_settings(settings):
+    if is_macos() and settings.get('_lab')=='manim':
+        raise ValueError('Manim non è ancora disponibile in questa edizione macOS. Puoi usare slide, canvas e calcolo numerico.')
+
+
 def runtime_ready(root,key):
     from .engine import runtime_executable
     from .tools_runtime import status

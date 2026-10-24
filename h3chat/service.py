@@ -533,6 +533,8 @@ class Service:
             self.engine.require_model(settings['chat_model'],'chat')
         from .narrated_manim import requested as narrated_requested
         settings['_manim_voice']=narrated_requested(prompt,settings)
+        from .platform_runtime import guard_settings as guard_platform
+        guard_platform(settings)
         if settings['_manim_voice'] and not source:self.engine.require_model(settings['chat_model'],'chat')
         if lab not in ('manim','calculate','slides','infographic') and not (lab=='auto' and settings.get('lab_auto',True) and lab_route(prompt)=='manim') and video_route([{'content':prompt}],settings):
             from .video_options import prompt_duration
@@ -638,6 +640,8 @@ class Service:
             timing=start_timing(self.store,job)
             payload = json.loads(job["payload"])
             settings = self.effective_settings(voice_engines.normalize(DEFAULTS | payload["settings"]))
+            from .platform_runtime import guard_settings as guard_platform
+            guard_platform(settings)
             from .execution_mode import guard_job,guard_intent
             guard_job(settings)
             history = self.store.messages(job["chat_id"], payload["until"])

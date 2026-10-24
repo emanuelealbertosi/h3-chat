@@ -130,7 +130,6 @@ def export_pdf(root,data,body):
             try:
                 deadline=time.monotonic()+90
                 while time.monotonic()<deadline and not complete():
-                    if process.poll() is not None:break
                     time.sleep(.15)
             finally:
                 try:os.killpg(process.pid,signal.SIGTERM)

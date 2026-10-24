@@ -93,6 +93,8 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
   const state=getState();if(!state)return;
   const value=visualControls.read(),mode=lab.value,cpu=cpuMode(state);
   for(const item of [images,videoEdit,$('#music-toggle'),$('#video-toggle'),$('#voice-toggle'),transcribe]){item.disabled=cpu;item.title=cpu?'Disabilitato in modalità CPU':'';}
+  const mac=state.platform?.system==='darwin';tools.get('manim').disabled=mac;tools.get('manim').title=mac?'Manim non è ancora disponibile su macOS.':'';
+  if(mac){transcribe.disabled=true;transcribe.title='La trascrizione locale non è ancora disponibile in questa edizione macOS.';}
   imageToggle.disabled=cpu;$('#slides-generate-images').disabled=cpu;assistant.disabled=cpu&&!chatModelId(state);videoEdit.setAttribute('aria-pressed',String(value.video&&value.video_editing==='modify'));
   auto.setAttribute('aria-pressed',String(mode==='auto'&&!value.image_model&&!value.music&&!value.video&&!value.voice&&!value.transcribe));images.setAttribute('aria-pressed',String(!!value.image_model));
   for(const [name,item] of tools)item.setAttribute('aria-pressed',String(mode===name));

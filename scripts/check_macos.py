@@ -62,9 +62,7 @@ try:
         from h3chat.access import Access
         from h3chat.workspaces import Workspaces
         http.access=Access(data);http.workspaces=Workspaces(app)
-        class Network:
-            status={}
-        http.network=Network()
+        http.network=None
         runner=threading.Thread(target=http.serve_forever,daemon=True);runner.start()
         try:
             with urllib.request.urlopen(f'http://127.0.0.1:{http.server_port}/api/health',timeout=5) as response:assert json.load(response)['app']=='h3-chat'

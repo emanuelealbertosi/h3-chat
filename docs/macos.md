@@ -24,6 +24,8 @@ Il pulsante CPU mantiene il comportamento delle altre edizioni: disabilita la ge
 
 Conversazioni, account e collegamenti restano nella cartella `data`; i pesi scaricati in `models`. Prima di aggiornare attendi la fine dei lavori, ferma il servizio e fai una copia di `data`. Sostituisci i file dell'app con quelli della nuova cartella estratta, conservando dati e modelli. Non copiare i runtime binari da Windows sul Mac. Le chiavi API protette da Windows vanno reinserite nel Portachiavi del Mac.
 
+Se trasferisci conversazioni da Windows, seleziona **CPU** o **Metal** nel Setup del Mac e ricollega i modelli ai loro nuovi percorsi: i backend CUDA/Vulkan e i percorsi Windows non sono trasferibili direttamente.
+
 ## Build e verifiche
 
 La build è eseguita su un runner macOS arm64. Python e llama.cpp sono archivi ufficiali con versione, dimensione e SHA-256 fissati in `scripts/macos-sources.json`; i wheel macOS sono installati solo da distribuzioni binarie con le versioni indicate in `scripts/macos-requirements.txt`. La build verifica avvio del servizio, API, Portachiavi, lettura documenti, RAG e PDF con i componenti effettivamente inclusi. Lo ZIP contiene il manifest SHA-256 di tutti i file e un rapporto di verifica; dati personali e modelli generativi non sono inclusi.
