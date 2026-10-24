@@ -8,12 +8,13 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
-    env:
-      TEMP: ${{ runner.temp }}\h3-tests
-      TMP: ${{ runner.temp }}\h3-tests
     steps:
       - name: Prepare canonical temporary directory
-        run: New-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null
+        run: |
+          $testTemp = Join-Path $env:RUNNER_TEMP 'h3-tests'
+          New-Item -ItemType Directory -Force -Path $testTemp | Out-Null
+          "TEMP=$testTemp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMP=$testTemp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
