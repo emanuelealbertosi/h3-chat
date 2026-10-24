@@ -48,7 +48,7 @@ def build():
     ffmpeg=next((stage/'runtime/tools/documents/imageio_ffmpeg/binaries').glob('ffmpeg-macos-*'))
     (stage/'runtime/remix/ffmpeg.exe').symlink_to(os.path.relpath(ffmpeg,stage/'runtime/remix'))
     env=os.environ|{'PLAYWRIGHT_BROWSERS_PATH':str(stage/'runtime/browser')}
-    run(['npx','--yes','--package=playwright@'+source['playwright'],'playwright','install','chromium','--no-shell'],env=env)
+    run(['npx','--yes','--package=playwright@'+source['playwright'],'playwright','install','chromium','--only-shell'],env=env)
     from h3chat.tools_runtime import mark_ready
     mark_ready(stage,'documents')
     app=stage/'H3-Chat.app/Contents';(app/'MacOS').mkdir(parents=True)

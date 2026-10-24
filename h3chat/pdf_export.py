@@ -108,7 +108,7 @@ def export_pdf(root,data,body):
     candidates=[Path(os.environ.get('PROGRAMFILES(X86)','C:/Program Files (x86)'))/'Microsoft/Edge/Application/msedge.exe',
                 Path(os.environ.get('PROGRAMFILES','C:/Program Files'))/'Microsoft/Edge/Application/msedge.exe']
     from .platform_runtime import is_macos
-    if is_macos():candidates=[p for p in (Path(root)/'runtime/browser').glob('**/Contents/MacOS/*') if p.name in ('Chromium','Google Chrome for Testing','Google Chrome')]+[Path('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),Path('/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge')]
+    if is_macos():candidates=list((Path(root)/'runtime/browser').rglob('headless_shell'))+list((Path(root)/'runtime/browser').rglob('chrome-headless-shell'))+[p for p in (Path(root)/'runtime/browser').glob('**/Contents/MacOS/*') if p.name in ('Chromium','Google Chrome for Testing','Google Chrome')]
     edge=next((p for p in candidates if p.exists()),None)
     if not edge:raise ValueError('Browser PDF non disponibile: reinstalla il pacchetto macOS.' if is_macos() else 'Per il PDF serve Microsoft Edge, normalmente incluso in Windows.')
     folder,source_file,title=export_document(root,data,body)
@@ -118,29 +118,10 @@ def export_pdf(root,data,body):
           '--user-data-dir='+str(folder/'browser-profile'),'--virtual-time-budget=2500',source_file.as_uri()]
     if is_macos():args[1:1]=['--use-mock-keychain','--password-store=basic','--disable-background-networking','--no-default-browser-check']
     if is_macos():
-        import signal,tempfile
-        def complete():
-            try:
-                with target.open('rb') as stream:
-                    if stream.read(5)!=b'%PDF-':return False
-                    stream.seek(max(0,target.stat().st_size-256));return b'%%EOF' in stream.read()
-            except OSError:return False
-        with tempfile.TemporaryFile() as errors:
-            process=subprocess.Popen(args,stdout=subprocess.DEVNULL,stderr=errors,start_new_session=True)
-            try:
-                deadline=time.monotonic()+90
-                while time.monotonic()<deadline and not complete():
-                    time.sleep(.15)
-            finally:
-                try:os.killpg(process.pid,signal.SIGTERM)
-                except ProcessLookupError:pass
-                try:process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    try:os.killpg(process.pid,signal.SIGKILL)
-                    except ProcessLookupError:pass
-                    process.wait(timeout=5)
-            errors.seek(0,2);errors.seek(max(0,errors.tell()-1600));error=errors.read().decode('utf-8','replace')
-        if not complete():raise RuntimeError('Esportazione PDF Mac non riuscita. '+error[-800:])
+        from .platform_runtime import python_executable
+        result=subprocess.run([str(python_executable(root)),'-X','utf8',str(Path(root)/'native/pdf-worker.py'),str(source_file),str(target),str(edge)],capture_output=True,timeout=90)
+        if result.returncode or not target.is_file() or target.read_bytes()[:5]!=b'%PDF-':
+            raise RuntimeError('Esportazione PDF Mac non riuscita. '+result.stderr.decode('utf-8','replace')[-1200:])
         return {'url':'/exports/'+key+'/document.pdf','name':title+'.pdf'}
     result=subprocess.run(args,capture_output=True,timeout=90,creationflags=CREATE_NO_WINDOW)
     # Windows Edge may return from its launcher while the browser child is still printing.
