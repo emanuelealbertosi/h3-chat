@@ -20,3 +20,10 @@ Per sviluppare servono Node.js 22+, Python 3.13 e MSVC Build Tools x64. Dalla ca
 Includere nel commit il worker compilato e i due file di `distribution/` quando cambiano i rispettivi sorgenti. I fingerprint normalizzano CRLF/LF per funzionare anche con checkout Git Windows. Il bundle non contiene dati, pesi o percorsi personali.
 
 Per un pacchetto ZIP completo eseguire anche `scripts/install_cpu.py`, `scripts/ci-install-music.py` (richiede GitHub CLI), `scripts/check_native.py` e `scripts/package.py`. La workflow di release verifica prima l'installazione API senza motori GPU e poi quella completa, ripete build e test su Windows, crea un archivio con manifest di tutti i file e prepara una release draft da verificare prima della pubblicazione. Il numero di versione viene letto da `h3chat/__init__.py`.
+
+
+## macOS Apple Silicon
+
+La workflow `macos.yml` costruisce su `macos-15` arm64 una distribuzione portatile con Python, llama.cpp CPU/Metal, strumenti documenti e browser PDF inclusi. `scripts/build_macos.py` usa gli archivi ufficiali fissati in `scripts/macos-sources.json`; `scripts/check_macos.py` verifica i componenti effettivamente distribuiti e l'eseguibile `.app` dopo una rilocazione con spazi nel percorso, sempre con dati temporanei. Il pacchetto esclude cache, profili utente, database, cartelle data/models/work e dipendenze Windows. Modelli GGUF reali non vengono scaricati né caricati dal test di avvio nativo.
+
+La workflow di release chiama anche la build Mac e allega il relativo archivio, checksum e rapporto al draft soltanto se entrambe le piattaforme passano. La pubblicazione del draft richiede la verifica dei rapporti di entrambi i pacchetti. Le release già pubblicate non vengono sovrascritte.
