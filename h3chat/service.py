@@ -351,8 +351,8 @@ class Service:
         finally: path.unlink(missing_ok=True)
 
     def validate_media(self, media, *, canvas=False):
-        if not isinstance(media, list) or len(media) > (64 if canvas else 12):
-            raise ValueError("Per i video allega fino a nove immagini e tre tracce audio.")
+        if not isinstance(media, list) or len(media) > (128 if canvas else 12):
+            raise ValueError('Il canvas può contenere fino a 128 risorse.' if canvas else 'Per i video allega fino a nove immagini e tre tracce audio.')
         resolved = []
         for item in media:
             image_id = item.get("id", "") if isinstance(item, dict) else ""

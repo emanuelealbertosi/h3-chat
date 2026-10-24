@@ -30,7 +30,7 @@ con temi, colonne e impaginazione automatica. Le presentazioni già salvate senz
 un motore esplicito continuano a usare questo percorso. La loro modifica tramite
 prompt conserva il motore precedente.
 
-Sono disponibili **1–50 slide** (numero fisso iniziale 8) e formati 16:9
+Sono disponibili **1–100 slide** (numero fisso iniziale 8) e formati 16:9
 (default), 9:16, 4:3, 16:10 e 1:1. In **Slide → Impostazioni → Numero di slide**
 puoi scegliere **Numero fisso** oppure **Automatico · dai contenuti**. In automatico
 il modello sceglie il numero durante la scaletta, sulla base di richiesta, fonti,
@@ -179,3 +179,9 @@ diventare immagini. Non tutti gli effetti CSS hanno un equivalente PPTX.
 
 Funziona con LLM locali o provider API. H3-Slides non è richiesto. Il componente
 Documenti è incluso nell'installazione; per il PDF serve Microsoft Edge.
+
+### Esportazione
+
+PowerPoint conserva testi e grafica modificabili, ma non esporta le animazioni CSS come animazioni native di PowerPoint. Anche HTML e PDF sono copie statiche. Per il movimento va usata la riproduzione o l’esportazione video prevista dalla modalità.
+
+Gli export HTML e PDF eliminano le proprietà grafiche predefinite duplicate, conservando lo stile calcolato di ciascun elemento. Il limite rimane 64 MiB di contenuto HTML, incluse le immagini incorporate.

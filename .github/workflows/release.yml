@@ -8,7 +8,12 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    env:
+      TEMP: ${{ runner.temp }}\h3-tests
+      TMP: ${{ runner.temp }}\h3-tests
     steps:
+      - name: Prepare canonical temporary directory
+        run: New-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:

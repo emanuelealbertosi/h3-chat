@@ -18,6 +18,9 @@ def identify(path, name):
     mime = mimetypes.guess_type(name)[0] or 'application/octet-stream'
     mime = {'.mkv':'video/x-matroska', '.webm':'video/webm', '.mov':'video/quicktime',
             '.avi':'video/x-msvideo', '.m4a':'audio/mp4', '.aac':'audio/aac',
+            '.docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            '.pptx':'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            '.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             '.glb':'model/gltf-binary', '.md':'text/markdown'}.get(suffix, mime)
     with Path(path).open('rb') as stream: head = stream.read(512)
     signatures = [(b'\x89PNG\r\n\x1a\n','.png','image/png'), (b'\xff\xd8\xff','.jpg','image/jpeg'),

@@ -21,17 +21,17 @@ const send=async prompt=>{
 try{
  await page.route('**/api/chats/*/messages',route=>route.request().method()==='POST'?route.fulfill({json:{job_id:'synthetic-only',intent:'slides',canvas:true}}):route.continue());
  await page.goto(fixture.url);await page.click(`[data-chat="${fixture.chat}"]`);await page.click('#prompt-slides');await openSlides();
- assert.equal(await page.inputValue('#slides-count'),'8');assert.equal(await page.getAttribute('#slides-count','max'),'50');
- await page.fill('#slides-count','49');await page.getByRole('button',{name:'Più slide',exact:true}).click();
- assert.equal(await page.inputValue('#slides-count'),'50');await page.getByRole('button',{name:'Più slide',exact:true}).click();assert.equal(await page.inputValue('#slides-count'),'50');
- await page.getByRole('button',{name:'Meno slide',exact:true}).click();assert.equal(await page.inputValue('#slides-count'),'49');
- await page.fill('#slides-count','50');await closeSettings();assert.match(await page.locator('[data-mode-settings="slides-options"]').locator('..').textContent(),/50 slide/);
- assert.equal((await send('Crea una presentazione')).slides.count,50);
+ assert.equal(await page.inputValue('#slides-count'),'8');assert.equal(await page.getAttribute('#slides-count','max'),'100');
+ await page.fill('#slides-count','99');await page.getByRole('button',{name:'Più slide',exact:true}).click();
+ assert.equal(await page.inputValue('#slides-count'),'100');await page.getByRole('button',{name:'Più slide',exact:true}).click();assert.equal(await page.inputValue('#slides-count'),'100');
+ await page.getByRole('button',{name:'Meno slide',exact:true}).click();assert.equal(await page.inputValue('#slides-count'),'99');
+ await page.fill('#slides-count','100');await closeSettings();assert.match(await page.locator('[data-mode-settings="slides-options"]').locator('..').textContent(),/100 slide/);
+ assert.equal((await send('Crea una presentazione')).slides.count,100);
  await openSlides();await countChoices().getByRole('button',{name:'Automatico · dai contenuti',exact:true}).click();
  assert.equal(await page.locator('#slides-count').isVisible(),false);assert.equal(await page.locator('#slides-count').isDisabled(),true);
- await closeSettings();assert.match(await page.locator('[data-mode-settings="slides-options"]').locator('..').textContent(),/Numero automatico · max 50/);
+ await closeSettings();assert.match(await page.locator('[data-mode-settings="slides-options"]').locator('..').textContent(),/Numero automatico · max 100/);
  assert.equal((await send('Crea una presentazione dai contenuti allegati')).slides.count,'auto');
- await openSlides();await countChoices().getByRole('button',{name:'Numero fisso',exact:true}).click();assert.equal(await page.inputValue('#slides-count'),'50');await closeSettings();
+ await openSlides();await countChoices().getByRole('button',{name:'Numero fisso',exact:true}).click();assert.equal(await page.inputValue('#slides-count'),'100');await closeSettings();
  let draftCount='auto';
  await page.route('**/api/chats/*/request-draft/2',route=>route.fulfill({json:{prompt:'Presentazione recuperata',media:[],lab:'slides',loras:[],controls:{},slides:{count:draftCount,format:'16:9',engine:'llm',design:'playful',detail:'concise',composition:'standard',vision_scope:'relevant'}}}));
  await page.locator('#msg-2').getByRole('button',{name:'Ricarica richiesta',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#slides-count-mode').value==='auto');
@@ -39,12 +39,12 @@ try{
  assert.equal(await page.locator('#slides-count').isVisible(),false);await closeSettings();assert.equal((await send('Presentazione recuperata')).slides.count,'auto');
  draftCount=42;await page.locator('#msg-2').getByRole('button',{name:'Ricarica richiesta',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#slides-count-mode').value==='fixed'&&document.querySelector('#slides-count').value==='42');
  await openSlides();assert.equal(await page.locator('#slides-count').isVisible(),true);await closeSettings();assert.equal((await send('Presentazione recuperata')).slides.count,42);
- const deck={version:1,format:'16:9',title:'Cinquanta slide',references:[],active:0,pages:Array.from({length:50},(_,i)=>({title:`Slide ${i+1}`,status:'ready',nodes:[{id:'heading',parent:'root',kind:'heading',text:`Pagina ${i+1}`,asset_id:'',language:'text',style:{}}],notes:`Note ${i+1}`,sources:[]}))};
+ const deck={version:1,format:'16:9',title:'Cento slide',references:[],active:0,pages:Array.from({length:100},(_,i)=>({title:`Slide ${i+1}`,status:'ready',nodes:[{id:'heading',parent:'root',kind:'heading',text:`Pagina ${i+1}`,asset_id:'',language:'text',style:{}}],notes:`Note ${i+1}`,sources:[]}))};
  await page.evaluate(async({chat,deck})=>{const{token}=await(await fetch('/api/state')).json();const response=await fetch('/api/canvas/'+chat,{method:'PUT',headers:{'Content-Type':'application/json','X-H3-Token':token},body:JSON.stringify({title:deck.title,content:'```h3-slides\n'+JSON.stringify(deck)+'\n```',media:[]})});if(!response.ok)throw Error(await response.text());},{chat:fixture.chat,deck});
  await page.reload();await page.click(`[data-chat="${fixture.chat}"]`);await page.click('#canvas-toggle');await page.waitForSelector('.h3-slide-page');
- assert.equal(await page.locator('.slides-navigation select option').count(),50);await page.selectOption('.slides-navigation select','49');assert.match(await page.locator('.h3-slide-page').innerText(),/Pagina 50/);
+ assert.equal(await page.locator('.slides-navigation select option').count(),100);await page.selectOption('.slides-navigation select','99');assert.match(await page.locator('.h3-slide-page').innerText(),/Pagina 100/);
  await page.click('#canvas-close');await page.click('#prompt-slides');await openSlides();await countChoices().getByRole('button',{name:'Automatico · dai contenuti',exact:true}).click();
  await page.setViewportSize({width:390,height:844});await mkdir('work/slides-count-qa',{recursive:true});await page.screenshot({path:'work/slides-count-qa/mobile-auto.png',fullPage:true});
  assert.equal(await page.locator('#prompt-mode-settings').evaluate(e=>e.scrollWidth>e.clientWidth+2),false);
- assert.deepEqual(errors,[]);console.log('Slides count: max 50, automatic send, fixed/auto draft restoration, 50-page canvas and mobile passed. No model inference.');
+ assert.deepEqual(errors,[]);console.log('Slides count: max 100, automatic send, fixed/auto draft restoration, 100-page canvas and mobile passed. No model inference.');
 }catch(error){console.error(diagnostics);throw error;}finally{await browser.close();child.kill();}

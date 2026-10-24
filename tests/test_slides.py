@@ -41,7 +41,7 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(options('Crea 12 slide in 4:3'),{'count':12,'format':'4:3','engine':'llm'})
         self.assertEqual(options('Crea 5 slide in 9 : 16',{'format':'16:9'}),{'count':5,'format':'9:16','engine':'llm'})
         self.assertEqual(options('',{'format':'9:16'})['format'],'9:16')
-        for count in (0,51,True,'8'):
+        for count in (0,101,True,'8'):
             with self.assertRaises(ValueError):options('',{'count':count})
 
     def test_incremental_text_and_final_validation(self):
@@ -143,12 +143,12 @@ class GenerationTests(unittest.TestCase):
             kw['on_text'](draft)
             saved=self.app.store.canvas_history.get(self.job['chat_id'])
             self.assertIn('Progressivo',saved['content']);self.progress+=1
-            if self.fail:raise RuntimeError('Synthetic interruption')
+            if self.fail_generation:raise RuntimeError('Synthetic interruption')
             value={'nodes':[node(text='Entrate 1200 dal documento')],'notes':'Fonte fornita','sources':['D1'] if self.documents else []}
         return json.dumps(value),'stop'
 
     def execute(self,job,*,fail=False,documents=False):
-        self.calls=[];self.job=job;self.progress=0;self.fail=fail;self.documents=documents
+        self.calls=[];self.job=job;self.progress=0;self.fail_generation=fail;self.documents=documents
         with patch.object(self.app.engine,'require_model',return_value=self.model),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama') as start,patch.object(self.app.engine,'completion',side_effect=self.completion):
             self.app.execute_job(job,self.cancel)
         self.assertEqual(start.call_count,1)
@@ -183,7 +183,7 @@ class GenerationTests(unittest.TestCase):
         def complete(messages,settings,cancel,**kw):
             seen.append((settings.copy(),'slides' in kw['schema']['properties']))
             return original(messages,settings,cancel,**kw)
-        self.calls=[];self.job=job;self.progress=0;self.fail=False;self.documents=False
+        self.calls=[];self.job=job;self.progress=0;self.fail_generation=False;self.documents=False
         with patch.object(self.app.engine,'require_model',return_value=self.model),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete):
             self.app.execute_job(job,self.cancel)
         planning=next(settings for settings,is_plan in seen if is_plan)
@@ -194,7 +194,7 @@ class GenerationTests(unittest.TestCase):
     def test_truncated_outline_retries_once_with_more_output_within_user_budget(self):
         job=self.enqueue();payload=json.loads(job['payload']);payload['settings'].update(max_tokens=10000,context=30000)
         job=job|{'payload':json.dumps(payload)};seen=[]
-        self.calls=[];self.job=job;self.progress=0;self.fail=False;self.documents=False
+        self.calls=[];self.job=job;self.progress=0;self.fail_generation=False;self.documents=False
         def complete(messages,settings,cancel,**kw):
             if 'slides' in kw['schema']['properties']:
                 seen.append(settings['max_tokens'])
@@ -209,7 +209,7 @@ class GenerationTests(unittest.TestCase):
         self.assertEqual(answer['meta']['slide_outline_truncated']['budget'],seen[0])
 
     def test_generation_recovers_invalid_tree_and_streams_before_node_id(self):
-        job=self.enqueue();page_calls=0;self.calls=[];self.job=job;self.progress=0;self.fail=False;self.documents=False
+        job=self.enqueue();page_calls=0;self.calls=[];self.job=job;self.progress=0;self.fail_generation=False;self.documents=False
         def complete(messages,settings,cancel,**kw):
             nonlocal page_calls
             if 'slides' in kw['schema']['properties']:return self.completion(messages,settings,cancel,**kw)
@@ -229,7 +229,7 @@ class GenerationTests(unittest.TestCase):
         validate_content(answer['meta']['artifact']['content'],[])
 
     def test_broken_tree_retry_is_bounded_and_retains_preview(self):
-        job=self.enqueue();self.calls=[];self.job=job;self.progress=0;self.fail=False;self.documents=False;page_calls=0
+        job=self.enqueue();self.calls=[];self.job=job;self.progress=0;self.fail_generation=False;self.documents=False;page_calls=0
         def complete(messages,settings,cancel,**kw):
             nonlocal page_calls
             if 'slides' in kw['schema']['properties']:return self.completion(messages,settings,cancel,**kw)
@@ -275,7 +275,7 @@ class GenerationTests(unittest.TestCase):
         for i in range(3):
             stream=io.BytesIO();Image.new('RGB',(100,100),(i*80,10,20)).save(stream,'PNG')
             media.append(self.app.upload({'name':f'image-{i}.png','data':base64.b64encode(stream.getvalue()).decode()}))
-        job=self.enqueue(media=media);self.calls=[];self.job=job;self.progress=0;self.fail=False;self.documents=False
+        job=self.enqueue(media=media);self.calls=[];self.job=job;self.progress=0;self.fail_generation=False;self.documents=False
         captions=[]
         def complete(messages,settings,cancel,**kw):
             if 'descriptions' in kw['schema']['properties']:

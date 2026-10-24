@@ -17,6 +17,7 @@ VENDOR = ROOT/'runtime/vision/core/comfy/ldm/minimax/model.py'
 
 
 def native_forward():
+    if not VENDOR.is_file():raise unittest.SkipTest('Optional local video runtime is not installed.')
     tree = ast.parse(VENDOR.read_text(encoding='utf-8'))
     model = next(node for node in tree.body if isinstance(node, ast.ClassDef)
                  and node.name == 'MiniMaxH3Model')

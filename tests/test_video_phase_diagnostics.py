@@ -19,6 +19,7 @@ ENGINE = ROOT/'runtime/veda/60bfae688897dc41bc8685ca9f3130d7ed8f3b0c/veda_comfy/
 
 
 def native_function(path, class_name, name, namespace=None):
+    if not path.is_file():raise unittest.SkipTest('Optional local video runtime is not installed.')
     tree = ast.parse(path.read_text(encoding='utf-8'))
     cls = next(x for x in tree.body if isinstance(x, ast.ClassDef) and x.name == class_name)
     definition = next(x for x in cls.body if isinstance(x, ast.FunctionDef) and x.name == name)
@@ -61,7 +62,7 @@ class Block:
 
 
 class EngineStub:
-    attention = native_function(ENGINE, 'VedaEngine', 'attention')[1]
+    attention = native_function(ENGINE, 'VedaEngine', 'attention')[1] if ENGINE.is_file() else lambda *args: None
     def __init__(self): self.chunking = {'heads_per_chunk': 1}; self.timer = lambda _: None
     def _weights(self): return None
     def _chunk_bytes(self): return 128

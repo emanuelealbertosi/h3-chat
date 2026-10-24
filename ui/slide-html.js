@@ -4,6 +4,7 @@ import {editHtmlSlide} from './slide-html-editing.js';
 import {contentOverflows,fitMediaBounds} from './slide-html-bounds.js';
 import {readableText} from './slide-html-contrast.js';
 import {portraitLayout} from './infographic-layout.js';
+import {initialExportStyles,applyExportStyles} from './export-style.js';
 import '../static/infographic-motion.js';
 
 const heights={'16:9':720,'9:16':1280*16/9,'4:3':960,'16:10':800,'1:1':1280};
@@ -83,25 +84,24 @@ export function htmlOverflow(frame){
 }
 
 export function flattenHtml(frame){
-  const {doc}=sessions.get(frame),body=doc.body,clone=body.cloneNode(true);
+  const {doc}=sessions.get(frame),body=doc.body,initial=initialExportStyles(doc),clone=body.cloneNode(true);
   const sources=[body,...body.querySelectorAll('*')],targets=[clone,...clone.querySelectorAll('*')];
   for(let i=0;i<sources.length;i++){
     const css=doc.defaultView.getComputedStyle(sources[i]);targets[i].removeAttribute('class');
-    for(const property of css){const value=css.getPropertyValue(property);if(!/url\(/i.test(value))targets[i].style.setProperty(property,value);}
-    if(css.position==='fixed')targets[i].style.position='absolute';
-    targets[i].style.setProperty('animation','none');targets[i].style.setProperty('transition','none');
+    applyExportStyles(targets[i],css,initial);
+    if(css.position==='fixed')targets[i].setAttribute('style',targets[i].getAttribute('style')+';position:absolute');
     for(const pseudo of ['::before','::after']){
       const decoration=doc.defaultView.getComputedStyle(sources[i],pseudo);
       if(!decoration.content||['none','normal'].includes(decoration.content))continue;
       const span=document.createElement('span');
       try{span.textContent=JSON.parse(decoration.content);}catch{span.textContent='';}
-      for(const property of decoration){const value=decoration.getPropertyValue(property);if(!/url\(/i.test(value)&&property!=='content')span.style.setProperty(property,value);}
+      applyExportStyles(span,decoration,initial,{pseudo:true});
       if(pseudo==='::before')targets[i].prepend(span);else targets[i].append(span);
     }
   }
   clone.querySelectorAll('[data-h3-video]').forEach(n=>{if(n.poster){const image=document.createElement('img');image.src=n.poster;image.style.cssText=n.style.cssText;n.replaceWith(image);}else n.remove();});
   clone.querySelectorAll('style,script').forEach(n=>n.remove());
-  const content=document.createElement('div');content.style.cssText=clone.style.cssText;content.innerHTML=clone.innerHTML;
+  const content=document.createElement('div');content.setAttribute('style',clone.getAttribute('style'));content.innerHTML=clone.innerHTML;
   frame.replaceChildren(content);sessions.delete(frame);
 }
 

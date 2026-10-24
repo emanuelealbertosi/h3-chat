@@ -14,6 +14,7 @@ def module(name,file):
     result=importlib.util.module_from_spec(spec);spec.loader.exec_module(result);return result
 
 
+@unittest.skipUnless((ROOT/'runtime/remix/ffmpeg.exe').is_file(),'Optional FFmpeg media runtime is not installed.')
 class ExtensionWorkerTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.folder=Path(self.tmp.name)

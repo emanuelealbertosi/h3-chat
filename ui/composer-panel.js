@@ -55,7 +55,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  pills($('#video-editing'),'Regia');
  slides.classList.add('prompt-slide-options');
  const countMode=$('#slides-count-mode');pills(countMode,'Numero di slide');
- const count=$('#slides-count'),countLabel=count.closest('label');countLabel.classList.add('prompt-count');const minus=button('−'),plus=button('＋');minus.ariaLabel='Meno slide';plus.ariaLabel='Più slide';count.before(minus);count.after(plus);for(const [item,delta] of [[minus,-1],[plus,1]])item.onclick=()=>{count.value=Math.max(1,Math.min(50,(Number(count.value)||8)+delta));count.dispatchEvent(new Event('change',{bubbles:true}));render();};
+ const count=$('#slides-count'),countLabel=count.closest('label');countLabel.classList.add('prompt-count');const minus=button('−'),plus=button('＋');minus.ariaLabel='Meno slide';plus.ariaLabel='Più slide';count.before(minus);count.after(plus);for(const [item,delta] of [[minus,-1],[plus,1]])item.onclick=()=>{count.value=Math.max(1,Math.min(100,(Number(count.value)||8)+delta));count.dispatchEvent(new Event('change',{bubbles:true}));render();};
  const slideTechnical=field('Presentazioni · opzioni tecniche');slides.append(slideTechnical);
  for(const id of ['slides-engine','slides-vision'])slideTechnical.append($('#'+id).closest('label'));
  for(const [id,title] of [['slides-format','Formato'],['slides-design','Stile'],['slides-detail','Contenuto'],['slides-composition','Composizione'],['slides-background','Sfondo'],['slides-palette','Palette']])pills($('#'+id),title);

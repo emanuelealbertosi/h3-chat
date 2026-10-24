@@ -424,7 +424,7 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     outline=json.loads(raw)
     if not isinstance(outline,dict) or not isinstance(outline.get('title'),str) or not isinstance(outline.get('slides'),list): raise ValueError('Scaletta slide non valida.')
     actual_count=len(outline['slides'])
-    if not min_count<=actual_count<=max_count:raise ValueError('Scaletta slide non valida: il numero deve rispettare la richiesta e il limite di 50.')
+    if not min_count<=actual_count<=max_count:raise ValueError('Scaletta slide non valida: il numero deve rispettare la richiesta e il limite di 100.')
     for row in outline['slides']:
         if not isinstance(row,dict) or any(not isinstance(row.get(k),str) or len(row[k])>1500 for k in ('title','purpose')): raise ValueError('Scaletta slide non valida.')
     opts=opts|{'count':actual_count}

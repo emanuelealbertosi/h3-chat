@@ -24,7 +24,7 @@ def animation_history(history):
         if content.startswith('```h3-slides\n'):
             try:
                 deck=json.loads(content[13:-4]);facts=['Presentazione: '+str(deck.get('title',''))]
-                for page in deck.get('pages',[])[:50]:
+                for page in deck.get('pages',[])[:100]:
                     parser=SlideText();parser.feed(page.get('html',''))
                     nodes=[str(n.get('text','')) for n in page.get('nodes',[]) if n.get('text')]
                     facts.append(str(page.get('title',''))+'\n'+' '.join(parser.parts+nodes)+'\n'+str(page.get('notes','')))
@@ -43,7 +43,7 @@ def artifact_summary(content):
             return json.dumps({'title':deck.get('title'), 'engine':deck.get('engine'),
                 'design':deck.get('design'), 'detail':deck.get('detail'),
                 'visual_direction':deck.get('visual_direction','')[:800],
-                'pages':[{'title':p.get('title'), 'purpose':p.get('purpose','')[:250]} for p in deck.get('pages',[])[:50]]},ensure_ascii=False)
+                'pages':[{'title':p.get('title'), 'purpose':p.get('purpose','')[:250]} for p in deck.get('pages',[])[:100]]},ensure_ascii=False)
         except (ValueError,TypeError,AttributeError):pass
     return content[:1200]
 

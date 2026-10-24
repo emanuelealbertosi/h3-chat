@@ -7,6 +7,7 @@ import test_video_import as fixture
 from h3chat.video_edit import describe,request
 
 
+@unittest.skipUnless((Path(__file__).resolve().parents[1]/'runtime/remix/ffmpeg.exe').is_file(),'Optional FFmpeg media runtime is not installed.')
 class OriginalAudioLipSyncTests(unittest.TestCase):
     setUp=fixture.ExternalVideoTests.setUp
     tearDown=fixture.ExternalVideoTests.tearDown

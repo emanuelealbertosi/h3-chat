@@ -1,8 +1,8 @@
 """Requested slide counts; automatic length is resolved by the source-aware outline."""
 import re
 
-MAX_SLIDES = 50
-MAX_DECK_CHARACTERS = 4_600_000
+MAX_SLIDES = 100
+MAX_DECK_CHARACTERS = 9_200_000
 _SLIDES = r'(?:slides?|diapositiv[ae])'
 
 
@@ -37,7 +37,7 @@ def outline_bounds(prompt,count):
     for match in re.finditer(r'\b(?:massimo|max\.?|fino\s+a|non\s+pi[uù]\s+di)\s+(\d+)\s*'+_SLIDES+r'\b',prompt,re.I):upper=min(upper,int(match[1]))
     for match in re.finditer(r'\b(?:minimo|min\.?|almeno)\s+(\d+)\s*'+_SLIDES+r'\b',prompt,re.I):lower=max(lower,int(match[1]))
     for match in re.finditer(r'\b(?:da|tra|fra)\s+(\d+)\s+(?:a|e)\s+(\d+)\s*'+_SLIDES+r'\b',prompt,re.I):lower=max(lower,int(match[1]));upper=min(upper,int(match[2]))
-    if not 1<=lower<=upper<=MAX_SLIDES:raise ValueError('Intervallo automatico delle slide non valido: scegli limiti compatibili da 1 a 50.')
+    if not 1<=lower<=upper<=MAX_SLIDES:raise ValueError('Intervallo automatico delle slide non valido: scegli limiti compatibili da 1 a 100.')
     return lower,upper
 
 

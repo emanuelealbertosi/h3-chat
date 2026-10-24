@@ -11,9 +11,9 @@ import {slideProgress} from './slide-generation-state.js';
 export const slideFormats={'16:9':720,'9:16':1280*16/9,'4:3':960,'16:10':800,'1:1':1280};
 export function readDeck(content){
   if(!content.startsWith('```h3-slides\n'))return null;
-  if(content.length>4600000||!content.endsWith('\n```'))throw Error('Sorgente slide incompleto o troppo grande.');
+  if(content.length>9200000||!content.endsWith('\n```'))throw Error('Sorgente slide incompleto o troppo grande.');
   const deck=JSON.parse(content.slice(13,-4));
-  if(deck.version!==1||!Object.hasOwn(slideFormats,deck.format)||!Array.isArray(deck.pages)||!deck.pages.length||deck.pages.length>50)throw Error('Presentazione non valida.');
+  if(deck.version!==1||!Object.hasOwn(slideFormats,deck.format)||!Array.isArray(deck.pages)||!deck.pages.length||deck.pages.length>(deck.infographic?30:100))throw Error('Presentazione non valida.');
   if(deck.title!==undefined&&(typeof deck.title!=='string'||deck.title.length>150))throw Error('Titolo presentazione non valido.');
   deck.title||='Presentazione';deck.references||=[];
   if(!['llm','deterministic'].includes(deck.engine||'deterministic'))throw Error('Motore slide non valido.');
