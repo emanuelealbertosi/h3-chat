@@ -1,5 +1,6 @@
 import {openImageZoom} from './image-zoom.js';
 import {appendCreationDetails} from './creation-details.js';
+import {appendBackgroundGrid} from './background-grid.js';
 
 const selections=new Map();
 const viewers=new Set();
@@ -10,6 +11,7 @@ function select(key,index){
 
 export function appendImageBatch(target,media,options={}){
   if(!media?.length||!media.every(m=>m.batch_id&&m.mime?.startsWith('image/'))||new Set(media.map(m=>m.batch_id)).size!==1)return false;
+  if(media.every(m=>m.slide_background)){appendBackgroundGrid(target,[...media].sort((a,b)=>a.batch_index-b.batch_index));return true;}
   const images=[...media].sort((a,b)=>a.batch_index-b.batch_index),key=images[0].batch_id;
   const host=document.createElement('figure');host.className='image-batch image-output';host.dataset.batchId=key;
   const main=document.createElement('button');main.type='button';main.className='image-zoom-trigger';

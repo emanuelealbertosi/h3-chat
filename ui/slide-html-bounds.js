@@ -1,8 +1,10 @@
 // Repair intrinsic sizing and clipped SVG coordinates without selecting a new layout.
 export function contentOverflows(doc,height){
+ const content=doc.querySelector('[data-h3-background-content]'),bounds=content?.getBoundingClientRect();
  return [...doc.body.querySelectorAll('*')].some(element=>{
   if(element.closest('style,[data-h3-editor],[data-h3-trusted]')||element.closest('svg')&&element.tagName.toLowerCase()!=='svg')return false;
-  const box=element.getBoundingClientRect();return box.right>1282||box.bottom>height+2||box.left< -2||box.top< -2;
+  if(!element.getClientRects().length)return false;
+  const box=element.getBoundingClientRect();return bounds?box.right>bounds.right+2||box.bottom>bounds.bottom+2||box.left<bounds.left-2||box.top<bounds.top-2:box.right>1282||box.bottom>height+2||box.left< -2||box.top< -2;
  });
 }
 
@@ -43,6 +45,7 @@ export function fitMediaBounds(doc,height,wholeImages=false){
  // Do not alter correctly fitted free HTML, including deliberate flex alignment.
  if(contentOverflows(doc,height)){relax();relax();}
  for(const element of doc.body.querySelectorAll('img,svg')){
+  if(element.closest('[data-h3-trusted]'))continue;
   const parent=element.parentElement;if(!parent)continue;
   // Preserve complete source figures by default. Explicit image-fit choices
   // may fill the box with a proportional crop, also after saving and reloading.

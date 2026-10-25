@@ -1,6 +1,7 @@
 """Isolated HTML frames and embedded authorized assets for offline rendering."""
 import base64
 import html
+import json
 import re
 from html.parser import HTMLParser
 from pathlib import Path
@@ -77,6 +78,22 @@ def document(root,data,deck,media):
         video_posters[clip['asset_id']]='<img data-h3-video="'+html.escape(clip['asset_id'],quote=True)+'" data-h3-trusted style="display:block;width:100%;height:100%;object-fit:'+clip['fit']+'" src="data:image/jpeg;base64,'+base64.b64encode(poster.read_bytes()).decode()+'">'
     for i,page in enumerate(deck['pages']):
         cleaner=Clean(data,media,video_posters);cleaner.feed(source(page.get('html','')))
-        inner='<!doctype html><html lang="it"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="'+html.escape(csp,quote=True)+'"><style>html,body{margin:0;width:'+str(width)+'px;height:'+str(height)+'px;overflow:hidden}*,*:before,*:after{box-sizing:border-box;animation:none!important;transition:none!important}'+fonts+math_css+'</style></head><body>'+''.join(cleaner.out)+backdrop+'</body></html>'
+        specification=''
+        if deck.get('background_style'):
+            from .slide_background_style import validate_deck
+            validate_deck(deck,media)
+            static=[]
+            for item in media:
+                if item['id'] not in deck['background_style']['asset_ids']:continue
+                record={k:item[k] for k in ('id','path','mime','slide_background') if k in item}
+                if item['id']==page.get('background_asset_id'):
+                    path=safe_join(Path(data),item['path'])
+                    if item.get('mime') not in ('image/png','image/jpeg','image/webp') or not path.is_file() or path.stat().st_size>16*1024**2:raise ValueError('Sfondo statico non disponibile o troppo grande.')
+                    record['offline_background_data']='data:'+item['mime']+';base64,'+base64.b64encode(path.read_bytes()).decode()
+                static.append(record)
+            assignments=[{'background_asset_id':p.get('background_asset_id')} for p in deck['pages']]
+            spec={'deck':{k:deck[k] for k in ('format','background_style','background','background_color','palette','text_tone','theme','design') if k in deck}|{'pages':assignments},'page':{'background_asset_id':page.get('background_asset_id')},'media':static}
+            specification='<div hidden data-h3-trusted data-h3-background-spec>'+html.escape(json.dumps(spec,ensure_ascii=False))+'</div>'
+        inner='<!doctype html><html lang="it"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="'+html.escape(csp,quote=True)+'"><style>html,body{margin:0;width:'+str(width)+'px;height:'+str(height)+'px;overflow:hidden}*,*:before,*:after{box-sizing:border-box;animation:none!important;transition:none!important}'+fonts+math_css+'</style></head><body>'+''.join(cleaner.out)+backdrop+specification+'</body></html>'
         frames.append('<iframe sandbox="allow-same-origin" data-h3-scene="'+str(i)+'" style="position:absolute;inset:0;width:100%;height:100%;border:0" srcdoc="'+html.escape(inner,quote=True)+'"></iframe>')
     return '<!doctype html><html style="background:'+background+'"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; frame-src \'self\'; style-src \'unsafe-inline\'; img-src data:; font-src data:; script-src \'none\'; connect-src \'none\'"></head><body style="margin:0;width:'+str(width)+'px;height:'+str(height)+'px;overflow:hidden;clip-path:inset(0 round '+str(radius)+'px);background:'+background+'">'+''.join(frames)+'</body></html>'

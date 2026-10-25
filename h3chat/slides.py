@@ -94,7 +94,7 @@ def edit_options(prompt,content):
     if extra:count+=1 if extra[1].lower() in ('un','una') else int(extra[1])
     # An addition specifies an increment, not the new total.
     return options(prompt[:extra.start()]+prompt[extra.end():] if extra else prompt,
-                   {'count':count,'format':deck['format'],'engine':deck.get('engine','deterministic')}|{k:deck[k] for k in ('theme','typography','design','detail','composition','engine','vision_scope','background','background_color','palette','text_tone','duration_minutes','llm_timeout') if k in deck})
+                   {'count':count,'format':deck['format'],'engine':deck.get('engine','deterministic')}|{k:deck[k] for k in ('theme','typography','design','detail','composition','engine','vision_scope','background','background_color','palette','text_tone','duration_minutes','llm_timeout','background_style') if k in deck})
 
 
 def options(prompt, body=None):
@@ -140,6 +140,9 @@ def options(prompt, body=None):
     if result.get('composition')=='rich':result['engine']='llm'
     from .slide_colors import options as color_options
     result.update(color_options(body))
+    if body.get('background_style') is not None:
+        from .slide_background_style import options as background_options
+        result['background_style']=background_options(body['background_style'])
     from .slide_colors import requested_tone
     tone=requested_tone(prompt)
     if tone is not None:result['text_tone']=tone
@@ -329,6 +332,8 @@ def validate_content(content, media):
     timeout_value(deck)
     from .slide_colors import options as color_options
     color_options(deck)
+    from .slide_background_style import validate_deck as validate_background
+    validate_background(deck,media)
     if 'title' in deck and (not isinstance(deck['title'],str) or len(deck['title'])>150):raise ValueError('Titolo presentazione non valido.')
     refs=deck.get('references', [])
     if not isinstance(refs,list) or len(refs)>100 or any(not isinstance(r,dict) or not isinstance(r.get('id'),str) or not isinstance(r.get('label'),str) or len(r['label'])>1000 for r in refs): raise ValueError('Fonti slide non valide.')
@@ -360,7 +365,7 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     # All supplied chat images and extracted document figures are reusable assets.
     for message in history:
         for item in message.get('media', []):
-            if item.get('mime','').startswith('image/') and item['id'] not in seen:
+            if item.get('mime','').startswith('image/') and not item.get('slide_background') and item['id'] not in seen:
                 seen.add(item['id']); assets.append(item)
     assets=assets[-32:]
     fresh=[];fresh_ids=set()
@@ -498,6 +503,10 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
         deck.update({k:opts[k] for k in ('background','background_color','palette','text_tone') if k in opts})
     if opts.get('generate_images'):deck['image_generation']={'model':meta['slide_image_model'],'count':len(generated),
         'plan':[{k:item[k] for k in ('slide','asset_id','description','aspect','width','height') if k in item} for item in meta['slide_image_plan']]}
+    from .slide_background_style import assign as assign_backgrounds,brief as background_brief
+    backgrounds=settings.get('_slide_background_assets',[])
+    assets.extend(m for m in backgrounds if m['id'] not in {a['id'] for a in assets})
+    assign_backgrounds(deck,opts.get('background_style'),assets)
     def publish():
         content=encode(deck)
         meta['artifact']={'title':deck['title'],'content':content,'media':assets}
@@ -514,6 +523,7 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
             request=base+([{'role':'assistant','content':previous}] if previous else [])+[{'role':'user','content':f"Crea SOLO la pagina {index+1}/{len(pages)}: {page['title']}\nObiettivo: {page['purpose']}\nViewport {FORMATS[opts['format']][0]}x{FORMATS[opts['format']][1]} px.\nSequenza completa: "+json.dumps([{k:row[k] for k in ('title','purpose')} for row in outline['slides']],ensure_ascii=False)+"\nMantieni coerenza con la pagina precedente, ma inventa una composizione adatta a questo contenuto. Restituisci subito HTML e CSS completi."}]
             request[-1]['content']+='\nCONTENUTI EDITORIALI PREPARATI PER QUESTA PAGINA:\n'+json.dumps(page['editorial'],ensure_ascii=False)+'\nComponi i contenuti visibili preparati: conserva spiegazioni, esempi e fonti, senza ridurli a slogan o sostituirli con una sola illustrazione. Non stampare istruzioni grafiche. Le note relatore sono già salvate separatamente; non trasferire nelle note il testo destinato alla slide. Rispetta comunque i vincoli espliciti della richiesta.'
             request[-1]['content']+='\nDirezione artistica: '+deck['visual_direction']
+            request[-1]['content']+=background_brief(deck,page,assets)
             planned=[{'id':item['asset_id'],'description':item['description'],**{k:item[k] for k in ('aspect','width','height') if k in item}} for item in meta.get('slide_image_plan',[]) if item['slide']==index+1]
             if planned:request[-1]['content']+='\nIllustrazioni già generate PER QUESTA PAGINA: '+json.dumps(planned,ensure_ascii=False)+'\nIncludile tutte come <img data-asset-id="ID">, progettando riquadri adatti al loro formato reale. Rendile protagoniste, senza ridurle a miniature: riserva circa 35–55% della pagina quando la figura è importante. Per queste illustrazioni generate puoi usare data-image-fit="cover" con object-fit:cover per riempire il riquadro senza deformare, mantenendo visibili i soggetti principali. Per documenti e figure informative conserva l’immagine intera.'
             updated=0

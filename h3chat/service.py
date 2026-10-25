@@ -147,7 +147,7 @@ class Service:
                 "media_server":self.media_server.status(),
                 "llm_options":{"keys":LLM_KEYS,"defaults":{profile:llm_defaults(profile) for profile in PROFILES},"max_context":MAX_CONTEXT,"max_output_tokens":MAX_OUTPUT_TOKENS},
                 "music_runtime":music_status(self.root), "music_options":{"request_controls":True,"resing":True,"defaults":MUSIC_DEFAULTS,"numbers":MUSIC_NUMBERS,"integers":sorted(MUSIC_INTEGER)},
-                "slide_options":{"max_count":MAX_SLIDES,"automatic_count":True},
+                "slide_options":{"max_count":MAX_SLIDES,"automatic_count":True,"background_batches":True,"background_styles":True},
                 "video_options":{"defaults":VIDEO_DEFAULTS,"aspects":VIDEO_ASPECTS,"request_controls":True,"segment_controls":True,"format_control":True,"request_draft":True,"seed_control":True,"attention_choices":True,"batch_controls":True}, "veda_runtime":veda_status(self.root),
                 "tools_runtime":tools_status(self.root),"transcription_models":[m|{'ready':all(safe_join(self.root,f['path']).is_file() for f in m['files'])} for m in self.downloads.tool_models.values() if m['id'].startswith('whisper-')],
                 "embeddinggemma2_runtime":{"ready":gemma2_runtime_ready(self.root)}, "vision_runtime":vision_status(self.root), "models": models,"image_options":{"request_controls":True,"last_seed":True,"moss_presets":MOSS_RECIPES,"moss_dmd2":moss_dmd2_status(self.root),"moss_negative_prompt":MOSS_NEGATIVE_PROMPT,"samplers":NATIVE_SAMPLERS,"schedulers":NATIVE_SCHEDULERS,"vision_samplers":VISION_SAMPLERS,"vision_schedulers":VISION_SCHEDULERS,"defaults":{k:DEFAULTS[k] for k in IMAGE_DEFAULT_KEYS}},"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
@@ -507,6 +507,8 @@ class Service:
             if source:raise ValueError('Modifica la grafica dell’infografica nel canvas.')
             if any((selection,music,video,transcribe,voice)):raise ValueError('Usa le opzioni voce, musica e immagini nel pannello Infografica.')
             lab='infographic';settings['_infographic']=infographic_options(prompt,body.get('infographic'))
+            from .slide_background_style import resolve as resolve_backgrounds
+            settings['_slide_background_assets']=resolve_backgrounds(self,settings['_infographic'].get('background_style'))
             self.engine.require_model(settings['chat_model'],'chat')
             inf=settings['_infographic']
             if inf['images']=='generate':self.engine.require_model(inf['image_model'] or settings['create_model'],'create')
@@ -519,6 +521,8 @@ class Service:
             slide_defaults=slides_edit_options(prompt,current_canvas['content']) if editing_slides and lab=='auto' else body.get('slides')
             lab='slides'
             settings['_slides']=slide_defaults if editing_slides and slide_defaults and body.get('lab','auto')=='auto' else slides_options(prompt,slide_defaults)
+            from .slide_background_style import resolve as resolve_backgrounds
+            settings['_slide_background_assets']=resolve_backgrounds(self,settings['_slides'].get('background_style'),current_canvas.get('media',[]) if editing_slides else [])
             self.engine.require_model(settings['chat_model'],'chat')
             if settings['_slides'].get('generate_images'):
                 self.engine.require_model(settings['_slides'].get('image_model') or settings['create_model'],'create')
@@ -667,6 +671,10 @@ class Service:
                 self.store.execute("UPDATE jobs SET stage=? WHERE id=?", (label, job["id"]))
             if settings.get('_mesh3d'):
                 raise ValueError('La funzionalità di generazione 3D è stata rimossa. I file già creati restano disponibili per il download.')
+            if settings.get('_slide_backgrounds'):
+                from .slide_backgrounds import render as render_backgrounds
+                render_backgrounds(self,job,payload,settings,cancel,stage,meta)
+                self.store.execute("UPDATE jobs SET status='done' WHERE id=?",(job['id'],));return
             if settings.get('_video_probe'):
                 from .video_probe import render as probe_video
                 probe_video(self,job,payload,settings,cancel,stage,log_path)

@@ -174,7 +174,7 @@ def run(request):
             time.sleep(.1)
         cdp.evaluate("Promise.all([...document.querySelectorAll('iframe')].map(async f=>{await f.contentDocument.fonts.ready;await Promise.all([...f.contentDocument.images].map(i=>i.decode().catch(()=>{})));}))",True)
         cdp.evaluate((ROOT/'static/vendor/infographic-renderer.js').read_text(encoding='utf-8'))
-        cdp.evaluate('document.querySelectorAll("iframe").forEach((f,i)=>H3Infographic.prepare(f.contentDocument,'+str(height)+','+json.dumps(deck['infographic'].get('options',{}))+','+json.dumps(deck['infographic']['durations'])+'[i]))')
+        cdp.evaluate('Promise.all(Array.from(document.querySelectorAll("iframe"),(f,i)=>H3Infographic.prepare(f.contentDocument,'+str(height)+','+json.dumps(deck['infographic'].get('options',{}))+','+json.dumps(deck['infographic']['durations'])+'[i])))',True)
         cdp.evaluate("Promise.all([...document.querySelectorAll('iframe')].map(f=>f.contentDocument.fonts.ready))",True)
         if request.get('mode')=='layout':
             return {'pages':cdp.evaluate('Array.from(document.querySelectorAll("iframe"),f=>H3Infographic.measure(f.contentDocument,'+str(height)+','+json.dumps(deck['infographic'].get('options',{}))+'))')}

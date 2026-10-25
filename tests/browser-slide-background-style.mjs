@@ -1,0 +1,53 @@
+import {spawn} from 'node:child_process';
+import {once} from 'node:events';
+import {createInterface} from 'node:readline';
+import {createRequire} from 'node:module';
+import {writeFileSync,mkdirSync} from 'node:fs';
+import {build} from 'esbuild';
+import JSZip from 'jszip';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
+const child=spawn('runtime/python/python.exe',['-X','utf8','tests/serve_background_fixture.py'],{stdio:['ignore','pipe','pipe']});let logs='';child.stderr.on('data',x=>logs+=x);
+const lines=createInterface({input:child.stdout});const [line]=await Promise.race([once(lines,'line'),once(child,'exit').then(()=>{throw Error(logs);})]);lines.close();const fixture=JSON.parse(line);
+let browser;
+try{
+ browser=await chromium.launch({channel:'msedge',headless:true,args:['--disable-gpu']});const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(fixture.url);await page.locator('#prompt-slides').click();await page.locator('[data-mode-settings=slides-options]').click();
+ await page.locator('#slides-background-base').selectOption('collection');const picker=page.locator('#slide-background-picker');await picker.locator('[data-use]').waitFor({state:'visible'});
+ await picker.locator('[data-none]').click();assert.equal(await picker.locator('[data-use]').isDisabled(),true);
+ await picker.getByRole('checkbox',{name:'Usa sfondo 1',exact:true}).check();await picker.getByRole('checkbox',{name:'Usa sfondo 3',exact:true}).check();
+ await picker.getByRole('button',{name:'Sposta prima sfondo 3',exact:true}).click();await picker.locator('[data-use]').click();
+ await page.locator('#slides-background-decorations').check();await page.locator('#slides-background-opacity').fill('30');await page.locator('#prompt-mode-settings').getByRole('button',{name:'Fatto',exact:true}).click();
+ let request;await page.route('**/api/chats/*/messages',async r=>{request=r.request().postDataJSON();await r.fulfill({status:400,contentType:'application/json',body:JSON.stringify({error:'Invio simulato: nessuna generazione.'})});});
+ await page.locator('#prompt').fill('Crea 5 slide sulle porte logiche');await page.locator('#send').click();await page.waitForFunction(()=>document.body.innerText.includes('Invio simulato'));
+ assert.equal(request.slides.background_style.base,'collection');assert.equal(request.slides.background_style.decorations,true);assert.equal(request.slides.background_style.opacity,30);assert.equal(request.slides.background_style.asset_ids.length,2);
+ const sets=await page.evaluate(()=>fetch('/api/slide-backgrounds').then(r=>r.json()));assert.deepEqual(request.slides.background_style.asset_ids,[sets.items[0].images[2].media.id,sets.items[0].images[0].media.id]);
+ await page.locator('#prompt-infographic').click();await page.locator('[data-mode-settings=infographic-options]').click();await page.locator('#infographic-background-base').selectOption('gradient');await page.locator('#infographic-background-decorations').check();await page.locator('#prompt-mode-settings').getByRole('button',{name:'Fatto',exact:true}).click();
+ await page.locator('#prompt').fill('Crea una infografica statica');await page.locator('#send').click();await page.waitForTimeout(300);assert.equal(request.infographic.background_style.base,'gradient');assert.equal(request.infographic.background_style.decorations,true);
+ assert.deepEqual(errors,[]);
+ // Exercise real canvas rendering and flattening separately from the composer.
+ const rendered=await browser.newPage({viewport:{width:1400,height:900}});await rendered.route('**/static/app.js*',r=>r.fulfill({contentType:'application/javascript',body:''}));await rendered.goto(fixture.url);
+ const bundle=await build({stdin:{contents:"export {htmlPage,flattenHtml,htmlOverflow} from './ui/slide-html.js';export {applyHtmlBackground} from './ui/slide-background-style.js';export {exportPowerPoint} from './ui/slide-pptx.js';",resolveDir:process.cwd()},bundle:true,write:false,format:'iife',globalName:'bgTest'});
+ await rendered.route('**/static/background-style-test.js',r=>r.fulfill({contentType:'application/javascript',body:bundle.outputFiles[0].text}));await rendered.addScriptTag({url:fixture.url+'/static/background-style-test.js'});
+ await rendered.evaluate(async()=>{
+  const set=(await fetch('/api/slide-backgrounds').then(r=>r.json())).items[0];window.media=set.images.map(i=>i.media);
+  document.body.replaceChildren();document.body.style.cssText='margin:0;display:block';window.mount=document.createElement('div');document.body.append(mount);
+  window.deck={version:1,engine:'llm',format:'16:9',pages:[{title:'Pagina',status:'ready',background_asset_id:media[0].id,html:'<style>body{font:30px Arial;background:white;padding:35px}main{width:1280px;height:720px;background:white}h1{margin:0}</style><main><h1>Porte logiche</h1><p>AND, OR e NOT: due segnali, un risultato.</p></main>'}],background_style:{base:'collection',decorations:true,set_id:set.id,asset_ids:[media[0].id],opacity:20,veil:'auto'}};
+  window.frame=await bgTest.htmlPage(deck,deck.pages[0],0,media,mount);
+ });
+ const geometry=await rendered.evaluate(()=>{const doc=frame.querySelector('iframe').contentDocument,r=doc.querySelector('[data-h3-background-content]').getBoundingClientRect(),h=doc.querySelector('h1').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,headingInside:h.x>=r.x&&h.right<=r.right,layers:doc.querySelectorAll('[data-h3-background-layer]').length,overflow:bgTest.htmlOverflow(frame),sandbox:frame.querySelector('iframe').getAttribute('sandbox')};});
+ assert.ok(Math.abs(geometry.x-153.6)<1);assert.ok(Math.abs(geometry.width-972.8)<1);assert.ok(geometry.headingInside);assert.equal(geometry.layers,1);assert.equal(geometry.overflow,false);assert.equal(geometry.sandbox,'allow-same-origin');
+ mkdirSync('work/slide-backgrounds-2026-10-25',{recursive:true});const before=await rendered.locator('.h3-slide-page').screenshot({path:'work/slide-backgrounds-2026-10-25/frame-layout.png'});
+ await rendered.evaluate(()=>bgTest.flattenHtml(frame));const after=await rendered.locator('.h3-slide-page').screenshot();assert.equal(before.equals(after),true,'Flattened exports must preserve the background and safe content layout');
+ const [pptx]=await Promise.all([rendered.waitForEvent('download'),rendered.evaluate(()=>bgTest.exportPowerPoint(mount,deck,'Background export'))]);
+ const pptxPath='work/slide-backgrounds-2026-10-25/background-export.pptx';await pptx.saveAs(pptxPath);
+ const {readFile}=await import('node:fs/promises'),zip=await JSZip.loadAsync(await readFile(pptxPath)),slide=await zip.file('ppt/slides/slide1.xml').async('string');
+ assert.ok(slide.indexOf('Porte')>0&&slide.indexOf('<p:pic>')<slide.indexOf('Porte'),'Background image must be behind the editable PowerPoint text');
+ assert.equal([...slide.matchAll(/<p:sp>.*?<\/p:sp>/gs)].some(m=>m[0].includes('<a:off x="0" y="0"/>')&&m[0].includes('<a:ext cx="12192000" cy="6858000"/>')),false,'No opaque full-slide surface may cover the owned background');
+ const offline=await browser.newPage({viewport:{width:1280,height:720}});await offline.goto(fixture.url+'/fixture/background-infographic.html');
+ const renderer=await build({entryPoints:['ui/infographic-renderer.js'],bundle:true,write:false,format:'iife'});await offline.evaluate(renderer.outputFiles[0].text);
+ const offlineLayout=await offline.evaluate(async()=>{const doc=document.querySelector('iframe').contentDocument;await H3Infographic.prepare(doc,720,{layout:'columns2'},5);H3Motion.apply(doc,1,5,{layout:'columns2'});const content=doc.querySelector('[data-h3-background-content]').getBoundingClientRect();return {layers:doc.querySelectorAll('[data-h3-background-layer]').length,panels:[...doc.querySelectorAll('[data-panel]')].map(e=>({width:e.getBoundingClientRect().width,x:e.getBoundingClientRect().x,display:doc.defaultView.getComputedStyle(e).display})),contentWidth:content.width,x:content.x};});
+ assert.equal(offlineLayout.layers,1);assert.equal(offlineLayout.panels.length,2);assert.ok(offlineLayout.panels.every(p=>p.display!=='none'&&Math.abs(p.width-offlineLayout.contentWidth/2)<1));
+ assert.equal(await offline.evaluate(()=>{const doc=document.querySelector('iframe').contentDocument;H3Motion.videoTracks([doc],{options:{layout:'columns2',video_start:'panel'},durations:[5]});return [...doc.querySelectorAll('[data-panel]')].every(p=>p.parentElement.hasAttribute('data-h3-background-content'));}),true);
+ const report={status:'passed',selection_subset_and_order:true,slide_and_infographic_controls_independent:true,frame_geometry:geometry,offline_infographic:offlineLayout,flatten_pixels_identical:true,pptx_background_behind_editable_text:true,real_generation_started:false};writeFileSync('work/slide-backgrounds-2026-10-25/style-browser.json',JSON.stringify(report,null,2));console.log(report);
+}catch(error){console.error(logs);throw error;}finally{await browser?.close();child.kill();}

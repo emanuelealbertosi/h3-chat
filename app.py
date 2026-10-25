@@ -131,6 +131,9 @@ class Handler(BaseHTTPRequestHandler):
             if access and path.startswith('/api/auth/'):
                 return self.auth_request(path,method)
             if method == "GET":
+                if path=='/api/slide-backgrounds':
+                    from h3chat.slide_backgrounds import listing
+                    return self.json(listing(self.app))
                 if path=='/api/images/last-seed':
                     from h3chat.image_history import last_seed
                     query=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
@@ -341,6 +344,9 @@ class Handler(BaseHTTPRequestHandler):
             if len(parts)==4 and parts[:3]==['api','slides','images'] and method=='POST':
                 from h3chat.slide_images import request
                 return self.json(request(self.app,parts[3],body))
+            if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='slide-backgrounds' and method=='POST':
+                from h3chat.slide_backgrounds import enqueue
+                return self.json(enqueue(self.app,parts[2],body),202)
             if path=='/api/upscale/settings' and method=='POST':
                 from h3chat.upscale_runtime import save_settings
                 return self.json(save_settings(ROOT,body))

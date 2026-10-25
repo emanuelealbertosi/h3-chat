@@ -25,7 +25,7 @@ CHOICES={'format':tuple(FORMATS),'style':('auto','professional','playful','comic
  'video_background':('auto','off'),'video_fit':('contain','cover'),'video_end':('freeze','loop'),'video_audio':('mute','keep','duck'),'video_start':('together','panel')}
 DEFAULTS={'format':'9:16','style':'auto','palette':'auto','shapes':'auto','pace':'auto','images':'auto',
  'music':'auto','sfx':'subtle','transition':'auto','voice_style':'auto','output':'video','duration':30,'scenes':3,'voice':True,'image_model':'','corners':'square','frame':'dark',
- 'video_background':'auto','video_id':'','video_fit':'contain','video_end':'freeze','video_audio':'mute','video_start':'together'}|screen.DEFAULTS|typography.DEFAULTS
+ 'video_background':'auto','video_id':'','video_fit':'contain','video_end':'freeze','video_audio':'mute','video_start':'together','background_style':None}|screen.DEFAULTS|typography.DEFAULTS
 CHOICES.update(typography.CHOICES)
 
 def plan_regia(engine,base,brief,schema,settings,cancel,stage,scenes):
@@ -73,6 +73,9 @@ def requested(prompt):
 def options(prompt='',value=None):
     if value is not None and (not isinstance(value,dict) or set(value)-set(DEFAULTS)):raise ValueError('Opzioni infografica non valide.')
     result=DEFAULTS|dict(value or {})
+    from .slide_background_style import options as background_options
+    result['background_style']=background_options(result['background_style'])
+    if result['background_style']:result.update(video_background='off',video_id='')
     timing_span=screen.prompt_timing(prompt,result)
     screen.validate(result)
     typography.validate(result)
@@ -145,7 +148,7 @@ def build(app,job,payload,history,settings,model,cancel,stage,log,meta):
     assets=[];seen=set()
     recent=[x for m in history for x in m.get('media',[]) if x.get('mime','').startswith('image/')][-32:]
     for item in meta.pop('_slide_assets',[])+recent:
-        if item.get('mime','').startswith('image/') and item['id'] not in seen and item['path'].startswith(('uploads/','outputs/','document-cache/')):seen.add(item['id']);assets.append(item)
+        if item.get('mime','').startswith('image/') and not item.get('slide_background') and item['id'] not in seen and item['path'].startswith(('uploads/','outputs/','document-cache/')):seen.add(item['id']);assets.append(item)
     assets=assets[:32]
     import shutil
     for index,item in enumerate(assets):
@@ -190,6 +193,9 @@ def build(app,job,payload,history,settings,model,cancel,stage,log,meta):
         deck['infographic']['timeline_target']=target
         deck['infographic']['durations']=[target['end']-target['start']]
     media=list(assets)+video_items+posters
+    from .slide_background_style import assign as assign_backgrounds,brief as background_brief
+    media.extend(m for m in settings.get('_slide_background_assets',[]) if m['id'] not in {a['id'] for a in media})
+    assign_backgrounds(deck,opts.get('background_style'),media)
     if video:deck['infographic']['video']=video
     elif videos:deck['infographic']['videos']=videos
     def publish():
@@ -238,6 +244,7 @@ def build(app,job,payload,history,settings,model,cancel,stage,log,meta):
             import time
             if time.monotonic()-last[0]>.8:page['html']=value[-80000:];publish();last[0]=time.monotonic()
         request[-1]['content']+=layout_brief(opts['format'])
+        request[-1]['content']+=background_brief(deck,page,media)
         stage(f'Infografica · composizione HTML {index+1}/{len(deck["pages"])}')
         try:
             html=generate_html(app.engine,request,settings|{'think_level':'off'},cancel,writing,stage,f'Infografica · scena {index+1}')

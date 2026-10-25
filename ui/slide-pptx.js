@@ -87,10 +87,13 @@ export async function exportPowerPoint(root,deck,title){
   pres.defineLayout({name:'H3',width:1280/96,height:height/96});pres.layout='H3';pres.author='H3-Chat';pres.title=title;pres.subject=deck.title;pres.theme={headFontFace:'Cambria',bodyFontFace:'Arial',lang:'it-IT'};
   for(const frame of root.querySelectorAll('.h3-slide-page')){
     const slide=pres.addSlide();slide.background={color:color(getComputedStyle(frame).backgroundColor).color};
+    const background=frame.querySelector('[data-h3-background-layer]');
+    if(background)slide.addImage({data:await rasterGraphic(background),...box(background,frame)});
     // Preserve every painted HTML surface, including inline code and figure
     // labels: their readable text color depends on that background in the DOM.
     for(const element of frame.querySelectorAll('*')){
-      if(element.closest('.no-export,svg,math,.katex')||getComputedStyle(element).display==='none')continue;
+      if(background&&element.contains(background))continue;
+      if(element.closest('.no-export,svg,math,.katex,[data-h3-background-layer]')||getComputedStyle(element).display==='none')continue;
       const style=getComputedStyle(element),fill=color(style.backgroundColor),border=parseFloat(style.borderTopWidth)||0;
       if(deck.engine==='llm'&&style.backgroundImage!=='none'){
         const bounds=box(element,frame);if(bounds.w>0&&bounds.h>0)slide.addImage({data:await rasterDecoration(element),...bounds});continue;
@@ -100,7 +103,7 @@ export async function exportPowerPoint(root,deck,title){
     }
     addTextLines(slide,frame);
     for(const element of frame.querySelectorAll('img,svg,.katex-display,.katex:not(.katex-display .katex),canvas')){
-      if(element.closest('.no-export')||element.parentElement.closest('.katex,.katex-display'))continue;
+      if(element.closest('.no-export,[data-h3-background-layer]')||element.parentElement.closest('.katex,.katex-display'))continue;
       if(element.tagName==='CANVAS'&&chart(slide,pres,element,frame))continue;
       const bounds=box(element,frame),data=await rasterGraphic(element);
       slide.addImage({data,...bounds});

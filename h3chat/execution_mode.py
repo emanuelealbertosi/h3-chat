@@ -33,7 +33,7 @@ def guard_intent(settings,intent):
 
 def guard_job(settings):
     if not cpu(settings):return
-    flags=('_image_model','_image_batch','_music','_video','_voice','_transcribe','_upscale','_video_probe',
+    flags=('_image_model','_image_batch','_slide_backgrounds','_music','_video','_voice','_transcribe','_upscale','_video_probe',
            '_video_edit','_video_recreate','_video_extend','_video_remix','_video_resume','_music_resing','_manim_voice')
     if any(settings.get(key) for key in flags):raise ValueError(MEDIA_ERROR)
     if settings.get('_slides',{}).get('generate_images'):raise ValueError(MEDIA_ERROR)

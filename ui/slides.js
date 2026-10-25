@@ -7,6 +7,7 @@ import {validateDesign,applyOverride} from './slide-design.js';
 import {repairSlideContrast} from './slide-contrast.js';
 import {mountInfographic} from './infographics.js';
 import {slideProgress} from './slide-generation-state.js';
+import {validateBackgroundStyle,applyDeclarativeBackground} from './slide-background-style.js';
 
 export const slideFormats={'16:9':720,'9:16':1280*16/9,'4:3':960,'16:10':800,'1:1':1280};
 export function readDeck(content){
@@ -18,6 +19,7 @@ export function readDeck(content){
   if(deck.duration_minutes!==undefined&&(typeof deck.duration_minutes!=='number'||!Number.isFinite(deck.duration_minutes)||deck.duration_minutes<0||deck.duration_minutes>20))throw Error('Durata indicativa slide non valida.');
   deck.title||='Presentazione';deck.references||=[];
   if(!['llm','deterministic'].includes(deck.engine||'deterministic'))throw Error('Motore slide non valido.');
+  validateBackgroundStyle(deck);
   for(const page of deck.pages){
     if(deck.engine==='llm'){if(typeof page.html!=='string'&&page.html!==undefined||typeof page.html==='string'&&page.html.length>80000)throw Error('HTML slide non valido.');continue;}
     if(typeof page.title!=='string'||page.title.length>150||!Array.isArray(page.nodes)||page.nodes.length>40)throw Error('Pagina slide non valida.');
@@ -71,6 +73,7 @@ async function pageElement(deck,page,index,media,options,mount){
   const footer=document.createElement('div');footer.className='h3-slide-footer';
   const sources=(page.sources||[]).map(id=>{const source=(deck.references||[]).find(r=>r.id===id);return source?'['+id+'] '+source.label:'';}).filter(Boolean);
   footer.title=sources.join(' · ');footer.textContent=deck.title.slice(0,80)+((page.sources||[]).length?' · '+page.sources.map(id=>'['+id+']').join(' '):'')+' · '+(index+1)+' / '+deck.pages.length;frame.append(footer);
+  await applyDeclarativeBackground(frame,deck,page,media,slideFormats[deck.format]);
   repairSlideContrast(frame);return frame;
 }
 export async function renderSlides(target,value,options={}){
@@ -79,7 +82,7 @@ export async function renderSlides(target,value,options={}){
   const key=value.id||'draft';let selected=selections.get(key)||{index:deck.active||0,follow:true};
   if(selected.follow)selected.index=deck.active||0;selected.index=Math.max(0,Math.min(deck.pages.length-1,selected.index));selections.set(key,selected);
   const page=deck.pages[selected.index],context=JSON.stringify([key,deck.format,deck.engine,deck.title,deck.references,deck.pages.length,selected.index,!!selected.editing,!!options.editable,!!options.busy,!!options.onChange,!!options.onResume,!!options.onRegenerate]);
-  const pageSignature=JSON.stringify([page.html,page.text_tone||deck.text_tone,deck.image_generation,value.media]);
+  const pageSignature=JSON.stringify([page.html,page.text_tone||deck.text_tone,deck.image_generation,deck.background_style,page.background_asset_id,value.media]);
   const previous=previews.get(target);
   if(deck.engine==='llm'&&!deck.infographic&&!selected.editing&&previous?.context===context&&previous.frame.isConnected){
     previous.live.value=value;previous.live.options=options;previous.update(deck,options);

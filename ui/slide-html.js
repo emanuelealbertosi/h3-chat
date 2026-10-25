@@ -5,6 +5,7 @@ import {contentOverflows,fitMediaBounds} from './slide-html-bounds.js';
 import {readableText} from './slide-html-contrast.js';
 import {portraitLayout} from './infographic-layout.js';
 import {initialExportStyles,applyExportStyles} from './export-style.js';
+import {applyHtmlBackground} from './slide-background-style.js';
 import '../static/infographic-motion.js';
 
 const heights={'16:9':720,'9:16':1280*16/9,'4:3':960,'16:10':800,'1:1':1280};
@@ -21,7 +22,7 @@ async function localMathCSS(){
 }
 
 async function markup(page,media){
-  const clean=DOMPurify.sanitize(page.html||'',{WHOLE_DOCUMENT:true,ADD_TAGS:['style'],FORBID_TAGS:['script','iframe','object','embed','link','meta','base','form','input','button','video','audio'],FORBID_ATTR:['srcset','action','formaction','autofocus','data-h3-editor','data-h3-trusted','data-h3-video']});
+  const clean=DOMPurify.sanitize(page.html||'',{WHOLE_DOCUMENT:true,ADD_TAGS:['style'],FORBID_TAGS:['script','iframe','object','embed','link','meta','base','form','input','button','video','audio'],FORBID_ATTR:['srcset','action','formaction','autofocus','data-h3-editor','data-h3-trusted','data-h3-video','data-h3-background-content','data-h3-background-layer']});
   const doc=new DOMParser().parseFromString(clean,'text/html');
   doc.querySelectorAll('a').forEach(a=>{a.removeAttribute('href');a.removeAttribute('target');});
   for(const image of doc.querySelectorAll('img')){
@@ -51,6 +52,7 @@ export async function htmlPage(deck,page,index,media,mount){
   iframe.srcdoc=`<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; script-src 'none'; connect-src 'none'; ${clip||splitClips.length?"media-src 'self';":''}"><style data-h3-trusted>html,body{margin:0;width:1280px;min-height:${height}px;box-sizing:border-box}*,*:before,*:after{box-sizing:border-box}${fonts}${deck.infographic?'*,*:before,*:after{animation:none!important;transition:none!important}':''}</style></head><body>${content}<style data-h3-trusted>html,body{overflow:hidden!important}</style></body></html>`;
   frame.append(iframe);mount.append(frame);await loaded;
   const doc=iframe.contentDocument;
+  if(!deck.infographic)await applyHtmlBackground(doc,deck,page,media,height);
   if(clip){
     const video=doc.createElement('video');video.dataset.h3Video=background.asset_id;video.dataset.h3Trusted='';video.muted=true;video.playsInline=true;video.preload='auto';video.loop=background.end==='loop';video.src='/media/'+clip.path;
     const poster=media.find(m=>m.id===background.poster_id&&m.mime==='image/jpeg'&&safePath(m.path));
@@ -66,7 +68,7 @@ export async function htmlPage(deck,page,index,media,mount){
       slot.prepend(video);
     }
   }
-  if(deck.infographic){H3Motion.screen(doc,deck.infographic.options,deck.infographic.durations[index]);H3Motion.freeze(doc);}
+  if(deck.infographic){H3Motion.screen(doc,deck.infographic.options,deck.infographic.durations[index]);await applyHtmlBackground(doc,deck,page,media,height);if(deck.background_style)H3Motion.screen(doc,deck.infographic.options,deck.infographic.durations[index]);H3Motion.freeze(doc);}
   await doc.fonts.ready;await Promise.all([...doc.images].map(img=>img.decode().catch(()=>{})));
   renderMath(doc.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false});
   // Local bundled math CSS is trusted and does not enable generated scripts.

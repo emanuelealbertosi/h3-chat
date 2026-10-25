@@ -1,5 +1,74 @@
 # Slide AI e voce naturale
 
+## Crea soltanto sfondi
+
+Accanto a **Impostazioni Slide** trovi **Crea sfondi**, con una finestra separata.
+Scegli cornici con centro libero o sfondi tenui, formato, modello immagini,
+temi aggiuntivi, palette e varianti. **Usa modalità sfondi** seleziona il prossimo
+invio: scrivi il tema principale nel prompt e premi **Invia**. Parte soltanto il
+batch degli sfondi, senza pianificare slide e senza usare Assistant, RAG o allegati.
+**Torna alle slide** ripristina il normale invio; le impostazioni delle slide
+non vengono cambiate. La modalità sfondi non viene riattivata automaticamente
+ricaricando la pagina.
+
+Il totale è temi × palette × varianti, fino a **24 sfondi** per richiesta.
+Le immagini vengono generate in sequenza con il modello selezionato; passi,
+sampler e scheduler seguono le sue impostazioni. I megapixel possono essere
+lasciati vuoti per conservarne il valore. Il seed può seguire il modello, essere
+casuale per immagine oppure fisso per tutto il set. Prompt, modello, parametri
+effettivi e seed vengono conservati con le immagini.
+Formato, megapixel e parametri di generazione espliciti nel prompt principale
+prevalgono sui valori della modale per tutte le immagini del batch. Il numero
+degli sfondi resta quello calcolato da temi, palette e varianti nella modale.
+
+Chat e canvas mostrano una **griglia di miniature, quattro per riga** (due sugli
+schermi piccoli), aggiornata dopo ogni immagine completata. Clicca una miniatura
+per aprire lo zoom e scaricare l’originale. Stop conserva gli sfondi già pronti
+in chat, canvas, galleria e nella raccolta dei set.
+
+La **Raccolta sfondi salvati** nella stessa finestra permette di ritrovare gli
+originali e recuperare la ricetta del set, anche in un’altra chat dello stesso
+account. **Riusa ricetta del set** compila le opzioni e il prompt ma non invia
+automaticamente una nuova generazione. La raccolta è separata per workspace.
+
+Margine del centro libero, base chiara/scura e intensità consigliata sono
+conservati per il futuro uso nei layout. La simulazione di leggibilità aggiunge
+una velatura e un’area testo soltanto all’anteprima; non altera l’immagine né
+produce una trasparenza alfa. La posizione degli ornamenti è una richiesta al
+modello, non una maschera geometrica garantita. Creare un batch non applica gli
+sfondi a una presentazione: il loro uso si sceglie separatamente nelle impostazioni.
+
+Richiede la normale modalità GPU e un modello immagini pronto (anche un servizio
+esterno). Nella modalità CPU si può consultare la raccolta ma non generare.
+Se il server è ancora alla versione precedente, il pulsante indica di riavviare
+H3-Chat dopo la fine di tutti i lavori per attivare la nuova funzione.
+
+## Usare gli sfondi in slide e infografiche
+
+Nelle rispettive impostazioni, **Composizione dello sfondo** offre:
+**Automatico** (mantiene il comportamento precedente), **Plain** (tinta unita),
+**Gradient** (sfumatura) e **Raccolta**. **Decoration** aggiunge bordi e accenti
+HTML/SVG, combinabili con ciascuna base. Non genera nuove immagini. Raccolta
+parte senza decorazioni aggiuntive per evitare doppie cornici.
+
+Con Raccolta scegli il batch, spunta gli sfondi e cambia l’ordine con le frecce;
+le miniature si possono ingrandire. La sequenza ruota nelle pagine/scene:
+tre sfondi su cinque pagine producono 1, 2, 3, 1, 2. L’assegnazione effettiva è
+salvata per pagina e rimane nella ricreazione di una singola slide e nella ripresa
+delle mancanti. Nessuna nuova generazione immagini è necessaria, anche in modalità
+CPU. File mancanti provocano un errore esplicito invece di una sostituzione.
+
+L’intensità regola il contributo dell’immagine; la velatura chiara/scura protegge
+la lettura. Le cornici vengono mantenute intere, senza ritaglio, con un’area
+interna per i contenuti calcolata sul margine salvato. Il modello riceve le misure
+utili per comporre la pagina. La stessa composizione è conservata negli export;
+in PowerPoint il fondale è un elemento grafico dietro ai testi modificabili.
+
+Le impostazioni delle infografiche sono indipendenti da quelle delle slide.
+Uno sfondo statico selezionato sostituisce il video di sfondo; tornando a
+Automatico si riutilizzano i controlli video precedenti. La composizione statica
+è mantenuta anche nel rendering offline del filmato e nei layout a riquadri.
+
 ## Stile della presentazione
 
 Lo stile selezionato guida sia l'HTML libero sia le illustrazioni AI:

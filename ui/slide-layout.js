@@ -65,7 +65,7 @@ export function layoutSlide(frame,title){
   const next=carried=>{
     if(frames.length>=100)throw Error('Questa slide richiede troppe continuazioni. Usa una presentazione più breve.');
     current=frame.cloneNode(false);current.classList.add('slide-continuation');current.style.setProperty('--slide-fit','1');
-    body=original.cloneNode(false);current.append(body,footer.cloneNode(true));
+    body=original.cloneNode(false);const background=frame.querySelector('[data-h3-background-layer]');if(background)current.append(background.cloneNode(true));current.append(body,footer.cloneNode(true));
     const label=carried||document.createElement('div');
     if(!carried){label.className='slide-continuation-title';label.textContent=title+' · seguito';}body.append(label);
     frames.at(-1).after(current);frames.push(current);

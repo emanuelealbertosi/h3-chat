@@ -23,7 +23,7 @@
  function videoTracks(documents,motion){
   const options=motion.options||{},delayed=options.video_start==='panel'&&options.layout&&options.layout!=='full',allowed=new Set((motion.videos||(motion.video?[motion.video]:[])).map(v=>v.asset_id)),tracks=new Map(),targets=[];let offset=0;
   documents.forEach((doc,index)=>{
-   const duration=motion.durations[index];if(delayed)for(const panel of panelTimes(doc,options,duration))doc.body.append(panel);
+   const duration=motion.durations[index],area=doc.querySelector?.('[data-h3-background-content]')||doc.body;if(delayed)for(const panel of panelTimes(doc,options,duration))area.append(panel);
    const scale=timingScale(animationNodes(doc),duration);
    for(const slot of doc.querySelectorAll('div[data-video-asset-id],[data-h3-video]')){
     const id=slot.dataset.videoAssetId||slot.dataset.h3Video;if(!allowed.has(id))continue;const panel=slot.closest('[data-panel]');if(delayed&&!panel)continue;
@@ -38,11 +38,11 @@
  }
  function screen(doc,options={},duration=30){
   const layout=options.layout||'full',count=panelCount(layout);if(count===1)return;
-  const width=doc.defaultView.innerWidth,height=doc.defaultView.innerHeight;
+  const area=doc.querySelector?.('[data-h3-background-content]')||doc.body,width=area===doc.body?doc.defaultView.innerWidth:area.clientWidth,height=area===doc.body?doc.defaultView.innerHeight:area.clientHeight;
   const overlays=screenOverlays(doc),panels=panelTimes(doc,options,duration);
   doc.body.style.setProperty('position','relative','important');doc.body.style.setProperty('overflow','hidden','important');
   for(const panel of panels){
-   const index=Number(panel.dataset.panel)-1;doc.body.append(panel);
+   const index=Number(panel.dataset.panel)-1;area.append(panel);
    let x=0,y=0,w=width,h=height;
    if(layout!=='pip'){const [columns,rows]=layouts[layout];w=width/columns;h=height/rows;x=(index%columns)*w;y=Math.floor(index/columns)*h;}
    if(layout==='pip'&&index===1){w=width*.32;h=height*.32;x=width-w-width*.03;y=height-h-height*.03;}
@@ -50,13 +50,13 @@
    for(const [key,value] of Object.entries(styles))panel.style.setProperty(key,value,'important');
   }
   for(const [index,overlay] of overlays.entries()){
-   doc.body.append(overlay);overlay.dataset.overlay='global';
+   area.append(overlay);overlay.dataset.overlay='global';
    const styles={position:'absolute',left:'0px',top:'0px',right:'auto',bottom:'auto',width:width+'px',height:height+'px','min-width':'0','min-height':'0','max-width':'none','max-height':'none',margin:'0','box-sizing':'border-box',overflow:'hidden','z-index':String(count+1+index)};
    // A shared title is transparent over the clips. An opaque closing card is explicit.
    if(overlay.dataset.overlayBackground!=='opaque')styles.background='transparent';
    for(const [key,value] of Object.entries(styles))overlay.style.setProperty(key,value,'important');
   }
-  for(const child of [...doc.body.children])if(!panels.includes(child)&&!overlays.includes(child)&&child.tagName!=='STYLE')child.style.setProperty('display','none','important');
+  for(const child of [...area.children])if(!panels.includes(child)&&!overlays.includes(child)&&child.tagName!=='STYLE'&&!child.hasAttribute?.('data-h3-trusted'))child.style.setProperty('display','none','important');
   states.delete(doc);
  }
  function ease(t,kind){t=clamp(t);return kind==='linear'?t:kind==='snap'?1-Math.pow(1-t,4):t*t*(3-2*t);}

@@ -29,6 +29,8 @@ import {initChatModels} from './chat-models.js';
 import {renderVoiceSettings} from './voice.js';
 import {readDeck,renderSlides,exportSlides,transferSlideView} from './slides.js';
 import {initSlideImages} from './slide-ai.js';
+import {initSlideBackgrounds} from './slide-backgrounds.js';
+import {initSlideBackgroundPicker} from './slide-background-picker.js';
 import {initSlideColors} from './slide-colors.js';
 import {initComposerPanel} from './composer-panel.js';
 import {initManimPresentation} from './manim-presentation.js';
@@ -97,7 +99,9 @@ $('#slides-options').insertAdjacentHTML('beforeend',' <label>Composizione <selec
 $('#slides-composition').addEventListener('change',()=>{if($('#slides-composition').value==='rich'&&$('#slides-engine').value!=='llm'){$('#slides-engine').value='llm';$('#slides-engine').dispatchEvent(new Event('change',{bubbles:true}));}});
 $('#slides-engine').addEventListener('change',()=>{if($('#slides-engine').value==='deterministic'&&$('#slides-composition').value==='rich'){$('#slides-composition').value='standard';$('#slides-composition').dispatchEvent(new Event('change',{bubbles:true}));}});
 const slideImages=initSlideImages();
+const slideBackgrounds=initSlideBackgrounds({api,getState:()=>state,notify:toast,onRecipe:prompt=>{$('#prompt').value=prompt;$('#prompt').dispatchEvent(new Event('input',{bubbles:true}));}});
 const slideColors=initSlideColors();
+const slideBackgroundPicker=initSlideBackgroundPicker({api,getState:()=>state});
 async function executeArtifact(lang,source){if(activeJob())throw Error('Attendi o interrompi il lavoro corrente.');if(!current)await newChat();await api('/chats/'+current+'/messages',{prompt:lang.startsWith('manim')?'Renderizza questa scena Manim':'Esegui questo calcolo con l’interprete',lab:lang.startsWith('manim')?'manim':'calculate',lab_source:source,canvas:canvasOpen,...projects.read()});await refresh();}
 function localCard(model){
   const m=model;
@@ -160,6 +164,8 @@ function renderStatus(){
   $('#chat-advanced').checked=!!state.settings.chat_advanced;
   const job=userJob(),canvasJob=activeJob(),any=state.jobs.some(j=>j.status==='running');
   slideImages.render(state);
+  slideBackgrounds.render();
+  slideBackgroundPicker.render();
   $('#engine-badge').classList.toggle('busy',any);
   const loaded=state.memory?.models||[];
   $('#memory-status').textContent=(state.settings.memory_policy==='resident'?'Residenti':'A richiesta')+' · '+loaded.length+' caricati'+(state.memory?.warm_image_engine?' · motore immagini pronto':'');
@@ -332,12 +338,19 @@ async function uploadFiles(files){
 async function send(event){event.preventDefault();if(userJob())return;const prompt=$('#prompt').value.trim();if(!prompt)return;
   $('#send').disabled=true;
   try{await chatModels.wait();if(!current){const fresh=await api('/chats',{collection_id:collection,project_id:project});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);manimPresentation?.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
+    const backgroundOptions=slideBackgrounds.read();
+    if(backgroundOptions){
+      requireMediaMode();if(prompt.length>4000)throw Error('Tema degli sfondi: massimo 4.000 caratteri.');
+      await persistCanvas();const sent=await api('/chats/'+current+'/slide-backgrounds',{prompt,options:backgroundOptions});
+      queuedCanvasJob(sent,current,'Sfondi in coda');canvasFollow=true;canvasEditing=false;await toggleCanvas(true);
+      $('#prompt').value='';drafts.delete(current);await refresh();return;
+    }
     await persistCanvas();const controls=visualControls.read();
     if(controls.video&&controls.video_editing==='modify'){
       const videos=attachments.filter(x=>x.mime?.startsWith('video/'));if(videos.length>1)throw Error('Scegli un solo video da modificare.');
       await editVideo(videos[0],{initialPrompt:prompt,initialReferences:attachments.filter(x=>x.mime?.startsWith('image/')),initialSteps:controls.video_steps,initialAssistant:controls.assistant,initialModel:controls.video_model||undefined,initialParameters:controls.video_parameters||{},onQueued:async()=>{$('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);}});return;
     }
-    const presentation=await manimPresentation.prepare();const sent=await api('/chats/'+current+'/messages',cpuRequest({prompt,media:attachments,canvas:canvasOpen,...presentation,...visualControls.request(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='infographic'?{infographic:infographicsUI.read()}:{}),...($('#lab-tool').value==='slides'?{slides:{llm_timeout:Number($('#slides-timeout').value),duration_minutes:Number($('#slides-duration').value),engine:$('#slides-engine').value,count:$('#slides-count-mode').value==='auto'?'auto':Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value,composition:$('#slides-composition').value,vision_scope:$('#slides-vision').value,...slideColors.read(),...slideImages.read()}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()},state));
+    const presentation=await manimPresentation.prepare();const sent=await api('/chats/'+current+'/messages',cpuRequest({prompt,media:attachments,canvas:canvasOpen,...presentation,...visualControls.request(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='infographic'?{infographic:infographicsUI.read()}:{}),...($('#lab-tool').value==='slides'?{slides:{llm_timeout:Number($('#slides-timeout').value),duration_minutes:Number($('#slides-duration').value),engine:$('#slides-engine').value,count:$('#slides-count-mode').value==='auto'?'auto':Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value,composition:$('#slides-composition').value,vision_scope:$('#slides-vision').value,...slideColors.read(),...slideImages.read(),...slideBackgroundPicker.read()}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()},state));
     if(['slides','infographic','image_batch'].includes(sent.intent)){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}
     $('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);await refresh();
   }finally{$('#send').disabled=false;}
@@ -628,7 +641,7 @@ document.querySelectorAll('[data-export]').forEach(b=>b.onclick=act(async()=>{if
 composerUI=initComposerPanel({getState:()=>state,visualControls,getAttachments:()=>attachments,notify:toast,
  getLastImageSeed:model=>api('/images/last-seed?model='+encodeURIComponent(model)),
  saveImagePresets:async presets=>{const settings=await api('/settings',{moss_presets:presets});state.settings=settings;if(settingsDraft)settingsDraft.moss_presets=structuredClone(settings.moss_presets);}});
-infographicsUI=initInfographics({getState:()=>state,getAttachments:()=>attachments,uploadVideo:uploadFiles,notify:toast});
+infographicsUI=initInfographics({api,getState:()=>state,getAttachments:()=>attachments,uploadVideo:uploadFiles,notify:toast});
 manimPresentation=initManimPresentation({getAttachments:()=>attachments,getCanvas:()=>canvas,getState:()=>state,getChatId:()=>current,api,notify:toast});
 document.querySelector('#composer').addEventListener('change',()=>manimPresentation.render());
 const accountActions=document.createElement('div');accountActions.className='account-actions';accountActions.innerHTML='<a class="settings-button" href="/access">♙ <span>Account e accessi</span></a><button type="button" id="account-logout" class="settings-button">↪ <span>Esci dall’account</span></button>';$('#settings-open').after(accountActions);
