@@ -55,6 +55,10 @@ Un rifiuto o uno Stop conclude l'esecuzione; non aggirarlo con un altro strument
 Non ripetere una scrittura identica: un risultato già salvato va riutilizzato.
 Genera immagini solo se allow_images è vero. Le slide non generano nuove immagini implicitamente:
 usa create_image_lot e poi il lotto restituito, oppure scegli lotti esistenti.
+Per cornici o sfondi usa create_slide_backgrounds (oppure list_slide_backgrounds), non create_image_lot.
+Passa il background_style restituito a create_slides: una figura normale non diventa automaticamente uno sfondo.
+Per applicare una cornice già creata a slide esistenti usa apply_slide_background, poi controlla il layout.
+Per immagini con formati diversi, indica il formato di ciascuna immagine nel prompt numerato di create_image_lot.
 Non dichiarare operazioni eseguite senza il risultato dello strumento. Se mancano capacità,
 fonti, autorizzazioni o verifiche dichiaralo; finish può spiegare un limite senza inventare successi.'''
 BRIEF+='\nPer configurare un server LLM usa configure_api: prepara nome, indirizzo e modello. La chiave si inserisce soltanto nella finestra protetta, mai nel prompt o negli argomenti. Non chiedere di incollarla in chat. Il salvataggio non equivale a una prova della connessione.'

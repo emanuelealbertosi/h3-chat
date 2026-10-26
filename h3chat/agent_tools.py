@@ -37,6 +37,9 @@ from .agent_computer import definitions as computer_definitions
 TOOLS.update(computer_definitions())
 from .agent_model_tools import definitions as model_definitions,WRITES as MODEL_WRITES
 TOOLS.update(model_definitions())
+from .agent_background_tools import definitions as background_definitions
+TOOLS.update(background_definitions())
+TOOLS['create_slides'][1]['properties']['background_style']=copy.deepcopy(TOOLS['apply_slide_background'][1]['properties']['background_style'])
 WRITES={'create_slides','revise_slide','complete_slides','create_image_lot','edit_image','create_voice','create_music','resing_music','create_infographic','apply_infographic_music','render_infographic','create_manim','transcribe_audio','calculate'}
 WRITES|=MUTATIONS
 WRITES.add('configure_api')
@@ -44,6 +47,7 @@ WRITES.update(file_definitions())
 WRITES|=WEB_WRITES
 WRITES.update(computer_definitions())
 WRITES|=MODEL_WRITES
+WRITES|={'create_slide_backgrounds','apply_slide_background'}
 LINKABLE={'create_slides','create_image_lot','create_voice','create_music','create_infographic','create_manim'}
 LINKABLE.update(file_definitions())
 for tool in LINKABLE:TOOLS[tool][1]['properties']['source_artifact_ids']={'type':'array','items':ID,'maxItems':8}
@@ -55,7 +59,7 @@ def permission(config,name,args):
     if name in MUTATIONS or name=='read_project' or name=='list_projects':
         if not config.get('allow_projects'):raise PermissionError('Gestione progetti e RAG non autorizzata nelle impostazioni Agent.')
     if name=='import_web_sources' and not config.get('allow_projects'):raise PermissionError('Abilita la gestione progetti Agent per aggiungere fonti Web al RAG.')
-    key={'create_image_lot':'allow_images','edit_image':'allow_images','create_voice':'allow_audio','create_music':'allow_audio','resing_music':'allow_audio','apply_infographic_music':'allow_audio',
+    key={'create_image_lot':'allow_images','create_slide_backgrounds':'allow_images','edit_image':'allow_images','create_voice':'allow_audio','create_music':'allow_audio','resing_music':'allow_audio','apply_infographic_music':'allow_audio',
          'create_manim':'allow_manim','transcribe_audio':'allow_transcription'}.get(name)
     if key and not config.get(key,False):raise PermissionError('Permesso disabilitato per questo strumento: '+key)
     if name=='create_infographic':
@@ -118,6 +122,9 @@ def execute(ctx,name,args):
     if name in model_definitions():
         from .agent_model_tools import execute as execute_model
         return execute_model(ctx,name,args)
+    if name in background_definitions():
+        from .agent_background_tools import execute as execute_background
+        return execute_background(ctx,name,args)
     if name in file_definitions():
         from .agent_files import execute as execute_file
         return execute_file(ctx,name,args)
@@ -233,7 +240,7 @@ def execute(ctx,name,args):
         from .slide_image_lots import resolve
         from .slide_background_style import resolve as resolve_backgrounds
         defaults={k:v for k,v in settings['_agent'].get('slide_defaults',{}).items() if k not in ('count_mode',)}
-        defaults.update({k:args[k] for k in ('count','format','motion') if k in args})
+        defaults.update({k:args[k] for k in ('count','format','motion','background_style') if k in args})
         defaults.update(generate_images=False)
         if defaults.get('image_source')=='generate':defaults['image_source']='auto'
         if args.get('lot_ids'):defaults.update(image_source='lots',image_lots=args['lot_ids'])

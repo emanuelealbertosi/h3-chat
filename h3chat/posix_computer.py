@@ -46,7 +46,7 @@ def sandbox_command(root,argv,cwd,env,*,reads=()):
     if sys.platform=='darwin':return [backend,'-p',mac_profile(allowed,[cwd]),*map(str,argv)]
     # Empty mount namespace: no host /home, /run, /tmp, credentials or sockets.
     # --unshare-all includes network + PID isolation. No privileged fallback.
-    args=[backend,'--die-with-parent','--new-session','--unshare-all','--cap-drop','ALL','--proc','/proc','--dev','/dev','--tmpfs','/tmp']
+    args=[backend,'--die-with-parent','--new-session','--unshare-all','--unshare-user','--cap-drop','ALL','--proc','/proc','--dev','/dev','--tmpfs','/tmp']
     for name in ('/usr','/bin','/sbin','/lib','/lib64'):
         p=Path(name)
         if p.exists():args+=['--ro-bind',name,name]

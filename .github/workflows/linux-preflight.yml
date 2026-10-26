@@ -24,5 +24,5 @@ jobs:
         run: |
           g++ -O2 -std=c++17 native/sd-worker.cpp -ldl -pthread -o build/linux-preflight/H3-Chat/native/h3-sd-worker
           cc -O2 scripts/linux-process-guard.c -o build/linux-preflight/H3-Chat/runtime/tools/h3-process-guard
-      - name: Check actual native file/process boundaries
+      - name: Check native file/process boundaries with an explicit user namespace
         run: build/linux-preflight/H3-Chat/runtime/python/bin/python3 -X utf8 scripts/check_posix.py build/linux-preflight/H3-Chat

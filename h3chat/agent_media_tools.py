@@ -164,8 +164,6 @@ def execute(ctx,name,args):
         return ctx.artifact_result(value)
     if name=='create_manim':
         from .manim_artifact import build
-        from .platform_runtime import is_macos
-        if is_macos():raise ValueError('Manim non è ancora disponibile nell’edizione macOS.')
         local.update(_lab='manim',_lab_source='',_manim_voice=False,manim_device='cpu')
         if 'duration' in args:local['manim_duration']=args['duration']
         title,content,files=build(app,job,ctx.payload|{'prompt':args['prompt'],'media':media},ctx.history(args['prompt']),local,ctx.model,ctx.cancel,ctx.stage,ctx.log_path,meta)

@@ -4,6 +4,8 @@ const child=spawn('runtime/python/python.exe',['-X','utf8','tests/serve_agent_fi
 const folder='work/agent-phase1-2026-10-25';mkdirSync(folder,{recursive:true});
 try{
  browser=await chromium.launch({channel:'msedge',headless:true,args:['--disable-gpu']});const page=await browser.newPage({viewport:{width:1480,height:1080}}),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(fixture.url);await page.click(`[data-chat="${fixture.chat_id}"]`);
+ assert.equal(await page.locator('#prompt-modes').evaluate(el=>el.lastElementChild.id),'prompt-agent');
+ assert.equal(await page.locator('#prompt-agent').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(168, 39, 49)');
  await page.getByRole('button',{name:'◇ Agent',exact:true}).click();
  await page.locator('#agent-scope').waitFor();assert.equal(await page.locator('#agent-scope [data-scope=h3]').getAttribute('aria-pressed'),'true');
  await page.locator('#agent-scope [data-scope=global]').click();const warning=page.locator('.agent-scope-dialog');await warning.waitFor();assert.equal(await warning.locator('[data-activate]').isEnabled(),false);assert.match(await warning.locator('[data-warning]').innerText(),/cancellare file/);await warning.locator('[data-cancel]').click();assert.equal(await page.locator('#agent-scope [data-scope=h3]').getAttribute('aria-pressed'),'true');
