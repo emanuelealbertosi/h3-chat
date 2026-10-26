@@ -28,13 +28,14 @@ export function initComposerSettings({context,getState,onChange,visualControls})
    const row=document.createElement('div');row.className='prompt-settings-row';
    const button=document.createElement('button');button.type='button';button.className='prompt-choice';button.textContent='⚙ Impostazioni '+title;button.dataset.modeSettings=id;button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-controls',dialog.id);
    const text=document.createElement('span');text.className='prompt-settings-summary';row.append(button,text);context.append(row);
+   if(id==='agent-options'){button.textContent='⚙ Preferenze Agente · budget e limiti';button.setAttribute('aria-controls','agent-preferences');const auto=panel.querySelector('[data-agent-auto]');if(auto)row.insertBefore(auto,text);}
    if(id==='music-inputs'){
     const resing=document.createElement('button');resing.type='button';resing.className='prompt-choice';resing.dataset.musicResing='';resing.textContent='Re-sing';button.after(resing);
     resing.onclick=()=>{visualControls.set({...visualControls.read(),music_resing:!visualControls.read().music_resing});onChange();render();};
    }
    const tab=document.createElement('button');tab.type='button';tab.className='prompt-choice';tab.textContent=title;tab.dataset.modeTab=id;tabs.append(tab);
    const entry={id,title,describe,panel,wrapper,row,button,text,tab};entries.push(entry);
-   button.onclick=()=>{current=id;opener=button;render();dialog.showModal();};tab.onclick=()=>{current=id;render();};
+   button.onclick=()=>{if(id==='agent-options'){panel.querySelector('[data-agent-preferences]').click();return;}current=id;opener=button;render();dialog.showModal();};tab.onclick=()=>{if(id==='agent-options'){dialog.close();panel.querySelector('[data-agent-preferences]').click();return;}current=id;render();};
   }
  }
  function render(){

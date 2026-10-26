@@ -32,6 +32,14 @@ from h3chat.engine import runtime_executable
 from docx import Document
 assert protect(protect('h3-linux-disposable-test'),True)=='h3-linux-disposable-test'
 for key in ('documents','lab','asr','latex'):assert status(stage)[key]['ready'],(key,status(stage))
+with tempfile.TemporaryDirectory(prefix='h3-linux-tex-') as temporary:
+    folder=Path(temporary);texbin=next((stage/'runtime/tools/latex/TinyTeX/bin').glob('*/latex')).parent
+    (folder/'test.tex').write_text(r'\documentclass[preview]{standalone}\begin{document}$x^2+1$\end{document}')
+    env=os.environ|{'PATH':str(texbin)+os.pathsep+os.environ.get('PATH','')}
+    for command in ([texbin/'latex','-interaction=nonstopmode','-halt-on-error','-no-shell-escape','test.tex'],[texbin/'dvisvgm','--no-fonts','test.dvi','-o','test.svg']):
+        result=subprocess.run(list(map(str,command)),cwd=folder,env=env,capture_output=True,timeout=60)
+        assert result.returncode==0,(command,result.stderr[-1500:],result.stdout[-1500:])
+    assert '<svg' in (folder/'test.svg').read_text()
 llama=runtime_executable(stage,'cpu','llama');assert llama
 result=subprocess.run([str(llama),'--version'],capture_output=True,timeout=60);assert result.returncode==0,result.stderr[-2000:]
 for worker in (stage/'native/h3-sd-worker',stage/'runtime/music/cpu/h3-music-worker'):

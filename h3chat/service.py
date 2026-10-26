@@ -153,7 +153,7 @@ class Service:
                 "media_server":self.media_server.status(),
                 "llm_options":{"keys":LLM_KEYS,"defaults":{profile:llm_defaults(profile) for profile in PROFILES},"max_context":MAX_CONTEXT,"max_output_tokens":MAX_OUTPUT_TOKENS},
                 "music_runtime":music_status(self.root), "music_options":{"request_controls":True,"resing":True,"defaults":MUSIC_DEFAULTS,"numbers":MUSIC_NUMBERS,"integers":sorted(MUSIC_INTEGER)},
-                "agent_options":{"enabled":True,"version":2,"prefix":"agent:","computer":__import__('h3chat.agent_computer',fromlist=['public']).public(self)},
+                "agent_options":{"enabled":True,"version":3,"prefix":"agent:","computer":__import__('h3chat.agent_computer',fromlist=['public']).public(self)},
                 "slide_options":{"max_count":MAX_SLIDES,"automatic_count":True,"background_batches":True,"background_styles":True,"settings_presets":True,"automatic_decorations":True},
                 "video_options":{"defaults":VIDEO_DEFAULTS,"aspects":VIDEO_ASPECTS,"request_controls":True,"segment_controls":True,"format_control":True,"request_draft":True,"seed_control":True,"attention_choices":True,"batch_controls":True}, "veda_runtime":veda_status(self.root),
                 "tools_runtime":tools_status(self.root),"transcription_models":[m|{'ready':all(safe_join(self.root,f['path']).is_file() for f in m['files'])} for m in self.downloads.tool_models.values() if m['id'].startswith('whisper-')],
@@ -256,6 +256,9 @@ class Service:
             else:raise ValueError('In modalità CPU scegli un LLM locale o un provider esterno.')
         if 'llm_overrides' in patch:validate_llm_presets(patch['llm_overrides'],patch.get('profile',current['profile']))
         s = merge_llm_settings(current,patch)
+        from .agent_state import options as agent_options
+        agent_defaults=agent_options(s.get('agent_defaults',{}))
+        if agent_defaults.get('scope')!='h3' or agent_defaults.get('grant_id'):raise ValueError('Le preferenze Agent non possono salvare autorizzazioni di accesso al computer.')
         from .llm_steering import validate as validate_steering
         validate_steering(s)
         if s.get('llm_steering_enabled'):

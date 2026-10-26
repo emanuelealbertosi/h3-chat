@@ -89,7 +89,12 @@ def apply_aspect(result,prompt='',model=None):
 
 def options(model, settings,prompt=''):
     result=configured(model,settings)
-    from .moss_dmd2 import effective
+    from .moss_dmd2 import effective,requested as requested_turbo
+    turbo=requested_turbo(prompt,moss=model.get('architecture')=='moss')
+    if turbo is not None:
+        if turbo and model.get('architecture')!='moss':raise ValueError('È stato richiesto MOSS Turbo, ma il modello scelto non è MOSS. Nessuna sostituzione automatica.')
+        if not turbo and result.get('moss_turbo') and result.get('moss_turbo_previous'):result.update(result['moss_turbo_previous'])
+        result['moss_turbo']=turbo
     result=effective(result)
     requested={}
     for key,pattern in (

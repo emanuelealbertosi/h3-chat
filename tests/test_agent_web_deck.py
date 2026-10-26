@@ -48,7 +48,7 @@ class WebDeckTests(unittest.TestCase):
         document={'pages':1,'blocks':[{'text':'Turing formalized effective computation using a tape and a finite table.','location':'p. 1','page':1}]}
         with patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=completion),patch.object(self.app.engine,'tool_call',side_effect=worker),patch.object(self.app.engine,'read_document',return_value=document),patch('h3chat.web_search.search',return_value=[row]),patch('h3chat.web_search.fetch',return_value='<img src="/tape.png" alt="Tape diagram">'),patch('h3chat.web_search.public_url',side_effect=lambda url:url):
             self.app.execute_job(job,threading.Event())
-        state=load(self.app,chat,job['id']);self.assertEqual(state['status'],'done');self.assertTrue(all(a['status']=='done' for a in state['actions']),state['actions']);self.assertTrue(seen[0])
+        state=load(self.app,chat,job['id']);self.assertEqual(state['status'],'done',{'message':state['message'],'usage':state['usage']});self.assertTrue(all(a['status']=='done' for a in state['actions']),state['actions']);self.assertTrue(seen[0])
         artifact=self.app.store.canvas_history.get(chat,state['artifacts'][-1]['id']);deck=json.loads(artifact['content'][len(PREFIX):-4]);self.assertEqual(len(deck['pages']),5);self.assertGreaterEqual(page[0],5)
         self.assertTrue(any(v['mime']=='image/png' for v in artifact['media']));self.assertEqual(state['config']['scope'],'h3');self.assertFalse(state['config']['allow_images'])
 

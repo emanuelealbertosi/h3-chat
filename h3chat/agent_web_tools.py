@@ -9,6 +9,25 @@ from .store import uid
 
 WRITES={'import_web_images','import_web_sources','download_web_document'}
 
+
+def page_links(html,base):
+    from urllib.parse import urlsplit
+    class Links(HTMLParser):
+        def __init__(self):super().__init__();self.rows=[];self.current=None
+        def handle_starttag(self,tag,attrs):
+            if tag=='a':self.current={'url':urljoin(base,dict(attrs).get('href','')),'label':''}
+        def handle_data(self,value):
+            if self.current:self.current['label']+=value[:200]
+        def handle_endtag(self,tag):
+            if tag=='a' and self.current:
+                p=urlsplit(self.current['url'])
+                if p.scheme in ('http','https') and p.hostname and not p.username and not p.password and len(self.rows)<60:self.rows.append(self.current)
+                self.current=None
+    parser=Links();parser.feed(html);seen=set();result=[]
+    for row in parser.rows:
+        if row['url'] not in seen:seen.add(row['url']);result.append({'url':row['url'][:2000],'label':row['label'].strip()[:200]})
+    return result
+
 def definitions():
     def s(n=1000):return {'type':'string','maxLength':n}
     def obj(p,r):return {'type':'object','properties':p,'required':r,'additionalProperties':False}
@@ -47,12 +66,12 @@ def execute(ctx,name,args):
         ctx.tool_app.save_artifact(ctx.job['chat_id'],**value)
         return ctx.artifact_result(value)|{'downloaded':True,'read':False,'source_url':args['url']}
     if name=='read_web_page':
-        parser=Text();parser.feed(fetch(args['url'],ctx.cancel));text=parser.text()[:16000]
+        html=fetch(args['url'],ctx.cancel);parser=Text();parser.feed(html);text=parser.text()[:16000]
         if not text or re.search(r'enable javascript|verify.{0,20}human|checking your browser|access denied|just a moment',text[:2500],re.I):raise ValueError('La pagina blocca la lettura pubblica o richiede un browser. Nessun contenuto simulato.')
         row={'title':args['url'],'url':args['url'],'text':text,'snippet':'','read':True};remember(ctx,[row])
         number=next((i for i,s in enumerate(ctx.state['web_sources'],1) if s['url']==row['url']),None)
         if number is None:raise ValueError('Raggiunto il limite di 20 fonti Web per questa sessione Agent.')
-        return {'source':row|{'number':number},'data_only':True}
+        return {'source':row|{'number':number},'links':page_links(html,args['url']),'data_only':True}
     if name=='search_web_images':
         count=args.get('count',12);candidates=[]
         if ctx.settings['web_provider']=='searxng':

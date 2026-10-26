@@ -2,7 +2,7 @@
 
 Agent è una modalità aggiuntiva. Assistant On/Off, chat e tutte le modalità esistenti
 rimangono disponibili. Scegli **Agent** tra i pulsanti della chat e apri
-**Impostazioni Agent**, oppure anteponi `agent:` al messaggio. Per il cervello usa il
+**Preferenze Agente · budget e limiti**, oppure anteponi `agent:` al messaggio. Per il cervello usa il
 LLM scelto in chat, locale o tramite API; deve produrre JSON strutturato valido.
 Con il registro esteso è consigliato un contesto di almeno 32.000 token; modelli piccoli o poco affidabili
 nel JSON possono fermarsi senza eseguire strumenti.
@@ -11,6 +11,38 @@ Il ciclo è realmente iterativo: il modello sceglie uno strumento, H3 ne verific
 argomenti e permessi, lo esegue, restituisce l'esito e il modello decide il seguito.
 Il piano iniziale non fissa una sequenza obbligatoria. Non vengono installati altri
 LLM, scaricati modelli o caricati motori aggiuntivi all'avvio di Agent.
+
+## Preferenze, autoapprovazione e preparazione multiagente
+
+Apri **Impostazioni e modelli → Preferenze → Agente autonomo → Apri preferenze
+Agente**, oppure il pulsante dedicato sotto la modalità Agent. Puoi salvare limiti
+di passaggi, minuti attivi, chiamate LLM, budget prudenziale, immagini, timeout dei
+comandi PC e dimensione massima dei download. I permessi dei singoli motori sono
+separati. Per riprendere un run sospeso aumenta i suoi limiti e premi Riprendi:
+salvare le preferenze non rilancia lavori automaticamente.
+
+**Autoapprova** mostra un avviso e richiede una conferma esplicita. Evita le conferme
+dei tool consentiti per le nuove richieste. Non cambia modalità H3/Sandbox/Globale,
+permessi di generazione, budget, Stop, popup credenziali o conferme amministratore.
+All'apertura dell'app torna disattivato; una sessione già avviata conserva i suoi
+permessi e non viene ampliata dal pulsante.
+
+Numero agenti: 1 è il coordinatore singolo. Da 2 a 4 aggiunge consulenti di piano,
+revisione e verifica nella preparazione iniziale, usando lo stesso LLM. Le chiamate
+sono sequenziali, condividono budget e tempo e non eseguono tool. Il coordinatore
+riceve le sintesi come dati, sceglie i tool e mantiene un solo registro: nessuna
+generazione duplicata. I contributi completati restano salvati alla pausa/ripresa.
+
+Per MOSS Turbo il tool immagini espone `moss_turbo`; le richieste letterali vengono
+legate alla ricetta DMD2. I parametri di ogni immagine compaiono nel registro dei
+passaggi. Un modello incompatibile produce un errore, senza fallback silenzioso.
+
+`download_web_file` scarica link diretti pubblici negli output, con progresso e
+SHA256, senza eseguire o estrarre. `read_web_page` restituisce anche i link della
+pagina. `install_lora_from_url` controlla LoRA safetensors e compatibilità col
+modello e aggiorna la libreria, senza sovrascrivere o selezionare automaticamente
+il LoRA. Si applicano limite di dimensione, spazio e timeout; autenticazioni e
+licenze non vengono aggirate. Skill dedicate: `computer` e `models`.
 
 ## Strumenti disponibili
 

@@ -3,7 +3,7 @@ def definitions():
     def s(n=300):return {'type':'string','maxLength':n}
     def obj(p,r=()):return {'type':'object','properties':p,'required':list(r),'additionalProperties':False}
     params=obj({'steps':{'type':'integer','minimum':1,'maximum':100},'cfg':{'type':'number','minimum':0,'maximum':30},'seed':{'type':'integer','minimum':-1,'maximum':2147483647},
-        'sampler':s(50),'scheduler':s(50),'aspect':s(10),'megapixels':{'type':'number','minimum':.2,'maximum':16},'width':{'type':'integer','minimum':256,'maximum':4096},'height':{'type':'integer','minimum':256,'maximum':4096},'negative_prompt':dict(s(8000),minLength=0),
+        'sampler':s(50),'scheduler':s(50),'moss_turbo':{'type':'boolean'},'aspect':s(10),'megapixels':{'type':'number','minimum':.2,'maximum':16},'width':{'type':'integer','minimum':256,'maximum':4096},'height':{'type':'integer','minimum':256,'maximum':4096},'negative_prompt':dict(s(8000),minLength=0),
         'shift_video':{'type':'number','minimum':.01,'maximum':100},'shift_audio':{'type':'number','minimum':.01,'maximum':100},'duration':{'type':'number','minimum':1,'maximum':15},'attention':s(30)})
     return {
         'list_model_catalog':('Elenca i modelli H3 installati/collegati e quelli scaricabili dal catalogo verificato, con ID e dimensione. Non installa software o pesi da URL arbitrari; per un’architettura nuova non supportata serve prima integrare il motore.',obj({'query':s(200)})),
@@ -38,8 +38,14 @@ def execute(ctx,name,args):
         from .agent_computer import owner
         owner(app);values=args['parameters'];live=app.store.settings();video='video' in model['capabilities'];key='video_overrides' if video else 'image_overrides'
         if not video and not set(model['capabilities'])&{'create','edit'}:raise ValueError('Questo strumento configura preset immagini o video, non LLM o musica.')
-        allowed={'duration','megapixels','aspect','steps','cfg','sampler','scheduler','seed','shift_video','shift_audio','attention'} if video else {'megapixels','aspect','width','height','steps','cfg','sampler','scheduler','seed','negative_prompt'}
+        allowed={'duration','megapixels','aspect','steps','cfg','sampler','scheduler','seed','shift_video','shift_audio','attention'} if video else {'megapixels','aspect','width','height','steps','cfg','sampler','scheduler','seed','negative_prompt','moss_turbo'}
         if set(values)-allowed:raise ValueError('Parametri non applicabili al tipo di modello scelto.')
+        if not video and 'moss_turbo' in values:
+            from .image_options import configured
+            from .moss_dmd2 import RECIPE
+            previous=configured(model,live)
+            if not values['moss_turbo'] and previous.get('moss_turbo_previous'):values=previous['moss_turbo_previous']|values
+            elif values['moss_turbo'] and not previous.get('moss_turbo'):values=values|{'moss_turbo_previous':{k:previous[k] for k in RECIPE}}
         patch={key:live[key]|{model['id']:live[key].get(model['id'],{})|values}}
         if video:
             from .video_options import options

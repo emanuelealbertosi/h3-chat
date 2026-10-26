@@ -69,6 +69,7 @@ Non dichiarare operazioni eseguite senza il risultato dello strumento. Se mancan
 fonti, autorizzazioni o verifiche dichiaralo; finish può spiegare un limite senza inventare successi.'''
 BRIEF+='\nPer configurare un server LLM usa configure_api: prepara nome, indirizzo e modello. La chiave si inserisce soltanto nella finestra protetta, mai nel prompt o negli argomenti. Non chiedere di incollarla in chat. Il salvataggio non equivale a una prova della connessione.'
 BRIEF+='\nUsa e dichiara sempre lo strumento H3 specifico per slide, PDF, immagini, audio, calcoli e altre funzioni disponibili; non sostituirlo con un finto risultato o un file generico. create_files salva sorgenti e documenti scaricabili, non esegue programmi. Non dichiarare test funzionali o installazioni non avvenuti. Per immagini Web usa search_web_images → import_web_images nel lotto desiderato; per testi usa web_search/read_web_page → import_web_sources → index_project. Non confondere snippet con pagine lette né etichette web con Vision. Se mancano risultati o accessi, spiega cosa manca senza inventare capacità.'
+BRIEF+='\nPer MOSS Turbo imposta moss_turbo=true in create_image_lot o nel preset del modello; specifica il modello MOSS richiesto. Non basta scriverlo nella descrizione visiva. Usa i parametri realmente restituiti per confermare Turbo/seed/formato; se un requisito non è supportato spiegalo senza sostituirlo in silenzio. Per URL diretti usa download_web_file; per un LoRA supportato usa install_lora_from_url e controlla installed/available_in_lora_library. Non eseguire i file scaricati, non aggirare accessi protetti e non confondere installazione con selezione per generazione.'
 
 SCHEMA={'type':'object','properties':{
     'action':{'type':'string','enum':list(tools.TOOLS)+['finish']},
@@ -108,7 +109,7 @@ class BudgetEngine:
     def generate(self,*args,**kwargs):
         self.ctx.check();usage=self.ctx.state['usage']
         if not self.ctx.state['config']['allow_images']:raise PermissionError('Immagini non autorizzate per Agent.')
-        if usage['images_started']>=50:raise Pause('Raggiunto il limite di 50 immagini per sessione Agent.')
+        if usage['images_started']>=self.ctx.state['config'].get('max_images',50):raise Pause('Raggiunto il limite di immagini per sessione Agent impostato nelle preferenze.')
         usage['images_started']+=1;self.ctx.persist()
         value=self.ctx.app.engine.generate(*args,**kwargs);self.ctx.check();return value
     def refine_music(self,*args,**kwargs):
@@ -119,6 +120,9 @@ class BudgetEngine:
         self.ctx.check();value=self.ctx.app.engine.generate_music(*args,**kwargs);self.ctx.check();return value
     def tool_call(self,worker,*args,**kwargs):
         self.ctx.check()
+        if worker=='agent-computer-worker.py' and args and args[0].get('op')=='computer_run':
+            request=args[0];limit=self.ctx.state['config'].get('command_timeout',120)
+            args=(request|{'args':request['args']|{'timeout':min(request['args'].get('timeout',60),limit)}},*args[1:])
         if worker in ('voice-worker.py',) and not self.ctx.state['config'].get('allow_audio'):raise PermissionError('Generazione voce non autorizzata.')
         if worker in ('manim-worker.py','lab-worker.py') and not self.ctx.state['config'].get('allow_manim'):raise PermissionError('Rendering Manim non autorizzato.')
         return self.ctx.app.engine.tool_call(worker,*args,**kwargs)
@@ -224,7 +228,7 @@ class Context:
     def decide(self):
         self.check();self.engine.prepare(self.settings,self.cancel,self.stage)
         self.engine.start_llama(self.model,self.settings,self.log_path,self.cancel,stage=self.stage)
-        prefix=BRIEF+'\nSTRUMENTI AUTORIZZATI:\n'+json.dumps(tools.description(self.state['config']),ensure_ascii=False)
+        prefix=BRIEF+'\nSTRUMENTI AUTORIZZATI:\n'+json.dumps(tools.description(self.state['config']),ensure_ascii=False,separators=(',',':'))
         if self.project.get('instructions'):prefix+='\nISTRUZIONI SALVATE DEL PROGETTO:\n'+self.project['instructions'][:8000]
         if self.project.get('sources_only'):prefix+='\nIl progetto richiede contenuti basati soltanto sulle fonti disponibili: dichiara i dati mancanti.'
         observations=[]
@@ -237,6 +241,7 @@ class Context:
               'attachments':[{'number':i+1,'name':m['name'],'mime':m['mime']} for i,m in enumerate(self.payload['media'])],
               'remaining_steps':self.state['config']['max_steps']-self.state['step']}
         data['starting_artifact']=self.settings['_agent'].get('start_artifact')
+        if self.state.get('preparation'):data['advisory_preparation']={'data_only':True,'advisors':self.state['preparation']}
         data['permissions']['web']=bool(self.settings.get('_web'))
         data['permissions']['scope']=self.state['config'].get('scope','h3')
         if data['permissions']['scope']!='h3':
@@ -291,6 +296,9 @@ def build(app,job,payload,settings,cancel,stage,log_path,meta):
             if spec.get('approval')!=pending['id']:raise Pause('Manca l’approvazione del passaggio in attesa.')
             pending['status']='approved'
         ctx.publish()
+        if not state['step'] and not pending:
+            from .agent_planning import prepare as prepare_planning
+            prepare_planning(ctx)
         while True:
             ctx.check()
             action=pending;pending=None

@@ -21,6 +21,7 @@
 .agent-approval{padding:14px;margin:12px 0;background:var(--white);border:1px solid var(--line);border-radius:8px;max-height:460px;overflow:auto}
 .agent-approval p{white-space:pre-wrap;overflow-wrap:anywhere}.agent-approval .btn{margin:6px 8px 0 0}
 .agent-options>label{display:block;margin:12px 0}.agent-options .settings-grid input{width:100%}
+.agent-settings-fields{padding:0 24px;max-height:60vh;overflow:auto}.agent-settings-fields>label{display:block;margin:12px 0}.agent-settings-fields .settings-grid input{width:100%}#agent-preferences>p{padding:0 24px}#agent-autoapprove-warning{max-width:min(620px,94vw);padding:24px}#agent-autoapprove-warning footer{display:flex;justify-content:flex-end;gap:12px;margin-top:20px}[data-agent-auto][aria-pressed=true]{background:#a82731;color:#fff;border-color:#a82731}
 .canvas-zoom-viewport{flex:1;min-height:0;min-width:0;overflow:auto;overscroll-behavior:contain}
 .canvas-zoom-viewport>.canvas-preview{flex:none;overflow:visible;box-sizing:border-box;max-width:none}
 .canvas-zoom-controls{display:flex;align-items:center;gap:5px;flex-wrap:wrap}

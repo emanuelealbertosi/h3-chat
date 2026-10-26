@@ -8,6 +8,7 @@ from .downloads import safe_join
 from .store import uid
 
 DEFAULTS={'max_steps':16,'max_minutes':30,'max_calls':80,'token_budget':500000,
+          'planning_agents':1,'max_images':50,'command_timeout':120,'max_download_megabytes':8192,
           'confirm_writes':True,'allow_images':False,'allow_audio':False,'allow_video':False,'allow_manim':False,'allow_transcription':True,'allow_projects':False,'scope':'h3','grant_id':''}
 
 def options(value=None):
@@ -15,7 +16,7 @@ def options(value=None):
     if not isinstance(value,dict) or set(value)-set(DEFAULTS):raise ValueError('Opzioni Agent non valide.')
     result=DEFAULTS|value
     if result['scope'] not in ('h3','sandbox','global') or not isinstance(result['grant_id'],str) or result['grant_id'] and not re.fullmatch('[a-f0-9]{32}',result['grant_id']):raise ValueError('Modalità Agent non valida.')
-    for key,lo,hi in (('max_steps',1,50),('max_minutes',1,120),('max_calls',1,500),('token_budget',8000,2000000)):
+    for key,lo,hi in (('max_steps',1,50),('max_minutes',1,120),('max_calls',1,500),('token_budget',8000,2000000),('planning_agents',1,4),('max_images',1,50),('command_timeout',1,600),('max_download_megabytes',1,32768)):
         if type(result[key]) is not int or not lo<=result[key]<=hi:raise ValueError(f'Agent: {key} deve essere tra {lo} e {hi}.')
     for key in ('confirm_writes','allow_images','allow_audio','allow_video','allow_manim','allow_transcription','allow_projects'):
         if type(result[key]) is not bool:raise ValueError('Permessi Agent non validi.')
@@ -68,8 +69,11 @@ def public(state):
         if 'result' in action:
             encoded=json.dumps(action['result'],ensure_ascii=False)
             row['result_preview']=encoded[:1200];row['result_truncated']=len(encoded)>1200
+            if isinstance(action['result'],dict) and action['result'].get('image_parameters'):
+                keys=('moss_turbo','steps','cfg','sampler','scheduler','seed','width','height','aspect','megapixels')
+                row['image_parameters']=[{'index':v['index'],'model_id':v['model_id'],'parameters':{k:v['parameters'][k] for k in keys if k in v['parameters']}} for v in action['result']['image_parameters'][:50]]
         actions.append(row)
-    return {k:state[k] for k in ('id','status','plan','step','config','usage','elapsed_seconds','message','artifacts','current_job_id') if k in state}|{
+    return {k:state[k] for k in ('id','status','plan','step','config','usage','elapsed_seconds','message','artifacts','current_job_id','preparation') if k in state}|{
         'actions':actions,
         'can_resume':state['status'] in ('paused','stopped','failed','interrupted'),
         'budget_note':'Budget prudenziale: input UTF-8 e token massimi prenotati per ogni chiamata; non è un conteggio fatturato dal provider.'}
@@ -84,7 +88,9 @@ def enqueue(app,chat_id,body):
     if not prompt or len(prompt)>24000:raise ValueError('Descrivi il compito per Agent (massimo 24.000 caratteri).')
     request_id=body.get('agent_request_id')
     if request_id is not None and (not isinstance(request_id,str) or not re.fullmatch('[a-f0-9]{32}',request_id)):raise ValueError('Identificatore richiesta Agent non valido.')
-    config=options(body.get('agent'))
+    supplied=body.get('agent',{})
+    if not isinstance(supplied,dict):raise ValueError('Opzioni Agent non valide.')
+    config=options(app.store.settings().get('agent_defaults',{})|supplied)
     if config['scope']!='h3':
         from .agent_computer import grant
         grant(app,config)

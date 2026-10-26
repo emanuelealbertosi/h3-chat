@@ -37,6 +37,8 @@ from .agent_computer import definitions as computer_definitions
 TOOLS.update(computer_definitions())
 from .agent_model_tools import definitions as model_definitions,WRITES as MODEL_WRITES
 TOOLS.update(model_definitions())
+from .agent_asset_tools import definitions as asset_definitions,WRITES as ASSET_WRITES
+TOOLS.update(asset_definitions())
 from .agent_background_tools import definitions as background_definitions
 TOOLS.update(background_definitions())
 from .agent_video_tools import definitions as video_definitions,WRITES as VIDEO_WRITES
@@ -49,6 +51,7 @@ WRITES.update(file_definitions())
 WRITES|=WEB_WRITES
 WRITES.update(computer_definitions())
 WRITES|=MODEL_WRITES
+WRITES|=ASSET_WRITES
 WRITES|={'create_slide_backgrounds','apply_slide_background'}
 WRITES|=VIDEO_WRITES
 LINKABLE={'create_slides','create_image_lot','create_voice','create_music','create_infographic','create_manim','create_video','edit_video','inspect_video_timeline','assemble_video'}
@@ -56,8 +59,10 @@ LINKABLE.update(file_definitions())
 for tool in LINKABLE:TOOLS[tool][1]['properties']['source_artifact_ids']={'type':'array','items':ID,'maxItems':8}
 SKILLS={'sources':'agent-sources.md','slides':'agent-slides.md','images':'agent-images.md','audio':'agent-audio.md','graphics':'agent-graphics.md'}
 SKILLS['video']='agent-video.md'
+SKILLS.update(computer='agent-computer.md',models='agent-models.md')
 TOOLS['read_skill'][1]['properties']['name']['enum']=list(SKILLS)
 TOOLS['revise_slide'][1]['properties']['page']['description']='Numero della slide da 1: 1 è la prima, 2 è la seconda. Non usare indici da zero.'
+TOOLS['create_image_lot'][1]['properties']['moss_turbo']={'type':'boolean','description':'Turbo DMD2 per MOSS INT8/BF16/Kromoss: applica la ricetta dedicata. Se richiesto va impostato, non soltanto citato nel prompt.'}
 
 def permission(config,name,args):
     if name in VIDEO_WRITES and not config.get('allow_video',False):raise PermissionError('Video non autorizzati nelle impostazioni Agent.')
@@ -72,7 +77,14 @@ def permission(config,name,args):
         if args.get('generate_images') and not config.get('allow_images'):raise PermissionError('Generazione immagini non autorizzata.')
         if (args.get('voice') or args.get('music')=='generate') and not config.get('allow_audio'):raise PermissionError('Generazione audio non autorizzata.')
 
-def description(config=None):return [{'name':k,'description':v[0],'arguments_schema':v[1],'writes':k in WRITES} for k,v in TOOLS.items() if config is None or config.get('scope','h3')!='h3' or k not in computer_definitions()]
+def description(config=None):
+    rows=[]
+    for key,value in TOOLS.items():
+        if config is not None:
+            try:permission(config,key,{})
+            except PermissionError:continue
+        rows.append({'name':key,'description':value[0],'arguments_schema':value[1],'writes':key in WRITES})
+    return rows
 
 def writes(name,args):
     if name=='computer_files' and args.get('operation') in ('list','read','search'):return False
@@ -128,6 +140,9 @@ def execute(ctx,name,args):
     if name in model_definitions():
         from .agent_model_tools import execute as execute_model
         return execute_model(ctx,name,args)
+    if name in asset_definitions():
+        from .agent_asset_tools import execute as execute_asset
+        return execute_asset(ctx,name,args)
     if name in background_definitions():
         from .agent_background_tools import execute as execute_background
         return execute_background(ctx,name,args)
@@ -288,6 +303,19 @@ def execute(ctx,name,args):
         prompt=f'Crea {args["count"]} immagini. '+('Formato '+args['format']+'. ' if args.get('format') else '')+args['prompt']
         local=ctx.tool_settings()|{'_image_batch':True,'_image_model':args.get('model_id',''),
             '_image_lot':{'name':args['name'],'count':args['count'],'rag':bool(state['sources'])}}
+        from .moss_dmd2 import requested as requested_turbo
+        # A shared request may contain separate Qwen/MOSS jobs. In that case
+        # the planner must use the typed per-lot flag, not a global inference.
+        mixed=bool(re.search(r'\b(?:qwen|anima|flux|prima|seconda|terza|fourth|second|first)\b',state['request'],re.I))
+        selected=app.catalog.get(args.get('model_id') or local['create_model'],{})
+        moss=selected.get('architecture')=='moss'
+        turbo=requested_turbo(args['prompt'],moss=moss)
+        if turbo is None and not mixed:turbo=requested_turbo(state['request'],moss=moss)
+        if 'moss_turbo' in args:turbo=args['moss_turbo']
+        if turbo is not None:
+            local['_moss_turbo_requested']=turbo
         meta=ctx.tool_meta();build(ctx.tool_app,ctx.tool_job(),payload|{'prompt':prompt},ctx.history(prompt),local,ctx.cancel,ctx.stage,ctx.log_path,meta)
-        return ctx.artifact_result(meta['artifact'])|{'lot_id':ctx.action['id']}
+        return ctx.artifact_result(meta['artifact'])|{'lot_id':ctx.action['id'],'moss_turbo':turbo,
+            'sampling_recipe':__import__('h3chat.moss_dmd2',fromlist=['RECIPE']).RECIPE if turbo else None,
+            'image_parameters':[{'index':v['index'],'model_id':v['model_id'],'parameters':v['parameters']} for v in meta.get('image_batch_plan',[])]}
     raise ValueError('Strumento Agent non implementato.')

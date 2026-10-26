@@ -34,6 +34,7 @@ def requested_parameter_keys(prompt,index):
     if re.search(r'\b(?:quadrat[ao]|square|verticale|vertical|portrait format|orizzontale|horizontal|landscape format)\b',text,re.I):keys.add('aspect')
     if re.search(r'\bseed\s*(?:fisso|fixed|casuale|random)',text,re.I):keys.add('seed')
     if re.search(r'\b(?:negative[ _-]*prompt|prompt\s+negativo|negativo)\s*[:=]',text,re.I):keys.add('negative_prompt')
+    if re.search(r'\b(?:turbo|dmd2)\b',text,re.I):keys.add('moss_turbo')
     return keys
 
 

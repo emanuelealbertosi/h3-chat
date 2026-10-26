@@ -14,6 +14,35 @@ class AgentTests(unittest.TestCase):
     setUp=fixture.VisualModelsTests.setUp
     tearDown=fixture.VisualModelsTests.tearDown
 
+    def test_preparation_advisors_share_budget_and_never_execute_tools(self):
+        chat,job=self.ticket(prompt='agent: Prepara una risposta semplice',planning_agents=3,confirm_writes=False)
+        calls=[]
+        def complete(messages,settings,cancel,**kw):
+            calls.append(kw['schema'])
+            if 'summary' in kw['schema']['properties']:return json.dumps({'summary':'Conserva i requisiti espliciti.','checks':['Verifica il risultato.']}),'stop'
+            data=json.loads(messages[-1]['content']);self.assertTrue(data['advisory_preparation']['data_only']);self.assertEqual(len(data['advisory_preparation']['advisors']),2)
+            return decision('finish',message='Preparazione completata.')
+        answer,tool,image=self.run_job(job,complete)
+        state=ledger.load(self.app,chat,job['id'])
+        self.assertEqual(state['status'],'done',answer['meta']);self.assertEqual(state['usage']['llm_calls'],3)
+        self.assertEqual(state['actions'],[]);self.assertEqual(len(state['preparation']),2);tool.assert_not_called();image.assert_not_called()
+
+    def test_preparation_resume_keeps_completed_advice_and_the_same_budget(self):
+        chat,job=self.ticket(prompt='agent: Prepara una risposta semplice',planning_agents=3,max_calls=1)
+        def complete(messages,settings,cancel,**kw):
+            if 'summary' in kw['schema']['properties']:return json.dumps({'summary':'Contributo salvato.','checks':[]}), 'stop'
+            return decision('finish',message='Fatto.')
+        self.run_job(job,complete);state=ledger.load(self.app,chat,job['id']);self.assertEqual(state['status'],'paused');self.assertEqual(len(state['preparation']),1)
+        result=ledger.resume(self.app,chat,job['id'],{'limits':{'max_calls':5}})
+        next_job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(result['job_id'],));self.run_job(next_job,complete)
+        state=ledger.load(self.app,chat,job['id']);self.assertEqual(state['status'],'done');self.assertEqual(len(state['preparation']),2);self.assertEqual(state['usage']['llm_calls'],3)
+
+    def test_agent_preferences_do_not_store_computer_access_grants(self):
+        saved=self.app.save_settings({'agent_defaults':{'max_steps':28,'planning_agents':3}})
+        self.assertEqual(saved['agent_defaults']['planning_agents'],3)
+        for value in ({'planning_agents':5},{'scope':'global','grant_id':'a'*32}):
+            with self.assertRaises(ValueError):self.app.save_settings({'agent_defaults':value})
+
     def ticket(self,prompt='agent: Crea due slide e controlla il layout',**options):
         self.app.save_settings({'context':32768,'max_tokens':3000})
         chat=self.app.store.create_chat()['id']

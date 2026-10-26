@@ -51,7 +51,7 @@ def schema(model_ids,count=None,reference_count=9):
     parameters={'aspect':{'type':'string','enum':list(ASPECTS)},'megapixels':{'type':'number'},
                 'width':{'type':'integer'},'height':{'type':'integer'},'steps':{'type':'integer'},
                 'cfg':{'type':'number'},'seed':{'type':'integer'},'sampler':{'type':'string'},
-                'scheduler':{'type':'string'},'strength':{'type':'number'},'negative_prompt':{'type':'string'}}
+                'scheduler':{'type':'string'},'strength':{'type':'number'},'negative_prompt':{'type':'string'},'moss_turbo':{'type':'boolean'}}
     item={'type':'object','properties':{'prompt':{'type':'string','maxLength':1800},'model_id':{'type':'string','enum':model_ids},
           'model_choice':{'type':'string','maxLength':200},
           'lora_mode':{'type':'string','enum':['auto','explicit','none']},
@@ -192,6 +192,15 @@ def validate_plan(app,value,refs,settings,count=None,loras=(),source_prompt=''):
         if source_prompt:
             allowed=requested_parameter_keys(source_prompt,index+1)
             params={k:v for k,v in params.items() if k in allowed}
+        if settings.get('_moss_turbo_requested') is not None:
+            if model.get('architecture')!='moss':raise ValueError('Richiesto MOSS Turbo ma il piano sceglie un altro modello. Nessuna immagine avviata.')
+            turbo=settings['_moss_turbo_requested']
+            if type(turbo) is not bool:raise ValueError('Richiesta MOSS Turbo non valida.')
+            if not turbo:
+                from .image_options import configured
+                current=configured(model,settings)
+                if current.get('moss_turbo') and current.get('moss_turbo_previous'):params=current['moss_turbo_previous']|params
+            params=params|{'moss_turbo':turbo}
         local=capture_request(model,settings,params)
         literal=source_controls(source_prompt,index+1) if source_prompt else ''
         # Assistant prose describes the scene; only the user's original text

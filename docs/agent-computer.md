@@ -22,10 +22,18 @@ sotto le modalità del prompt quando scegli Agent. Assistant resta separato.
   cancellazione, esecuzione e invio dei contenuti al modello scelto. Richiede
   consenso locale; non è una protezione della cartella o dei dati dell’utente.
 
-Sandbox e Globale sono disponibili per ora su Windows. Su Mac gli strumenti H3
-restano disponibili; nessuna esecuzione non isolata sostituisce silenziosamente
+Sandbox e Globale sono implementate su Windows, macOS Apple Silicon e Linux.
+I collaudi nativi Mac e Ubuntu verificano file esterni, rete isolata, Stop e processi
+figli; la distribuzione Linux/Kali è ancora in collaudo. Mac usa Seatbelt, Linux
+bubblewrap; i processi isolati Mac/Linux non hanno rete diretta e usano i tool Web
+H3 per i download. Nessuna esecuzione non isolata sostituisce silenziosamente
 un confine non supportato. Al caricamento della pagina la scelta torna H3:
 le autorizzazioni al PC non vengono ripristinate da localStorage.
+
+I tool lavorano su file, programmi e risultati dei comandi. Non comprendono ancora
+controllo grafico del desktop, mouse/tastiera o lettura dello schermo. Un monitor
+del filesystem può durare entro timeout e budget; non resta attivo dopo il run.
+L'autoapprovazione non approva comandi amministratore o accessi al PC da sola.
 
 Sandbox ammette Internet pubblico e la capability Windows `registryRead` per
 le impostazioni di avvio, autorizzata espressamente dall’utente. Non concede
