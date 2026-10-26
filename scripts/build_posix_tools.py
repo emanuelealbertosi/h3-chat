@@ -45,7 +45,11 @@ def build(stage):
         # time; users must not need a package manager or a download on render.
         bins=[p for p in (latex/'TinyTeX/bin').iterdir() if p.is_dir()]
         if len(bins)!=1:raise ValueError('Unexpected TinyTeX executable directory.')
-        if not (bins[0]/'dvisvgm').is_file():run([bins[0]/'tlmgr','install','dvisvgm'])
+        if not (bins[0]/'dvisvgm').is_file():
+            # A pinned TinyTeX base can predate the repository's tlmgr revision.
+            # Update only its package manager before installing the missing tool.
+            run([bins[0]/'tlmgr','update','--self'],timeout=300)
+            run([bins[0]/'tlmgr','install','dvisvgm'],timeout=300)
         if not all((bins[0]/name).is_file() for name in ('latex','dvisvgm')):raise ValueError('Incomplete packaged TinyTeX: latex/dvisvgm missing.')
     for name in ('lab-requirements.txt','macos-requirements.txt','posix-asr-requirements.txt'):
         shutil.copy2(ROOT/'scripts'/name,stage/'scripts'/name)
