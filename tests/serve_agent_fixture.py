@@ -40,6 +40,8 @@ class FixtureHandler(Handler):
     identity={'role':'owner'}
     def log_message(self,*args):pass
 server=ThreadingHTTPServer(('127.0.0.1',0),FixtureHandler);server.app=app
-print(json.dumps({'url':f'http://127.0.0.1:{server.server_port}','chat_id':chat,'sandbox_path':str(sandbox_path)}),flush=True)
+asset_path='outputs/'+('f'*32)+'/asset/sample.bin';asset=app.data/asset_path;asset.parent.mkdir(parents=True);asset.write_bytes(b'Safe fixture download.')
+app.store.gallery.register([{'id':'f'*32,'name':'sample.bin','path':asset_path,'mime':'application/octet-stream'}]);asset.with_name('unpublished.bin').write_bytes(b'Not published')
+print(json.dumps({'url':f'http://127.0.0.1:{server.server_port}','chat_id':chat,'sandbox_path':str(sandbox_path),'asset_path':asset_path}),flush=True)
 try:server.serve_forever()
 finally:server.server_close();fixture.tearDown()

@@ -78,5 +78,6 @@ def execute(ctx,name,args):
         return {'installed':True,'name':selected,'sha256':result['sha256'],'bytes':result['bytes'],'family':traits['family'],'model_id':model['id'],
                 'selected_for_generation':False,'inference_started':False,'available_in_lora_library':any(v['path']==str(target) for v in listing['items'])}
     item={'id':ctx.action['id'],'name':selected,'path':result['path'],'mime':mimetypes.guess_type(selected)[0] or 'application/octet-stream'}
+    ctx.app.store.gallery.register([item])
     ctx.tool_app.save_artifact(ctx.job['chat_id'],title='File · '+selected,content='File scaricato; non aperto né eseguito. SHA256: '+result['sha256'],media=[item])
     return ctx.artifact_result({'title':'File · '+selected})|{'downloaded':True,'executed':False,'bytes':result['bytes'],'sha256':result['sha256'],'expected_hash_verified':bool(expected)}

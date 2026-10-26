@@ -277,6 +277,9 @@ class Worker:
         head=self.model.model.diffusion_model.final_layer
         from h3chat.fasth3 import check_heads
         check_heads(head.video_out.weight.shape[0],head.audio_out.weight.shape[0],getattr(self,'fast_omni',False))
+        if self.fast_omni:
+            from h3chat.fasth3 import install_head_bank
+            logging.info('FastH3 physical head-bank widths: %s',install_head_bank(self.model.model.diffusion_model))
         self.mlp_chunk_mb=0
         if self.offload and self.torch.cuda.get_device_properties(0).total_memory<=24*1024**3:
             from h3chat.video_mlp import install

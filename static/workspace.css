@@ -203,10 +203,11 @@
 .agent-connection-dialog label{display:block;margin:12px 0}.agent-connection-dialog label>input:not([type=checkbox]),.agent-connection-dialog select{display:block;width:100%;padding:10px;box-sizing:border-box}.agent-connection-dialog footer{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px;margin-top:20px}.agent-connection-dialog::backdrop{background:#0007}
 .collection-delete-dialog{width:min(720px,94vw);max-height:90vh;overflow:auto;padding:24px}.collection-delete-dialog ul{max-height:180px;overflow:auto}.collection-delete-dialog footer{display:flex;gap:12px;justify-content:flex-end;margin-top:20px}.collection-delete-dialog .message-error{overflow-wrap:anywhere}
 /* Autonomous Agent is a distinct mode, last in the composer mode list. */
-#prompt-modes #prompt-agent{background:#a82731;color:#fff;border-color:#a82731;margin-inline-start:8px;font-weight:700}
-#prompt-modes #prompt-agent:hover:not(:disabled){background:#8d1e27;border-color:#8d1e27}
-#prompt-modes #prompt-agent[aria-pressed=true]{background:#7d1720;border-color:#7d1720;box-shadow:0 0 0 2px #c23a4650}
+#prompt-modes #prompt-agent{background:#f9e9ec;color:#95434e;border-color:#ebcbd1;margin-inline-start:8px;font-weight:700}
+#prompt-modes #prompt-agent:hover:not(:disabled){background:#f2d8de;border-color:#dcaab4}
+#prompt-modes #prompt-agent[aria-pressed=true]{background:#a82731;color:#fff;border-color:#a82731;box-shadow:0 0 0 2px #c23a4650}
+#prompt-modes #prompt-agent[aria-pressed=true]:hover:not(:disabled){background:#8d1e27;border-color:#8d1e27}
 #prompt-modes #prompt-agent:focus-visible{outline:3px solid #e16a74;outline-offset:2px}
-#prompt-modes #prompt-agent:disabled{background:#a82731;color:#fff;opacity:.5}
+#prompt-modes #prompt-agent:disabled{opacity:.5}
 /* Agent capability selector stays visible next to the active composer mode. */
 .agent-scope{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 0}.agent-scope[hidden]{display:none}.agent-scope>div{display:flex;gap:6px}.agent-scope small{overflow-wrap:anywhere}.agent-scope-dialog,.agent-admin-dialog{max-width:min(650px,92vw);padding:24px;border:1px solid var(--line,#ccd7ce);border-radius:16px}.agent-scope-dialog h2{color:#9b371f}.agent-scope-dialog label{display:block;margin:14px 0}.agent-scope-dialog [data-folder]>div{display:flex;gap:8px}.agent-scope-dialog input[readonly]{flex:1;min-width:0}.agent-admin-dialog pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:40vh;overflow:auto;background:#f4eee6;padding:12px}.agent-scope-dialog footer,.agent-admin-dialog footer{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}

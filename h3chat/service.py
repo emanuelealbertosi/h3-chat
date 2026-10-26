@@ -495,7 +495,7 @@ class Service:
         settings['_video_steps']=validate_steps(body.get('video_steps'))
         if settings.get('_video_request') and not self.engine.require_model(settings['video_model'],'video').get('remote_media'):
             from .video_options import options as request_video_options
-            request_video_options({'id':settings['video_model']},settings,False)
+            request_video_options(self.engine.require_model(settings['video_model'],'video'),settings,False)
         editing=body.get('video_editing','continuous')
         if not isinstance(editing,str) or editing not in ('continuous','storyboard'):raise ValueError('Regia video: scegli Continuazione oppure Storyboard.')
         from .video_direct_storyboard import read as read_direct_storyboard

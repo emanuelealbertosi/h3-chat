@@ -5,6 +5,15 @@ from h3chat.store import DEFAULTS
 
 
 class BatchAspectRegression(unittest.TestCase):
+    def test_original_agent_seed_and_megapixels_survive_a_rewritten_prompt(self):
+        model={'id':'m','name':'MOSS','architecture':'moss','engine':'vision','capabilities':['create'],'steps':50,'cfg':3,'max_refs':1}
+        app=SimpleNamespace(catalog={'m':model},engine=SimpleNamespace(require_model=lambda ident,cap:model))
+        plan={'images':[{'prompt':'A ceramic teapot','model_id':'m','references':[],'parameters':{}}]}
+        settings=DEFAULTS|{'_image_original_controls':'Usa MOSS Turbo, 0.5 MP, 16:9, seed 42.','_moss_turbo_requested':True}
+        result=validate_plan(app,plan,[],settings,1,(),'Crea una immagine: una teiera.')[0]['parameters']
+        self.assertEqual(result['seed'],42);self.assertEqual(result['megapixels'],.5);self.assertEqual(result['steps'],8)
+        self.assertEqual(result['aspect'],'16:9');self.assertLess(result['width']*result['height'],510000)
+
     def test_agent_global_ratio_before_a_sentence_is_kept_for_every_image(self):
         model={'id':'moss','name':'MOSS','architecture':'moss','engine':'vision','capabilities':['create'],'steps':50,'cfg':3,'max_refs':1}
         app=SimpleNamespace(catalog={'moss':model},engine=SimpleNamespace(require_model=lambda ident,cap:model))

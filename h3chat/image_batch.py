@@ -190,8 +190,9 @@ def validate_plan(app,value,refs,settings,count=None,loras=(),source_prompt=''):
         if len(numbers)>model.get('max_refs',1):raise ValueError(f'Immagine {index+1}: troppi riferimenti per {model["name"]}.')
         from .image_batch_controls import source_controls,requested_parameter_keys
         if source_prompt:
-            allowed=requested_parameter_keys(source_prompt,index+1)
+            allowed=requested_parameter_keys(source_prompt,index+1)|requested_parameter_keys(settings.get('_image_original_controls',''),index+1)
             params={k:v for k,v in params.items() if k in allowed}
+        if settings.get('_image_lot_parameters'):params=settings['_image_lot_parameters']|params
         if settings.get('_moss_turbo_requested') is not None:
             if model.get('architecture')!='moss':raise ValueError('Richiesto MOSS Turbo ma il piano sceglie un altro modello. Nessuna immagine avviata.')
             turbo=settings['_moss_turbo_requested']
@@ -203,6 +204,7 @@ def validate_plan(app,value,refs,settings,count=None,loras=(),source_prompt=''):
             params=params|{'moss_turbo':turbo}
         local=capture_request(model,settings,params)
         literal=source_controls(source_prompt,index+1) if source_prompt else ''
+        if settings.get('_image_original_controls'):literal+='\n'+settings['_image_original_controls']
         # Assistant prose describes the scene; only the user's original text
         # controls sampling. Invented prose settings must not replace defaults.
         parameters=options(model,local,literal if source_prompt else prompt)

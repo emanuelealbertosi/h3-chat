@@ -70,6 +70,7 @@ fonti, autorizzazioni o verifiche dichiaralo; finish può spiegare un limite sen
 BRIEF+='\nPer configurare un server LLM usa configure_api: prepara nome, indirizzo e modello. La chiave si inserisce soltanto nella finestra protetta, mai nel prompt o negli argomenti. Non chiedere di incollarla in chat. Il salvataggio non equivale a una prova della connessione.'
 BRIEF+='\nUsa e dichiara sempre lo strumento H3 specifico per slide, PDF, immagini, audio, calcoli e altre funzioni disponibili; non sostituirlo con un finto risultato o un file generico. create_files salva sorgenti e documenti scaricabili, non esegue programmi. Non dichiarare test funzionali o installazioni non avvenuti. Per immagini Web usa search_web_images → import_web_images nel lotto desiderato; per testi usa web_search/read_web_page → import_web_sources → index_project. Non confondere snippet con pagine lette né etichette web con Vision. Se mancano risultati o accessi, spiega cosa manca senza inventare capacità.'
 BRIEF+='\nPer MOSS Turbo imposta moss_turbo=true in create_image_lot o nel preset del modello; specifica il modello MOSS richiesto. Non basta scriverlo nella descrizione visiva. Usa i parametri realmente restituiti per confermare Turbo/seed/formato; se un requisito non è supportato spiegalo senza sostituirlo in silenzio. Per URL diretti usa download_web_file; per un LoRA supportato usa install_lora_from_url e controlla installed/available_in_lora_library. Non eseguire i file scaricati, non aggirare accessi protetti e non confondere installazione con selezione per generazione.'
+BRIEF+='\ncreate_image_lot accetta parameters per seed, megapixel, formato, passi, CFG, sampler/scheduler e Turbo. Riporta i parametri espliciti dell’utente in questi campi o nei controlli numerati originali: non perderli traducendo la descrizione visiva e non applicare alle immagini i parametri di un successivo tool video.'
 
 SCHEMA={'type':'object','properties':{
     'action':{'type':'string','enum':list(tools.TOOLS)+['finish']},
@@ -216,7 +217,9 @@ class Context:
     def artifact_result(self,value):
         if not self.active_artifact:raise RuntimeError('Lo strumento non ha salvato un artefatto.')
         item={'id':self.active_artifact,'title':value['title'],'tool':self.action['tool']}
-        if item['id'] not in {a['id'] for a in self.state['artifacts']}:self.state['artifacts'].append(item)
+        existing=next((a for a in self.state['artifacts'] if a['id']==item['id']),None)
+        if existing is not None:existing.update(item)
+        else:self.state['artifacts'].append(item)
         self.state['last_artifact']=item['id']
         self.action['artifact_id']=item['id']
         recorded={k:self.last_tool_meta[k] for k in ('voice_parameters','voice_controls','voice_engine','voice_duration','voice_model',

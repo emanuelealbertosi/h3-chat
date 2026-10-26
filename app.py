@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import mimetypes
+import re
 import secrets
 import sqlite3
 import threading
@@ -136,6 +137,9 @@ class Handler(BaseHTTPRequestHandler):
             if access and path.startswith('/api/auth/'):
                 return self.auth_request(path,method)
             if method == "GET":
+                if len(parts)==5 and parts[:2]==['api','chats'] and parts[3]=='agent-runs':
+                    from h3chat.agent_state import load,public
+                    return self.json(public(load(self.app,parts[2],parts[4])))
                 if path=='/api/presentation-preferences':
                     from h3chat.presentation_preferences import load
                     return self.json(load(self.app))
@@ -233,6 +237,12 @@ class Handler(BaseHTTPRequestHandler):
                     return self.file(safe_join(self.app.data / "exports", relative))
                 if path.startswith("/media/"):
                     relative = path[len("/media/"):]
+                    if len(parts)==5 and parts[:2]==['media','outputs'] and parts[3]=='asset':
+                        from h3chat.agent_asset_tools import filename
+                        if not re.fullmatch('[a-f0-9]{32}',parts[2]) or filename(parts[4]).endswith('.partial') or not self.app.store.one('SELECT 1 FROM gallery WHERE path=?',(relative,)):raise PermissionError('File non pubblicato o non disponibile.')
+                        file=safe_join(self.app.data,relative)
+                        if not file.is_file():return self.json({'error':'File non trovato.'},404)
+                        return send_audio(self,file,attachment=True)
                     if not relative.startswith(("uploads/", "outputs/", "project-imports/", "exports/")) or (not relative.startswith(("uploads/","project-imports/","exports/")) and Path(relative).suffix not in (".png", ".jpg", ".wav", ".mp3", ".flac", ".ogg", ".mp4", ".pdf", ".docx", ".pptx", ".txt", ".md", ".srt", ".py", ".json", ".tex", ".log", ".html", ".svg", ".glb")):
                         raise PermissionError("File non disponibile.")
                     if relative.startswith(('uploads/','project-imports/','exports/')) and not self.app.store.one('SELECT 1 FROM gallery WHERE path=?',(relative,)):raise PermissionError('File non disponibile.')
@@ -410,9 +420,6 @@ class Handler(BaseHTTPRequestHandler):
                 self.require_local_computer()
                 from h3chat.agent_computer import revoke
                 return self.json(revoke(self.app,parts[3]))
-            if len(parts)==5 and parts[:2]==['api','chats'] and parts[3]=='agent-runs' and method=='GET':
-                from h3chat.agent_state import load,public
-                return self.json(public(load(self.app,parts[2],parts[4])))
             if len(parts)==6 and parts[:2]==['api','chats'] and parts[3]=='agent-runs' and parts[5]=='resume' and method=='POST':
                 from h3chat.agent_state import resume,load
                 if load(self.app,parts[2],parts[4])['config'].get('scope','h3')!='h3':self.require_local_computer()

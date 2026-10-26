@@ -16,6 +16,17 @@ class VideoAgentTests(unittest.TestCase):
     ticket=AgentTests.ticket
     run_job=AgentTests.run_job
 
+    def test_fast_h3_request_keeps_its_profile_during_service_preflight(self):
+        files={r:str(safetensors(self.base/('fast-'+r+'.safetensors'))) for r in ('diffusion','llm','vae','audio_vae')}
+        model=self.app.external_model({'profile':'fasth3-omni','files':files})
+        chat,job=self.ticket('agent: Crea un video FastH3 di prova',allow_video=True,confirm_writes=False)
+        self.run_job(job,lambda *a,**k:decision('create_video',{'prompt':'A ceramic teapot on a table','model_id':model['id'],'parameters':{'duration':5,'aspect':'16:9','megapixels':.7,'seed':42}}))
+        state=ledger.load(self.app,chat,job['id']);self.assertEqual(state['status'],'awaiting_video',state)
+        child=self.app.store.one('SELECT payload FROM jobs WHERE id=?',(state['current_job_id'],))
+        settings=json.loads(child['payload'])['settings'];self.assertEqual(settings['video_model'],model['id'])
+        from h3chat.video_options import options
+        self.assertEqual(options(model,settings,False)['attention'],'vsa')
+
     def timeline(self):
         files={r:str(safetensors(self.base/('clip-'+r+'.safetensors'))) for r in ('diffusion','llm','vae','audio_vae')}
         self.model=self.app.external_model({'profile':'minimax-h3','files':files})

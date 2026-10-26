@@ -1,11 +1,19 @@
 """Official FastH3 sampling contract and VSA wiring without loading a model."""
 import unittest
+from pathlib import Path
+import subprocess
 from types import SimpleNamespace
 from unittest.mock import Mock
 from h3chat.fasth3 import PRESET,attach,check_heads
 from h3chat.video_options import options
 
 class FastH3Tests(unittest.TestCase):
+    @unittest.skipUnless((Path(__file__).resolve().parents[1]/'runtime/vision/packages/torch/__init__.py').is_file(),'Optional vision runtime not installed')
+    def test_real_output_head_bank_returns_physical_width_on_cpu(self):
+        from h3chat.platform_runtime import python_executable
+        root=Path(__file__).resolve().parents[1]
+        result=subprocess.run([python_executable(root),'-X','utf8',str(root/'tests/fast_head_bank_cpu.py')],capture_output=True,text=True,timeout=60)
+        self.assertEqual(result.returncode,0,result.stderr[-3000:]);self.assertIn('"gpu_models_loaded": 0',result.stdout)
     def test_distilled_native_head_bank_has_dedicated_load_contract(self):
         check_heads(3072,1024,True);check_heads(96,32,False)
         with self.assertRaises(ValueError):check_heads(3072,1024,False)

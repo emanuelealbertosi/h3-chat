@@ -63,6 +63,9 @@ SKILLS.update(computer='agent-computer.md',models='agent-models.md')
 TOOLS['read_skill'][1]['properties']['name']['enum']=list(SKILLS)
 TOOLS['revise_slide'][1]['properties']['page']['description']='Numero della slide da 1: 1 è la prima, 2 è la seconda. Non usare indici da zero.'
 TOOLS['create_image_lot'][1]['properties']['moss_turbo']={'type':'boolean','description':'Turbo DMD2 per MOSS INT8/BF16/Kromoss: applica la ricetta dedicata. Se richiesto va impostato, non soltanto citato nel prompt.'}
+image_parameters=copy.deepcopy(model_definitions()['set_model_preset'][1]['properties']['parameters'])
+image_parameters['properties']={k:v for k,v in image_parameters['properties'].items() if k in {'steps','cfg','seed','sampler','scheduler','aspect','megapixels','width','height','negative_prompt','moss_turbo'}}
+TOOLS['create_image_lot'][1]['properties']['parameters']=image_parameters
 
 def permission(config,name,args):
     if name in VIDEO_WRITES and not config.get('allow_video',False):raise PermissionError('Video non autorizzati nelle impostazioni Agent.')
@@ -303,6 +306,12 @@ def execute(ctx,name,args):
         prompt=f'Crea {args["count"]} immagini. '+('Formato '+args['format']+'. ' if args.get('format') else '')+args['prompt']
         local=ctx.tool_settings()|{'_image_batch':True,'_image_model':args.get('model_id',''),
             '_image_lot':{'name':args['name'],'count':args['count'],'rag':bool(state['sources'])}}
+        from .image_batch_controls import global_controls
+        original=state['request']
+        next_tool=re.search(r'\b(?:create_video|edit_video|create_slides|create_music|create_voice)\b|\b(?:poi|quindi|then|successivamente)\s+(?:(?:crea|genera|usa|un|una|il|la)\s+)*(?:video|slide|musica|audio|filmato)\b',original,re.I)
+        if next_tool:original=original[:next_tool.start()]
+        local['_image_original_controls']=global_controls(original)
+        if args.get('parameters'):local['_image_lot_parameters']=args['parameters']
         from .moss_dmd2 import requested as requested_turbo
         # A shared request may contain separate Qwen/MOSS jobs. In that case
         # the planner must use the typed per-lot flag, not a global inference.

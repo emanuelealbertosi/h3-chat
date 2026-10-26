@@ -24,7 +24,15 @@ jobs:
         with:
           python-version: '3.13'
       - name: Linux build and desktop dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build build-essential pkg-config libcairo2-dev libpango1.0-dev bubblewrap libsecret-1-0 gnome-keyring dbus-x11 libnss3 libatk1.0-0 libatk-bridge2.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libxkbcommon0 libasound2t64 libvulkan-dev glslc spirv-headers glslang-tools
+        timeout-minutes: 12
+        run: |
+          # The hosted runner's Azure mirror stalled for over 25 minutes on package downloads.
+          # Select Ubuntu's official HTTPS mirror only on this disposable build runner.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            printf '%s\n' 'https://archive.ubuntu.com/ubuntu' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          fi
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=60 -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y cmake ninja-build build-essential pkg-config libcairo2-dev libpango1.0-dev bubblewrap libsecret-1-0 gnome-keyring dbus-x11 libnss3 libatk1.0-0 libatk-bridge2.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libxkbcommon0 libasound2t64 libvulkan-dev glslc spirv-headers glslang-tools
       - run: npm ci && npm run build
       - name: Install the explicitly authorized bubblewrap exception on the disposable runner
         run: sh scripts/install-linux-sandbox.sh --ci
