@@ -26,6 +26,11 @@ def mac_profile(reads,writes):
            # container. This permits only that self-query, not Mach services,
            # file access, networking or general mac_syscall operations.
            '(allow system-mac-syscall (require-all (mac-policy-name "Sandbox") (mac-syscall-number 67)))',
+           # Explicit human authorization, 2026-10-26; exact reviewed list in
+           # docs/macos-sandbox-startup-proposal.md. No general Mach allowance.
+           '(allow mach-lookup (global-name "com.apple.secinitd") (global-name "com.apple.system.opendirectoryd.libinfo") (global-name "com.apple.system.logger") (global-name "com.apple.logd"))',
+           '(allow file-read-data file-write-data (subpath "/dev/fd"))',
+           '(allow file-read* (literal "/"))',
            '(allow file-read* file-map-executable (subpath "/System") (subpath "/usr/lib") (subpath "/usr/share") (subpath "/bin") (subpath "/usr/bin") (subpath "/dev") (literal "/private/etc/localtime"))',
            '(allow file-write* (literal "/dev/null"))']
     for path in reads:parts.append('(allow file-read* file-map-executable (subpath '+quoted(path)+'))')
