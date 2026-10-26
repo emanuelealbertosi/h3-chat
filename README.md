@@ -91,7 +91,7 @@ richiesta: mostra la durata effettiva senza tagliare o allungare la scena.
 Per i vecchi errori «Durata errata» usa **Recupera animazione** sotto la risposta;
 il video già prodotto viene aggiunto al canvas senza nuovo rendering.
 
-Chat multimodale locale per Windows, con lo stile avorio e verde petrolio delle app H3. Una sola conversazione per testo, codice, immagini, canzoni, video, formule, grafici e diagrammi. I motori locali sono gestiti dall'app; non servono Ollama, LM Studio o ComfyUI. Gli LLM locali non richiedono chiavi API o abbonamenti; puoi scegliere anche provider LLM tramite API e server esterni per immagini, musica e video. Progetti con RAG, ricerca web e animazioni Manim restano nella stessa chat.
+Chat multimodale per Windows, macOS Apple Silicon e Linux x64, con lo stile avorio e verde petrolio delle app H3. Una sola conversazione per testo, codice, immagini, canzoni, video, formule, grafici e diagrammi. I motori locali sono gestiti dall'app; non servono Ollama, LM Studio o ComfyUI. Gli LLM locali non richiedono chiavi API o abbonamenti; puoi scegliere anche provider LLM tramite API e server esterni per immagini, musica e video. Progetti con RAG, ricerca web e animazioni Manim restano nella stessa chat. Le funzioni CUDA richiedono Windows o Linux con GPU NVIDIA compatibile.
 
 ## Installazione
 
@@ -103,9 +103,11 @@ con ricerca per parole immediata ed embedding CPU opzionale. Anche nel pacchetto
 portabile trovi **Setup → Configura per API · nessuna GPU**.
 [Procedura completa e protocolli supportati](docs/api-only-windows.md).
 
-**Mac con chip Apple (macOS 15+):** scarica [H3-Chat-0.18.62-macos-arm64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.18.62/H3-Chat-0.18.62-macos-arm64.zip), estrai tutta la cartella e apri `H3-Chat.app` mantenendo insieme gli altri file. Include Python, llama.cpp CPU/Metal, documenti e browser PDF; supporta API esterne e RAG locale. I motori CUDA, Manim e LaTeX standalone non sono inclusi nel primo port Mac. Firma ad hoc, senza notarizzazione Apple. [Guida Mac e funzioni disponibili](docs/macos.md).
+**Mac con chip Apple (macOS 15+):** scarica [H3-Chat-0.19.0-macos-arm64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.19.0/H3-Chat-0.19.0-macos-arm64.zip), estrai tutta la cartella e apri `H3-Chat.app` mantenendo insieme gli altri file. Include Python, llama.cpp CPU/Metal, documenti, browser PDF, Manim e LaTeX; supporta API esterne e RAG locale. I motori CUDA non sono inclusi. Firma ad hoc, senza notarizzazione Apple. [Guida Mac e funzioni disponibili](docs/macos.md).
 
-**Pacchetto Windows:** scarica [H3-Chat-0.18.62-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.18.62/H3-Chat-0.18.62-windows-x64.zip) dalla [release v0.18.62](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.18.62), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.19.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.19.0/H3-Chat-0.19.0-windows-x64.zip) dalla [release v0.19.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.19.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+
+**Linux x64 (Ubuntu e Kali):** scarica [H3-Chat-0.19.0-linux-x64.tar.gz](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.19.0/H3-Chat-0.19.0-linux-x64.tar.gz), estrai tutta la cartella e segui [la guida Linux](docs/linux.md). La base CPU/API è inclusa; i pesi e le dipendenze dei motori GPU si scelgono separatamente. [Novità e limiti della versione 0.19.0](docs/release-0.19.0.md).
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 

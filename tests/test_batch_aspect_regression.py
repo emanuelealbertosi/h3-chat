@@ -5,6 +5,15 @@ from h3chat.store import DEFAULTS
 
 
 class BatchAspectRegression(unittest.TestCase):
+    def test_agent_sampler_case_is_normalized_but_unknown_names_are_rejected(self):
+        from h3chat.image_options import capture_request
+        model={'id':'m','architecture':'moss','engine':'vision'}
+        value=capture_request(model,DEFAULTS,{'sampler':'Euler','scheduler':'SGM_UNIFORM'})
+        self.assertEqual(value['image_overrides']['m']['sampler'],'euler')
+        self.assertEqual(value['image_overrides']['m']['scheduler'],'sgm_uniform')
+        with self.assertRaisesRegex(ValueError,'Sampler'):
+            capture_request(model,DEFAULTS,{'sampler':'invented sampler'})
+
     def test_original_agent_seed_and_megapixels_survive_a_rewritten_prompt(self):
         model={'id':'m','name':'MOSS','architecture':'moss','engine':'vision','capabilities':['create'],'steps':50,'cfg':3,'max_refs':1}
         app=SimpleNamespace(catalog={'m':model},engine=SimpleNamespace(require_model=lambda ident,cap:model))

@@ -95,8 +95,6 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
   tools.get('agent').disabled=!state.agent_options?.enabled||!chatModelId(state);tools.get('agent').title=!state.agent_options?.enabled?'Agent disponibile dopo l’attivazione del servizio aggiornato.':!chatModelId(state)?'Scegli un LLM per Agent.':'Agent sperimentale · usa il modello scelto, gli strumenti H3 e il perimetro di accesso autorizzato.';
   const value=visualControls.read(),mode=lab.value,cpu=cpuMode(state);
   for(const item of [images,videoEdit,$('#music-toggle'),$('#video-toggle'),$('#voice-toggle'),transcribe]){item.disabled=cpu;item.title=cpu?'Disabilitato in modalità CPU':'';}
-  const mac=state.platform?.system==='darwin';tools.get('manim').disabled=mac;tools.get('manim').title=mac?'Manim non è ancora disponibile su macOS.':'';
-  if(mac){transcribe.disabled=true;transcribe.title='La trascrizione locale non è ancora disponibile in questa edizione macOS.';}
   imageToggle.disabled=cpu;$('#slides-generate-images').disabled=cpu;assistant.disabled=cpu&&!chatModelId(state);videoEdit.setAttribute('aria-pressed',String(value.video&&value.video_editing==='modify'));
   auto.setAttribute('aria-pressed',String(mode==='auto'&&!value.image_model&&!value.music&&!value.video&&!value.voice&&!value.transcribe));images.setAttribute('aria-pressed',String(!!value.image_model));
   for(const [name,item] of tools)item.setAttribute('aria-pressed',String(mode===name));

@@ -7,6 +7,11 @@ on:
         required: false
         type: string
   workflow_call:
+    inputs:
+      reuse_cuda_run:
+        description: 'Verified native CUDA artifact from an unchanged source build'
+        required: false
+        type: string
 permissions:
   contents: read
   actions: read

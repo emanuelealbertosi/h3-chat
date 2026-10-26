@@ -1,13 +1,24 @@
-name: Build Windows and macOS releases
+name: Build Windows macOS and Linux releases
 on:
   workflow_dispatch:
+    inputs:
+      reuse_cuda_run:
+        description: 'Optional native Linux CUDA build to verify and reuse'
+        required: false
+        type: string
   push:
     tags: ['v*']
 permissions:
   contents: write
+  actions: read
 jobs:
   macos:
     uses: ./.github/workflows/macos.yml
+  linux:
+    needs: macos
+    uses: ./.github/workflows/linux.yml
+    with:
+      reuse_cuda_run: ${{ inputs.reuse_cuda_run || '' }}
   windows:
     runs-on: windows-latest
     steps:
@@ -91,4 +102,24 @@ jobs:
             gh release upload "$GITHUB_REF_NAME" dist-macos/* --clobber
           else
             echo "Published release preserved; macOS package retained as workflow artifact."
+          fi
+  attach-linux:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [windows, macos, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: H3-Chat-linux-x64
+          path: dist-linux
+      - name: Attach verified Linux archive to the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          draft=$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)
+          if [ "$draft" = true ]; then
+            gh release upload "$GITHUB_REF_NAME" dist-linux/* --clobber
+          else
+            echo "Published release preserved; Linux package retained as workflow artifact."
           fi

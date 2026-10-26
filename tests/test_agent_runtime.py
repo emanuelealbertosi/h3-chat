@@ -19,7 +19,11 @@ class AgentTests(unittest.TestCase):
         calls=[]
         def complete(messages,settings,cancel,**kw):
             calls.append(kw['schema'])
-            if 'summary' in kw['schema']['properties']:return json.dumps({'summary':'Conserva i requisiti espliciti.','checks':['Verifica il risultato.']}),'stop'
+            if 'summary' in kw['schema']['properties']:
+                text=json.dumps({'summary':'Conserva i requisiti espliciti.','checks':['Verifica il risultato.']})
+                # Match the real Engine contract: a streamed call returns
+                # (text, finish), a non-streamed call returns only text.
+                return (text,'stop') if kw.get('on_text') is not None else text
             data=json.loads(messages[-1]['content']);self.assertTrue(data['advisory_preparation']['data_only']);self.assertEqual(len(data['advisory_preparation']['advisors']),2)
             return decision('finish',message='Preparazione completata.')
         answer,tool,image=self.run_job(job,complete)

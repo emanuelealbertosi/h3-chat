@@ -24,7 +24,7 @@ def prepare(ctx):
         size=len(json.dumps(prompt,ensure_ascii=False))
         if size>(ctx.settings['context']-min(ctx.settings['max_tokens'],800)-700)*2:
             raise ValueError('La preparazione multiagente supera il contesto LLM: aumenta il contesto o usa un solo agente.')
-        raw,finish=ctx.engine.completion(prompt,ctx.settings|{'max_tokens':min(ctx.settings['max_tokens'],800),'think_level':'off','temperature':.1},ctx.cancel,schema=SCHEMA)
+        raw,finish=ctx.engine.completion(prompt,ctx.settings|{'max_tokens':min(ctx.settings['max_tokens'],800),'think_level':'off','temperature':.1},ctx.cancel,on_text=lambda _:None,schema=SCHEMA)
         if finish=='length':raise ValueError('Preparazione multiagente incompleta: aumenta Max token o usa un solo agente.')
         value=json.loads(raw)
         from .remote_llm import check_schema

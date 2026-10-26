@@ -37,6 +37,10 @@ def configured(model, settings):
 
 def capture_request(model,settings,value):
     """Snapshot chat-local image controls without saving global preferences."""
+    value=dict(value)
+    for key,choices in (('sampler',SAMPLERS),('scheduler',SCHEDULERS)):
+        supplied=value.get(key)
+        if isinstance(supplied,str) and supplied.casefold() in choices:value[key]=supplied.casefold()
     validate_overrides({model['id']:value},{model['id']:model})
     overrides=settings.get('image_overrides',{})
     captured=settings|{'image_overrides':overrides|{model['id']:overrides.get(model['id'],{})|dict(value)}}
