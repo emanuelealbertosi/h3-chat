@@ -26,4 +26,23 @@ Per un pacchetto ZIP completo eseguire anche `scripts/install_cpu.py`, `scripts/
 
 La workflow `macos.yml` costruisce su `macos-15` arm64 una distribuzione portatile con Python, llama.cpp CPU/Metal, strumenti documenti e browser PDF inclusi. `scripts/build_macos.py` usa gli archivi ufficiali fissati in `scripts/macos-sources.json`; `scripts/check_macos.py` verifica i componenti effettivamente distribuiti e l'eseguibile `.app` dopo una rilocazione con spazi nel percorso, sempre con dati temporanei. Il pacchetto esclude cache, profili utente, database, cartelle data/models/work e dipendenze Windows. Modelli GGUF reali non vengono scaricati né caricati dal test di avvio nativo.
 
-La workflow di release chiama anche la build Mac e allega il relativo archivio, checksum e rapporto al draft soltanto se entrambe le piattaforme passano. La pubblicazione del draft richiede la verifica dei rapporti di entrambi i pacchetti. Le release già pubblicate non vengono sovrascritte.
+La workflow di release chiama anche la build Mac e allega il relativo archivio, checksum e rapporto al draft soltanto se Windows e Mac passano. Le release già pubblicate non vengono sovrascritte.
+
+## Linux Ubuntu e Kali
+
+La build Linux parte dopo il collaudo Mac e costruisce una base CPU/API con
+Python e strumenti portatili, più i motori CPU/Vulkan e NVIDIA. Il parametro
+facoltativo `reuse_cuda_run` riusa solo un archivio CUDA verificato con gli
+stessi sorgenti nativi; non presume che una compilazione precedente sia valida
+per input diversi. Il pacchetto combinato viene collaudato anche su Kali.
+
+PDF su Linux usa il namespace bubblewrap già autorizzato e mantiene attiva la
+sandbox Chromium. Il test leggero `linux-preflight.yml` verifica il renderer
+reale senza ricostruire tutti i motori. Il collaudo completo comprende API,
+Secret Service, RAG/documenti, LaTeX/SVG, PDF, isolamento/Stop e Manim su CPU.
+
+`scripts/verify_linux_package.py` legge tutti i membri del tar, controlla checksum,
+file richiesti, collegamenti interni ed esclusione dei dati personali. La release
+deve includere archivi, checksum e rapporti delle tre piattaforme; il passaggio
+Kali deve essere riuscito prima della pubblicazione. Le prove CI non caricano
+modelli o driver su una GPU reale e non invocano finestre amministratore.

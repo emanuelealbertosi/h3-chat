@@ -1,7 +1,9 @@
 # Steering LLM — verifica del 26 ottobre 2026
 
-Stato: opzione additiva implementata e verificata con fixture strutturali e avvio
-simulato; nessun vettore reale installato o applicato, nessuna prova GPU.
+Stato per la 0.19.0: opzione additiva implementata e verificata con fixture
+strutturali e avvio simulato; nessun vettore reale installato o applicato,
+nessuna prova GPU di steering. L'installazione automatica di un vettore per
+l'ISTA resta non disponibile, non viene dichiarata completata.
 
 ## Opzione implementata
 
@@ -18,9 +20,11 @@ nei parametri di llama.cpp. Intensità/file/layer entrano nella chiave di reside
 cambiarli ricarica il processo gestito alla prossima richiesta. Disattivandolo si
 torna al percorso normale, senza cambiare pesi o le altre impostazioni.
 
-Ricerca: UCVG documenta vettori additivi per Qwen3.8-27B, inclusi chiarezza e
-verbosità, ma nell'albero pubblico esaminato non erano presenti i file GGUF
-promessi dalla documentazione. Non sono stati sostituiti con file inventati.
+Ricerca: UCVG documenta vettori additivi e pubblica esempi di valutazione, ma
+nell'albero pubblico e negli allegati delle release esaminati non è stato
+trovato un GGUF appropriato per il 27B locale. Gli esempi Qwen3.8 presenti
+nell'albero includono il 9B: non sono stati scambiati per vettori del 27B.
+Non sono stati sostituiti con file inventati.
 I candidati GLP richiedono invece proiezione, non il supporto additivo disponibile
 nei motori installati. Non esiste ancora una prova di un vettore sul preciso ISTA
 locale: forma compatibile e dichiarazioni dell'autore non bastano a garantirla.
@@ -100,3 +104,22 @@ Questa nota non autorizza generazioni di test, download o sostituzione del motor
 - Candidato GLP-49, dichiarazioni dell'autore: https://huggingface.co/msuiche/Qwen3.8-27B-abliterated-cyber-GLP-49
 - Variante Mirai, documentazione dell'autore: https://huggingface.co/alesha-pro/Qwen3.8-27B-S-mirai-GGUF
 - UCVG, formato additivo e limiti dei percorsi Windows: https://github.com/Egor4More/ucvg.cpp
+
+## Controllo finale dei candidati, 27 ottobre 2026
+
+Sono stati verificati anche gli allegati delle release UCVG v0.1/v0.2: contengono
+i motori compilati, non un vettore 27B pronto. La variante Mirai richiede
+esplicitamente l'operatore projectivo e un motore dedicato; i due eseguibili H3
+non espongono quel modo, quindi il file non è stato applicato come additivo.
+
+Il candidato pubblico `com-kotobalabs/Ternary-Bonsai-2-27B-Refusal-Steering-GGUF`
+è piccolo e additivo, ma deriva da un altro checkpoint/quantizzazione. Il suo
+stesso autore riporta quattro rifiuti su quattro prove fuori campione e collasso
+con dosi maggiori. Non fornisce una base verificata per promettere il risultato
+richiesto sull'ISTA locale e non è stato installato o attivato.
+
+La scelta di rilascio è mantenere il caricamento manuale sperimentale, spento
+per default e con validazione rigorosa. Questa è una limitazione esplicita,
+non una conferma di efficacia o di compatibilità di un vettore non provato.
+
+- Candidato e misure dell'autore: https://huggingface.co/com-kotobalabs/Ternary-Bonsai-2-27B-Refusal-Steering-GGUF
