@@ -303,6 +303,13 @@ def build(app,job,payload,settings,cancel,stage,log_path,meta):
                     if any(a['status']=='failed' for a in state['actions']):state['message']+='\n\nAlcuni passaggi hanno restituito errori: il registro li conserva con i relativi risultati.'
                     ctx.publish(terminal=True);return
                 name=value['action'];base_key=ledger.fingerprint(name,args);key=base_key
+                binding=None
+                if name=='revise_slide':
+                    from .slide_content_guard import explicit_revision_page
+                    target=explicit_revision_page(state['request'])
+                    if target is not None:
+                        binding={'human_page':target,'model_page':args['page']}
+                        args=args|{'page':target};base_key=ledger.fingerprint(name,args);key=base_key
                 if name in tools.computer_definitions() and name!='request_admin':
                     # A repaired source file invalidates a previous command/test
                     # result. Identical repeated requests with no intervening
@@ -313,6 +320,7 @@ def build(app,job,payload,settings,cancel,stage,log_path,meta):
                 action={'id':uid(),'tool':name,'arguments':args,'summary':value['message'][:500],
                         'fingerprint':key,'base_fingerprint':base_key,'status':'prepared'}
                 state['actions'].append(action)
+                if binding:action['page_binding']=binding
                 if cached:
                     action.update(status='reused',result=cached.get('result',{'note':'Passaggio già tentato: non ripetuto.'}));ctx.publish();continue
                 try:tools.permission(state['config'],name,args)

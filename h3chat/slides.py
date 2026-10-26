@@ -568,7 +568,10 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
                 nonlocal updated
                 if time.monotonic()-updated<.25:return
                 if len(raw)>80000:raise ValueError('HTML della pagina troppo grande.')
-                page['html']=source(raw);publish();updated=time.monotonic()
+                partial=source(raw)
+                from .slide_content_guard import leaks
+                if not leaks(partial):page['html']=partial
+                publish();updated=time.monotonic()
             try:
                 html=generate_html(app.engine,request,settings,cancel,stream_html,stage,f'Slide {index+1}')
                 page['html'],missing=include_planned_images(app.engine,request,settings,cancel,html,planned,stream_html,stage,index+1)

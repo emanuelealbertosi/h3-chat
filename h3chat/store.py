@@ -10,6 +10,7 @@ from pathlib import Path
 from .llm_options import KEYS as LLM_KEYS, merge as merge_llm_settings
 from .voice import DEFAULTS as VOICE_DEFAULTS
 from .voice_engines import normalize as normalize_voice
+from .llm_steering import DEFAULTS as STEERING_DEFAULTS
 
 PROFILES = {
     "cpu": {"context": 4096, "gpu_layers": 0, "width": 512, "height": 512},
@@ -17,6 +18,7 @@ PROFILES = {
     "balanced": {"context": 8192, "gpu_layers": 99, "width": 768, "height": 768},
 }
 DEFAULTS = {
+    **STEERING_DEFAULTS,
     "execution_mode": "gpu", "cpu_chat_model": "",
     "llm_timeout": 1800,
     "vision_max_refs": 4,

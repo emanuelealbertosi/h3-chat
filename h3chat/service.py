@@ -256,6 +256,13 @@ class Service:
             else:raise ValueError('In modalità CPU scegli un LLM locale o un provider esterno.')
         if 'llm_overrides' in patch:validate_llm_presets(patch['llm_overrides'],patch.get('profile',current['profile']))
         s = merge_llm_settings(current,patch)
+        from .llm_steering import validate as validate_steering
+        validate_steering(s)
+        if s.get('llm_steering_enabled'):
+            from .llm_steering import selection as steering_selection
+            steering_model=self.catalog.get(s.get('chat_model'))
+            if not steering_model:raise ValueError('Seleziona un modello locale per lo steering.')
+            steering_selection(steering_model,s,self.engine.model_files(steering_model,s))
         if s['execution_mode']=='cpu' and patch.get('chat_model') and patch['chat_model']!=current['chat_model']:
             s['cpu_chat_model']=patch['chat_model']
         if s['llm_acceleration'] not in ('standard','qwen27'):raise ValueError('Ottimizzazione LLM non valida.')

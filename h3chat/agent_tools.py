@@ -57,6 +57,7 @@ for tool in LINKABLE:TOOLS[tool][1]['properties']['source_artifact_ids']={'type'
 SKILLS={'sources':'agent-sources.md','slides':'agent-slides.md','images':'agent-images.md','audio':'agent-audio.md','graphics':'agent-graphics.md'}
 SKILLS['video']='agent-video.md'
 TOOLS['read_skill'][1]['properties']['name']['enum']=list(SKILLS)
+TOOLS['revise_slide'][1]['properties']['page']['description']='Numero della slide da 1: 1 è la prima, 2 è la seconda. Non usare indici da zero.'
 
 def permission(config,name,args):
     if name in VIDEO_WRITES and not config.get('allow_video',False):raise PermissionError('Video non autorizzati nelle impostazioni Agent.')

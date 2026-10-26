@@ -49,6 +49,10 @@ Il motore visualizza in un documento isolato senza JavaScript: niente script,
 iframe, eventi, link attivi, animazioni infinite o video. HTML/CSS completo;
 le animazioni CSS finite richieste restano consentite.
 Scrivi anzitutto la struttura HTML e i contenuti, poi uno <style> compatto.
+SEPARAZIONE CONTENUTO/REGIA: nella pagina mostra soltanto i contenuti editoriali,
+titoli, etichette e spiegazioni per il pubblico. visual_plan, note relatore,
+impostazioni, istruzioni del motore, cataloghi asset e richieste di rendering sono
+metadati per te: applicali al codice, non stamparli in riquadri, balloon o didascalie.
 Riusa classi, gradienti, pseudo-elementi e SVG per le decorazioni: evita centinaia
 di regole quasi identiche numerate. Completa contenuto e CSS nella stessa risposta.
 '''
@@ -82,7 +86,7 @@ def source(raw):
 
 class InvalidPage(ValueError):pass
 
-def validate(raw,*,require_style=False):
+def validate(raw,*,require_style=False,check_instructions=False):
     html=source(raw)
     if len(html)>80000:raise InvalidPage('La pagina HTML supera 80.000 caratteri.')
     class Content(HTMLParser):
@@ -104,6 +108,9 @@ def validate(raw,*,require_style=False):
         raise InvalidPage('La risposta contiene solo CSS o una struttura HTML incompleta, senza una pagina visualizzabile.')
     if require_style and not parser.styled:
         raise InvalidPage('La pagina non contiene CSS utilizzabile: aggiungi uno <style> completo con layout, colori e tipografia, oppure stili inline.')
+    if check_instructions:
+        from .slide_content_guard import leaks
+        if leaks(html):raise InvalidPage('La pagina mostra istruzioni interne del motore come testo per il pubblico. Conserva i contenuti e applica la regia soltanto al codice; non stampare istruzioni o metadati.')
     return html
 
 
@@ -121,7 +128,7 @@ def generate(engine,request,settings,cancel,on_text,stage,label='Pagina',*,requi
             raw,finish=engine.completion(request,tuning,cancel,on_text=stream)
             if cancel.is_set():raise Cancelled()
             if finish=='length':raise InvalidPage('La risposta HTML è stata interrotta dal limite Max token.')
-            return validate(raw,require_style=require_style)
+            return validate(raw,require_style=require_style,check_instructions=True)
         except InvalidPage as exc:
             if attempt:raise ValueError(f'{label}: il modello non ha completato una pagina HTML utilizzabile dopo due tentativi. {exc} La bozza resta nel canvas; rigenera la scena o cambia modello.') from exc
             stage(f'{label} · correzione della pagina HTML incompleta')
@@ -155,5 +162,5 @@ def include_planned_images(engine,request,settings,cancel,html,planned,on_text,s
         'Restituisci l’HTML completo corretto, senza inventare o generare altre immagini.'}]
     raw,finish=engine.completion(repair,settings,cancel,on_text=on_text)
     if finish=='length':raise ValueError(f'Slide {number} incompleta: aumenta Max token. Anteprima conservata.')
-    html=validate(raw)
+    html=validate(raw,check_instructions=True)
     return html,any(asset['id'] not in used_images(html) for asset in planned)

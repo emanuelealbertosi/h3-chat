@@ -1,6 +1,31 @@
 # Steering LLM — verifica del 26 ottobre 2026
 
-Stato: ricerca tecnica; nessun peso scaricato o cambiato, nessun vettore applicato.
+Stato: opzione additiva implementata e verificata con fixture strutturali e avvio
+simulato; nessun vettore reale installato o applicato, nessuna prova GPU.
+
+## Opzione implementata
+
+Nelle opzioni tecniche LLM e nelle Preferenze dello stesso modello è disponibile
+«Steering · sperimentale», disattivato per default. Conserva per modello percorso
+GGUF, intensità (0 è neutro) e layer. La prima famiglia ammessa è qwen35 27B,
+5120 dimensioni, 64 layer principali; i layer ammessi sono 1–63 e il blocco MTP
+resta escluso. I provider API non possono attivare l'opzione.
+
+Prima di avviare il modello H3 controlla directory, dimensioni, copertura layer,
+tipo F32 e valori finiti; rifiuta file incompleti, GLP/projectivi e architetture
+diverse. Una copia identificata da SHA256 evita il separatore del disco Windows
+nei parametri di llama.cpp. Intensità/file/layer entrano nella chiave di residenza:
+cambiarli ricarica il processo gestito alla prossima richiesta. Disattivandolo si
+torna al percorso normale, senza cambiare pesi o le altre impostazioni.
+
+Ricerca: UCVG documenta vettori additivi per Qwen3.8-27B, inclusi chiarezza e
+verbosità, ma nell'albero pubblico esaminato non erano presenti i file GGUF
+promessi dalla documentazione. Non sono stati sostituiti con file inventati.
+I candidati GLP richiedono invece proiezione, non il supporto additivo disponibile
+nei motori installati. Non esiste ancora una prova di un vettore sul preciso ISTA
+locale: forma compatibile e dichiarazioni dell'autore non bastano a garantirla.
+Il lancio con MTP è coperto solo da test simulati; qualità, velocità e accettazione
+delle bozze devono ancora essere misurate con un vettore reale appropriato.
 
 ## Installazione verificata
 
@@ -48,7 +73,7 @@ serve verificare/adattare il runtime o valutare una conversione dell'adapter LoR
 con prove sull'esatta architettura e sulla quantizzazione ISTA. La sola presenza
 di `--lora` non garantisce che l'adapter PEFT sia direttamente caricabile.
 
-## Possibile integrazione H3
+## Regole dell'integrazione H3
 
 Opzione sperimentale in Opzioni tecniche LLM, inizialmente disabilitata, salvata
 per modello: file vettore locale, intensità e intervallo dei layer. Una selezione
@@ -74,3 +99,4 @@ Questa nota non autorizza generazioni di test, download o sostituzione del motor
 - Supporto dei modelli: https://github.com/ggml-org/llama.cpp/pull/20653
 - Candidato GLP-49, dichiarazioni dell'autore: https://huggingface.co/msuiche/Qwen3.8-27B-abliterated-cyber-GLP-49
 - Variante Mirai, documentazione dell'autore: https://huggingface.co/alesha-pro/Qwen3.8-27B-S-mirai-GGUF
+- UCVG, formato additivo e limiti dei percorsi Windows: https://github.com/Egor4More/ucvg.cpp

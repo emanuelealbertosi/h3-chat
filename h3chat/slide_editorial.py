@@ -31,6 +31,8 @@ BRIEF='''PREPARAZIONE EDITORIALE DELLA PAGINA, prima della grafica.
 Scrivi contenuti effettivi, non un elenco di argomenti da sviluppare in seguito.
 content contiene il testo destinato a essere VISIBILE: spiegazione del concetto,
 esempi concreti, passaggi o confronti quando pertinenti, con fonti disponibili.
+Non inserire in content istruzioni rivolte al motore, regole HTML, richieste di
+generazione o suggerimenti di impaginazione: questi appartengono solo a visual_plan.
 detail=full richiede spiegazioni autosufficienti e sostanziose, non tre slogan.
 detail=concise mantiene una sintesi informativa; rispetta sempre limiti espliciti
 di parole richiesti dall'utente. Non applicare un limite universale di 35 parole

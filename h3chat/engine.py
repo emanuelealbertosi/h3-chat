@@ -167,6 +167,9 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         if kind=='music':runtime_options=(('music_backend',music_backend(settings)),('music_threads',settings['music_threads']),('memory_policy',settings.get('memory_policy','on_demand')))
         if kind=='video':runtime_options=(('offload',video_options(model,settings,False)['offload']),('threads',settings['threads']),('memory_policy',settings.get('memory_policy','on_demand')))
         if kind=='chat': runtime_options+=(('mtp_tokens',mtp_tokens(model,settings)),)
+        if kind=='chat' and settings.get('llm_steering_enabled'):
+            from .llm_steering import fingerprint as steering_fingerprint
+            runtime_options+=(('steering',steering_fingerprint(settings)),)
         if kind=='chat' and settings.get('llm_acceleration')=='qwen27':
             from .llm_acceleration import stamp
             runtime_options+=(('accelerator_files',stamp(self.root)),)
@@ -322,6 +325,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         from .devices import options
         settings=options(settings,'llm')
         if model.get('api'):
+            if settings.get('llm_steering_enabled'):raise ValueError('Steering locale non disponibile per modelli API.')
             if cancel.is_set():raise Cancelled()
             if not self.api_credentials:raise ValueError('Configurazione API non disponibile.')
             config,key=self.api_credentials(model['id'])
@@ -338,6 +342,11 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         if cancel.is_set():raise Cancelled()
         files = self.model_files(model,settings)
         optimized=plan(self.root,model,settings,files)
+        from .llm_steering import prepare as prepare_steering
+        steering=prepare_steering(self.data,model,settings,files)
+        # Bind the session identity to the exact bytes staged for this launch,
+        # even if the user replaces the original vector during model startup.
+        if steering:settings=settings|{'llm_steering_file':str(steering['cwd']/steering['args'][1].split(':',1)[0])}
         session = self._activate("chat", model, settings, log_path, cancel, stage=stage)
         self.active_model = model
         if session.ready and session.alive():
@@ -375,10 +384,15 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
             args += ["--mmproj", files["mmproj"], "--image-max-tokens", 512 if settings["context"] <= 4096 else 1024]
         if "mmproj" in files:
             args += ["--mmproj-offload" if vision_gpu else "--no-mmproj-offload"]
+        if steering:
+            args+=steering['args']
+            session.steering={k:steering[k] for k in ('sha256','strength','layers')}
+            if stage:stage('Steering additivo sperimentale · layer '+str(steering['layers'])+' · intensità '+str(steering['strength']))
         with self.process_lock:
             if cancel.is_set():
                 raise Cancelled()
-            session.start(args)
+            if steering:session.start(args,cwd=steering['cwd'])
+            else:session.start(args)
         process = session.process
         deadline = time.monotonic() + 240
         while time.monotonic() < deadline:

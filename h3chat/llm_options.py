@@ -12,12 +12,16 @@ KEYS=(*KEYS,'vision_max_refs')
 BASE['vision_max_refs']=4
 KEYS=(*KEYS,'llm_acceleration')
 BASE['llm_acceleration']='standard'
+from .llm_steering import DEFAULTS as STEERING_DEFAULTS, validate as validate_steering
+KEYS=(*KEYS,*STEERING_DEFAULTS)
+BASE.update(STEERING_DEFAULTS)
 
 def defaults(profile):
     return BASE|({'context':8192,'gpu_layers':99} if profile=='balanced' else {'gpu_layers':0} if profile=='cpu' else {})
 
 def validate(values):
     if not isinstance(values,dict) or set(values)-set(KEYS):raise ValueError('Parametri del preset LLM non validi.')
+    validate_steering(values)
     if 'llm_acceleration' in values and values['llm_acceleration'] not in ('standard','qwen27'):raise ValueError('Ottimizzazione LLM non valida.')
     if 'llm_timeout' in values and (type(values['llm_timeout']) is not int or not 60<=values['llm_timeout']<=14400):raise ValueError('Tempo massimo LLM: da 60 a 14400 secondi.')
     for key,lo,hi in (('vision_max_refs',1,12),('context',1024,MAX_CONTEXT),('max_tokens',64,MAX_OUTPUT_TOKENS),('gpu_layers',0,999),('mtp_draft_tokens',1,8),('prompt_max_tokens',256,8192),('music_prompt_max_tokens',256,8192),('video_prompt_max_tokens',256,MAX_OUTPUT_TOKENS)):

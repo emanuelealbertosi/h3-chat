@@ -163,7 +163,8 @@ def build(app,job,payload,settings,model,cancel,stage,log_path,meta,*,prepare_en
         revision['characters']=len(raw)
         if time.monotonic()-last<.25:return
         partial=source(raw)
-        if _visible_html(partial):page['html']=partial
+        from .slide_content_guard import leaks
+        if _visible_html(partial) and not leaks(partial):page['html']=partial
         publish();last=time.monotonic()
         stage(f'Slide · ricreazione AI · pagina {index+1}/{len(deck["pages"])} · {len(raw)} caratteri ricevuti · {revision["elapsed_seconds"]:.0f} s')
     try:
@@ -192,7 +193,7 @@ def build(app,job,payload,settings,model,cancel,stage,log_path,meta,*,prepare_en
             raw,finish=app.engine.completion(repair,settings,cancel,on_text=stream)
             if cancel.is_set():raise Cancelled()
             if finish=='length':raise ValueError(f'Slide {index+1}: correzione incompleta per il limite Max token; bozza conservata.')
-            html=validate_html(raw,require_style=not bool(motion))
+            html=validate_html(raw,require_style=not bool(motion),check_instructions=True)
             if planned:
                 html,missing=include_planned_images(app.engine,request,settings,cancel,html,planned,stream,stage,index+1)
                 html=validate_html(html,require_style=not bool(motion))

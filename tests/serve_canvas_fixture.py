@@ -26,12 +26,25 @@ def main():
             def string(value):
                 raw=value.encode();return struct.pack('<Q',len(raw))+raw
             values={'general.architecture':'qwen35','general.name':internal}
+            if os.environ.get('H3_FIXTURE_STEERING')=='1' and filename.startswith('Qwen-Orca'):
+                values.update({'qwen35.block_count':65,'qwen35.embedding_length':5120})
             data=b'GGUF'+struct.pack('<IQQ',3,0,len(values))
-            for k,v in values.items():data+=string(k)+struct.pack('<I',8)+string(v)
+            for k,v in values.items():data+=string(k)+struct.pack('<I',8 if isinstance(v,str) else 4)+(string(v) if isinstance(v,str) else struct.pack('<I',v))
             path.write_bytes(data)
             return app.external_model({'profile':'chat','name':alias,'files':{'model':str(path)},'projector_mode':'off'})
         model=fixture_model('Qwen-OrcaRouter-IQ3_XXS.gguf','Staged_Tmpl','Staged_Tmpl')
         second=fixture_model('RVN-IQ3_M-mtp.gguf','Qwen fixture','Internal Ara')
+        steering_file=''
+        if os.environ.get('H3_FIXTURE_STEERING')=='1':
+            # A small structural CV fixture, never trained or used for inference.
+            def cv_string(text):
+                raw=text.encode();return struct.pack('<Q',len(raw))+raw
+            values={'general.architecture':'controlvector','controlvector.model_hint':'qwen35'}
+            raw=b'GGUF'+struct.pack('<IQQ',3,63,len(values))
+            for key,value in values.items():raw+=cv_string(key)+struct.pack('<I',8)+cv_string(value)
+            for i in range(63):raw+=cv_string('direction.'+str(i+1))+struct.pack('<IQIQ',1,5120,0,i*5120*4)
+            raw+=b'\0'*((-len(raw))%32)+struct.pack('<f',.125)*(63*5120)
+            cv=Path(folder)/'structural-vector.gguf';cv.write_bytes(raw);steering_file=str(cv)
         app.store.save_settings({'chat_model':model['id']})
         video_files={}
         for role in ('diffusion','llm','vae','audio_vae'):
@@ -207,7 +220,7 @@ def main():
             do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = handle_request
 
         server = ThreadingHTTPServer(('127.0.0.1', 0), FixtureHandler); server.app = app
-        print(json.dumps({'url':f'http://127.0.0.1:{server.server_port}', 'chat':chat, 'other':other, 'model':model['id'], 'second_model':second['id'],'embeddinggemma2':str(gemma)}), flush=True)
+        print(json.dumps({'url':f'http://127.0.0.1:{server.server_port}', 'chat':chat, 'other':other, 'model':model['id'], 'second_model':second['id'],'embeddinggemma2':str(gemma),'steering_file':steering_file}), flush=True)
         try:
             server.serve_forever()
         finally:

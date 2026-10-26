@@ -71,6 +71,29 @@ class AgentTests(unittest.TestCase):
         queued=self.app.store.one('SELECT payload FROM jobs WHERE id=?',(result['job_id'],))
         self.assertEqual(json.loads(queued['payload'])['settings']['_agent']['approval'],action['id'])
 
+    def test_second_slide_request_overrides_a_zero_based_llm_choice_before_approval(self):
+        from h3chat.slides import encode,PREFIX
+        chat,job=self.ticket('agent: Modifica la seconda slide: cambia i colori.',confirm_writes=False)
+        deck={'version':1,'engine':'llm','format':'16:9','title':'Logica','pages':[
+            {'title':'Prima','status':'ready','html':'<main>Prima invariata</main><style>main{color:red}</style>'},
+            {'title':'Seconda','status':'ready','html':'<main>Seconda originale</main><style>main{color:red}</style>'}]}
+        original=self.app.store.canvas_history.save(chat,{'title':'Logica','content':encode(deck),'media':[]})
+        choices=[0]
+        def completion(messages,settings,cancel,**kw):
+            if 'action' in (kw.get('schema') or {}).get('properties',{}):
+                choices[0]+=1
+                return decision('revise_slide',{'artifact_id':original['id'],'page':1,'prompt':'Usa il blu'}) if choices[0]==1 else decision('finish')
+            self.assertIn('SOLO alla pagina 2/2',messages[-1]['content'])
+            return '<main>Seconda blu</main><style>main{color:blue}</style>','stop'
+        self.run_job(job,completion)
+        state=ledger.load(self.app,chat,job['id']);self.assertEqual(state['status'],'done',state)
+        self.assertEqual(state['actions'][0]['arguments']['page'],2)
+        self.assertEqual(state['actions'][0]['page_binding'],{'human_page':2,'model_page':1})
+        result=self.app.store.canvas_history.get(chat,state['artifacts'][-1]['id'])
+        changed=json.loads(result['content'][len(PREFIX):-4])
+        self.assertEqual(changed['pages'][0],deck['pages'][0])
+        self.assertIn('Seconda blu',changed['pages'][1]['html'])
+
     def test_rejection_cannot_be_overridden_by_resume(self):
         chat,job=self.ticket();self.run_job(job,lambda *a,**kw:decision('create_slides',{'prompt':'Crea 2 slide'}))
         state=ledger.load(self.app,chat,job['id']);action=state['actions'][0]

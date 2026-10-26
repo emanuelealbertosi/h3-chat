@@ -174,4 +174,5 @@ class Session:
                 'mtp_tokens':next((v for k,v in self.key[2] if k=='mtp_tokens'),0) if self.ready else 0,
                 'loras':getattr(self,'active_loras',[]),
                 'acceleration':self.acceleration,
+                'steering':getattr(self,'steering',None),
                 'uses':self.uses,'started':self.started}
