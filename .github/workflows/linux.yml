@@ -147,6 +147,7 @@ jobs:
           path: dist/*linux-x64*
   kali:
     needs: package
+    if: ${{ always() && needs.package.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
