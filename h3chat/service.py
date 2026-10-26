@@ -60,7 +60,7 @@ class Service:
         prepare_environment(self.root)
         self.data = Path(data or self.root / "data").resolve()
         from .platform_runtime import is_macos
-        if is_macos() and not self.data.exists():self.data.mkdir(mode=0o700,parents=True)
+        if os.name!='nt' and not self.data.exists():self.data.mkdir(mode=0o700,parents=True)
         from .installation_profile import first_run_settings
         initial_settings = first_run_settings(self.root, (self.data / 'chat.sqlite').exists())
         self.store = Store(self.data)
@@ -72,6 +72,10 @@ class Service:
         self.runtimes.update(upscale_manifests(self.root))
         remix_manifest=self.root/'remix-runtimes.json'
         if remix_manifest.is_file():self.runtimes.update(json.loads(remix_manifest.read_text(encoding='utf-8')))
+        from .platform_runtime import is_linux
+        if is_linux():
+            from .linux_runtime import manifests
+            self.runtimes=manifests(self.root)
         from .platform_runtime import is_macos
         if is_macos():self.runtimes['metal']={'files':[]}
         self.downloads = Downloads(self.root, self.catalog, self.runtimes)

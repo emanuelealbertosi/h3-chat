@@ -563,8 +563,8 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
             return self.start_vision(session,model,settings,log_path,cancel,stage=stage)
         backend = 'cpu' if settings['profile']=='cpu' else settings['backend']
         cli = runtime_executable(self.root,backend,'sd')
-        dll = cli.parent/'stable-diffusion.dll' if cli else None
-        worker = self.root/'native/h3-sd-worker.exe'
+        dll = cli.parent/('stable-diffusion.dll' if os.name=='nt' else 'libstable-diffusion.so') if cli else None
+        worker = self.root/('native/h3-sd-worker.exe' if os.name=='nt' else 'native/h3-sd-worker')
         if not dll or not dll.exists():
             raise ValueError(f'Installa il motore immagini {backend.upper()} nelle impostazioni.')
         if not worker.exists():

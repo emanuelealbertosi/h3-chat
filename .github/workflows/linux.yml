@@ -1,0 +1,95 @@
+name: Build Linux Ubuntu and Kali
+on:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  cpu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Linux build and desktop dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build build-essential pkg-config libcairo2-dev libpango1.0-dev bubblewrap libsecret-1-0 gnome-keyring dbus-x11 libnss3 libatk1.0-0 libatk-bridge2.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libxkbcommon0 libasound2t64 libvulkan-dev glslc
+      - run: npm ci && npm run build
+      - name: Build self-contained Linux CPU and API distribution
+        run: python scripts/build_linux.py
+      - name: Verify packaged Linux app and native sandbox
+        run: dbus-run-session -- bash -c 'printf "h3-disposable-ci-only\n" | gnome-keyring-daemon --unlock --components=secrets; build/linux/H3-Chat/runtime/python/bin/python3 -X utf8 scripts/check_linux.py'
+      - name: Package verified CPU base
+        run: python scripts/build_linux.py --package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: H3-Chat-linux-cpu-base
+          path: dist/*linux-x64*
+  cuda:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    container: nvidia/cuda:12.8.1-devel-ubuntu24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native compiler prerequisites
+        run: apt-get update && apt-get install -y git cmake ninja-build g++ python3 python3-pip libcurl4-openssl-dev
+      - name: Build native CUDA engines without loading a GPU or models
+        run: python3 scripts/build_linux.py --native-cuda build/linux-cuda/H3-Chat
+      - name: Archive native CUDA components and notices
+        run: tar -czf H3-Chat-linux-cuda-components.tar.gz -C build/linux-cuda H3-Chat
+      - uses: actions/upload-artifact@v4
+        with:
+          name: H3-Chat-linux-cuda-components
+          path: H3-Chat-linux-cuda-components.tar.gz
+  package:
+    needs: [cpu, cuda]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@v4
+        with:
+          name: H3-Chat-linux-cpu-base
+          path: build/base
+      - uses: actions/download-artifact@v4
+        with:
+          name: H3-Chat-linux-cuda-components
+          path: build/cuda
+      - name: Assemble CPU/API and optional NVIDIA engines
+        run: |
+          mkdir -p build/linux
+          tar -xzf build/base/H3-Chat-*-linux-x64.tar.gz -C build/linux
+          tar -xzf build/cuda/H3-Chat-linux-cuda-components.tar.gz -C build/linux
+          python -c 'import json,pathlib;pathlib.Path("build/linux-stage.json").write_text(json.dumps({"path":str(pathlib.Path("build/linux/H3-Chat").resolve())}))'
+          python scripts/build_linux.py --package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: H3-Chat-linux-x64
+          path: dist/*linux-x64*
+  kali:
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: H3-Chat-linux-x64
+          path: build/kali-input
+      - name: Verify actual packaged components on Kali Rolling
+        run: |
+          docker run --rm --cap-add SYS_ADMIN --security-opt apparmor=unconfined --security-opt seccomp=unconfined -v "$PWD:/h3-input:ro" kalilinux/kali-rolling bash -ec '
+            apt-get update
+            apt-get install -y bubblewrap policykit-1 dbus-x11 gnome-keyring libsecret-1-0 libnss3 libatk1.0-0 libatk-bridge2.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libxkbcommon0 libcairo2 libpango-1.0-0 libasound2t64 libgomp1
+            useradd -m -s /bin/bash h3check
+            tar -xzf /h3-input/build/kali-input/H3-Chat-*-linux-x64.tar.gz -C /home/h3check
+            chown -R h3check:h3check /home/h3check/H3-Chat
+            su h3check -c '\''dbus-run-session -- bash -c "printf h3-disposable-ci-only | gnome-keyring-daemon --unlock --components=secrets; /home/h3check/H3-Chat/runtime/python/bin/python3 -X utf8 /h3-input/scripts/check_linux.py /home/h3check/H3-Chat"'\''
+          '

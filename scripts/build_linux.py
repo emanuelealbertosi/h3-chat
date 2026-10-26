@@ -87,6 +87,8 @@ def build():
     archive(spec['python'],unpack/'python',cache);shutil.copytree(unpack/'python/python',stage/'runtime/python',symlinks=True,dirs_exist_ok=True)
     archive(spec['llama'],unpack/'llama',cache);exe=next((unpack/'llama').rglob('llama-server'));shutil.copytree(exe.parent,stage/'runtime/cpu/llama',symlinks=True,dirs_exist_ok=True)
     python=stage/'runtime/python/bin/python3'
+    (stage/'runtime/tools').mkdir(parents=True,exist_ok=True)
+    run(['cc','-O2',ROOT/'scripts/linux-process-guard.c','-o',stage/'runtime/tools/h3-process-guard'])
     run([python,'-m','pip','install','--only-binary=:all:','--no-compile','--target',stage/'runtime/tools/documents','-r',ROOT/'scripts/linux-requirements.txt'])
     env=os.environ|{'PLAYWRIGHT_BROWSERS_PATH':str(stage/'runtime/browser')}
     run(['npx','--yes','--package=playwright@'+spec['playwright'],'playwright','install','chromium','--only-shell'],env=env)

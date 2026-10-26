@@ -1,5 +1,6 @@
 """The optional image runtime belongs entirely to this application directory."""
 import json
+import os
 from pathlib import Path
 
 REVISION = '3b4c0b0e457cf0a51cf3038e0a6750d8f96ce251'
@@ -11,14 +12,13 @@ def status(root):
     folder = Path(root) / 'runtime/vision'
     try:
         marker = json.loads((folder / 'ready.json').read_text(encoding='utf-8'))
-        ready = marker.get('core_revision') == REVISION and all((folder / name).is_file() for name in (
-            'core/comfy/sd.py', 'core/comfy/text_encoders/ming_image.py', 'core/comfy_extras/nodes_minimax_h3.py', 'core/comfy/text_encoders/minimax.py', 'packages/torch/__init__.py', 'packages.json', 'dlls/msvcp140.dll'))
+        required=['core/comfy/sd.py','core/comfy/text_encoders/ming_image.py','core/comfy_extras/nodes_minimax_h3.py','core/comfy/text_encoders/minimax.py','packages/torch/__init__.py','packages.json']
+        if os.name=='nt':required+=['dlls/msvcp140.dll']
+        ready = marker.get('core_revision') == REVISION and all((folder / name).is_file() for name in required)
     except (OSError, ValueError):
         ready = False
-    accelerated=ready and all((Path(root)/name).is_file() for name in (
-        'runtime/vision/packages/sageattention/__init__.py',
-        'runtime/vision/packages/triton/__init__.py',
-        'runtime/python/include/Python.h','runtime/python/libs/python313.lib'))
+    headers=['runtime/python/include/Python.h','runtime/python/libs/python313.lib'] if os.name=='nt' else ['runtime/python/include/python3.13/Python.h']
+    accelerated=ready and all((Path(root)/name).is_file() for name in ('runtime/vision/packages/sageattention/__init__.py','runtime/vision/packages/triton/__init__.py',*headers))
     return {'ready':ready, 'accelerated':accelerated, 'backends':['cuda','cpu'], 'revision':REVISION,
             'note':'Motore integrato Ming / Qwen Image 2.1 / Krea 2 · NVIDIA CUDA o CPU. Nessun server esterno.'}
 

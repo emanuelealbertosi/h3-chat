@@ -42,7 +42,7 @@ def frame_image(frame,path):
 class Context:
     def __init__(self,request):
         self.ROOT=ROOT;self.DATA=ROOT/'data';self.config=request['runtime'];self.d=Path(request['folder'])/'remix-work';self.d.mkdir(parents=True,exist_ok=True)
-        self.FFMPEG=ROOT/'runtime/remix/ffmpeg.exe';self.ENGINE=ROOT/'runtime/remix'/self.config['backend']/'audiocpp_cli.exe'
+        self.FFMPEG=ROOT/'runtime/remix/ffmpeg.exe';self.ENGINE=ROOT/'runtime/remix'/self.config['backend']/('audiocpp_cli.exe' if os.name=='nt' else 'audiocpp_cli')
         self.original=self.d/'excerpt.wav';self.reference=None;self.music={}
     def settings(self):return {'backend':self.config['backend'],'threads':self.config['threads']}
     def separation_model(self):return Path(self.config['separation_model'])

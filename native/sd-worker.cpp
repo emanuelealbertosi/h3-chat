@@ -1,8 +1,20 @@
 // H3-Chat persistent image worker. Private stdin/stdout protocol; no network listener.
 // ABI pinned to stable-diffusion.cpp 7f410a3 (see vendor/SOURCES.json).
 #define NOMINMAX
+#ifdef _WIN32
 #include <windows.h>
 #include <io.h>
+#else
+#include <dlfcn.h>
+#include <unistd.h>
+#include <ctime>
+#define _fdopen fdopen
+#define _dup dup
+#define _dup2 dup2
+#define _fileno fileno
+#define _setmode(a,b) ((void)0)
+#define _O_BINARY 0
+#endif
 #include <fcntl.h>
 #include <cstdio>
 #include <atomic>
@@ -31,10 +43,19 @@ static std::string vae_backend="cpu";
 static int vae_blocks=0;
 static std::atomic<int> image_phase{0}; // 0 prepare, 1 sample, 2 decode
 static void emit(const json& value){std::lock_guard<std::mutex> guard(protocol_lock);std::string line=value.dump()+"\n";fwrite(line.data(),1,line.size(),protocol);fflush(protocol);}
+#ifdef _WIN32
 static std::wstring wide(const std::string& s){int n=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s.data(),(int)s.size(),nullptr,0);if(!n)throw std::runtime_error("Invalid UTF-8 path");std::wstring out(n,L' ');MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s.data(),(int)s.size(),out.data(),n);return out;}
+static FILE* image_file(const std::string& path,bool write){return _wfopen(wide(path).c_str(),write?L"wb":L"rb");}
+#else
+static FILE* image_file(const std::string& path,bool write){return fopen(path.c_str(),write?"wb":"rb");}
+#endif
 
 struct Api {
+#ifdef _WIN32
  HMODULE dll=nullptr;
+#else
+ void* dll=nullptr;
+#endif
 #define FN(name) decltype(&::name) p_##name=nullptr;
  FN(sd_commit) FN(sd_ctx_params_init) FN(new_sd_ctx) FN(free_sd_ctx)
  FN(sd_img_gen_params_init) FN(generate_image) FN(free_sd_images)
@@ -42,11 +63,17 @@ struct Api {
  FN(sd_list_devices) FN(str_to_sample_method) FN(str_to_scheduler) FN(sd_sample_method_name) FN(sd_scheduler_name)
 #undef FN
  void open(const std::string& path){
+#ifdef _WIN32
   auto directory=std::filesystem::path(wide(path)).parent_path().wstring();
   SetDllDirectoryW(directory.c_str());
   dll=LoadLibraryExW(wide(path).c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
   if(!dll)throw std::runtime_error("Cannot load stable-diffusion.dll: Windows error "+std::to_string(GetLastError()));
 #define LOAD(name) p_##name=reinterpret_cast<decltype(p_##name)>(GetProcAddress(dll,#name));if(!p_##name)throw std::runtime_error("Missing native function: " #name);
+#else
+  dll=dlopen(path.c_str(),RTLD_NOW|RTLD_LOCAL);
+  if(!dll)throw std::runtime_error(dlerror());
+#define LOAD(name) p_##name=reinterpret_cast<decltype(p_##name)>(dlsym(dll,#name));if(!p_##name)throw std::runtime_error("Missing native function: " #name);
+#endif
   LOAD(sd_commit) LOAD(sd_ctx_params_init) LOAD(new_sd_ctx) LOAD(free_sd_ctx)
   LOAD(sd_img_gen_params_init) LOAD(generate_image) LOAD(free_sd_images)
   LOAD(sd_set_log_callback) LOAD(sd_set_progress_callback) LOAD(sd_get_default_sample_method) LOAD(sd_get_default_scheduler)
@@ -55,13 +82,19 @@ struct Api {
   std::string commit=p_sd_commit();
   if(commit.find("7f410a3")==std::string::npos)throw std::runtime_error("Native ABI version mismatch: "+commit);
  }
- ~Api(){if(dll)FreeLibrary(dll);}
+ ~Api(){if(dll){
+#ifdef _WIN32
+ FreeLibrary(dll);
+#else
+ dlclose(dll);
+#endif
+ }}
 };
 
 struct InputImage {
  sd_image_t value{};
  explicit InputImage(const std::string& path){
-  FILE* file=_wfopen(wide(path).c_str(),L"rb");if(!file)throw std::runtime_error("Cannot open image reference");
+  FILE* file=image_file(path,false);if(!file)throw std::runtime_error("Cannot open image reference");
   int w=0,h=0,c=0;value.data=stbi_load_from_file(file,&w,&h,&c,3);fclose(file);
   if(!value.data)throw std::runtime_error("Invalid PNG/JPEG reference");
   value.width=w;value.height=h;value.channel=3;
@@ -70,7 +103,13 @@ struct InputImage {
 };
 static void native_log(sd_log_level_t level,const char* text,void*){
  if(!text)return;
- if(level>=SD_LOG_INFO){SYSTEMTIME now;GetLocalTime(&now);fprintf(stderr,"%02d:%02d:%02d.%03d %s",now.wHour,now.wMinute,now.wSecond,now.wMilliseconds,text);if(*text&&text[strlen(text)-1]!='\n')fputc('\n',stderr);fflush(stderr);}
+ if(level>=SD_LOG_INFO){
+#ifdef _WIN32
+ SYSTEMTIME now;GetLocalTime(&now);fprintf(stderr,"%02d:%02d:%02d.%03d %s",now.wHour,now.wMinute,now.wSecond,now.wMilliseconds,text);
+#else
+ std::time_t t=std::time(nullptr);std::tm local{};localtime_r(&t,&local);fprintf(stderr,"%02d:%02d:%02d %s",local.tm_hour,local.tm_min,local.tm_sec,text);
+#endif
+ if(*text&&text[strlen(text)-1]!='\n')fputc('\n',stderr);fflush(stderr);}
  std::string line(text);
  if(line.find("generating image: ")!=std::string::npos){image_phase=1;emit({{"event","stage"},{"message","Preparazione del primo passo"}});}
  else if(line.find("decoding ")!=std::string::npos&&line.find("latents")!=std::string::npos){image_phase=2;emit({{"event","stage"},{"message",std::string("Decodifica immagine · VAE su ")+(vae_backend=="cpu"?"CPU":"GPU")}});}
@@ -81,7 +120,7 @@ static void progress(int step,int steps,float seconds,void*){
  emit({{"event","progress"},{"phase",phase},{"backend",vae_backend},{"step",step},{"steps",steps},{"seconds",seconds}});
 }
 static void write_png(const std::string& path,const sd_image_t& image){
- FILE* f=_wfopen(wide(path).c_str(),L"wb");if(!f)throw std::runtime_error("Cannot write output image");
+ FILE* f=image_file(path,true);if(!f)throw std::runtime_error("Cannot write output image");
  auto writer=[](void* context,void* data,int size){fwrite(data,1,size,static_cast<FILE*>(context));};
  int ok=stbi_write_png_to_func(writer,f,image.width,image.height,image.channel,image.data,image.width*image.channel);
  bool failed=ferror(f)!=0;fclose(f);if(!ok||failed)throw std::runtime_error("PNG write failed");

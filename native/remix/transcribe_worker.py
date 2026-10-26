@@ -4,6 +4,7 @@ from pathlib import Path
 p=argparse.ArgumentParser();p.add_argument('--input',required=True);p.add_argument('--output',required=True);p.add_argument('--root',required=True);p.add_argument('--backend',choices=['cuda','cpu'],default='cuda');p.add_argument('--threads',type=int,default=8);a=p.parse_args()
 root=Path(a.root);out=Path(a.output)
 sys.path[:0]=[str(root),str(root/'native')]
+if os.name!='nt':sys.path.insert(0,str(root/'runtime/remix/transcription/Lib/site-packages'))
 from remix import platform_runtime
 settings=json.loads(os.environ['H3_REMIX_MODELS'])
 temp=root/'data/tmp';temp.mkdir(parents=True,exist_ok=True)

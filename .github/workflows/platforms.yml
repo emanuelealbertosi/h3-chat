@@ -1,0 +1,14 @@
+name: Verify Mac then build Linux
+on:
+  workflow_dispatch:
+  push:
+    branches: ['codex/platforms-2026-10-26']
+    paths: ['.github/workflows/platforms.yml']
+permissions:
+  contents: read
+jobs:
+  macos:
+    uses: ./.github/workflows/macos.yml
+  linux:
+    needs: macos
+    uses: ./.github/workflows/linux.yml

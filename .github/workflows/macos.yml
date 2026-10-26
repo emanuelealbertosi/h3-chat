@@ -30,6 +30,12 @@ jobs:
             build/macos-downloads
             build/macos/H3-Chat/runtime/browser
           key: macos-arm64-${{ hashFiles('scripts/macos-sources.json') }}
+      - uses: actions/cache@v4
+        with:
+          path: |
+            build/posix-tool-wheels
+            build/macos-repaired-wheels
+          key: macos-cpu-tools-${{ hashFiles('scripts/lab-requirements.txt', 'scripts/posix-asr-requirements.txt', 'scripts/build_posix_tools.py') }}
       - name: Build native self-contained distribution
         id: build
         run: python scripts/build_macos.py

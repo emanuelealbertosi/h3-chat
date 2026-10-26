@@ -36,11 +36,13 @@ def settings(root):
 def ready(root,config=None):
     root=Path(root);config=config or settings(root)
     folder=root/'runtime/remix'/config['backend']
-    binary=folder/'audiocpp_cli.exe'
+    binary=folder/('audiocpp_cli.exe' if __import__('os').name=='nt' else 'audiocpp_cli')
     ffmpeg=root/'runtime/remix/ffmpeg.exe'
     py=root/'runtime/remix/transcription/python.exe'
-    native=binary.is_file() and all((folder/n).is_file() for n in ('vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll','vcomp140.dll'))
-    if config['backend']=='cuda':native=native and all(any((d/n).is_file() for d in (folder,root/'runtime/music/cuda')) for n in ('cudart64_12.dll','cublas64_12.dll','cublasLt64_12.dll'))
+    native=binary.is_file()
+    if __import__('os').name=='nt':
+        native=native and all((folder/n).is_file() for n in ('vcruntime140.dll','vcruntime140_1.dll','msvcp140.dll','vcomp140.dll'))
+        if config['backend']=='cuda':native=native and all(any((d/n).is_file() for d in (folder,root/'runtime/music/cuda')) for n in ('cudart64_12.dll','cublas64_12.dll','cublasLt64_12.dll'))
     return {'media':ffmpeg.is_file(),'native':native,
             'separation':native and bool(config['separation_model']),
             'conversion':native and bool(config['conversion_model']),

@@ -5,7 +5,15 @@
 #include "json.hpp"
 #include <cstdio>
 #include <fcntl.h>
+#ifdef _WIN32
 #include <io.h>
+#else
+#include <unistd.h>
+#define _fdopen fdopen
+#define _dup dup
+#define _dup2 dup2
+#define _fileno fileno
+#endif
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -16,7 +24,9 @@ static void emit(const json &v) { const auto s=v.dump()+"\n"; fwrite(s.data(),1,
 static std::filesystem::path path(const json &v) {return std::filesystem::u8path(v.get<std::string>());}
 int main() {
   wire=_fdopen(_dup(_fileno(stdout)),"wb"); _dup2(_fileno(stderr),_fileno(stdout));
+#ifdef _WIN32
   _setmode(_fileno(stdin),_O_BINARY);
+#endif
   emit({{"event","hello"},{"engine","yue2"}});
   std::unique_ptr<engine::core::ExecutionContext> context;
   std::shared_ptr<yue::Yue2Assets> assets;

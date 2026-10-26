@@ -37,6 +37,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  const tools=new Map([['slides',button('▥ Slide','prompt-slides')],['infographic',button('✧ Infografica','prompt-infographic')],['manim',button('⌁ Manim','prompt-manim')],['calculate',button('∑ Calcolo','prompt-calculate')],['agent',button('◇ Agent','prompt-agent')]]);
  for(const item of tools.values())modes.append(item);
  const transcribe=$('#transcribe-toggle');transcribe.className='prompt-choice';modes.append(transcribe);
+ modes.append(tools.get('agent'));tools.get('agent').classList.add('prompt-agent-mode');
  const reset=()=>visualControls.set({...visualControls.read(),image_model:'',music:false,video:false,voice:false,transcribe:false});
  const setLab=value=>{lab.value=value;lab.dispatchEvent(new Event('change',{bubbles:true}));};
  auto.onclick=()=>{setLab('auto');reset();render();};

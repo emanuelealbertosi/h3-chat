@@ -93,6 +93,11 @@ def extract_zip(archive, destination):
             if (item.external_attr >> 16) & 0o170000 == 0o120000:
                 raise ValueError("Link simbolico non consentito nel runtime.")
         bundle.extractall(destination)
+        if os.name!='nt':
+            for item in bundle.infolist():
+                if not item.is_dir():
+                    mode=(item.external_attr>>16)&0o777
+                    if mode:os.chmod(safe_join(destination,item.filename),mode&0o755)
 
 
 def extract_members(archive, destination, members, cancel=None):
@@ -179,7 +184,7 @@ class Downloads:
             if task['kind']=='runtime' and task['id'].startswith('upscale_'):
                 from .upscale_runtime import prepare
                 prepare(self.root,task['id'])
-            if task['kind']=='runtime' and task['id']=='remix_score':
+            if task['kind']=='runtime' and task['id']=='remix_score' and os.name=='nt':
                 from .residency import Session
                 session=Session(('remix-setup',(),()),'tool',{'id':'remix-setup','name':'Remix'},{},{},self.root/'runtime/remix/install-score.log')
                 try:
@@ -191,6 +196,9 @@ class Downloads:
                     session.wait('result',task['cancel'],14400,stage)
                 finally:session.stop()
             # Marker is only written after every model component has been verified.
+            if task['kind']=='runtime' and __import__('sys').platform.startswith('linux'):
+                from .linux_runtime import finalize
+                finalize(self.root,task['id'])
             if task['kind']=='runtime' and task['id']=='voice':
                 from .voice import mark_ready
                 mark_ready(self.root)

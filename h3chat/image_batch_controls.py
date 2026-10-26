@@ -5,7 +5,9 @@ ORDINALS={name:i for i,names in enumerate((('prima','first'),('seconda','second'
           ('quinta','fifth'),('sesta','sixth'),('settima','seventh'),('ottava','eighth'),('nona','ninth'),('decima','tenth')),1) for name in names}
 WORDS='|'.join(ORDINALS)
 MARKER=re.compile(r'(?i)(?:\b(?:la|the)\s+|(?:^|(?<=[.;\n]))\s*)('+WORDS+r')\b(?:\s+(?:e|and)\s+(?:(?:la|the)\s+)?('+WORDS+r')\b)?\s*[:,-]?')
-NUMBERED=re.compile(r'(?i)(?:(?:^|[;:\n])\s*(\d{1,2})[.)]\s+|\b(?:immagine|image)\s+(\d{1,2})\s*[:)])')
+# A colon after a numeric ratio is not a list separator: "16:9. " used
+# to become image 9 and silently remove the global aspect from the header.
+NUMBERED=re.compile(r'(?i)(?:(?:^|[;\n]|(?<=[A-Za-zÀ-ÿ]):)\s*(\d{1,2})[.)]\s+|\b(?:immagine|image)\s+(\d{1,2})\s*[:)])')
 CONTROL_PATTERNS=(
     r'(?<!\d)(?:16|9|4|3|2|1)\s*[:/]\s*(?:16|9|4|3|2|1)(?!\d)',
     r'(?<!\d)\d{3,4}\s*[x×*]\s*\d{3,4}(?!\d)',

@@ -76,6 +76,14 @@ class Session:
         self.log_path.parent.mkdir(parents=True,exist_ok=True)
         self.log=self.log_path.open('wb')
         try:
+            if os.name!='nt':
+                # Native supervisor owns detached descendants as well as the
+                # main worker. This keeps Stop effective for CPU renderers,
+                # browsers, audio subprocesses and local model workers.
+                root=Path(__file__).resolve().parents[1]
+                guard=root/'runtime/tools/h3-process-guard'
+                if not guard.is_file():raise ValueError('Supervisore processi non disponibile: reinstalla il pacchetto H3 del sistema operativo.')
+                args=[guard,*args]
             self.process=subprocess.Popen([str(a) for a in args],stdin=subprocess.PIPE if ipc else subprocess.DEVNULL,
                 stdout=subprocess.PIPE if ipc else self.log,stderr=self.log,cwd=str(cwd or Path(args[0]).parent),
                 creationflags=0x08000000 if os.name=='nt' else 0,env=self.child_env)

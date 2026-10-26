@@ -21,6 +21,8 @@ jobs:
           python -c 'import json,pathlib,shutil;from scripts.build_macos import archive;root=pathlib.Path("build/linux-preflight/H3-Chat");spec=json.loads(pathlib.Path("scripts/linux-sources.json").read_text());archive(spec["python"],pathlib.Path("build/linux-preflight-unpack"),pathlib.Path("build/linux-downloads"));shutil.copytree("build/linux-preflight-unpack/python",root/"runtime/python",symlinks=True,dirs_exist_ok=True);shutil.copytree("h3chat",root/"h3chat",dirs_exist_ok=True);(root/"native").mkdir();[shutil.copy2(p,root/"native"/p.name) for p in pathlib.Path("native").glob("*.py")]'
           build/linux-preflight/H3-Chat/runtime/python/bin/python3 -m pip install --only-binary=:all: --target build/linux-preflight/H3-Chat/runtime/tools/documents -r scripts/linux-requirements.txt
       - name: Compile the persistent image bridge on Linux
-        run: g++ -O2 -std=c++17 native/sd-worker.cpp -ldl -pthread -o build/linux-preflight/H3-Chat/native/h3-sd-worker
+        run: |
+          g++ -O2 -std=c++17 native/sd-worker.cpp -ldl -pthread -o build/linux-preflight/H3-Chat/native/h3-sd-worker
+          cc -O2 scripts/linux-process-guard.c -o build/linux-preflight/H3-Chat/runtime/tools/h3-process-guard
       - name: Check actual native file/process boundaries
         run: build/linux-preflight/H3-Chat/runtime/python/bin/python3 -X utf8 scripts/check_posix.py build/linux-preflight/H3-Chat

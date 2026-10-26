@@ -26,6 +26,7 @@ def build(stage):
         run([sys.executable,'-m','pip','install','delocate==0.13.0'])
         repaired=ROOT/'build/macos-repaired-wheels';repaired.mkdir(parents=True,exist_ok=True)
         for wheel in wheels.glob('*.whl'):
+            if (repaired/wheel.name).exists():continue
             if 'none-any' in wheel.name:shutil.copy2(wheel,repaired/wheel.name)
             else:run([sys.executable,'-m','delocate.cmd.delocate_wheel','-w',repaired,wheel])
         wheel_source=repaired

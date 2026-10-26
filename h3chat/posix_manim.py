@@ -34,7 +34,7 @@ def render(root,request,stage):
         stdin=folder/'stdin';stdin.touch();log=folder/'render.log'
         reads=[root/'runtime/tools/lab',root/'runtime/tools/documents',latex,root/'native/manim-runner.py',root/'native/vendor',root/'native/slide_geometry.py']
         stage('Manim · CPU · processo isolato')
-        code=run(root,[python_executable(root),'-I','-X','utf8',root/'native/manim-runner.py'],folder,env,stdin,log,options.get('timeout',600),sandbox=folder,reads=reads)
+        code=run(root,[python_executable(root),'-I','-X','utf8',root/'native/manim-runner.py'],folder,env,stdin,log,options.get('timeout',600),sandbox=folder,reads=reads,max_file_mb=512)
         (output/'manim-render.log').write_text(log.read_text(encoding='utf8',errors='replace')[-20000:],encoding='utf8')
         if code:raise ValueError('Manim: rendering fallito. '+log.read_text(encoding='utf8',errors='replace')[-2500:])
         result=json.loads((folder/'result.json').read_text());path=Path(result['path']).resolve()
