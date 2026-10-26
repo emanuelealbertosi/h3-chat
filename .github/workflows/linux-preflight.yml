@@ -43,6 +43,8 @@ jobs:
       - name: Install the actual packaged browser for the PDF probe
         env:
           PLAYWRIGHT_BROWSERS_PATH: build/linux-preflight/H3-Chat/runtime/browser
-        run: build/linux-preflight/H3-Chat/runtime/python/bin/python3 -c 'import sys,runpy;sys.path.insert(0,"build/linux-preflight/H3-Chat/runtime/tools/documents");sys.argv=["playwright","install","chromium","--only-shell"];runpy.run_module("playwright",run_name="__main__")'
+        run: |
+          python -c 'from pathlib import Path;import shutil;root=Path("build/linux-preflight/H3-Chat");shutil.copytree("static",root/"static",dirs_exist_ok=True);import zipfile;bundle=zipfile.ZipFile("distribution/windows-bootstrap.zip");[bundle.extract(n,root) for n in bundle.namelist() if n.startswith("static/")]'
+          build/linux-preflight/H3-Chat/runtime/python/bin/python3 -c 'import sys,runpy;sys.path.insert(0,"build/linux-preflight/H3-Chat/runtime/tools/documents");sys.argv=["playwright","install","chromium","--only-shell"];runpy.run_module("playwright",run_name="__main__")'
       - name: Verify offline PDF with Chromium sandbox and outer file/network isolation
         run: build/linux-preflight/H3-Chat/runtime/python/bin/python3 -X utf8 scripts/check_linux_pdf.py build/linux-preflight/H3-Chat

@@ -113,6 +113,8 @@ jobs:
           tar -xzf build/cuda/H3-Chat-linux-cuda-components.tar.gz -C build/linux
           python -c 'import json,pathlib;pathlib.Path("build/linux-stage.json").write_text(json.dumps({"path":str(pathlib.Path("build/linux/H3-Chat").resolve())}))'
           python scripts/build_linux.py --package
+      - name: Verify archive payloads, links and private-data exclusions
+        run: python scripts/verify_linux_package.py
       - uses: actions/upload-artifact@v4
         with:
           name: H3-Chat-linux-x64
