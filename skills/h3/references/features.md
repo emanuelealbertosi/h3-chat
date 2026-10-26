@@ -41,6 +41,14 @@ Distinguere HTML libero LLM dal motore deterministico. Stile giocoso/fumettoso �
 
 Nel canvas verificare il risultato reale; animazioni statiche e output del planner non sono un video già renderizzato. Per creazione di artefatti didattici esterni all'app applicare anche le eventuali skill specifiche richieste, senza sostituire il motore H3 scelto dall'utente.
 
+## Agent
+
+Agent è una modalità aggiuntiva, distinta da Assistant. `docs/agent.md` descrive
+permessi, budget e strumenti H3/PC. Per Video, inclusi coda, versioni, memoria e
+raccordo finale, consulta `agent-video.md`: richiede allow_video esplicito e non
+equivale a una revisione visiva/ascolto del filmato. Per cornici usa gli adattatori
+della raccolta sfondi, senza trattare una normale figura come sfondo applicato.
+
 ## Galleria, file, metadati e client esterni
 
 `docs/infographics-and-gallery.md`, `docs/uploads.md`, `docs/sillytavern.md`, `docs/build.md`.

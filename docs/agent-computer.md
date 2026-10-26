@@ -7,9 +7,9 @@ sotto le modalità del prompt quando scegli Agent. Assistant resta separato.
 ## Le tre scelte
 
 - **H3**: strumenti dell’app, Web pubblico, documenti, RAG, progetti, lotti,
-  immagini, voce, musica, infografica, Manim e slide. Rispetta i permessi delle
-  Impostazioni Agent e la modalità CPU/GPU. Il motore video resta escluso dalle
-  generazioni Agent in questa fase. Nessuna shell o lettura libera del disco.
+  immagini, voce, musica, infografica, Manim, slide e video/timeline. Rispetta i
+  permessi delle Impostazioni Agent, incluso allow_video separato, e la modalità
+  CPU/GPU. Nessuna shell o lettura libera del disco.
 - **Sandbox**: strumenti H3 più file e programmi nella cartella scelta. Il
   proprietario locale sceglie una cartella reale separata dall’app; deve essere
   priva di junction, symlink e file con hard link. Il modello non può sceglierla

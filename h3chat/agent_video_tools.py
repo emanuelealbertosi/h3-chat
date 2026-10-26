@@ -75,7 +75,7 @@ def execute(ctx,name,args):
         if args.get('parameters'):body['video_parameters']=args['parameters']
         if args.get('segment_seconds'):body['video_segment_seconds']=args['segment_seconds']
     elif name=='edit_video':
-        body={'source':args['source'],'patches':args['patches'],'canvas':True,'assistant':args.get('assistant',False),'remount':args.get('remount',True)}
+        body={'source':args['source'],'patches':copy.deepcopy(args['patches']),'canvas':True,'assistant':args.get('assistant',False),'remount':args.get('remount',True)}
         for item in body['patches']:
             if 'end_image' in item:
                 if item.get('end_frame','none')!='none':raise ValueError('Scegli una sola guida per il fotogramma finale.')
