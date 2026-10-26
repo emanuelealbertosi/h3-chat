@@ -2,6 +2,9 @@ name: Build Linux Ubuntu and Kali
 on:
   workflow_dispatch:
   workflow_call:
+  push:
+    branches: ['codex/platforms-2026-10-26']
+    paths: ['.github/workflows/linux.yml']
 permissions:
   contents: read
 jobs:
