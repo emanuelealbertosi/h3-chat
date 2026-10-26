@@ -1,4 +1,5 @@
 """Resolve Linux wheels at build time; installers use only pinned URLs/hashes."""
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -10,6 +11,29 @@ import zipfile
 ROOT=Path(__file__).resolve().parents[1]
 
 
+def archive_identity(info):
+    """Some vendor indexes omit report hashes; hash the actual HTTPS bytes."""
+    url=info['url']
+    if urllib.parse.urlsplit(url).scheme!='https':raise ValueError('Wheel URL must use HTTPS.')
+    archive=info.get('archive_info',{})
+    digest=archive.get('hashes',{}).get('sha256')
+    if not digest and archive.get('hash','').startswith('sha256='):digest=archive['hash'][7:]
+    if digest:
+        if len(digest)!=64 or any(c not in '0123456789abcdefABCDEF' for c in digest):raise ValueError('Invalid wheel SHA256.')
+        with urllib.request.urlopen(urllib.request.Request(url,method='HEAD'),timeout=60) as response:size=int(response.headers['Content-Length'])
+        return size,digest.lower()
+    checksum=hashlib.sha256();size=0
+    with urllib.request.urlopen(url,timeout=120) as response:
+        declared=response.headers.get('Content-Length')
+        while block:=response.read(4*1024**2):
+            size+=len(block)
+            if size>8*1024**3:raise ValueError('Wheel exceeds the 8 GiB manifest limit.')
+            checksum.update(block)
+    if declared is not None and size!=int(declared):raise ValueError('Incomplete wheel download while computing SHA256.')
+    if not size:raise ValueError('Empty wheel download.')
+    return size,checksum.hexdigest()
+
+
 def wheels(stage,name,requirements,destination,*,constraints=None,index=None,python=None):
     folder=ROOT/'build/linux-locks';folder.mkdir(parents=True,exist_ok=True)
     report=folder/(name+'.json');python=python or Path(stage)/'runtime/python/bin/python3'
@@ -19,9 +43,9 @@ def wheels(stage,name,requirements,destination,*,constraints=None,index=None,pyt
     subprocess.run(args,check=True)
     result=[]
     for item in json.loads(report.read_text())['install']:
-        info=item['download_info'];url=info['url'];digest=info['archive_info']['hashes']['sha256'];filename=urllib.parse.unquote(urllib.parse.urlsplit(url).path.rsplit('/',1)[-1])
+        info=item['download_info'];url=info['url'];filename=urllib.parse.unquote(urllib.parse.urlsplit(url).path.rsplit('/',1)[-1])
         if not filename.endswith('.whl') or 'win_amd64' in filename or 'macosx' in filename:raise ValueError('Non-Linux wheel in resolved manifest: '+filename)
-        with urllib.request.urlopen(urllib.request.Request(url,method='HEAD'),timeout=60) as response:size=int(response.headers['Content-Length'])
+        size,digest=archive_identity(info)
         result.append({'url':url,'size':size,'sha256':digest,'path':'runtime/downloads/linux/'+filename,'extract_to':destination})
     return {'platform':'linux','files':result}
 

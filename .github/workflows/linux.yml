@@ -1,12 +1,15 @@
 name: Build Linux Ubuntu and Kali
 on:
   workflow_dispatch:
+    inputs:
+      reuse_cuda_run:
+        description: 'Optional successful native CUDA job run to reuse without recompiling unchanged engines'
+        required: false
+        type: string
   workflow_call:
-  push:
-    branches: ['codex/platforms-2026-10-26']
-    paths: ['.github/workflows/linux.yml']
 permissions:
   contents: read
+  actions: read
 jobs:
   cpu:
     runs-on: ubuntu-24.04
@@ -36,6 +39,7 @@ jobs:
           name: H3-Chat-linux-cpu-base
           path: dist/*linux-x64*
   cuda:
+    if: ${{ !inputs.reuse_cuda_run }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     container: nvidia/cuda:12.8.1-devel-ubuntu24.04
@@ -60,6 +64,7 @@ jobs:
           path: H3-Chat-linux-cuda-components.tar.gz
   package:
     needs: [cpu, cuda]
+    if: ${{ always() && needs.cpu.result == 'success' && (needs.cuda.result == 'success' || (needs.cuda.result == 'skipped' && inputs.reuse_cuda_run)) }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -71,9 +76,23 @@ jobs:
           name: H3-Chat-linux-cpu-base
           path: build/base
       - uses: actions/download-artifact@v4
+        if: ${{ !inputs.reuse_cuda_run }}
         with:
           name: H3-Chat-linux-cuda-components
           path: build/cuda
+      - name: Wait for the selected native CUDA artifact
+        if: ${{ inputs.reuse_cuda_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CUDA_RUN: ${{ inputs.reuse_cuda_run }}
+        run: python scripts/wait_linux_cuda.py "$CUDA_RUN"
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.reuse_cuda_run }}
+        with:
+          name: H3-Chat-linux-cuda-components
+          path: build/cuda
+          run-id: ${{ inputs.reuse_cuda_run }}
+          github-token: ${{ github.token }}
       - name: Assemble CPU/API and optional NVIDIA engines
         run: |
           mkdir -p build/linux
