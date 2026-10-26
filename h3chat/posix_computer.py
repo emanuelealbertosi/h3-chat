@@ -22,10 +22,10 @@ def mac_profile(reads,writes):
     parts=['(version 1)','(deny default)','(allow process-exec process-fork)',
            '(allow signal (target same-sandbox))','(allow sysctl-read)',
            '(allow file-read-metadata)',
-           '(allow file-read* (subpath "/System") (subpath "/usr/lib") (subpath "/usr/share") (subpath "/bin") (subpath "/usr/bin") (subpath "/dev") (literal "/private/etc/localtime"))',
+           '(allow file-read* file-map-executable (subpath "/System") (subpath "/usr/lib") (subpath "/usr/share") (subpath "/bin") (subpath "/usr/bin") (subpath "/dev") (literal "/private/etc/localtime"))',
            '(allow file-write* (literal "/dev/null"))']
-    for path in reads:parts.append('(allow file-read* (subpath '+quoted(path)+'))')
-    for path in writes:parts.append('(allow file-read* file-write* (subpath '+quoted(path)+'))')
+    for path in reads:parts.append('(allow file-read* file-map-executable (subpath '+quoted(path)+'))')
+    for path in writes:parts.append('(allow file-read* file-write* file-map-executable (subpath '+quoted(path)+'))')
     return '\n'.join(parts)
 
 
@@ -71,7 +71,26 @@ def run(root,argv,cwd,env,stdin,stdout,timeout=600,*,sandbox=None,reads=(),cance
         resource.setrlimit(resource.RLIMIT_NOFILE,(256,256))
         if sys.platform.startswith('linux'):resource.setrlimit(resource.RLIMIT_AS,(8*1024**3,8*1024**3))
     with open(stdin,'rb') as source,open(stdout,'wb') as output:
-        child=subprocess.Popen(list(map(str,argv)),cwd=cwd,env=env,stdin=source,stdout=output,stderr=output,start_new_session=True,preexec_fn=limits)
+        # Do not pass host data/log file descriptors through Seatbelt. Only
+        # anonymous pipes cross the boundary; the broker owns the actual files.
+        child=subprocess.Popen(list(map(str,argv)),cwd=cwd,env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True,preexec_fn=limits)
+        import threading
+        overflow=threading.Event()
+        def feed():
+            try:
+                while block:=source.read(65536):child.stdin.write(block);child.stdin.flush()
+            except (BrokenPipeError,OSError):pass
+            finally:child.stdin.close()
+        def collect():
+            size=0
+            try:
+                while block:=child.stdout.read(65536):
+                    size+=len(block)
+                    if size>4*1024**2:overflow.set();break
+                    output.write(block);output.flush()
+            except OSError:pass
+        feeder=threading.Thread(target=feed,daemon=True);reader=threading.Thread(target=collect,daemon=True)
+        feeder.start();reader.start()
         def terminate(*_):
             # Give the Mac kqueue supervisor time to kill children in other
             # sessions; SIGKILL on its process group alone would miss those.
@@ -84,7 +103,6 @@ def run(root,argv,cwd,env,stdin,stdout,timeout=600,*,sandbox=None,reads=(),cance
             except ProcessLookupError:pass
         previous={}
         # The engine's Stop terminates the broker: always kill its process group.
-        import threading
         if threading.current_thread() is threading.main_thread():
             def interrupted(signum,frame):terminate();raise InterruptedError('Esecuzione fermata.')
             for sig in (signal.SIGTERM,signal.SIGINT):previous[sig]=signal.signal(sig,interrupted)
@@ -93,10 +111,11 @@ def run(root,argv,cwd,env,stdin,stdout,timeout=600,*,sandbox=None,reads=(),cance
             while child.poll() is None:
                 if cancel and cancel.is_set():raise InterruptedError('Esecuzione fermata.')
                 if time.monotonic()>deadline:raise TimeoutError('Comando oltre il tempo massimo.')
-                if Path(stdout).stat().st_size>4*1024**2:raise ValueError('Uscita oltre 4 MiB.')
+                if overflow.is_set():raise ValueError('Uscita oltre 4 MiB.')
                 time.sleep(.05)
             return child.returncode
         finally:
             terminate()
             child.wait(timeout=5)
+            feeder.join(timeout=2);reader.join(timeout=2);child.stdout.close()
             for sig,handler in previous.items():signal.signal(sig,handler)

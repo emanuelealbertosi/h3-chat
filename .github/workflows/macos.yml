@@ -42,6 +42,9 @@ jobs:
           key: macos-arm64-${{ hashFiles('scripts/macos-sources.json') }}
       - name: Verify actual packaged components on Apple Silicon
         run: build/macos/H3-Chat/runtime/python/bin/python3 -X utf8 scripts/check_macos.py
+      - name: Native sandbox failure diagnostics
+        if: failure()
+        run: /usr/bin/log show --last 5m --style compact --predicate 'process == "sandboxd" OR eventMessage CONTAINS "Sandbox:"' | tail -80
       - name: Verify ZIP members and create checksum
         run: python scripts/build_macos.py --package
       - uses: actions/upload-artifact@v4
