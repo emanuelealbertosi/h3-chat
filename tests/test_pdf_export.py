@@ -7,6 +7,12 @@ from h3chat.pdf_export import export_document
 
 
 class ExportSizeTests(unittest.TestCase):
+    def test_svg_fragment_paints_survive_without_enabling_remote_urls(self):
+        source='<svg><defs><linearGradient id="paint"><stop offset="0" stop-color="red"/></linearGradient><filter id="blur"><feGaussianBlur stdDeviation="2"/></filter></defs><rect id="local" style="fill:url(#paint);filter:url(#blur)"/><rect id="remote" style="fill:url(https://example.invalid/x.svg#paint)" onload="alert(1)"/></svg>'
+        with tempfile.TemporaryDirectory() as directory,patch('h3chat.pdf_export.embedded_css',return_value=''):
+            _,file,_=export_document(Path(directory),Path(directory),{'html':source})
+            saved=file.read_text(encoding='utf8');self.assertIn('fill:url(#paint);filter:url(#blur)',saved);self.assertIn('fegaussianblur',saved);self.assertNotIn('example.invalid',saved);self.assertNotIn('onload=',saved)
+
     def test_vertical_slides_keep_portrait_page_dimensions(self):
         from h3chat.slides import FORMATS
         width,height=FORMATS['9:16']

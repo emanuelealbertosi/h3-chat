@@ -1,0 +1,12 @@
+{
+  "tinytex_mac": {
+    "url": "https://github.com/rstudio/tinytex-releases/releases/download/v2026.10/TinyTeX-darwin-v2026.10.tar.xz",
+    "size": 210535256,
+    "sha256": "9962e445b56f06feb2c28f73561e523e89d550e98abf910ba60b0ffb3856921f"
+  },
+  "tinytex_linux": {
+    "url": "https://github.com/rstudio/tinytex-releases/releases/download/v2026.10/TinyTeX-linux-x86_64-v2026.10.tar.xz",
+    "size": 151904844,
+    "sha256": "54fec1c79ab437d2d52e2f918bdb738c85779d654a93e62cc44f022e227692b5"
+  }
+}

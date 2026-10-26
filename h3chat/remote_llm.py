@@ -136,11 +136,12 @@ class Client:
                 except (AttributeError,OSError):pass
     def completion(self,config,key,messages,settings,cancel,on_text=None,schema=None,on_reasoning=None):
         request=messages
-        for attempt in range(2):
+        attempts=1 if settings.get('_agent_no_format_retry') else 2
+        for attempt in range(attempts):
             if cancel.is_set():raise Cancelled()
             try:return self._completion_once(config,key,request,settings,cancel,on_text,schema,on_reasoning)
             except StructuredCompletionError as exc:
-                if attempt or not schema:raise
+                if attempt+1>=attempts or not schema:raise
                 if cancel.is_set():raise Cancelled()
                 # A single targeted repair, keeping the same provider, model,
                 # output budget and full original task. No retries for transport,

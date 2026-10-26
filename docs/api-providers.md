@@ -78,3 +78,20 @@ stream incompleto e annullamento vengono mostrati nella stessa chat/finestra.
 Riferimenti ufficiali utilizzati: [DeepSeek Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/),
 [DeepSeek JSON Output](https://api-docs.deepseek.com/guides/json_mode/),
 [OpenRouter Chat Completions](https://openrouter.ai/docs/api/api-reference/chat/create-a-chat-completion).
+
+## Vision e modelli disponibili
+
+In **Provider API**, il controllo **Il modello supporta immagini / Vision** è
+visibile nel modulo del collegamento, fuori dalle opzioni richiudibili. Il
+pulsante **Immagini / Vision** del collegamento porta direttamente al controllo.
+Dalla modale **Slide → Immagini**, **Configura modello Vision** apre il provider
+API attualmente scelto. Cambiare questa dichiarazione richiede **Salva collegamento
+API** e non modifica da solo l’ID modello.
+
+**Carica elenco modelli** mostra anche le capacità dichiarate dal servizio:
+input immagine nel formato OpenAI/DeepSeek o `architecture.input_modalities` di
+OpenRouter. Il nome non deve contenere “Vision”. Se il provider dichiara la
+compatibilità, selezionare il modello aggiorna il flag nella bozza; il
+collegamento salvato cambia solo con un salvataggio esplicito. Le capacità non
+dichiarate restano sconosciute, senza dedurle dal nome. I modelli che generano
+immagini ma non le accettano in ingresso non vengono segnati come Vision.

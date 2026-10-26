@@ -229,10 +229,13 @@ class Knowledge:
         else:
             ident=uid();self.store.execute('INSERT INTO projects VALUES (?,?,?,?,?)',(ident,name.strip(),instructions,int(only),time.time()))
         return self.project(ident)
-    def mutable(self,ident):
+    def mutable(self,ident,*,active_job=None):
         self.project(ident)
         if self.tasks.get(ident,{}).get('status')=='running':raise ValueError('Attendi il completamento dell’indicizzazione.')
-        if self.store.one("SELECT j.id FROM jobs j JOIN chats c ON c.id=j.chat_id WHERE c.project_id=? AND j.status IN ('queued','running')",(ident,)):raise ValueError('Attendi o interrompi i lavori nel progetto.')
+        # Only the synchronous Agent adapter may amend its own project's sources.
+        # Browser/API callers never provide this internal job exemption.
+        if active_job and not self.store.one("SELECT id FROM jobs WHERE id=? AND status IN ('queued','running')",(active_job,)):raise ValueError('Lavoro Agent non più attivo.')
+        if self.store.one("SELECT j.id FROM jobs j JOIN chats c ON c.id=j.chat_id WHERE c.project_id=? AND j.status IN ('queued','running') AND j.id!=?",(ident,active_job or '')):raise ValueError('Attendi o interrompi i lavori nel progetto.')
     def delete(self,ident):
         with self.index_lock:
             self.mutable(ident);self.uploads.cancel_project(ident);self.store.execute('DELETE FROM projects WHERE id=?',(ident,))
@@ -251,7 +254,7 @@ class Knowledge:
             return self.register_import(ident,body,temporary)
         finally:temporary.unlink(missing_ok=True)
 
-    def register_import(self,ident,body,path):
+    def register_import(self,ident,body,path,*,active_job=None):
         """Register a complete private staging file without loading its bytes."""
         name,label,extension,defer=import_metadata(body);path=Path(path)
         if self.closed.is_set():raise ValueError('Applicazione in chiusura.')
@@ -260,7 +263,7 @@ class Knowledge:
             for piece in iter(lambda:inp.read(IMPORT_CHUNK_BYTES),b''):hasher.update(piece)
         digest=hasher.hexdigest()
         with self.index_lock:
-            self.mutable(ident)
+            self.mutable(ident,active_job=active_job)
             target=safe_join(self.data,'project-imports/'+ident+'/'+digest+'/document'+extension)
             existing=self.store.one('SELECT id FROM project_sources WHERE project_id=? AND path=?',(ident,str(target)))
             duplicate=bool(existing)
@@ -321,7 +324,11 @@ class Knowledge:
     def read(self,source,cancel,stage):
         path=Path(source['path'])
         if path.suffix.lower() not in EXTENSIONS:raise ValueError('File conservato nel progetto e in galleria; questo formato non è indicizzabile dal RAG.')
-        if path.suffix.lower() in IMAGE_EXTENSIONS:return [],[]
+        if path.suffix.lower() in IMAGE_EXTENSIONS:
+            from .image_collections import caption_for_path
+            caption=caption_for_path(self.data,path)
+            if not caption:return [],[]
+            return [{'location':'Descrizione immagine · catalogazione','page':None,'text':caption,'modality':'image','image_path':path.resolve().relative_to(self.data.resolve()).as_posix()}],[]
         if path.suffix.lower() in TEXT_EXTENSIONS:
             with path.open(encoding='utf-8-sig',errors='replace') as inp:text=inp.read(RAG_TEXT_CHARS+1)
             if len(text)>RAG_TEXT_CHARS:raise ValueError('Massimo dieci milioni di caratteri per documento RAG.')
@@ -371,7 +378,7 @@ class Knowledge:
                         chunks=[b|{'text':b['text'][j:j+1600]} for b in blocks for j in range(0,len(b['text']),1600) if b['text'][j:j+1600].strip()]
                         if visual_enabled(settings) and path.suffix.lower() in ({'.pdf','.docx'}|IMAGE_EXTENSIONS):
                             visual_chunks,visual_warnings=self.read_visuals(source,blocks,cancel,stage);chunks+=visual_chunks;warnings+=visual_warnings
-                        elif path.suffix.lower() in IMAGE_EXTENSIONS:raise ValueError('Per indicizzare immagini scegli Ovis oppure EmbeddingGemma 2 e attiva immagini nel RAG.')
+                        elif path.suffix.lower() in IMAGE_EXTENSIONS and not chunks:raise ValueError('Per indicizzare immagini scegli Ovis oppure EmbeddingGemma 2 e attiva immagini nel RAG, oppure catalogale prima con Vision.')
                         if not chunks:raise ValueError('Il documento non contiene testo estraibile. Per un libro scansionato crea prima una copia con OCR.')
                         if len(chunks)>RAG_CHUNKS:raise ValueError('Troppi estratti nel documento: massimo 20.000.')
                         self.replace_chunks(source,chunks,warnings,settings,model_key,st,fingerprint,cancel,stage)

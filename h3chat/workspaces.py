@@ -143,6 +143,11 @@ class Workspaces:
 
 
 def guest_allowed(path,method):
+    if path in ('/api/image-collections/delete-plan','/api/image-collections/delete') and method=='POST':return True
+    if path=='/api/presentation-preferences' and method in ('GET','POST'):return True
+    if path=='/api/slide-backgrounds' and method=='GET':return True
+    if path=='/api/image-collections' and method in ('GET','POST'):return True
+    if re.fullmatch(r'/api/image-collections/[a-f0-9]{32}(?:/(?:export|caption|rag))?',path) and method in ('POST','PATCH'):return True
     if method=='GET' and re.fullmatch(r'/api/media/[0-9a-f]{32}/generation',path):return True
     if method=='GET' and path=='/api/images/last-seed':return True
     if method=='GET' and re.fullmatch(r'/api/gallery/[0-9a-f]{32}/preview-progress',path):return True

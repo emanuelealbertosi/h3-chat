@@ -1,0 +1,40 @@
+import {spawn} from 'node:child_process';
+import {once} from 'node:events';
+import {createInterface} from 'node:readline';
+import {createRequire} from 'node:module';
+import {mkdirSync,writeFileSync} from 'node:fs';
+import {build} from 'esbuild';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
+const child=spawn('runtime/python/python.exe',['-X','utf8','tests/serve_background_fixture.py'],{stdio:['ignore','pipe','pipe']});let log='';child.stderr.on('data',x=>log+=x);const lines=createInterface({input:child.stdout});
+const [line]=await Promise.race([once(lines,'line'),once(child,'exit').then(()=>{throw Error(log);})]);lines.close();const fixture=JSON.parse(line);let browser;
+const folder='work/canvas-zoom-motion-2026-10-25';mkdirSync(folder,{recursive:true});
+try{
+ browser=await chromium.launch({channel:'msedge',headless:true,args:['--disable-gpu']});
+ const page=await browser.newPage({viewport:{width:1400,height:950}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.route('**/static/app.js*',r=>r.fulfill({contentType:'text/javascript',body:''}));await page.goto(fixture.url);
+ const bundle=await build({stdin:{contents:"export {initCanvasZoom} from './ui/canvas-zoom.js';export {renderSlides} from './ui/slides.js';",resolveDir:process.cwd()},bundle:true,write:false,format:'iife',globalName:'qa'});
+ await page.route('**/static/zoom-test.js',r=>r.fulfill({contentType:'text/javascript',body:bundle.outputFiles[0].text}));await page.addScriptTag({url:fixture.url+'/static/zoom-test.js'});
+ await page.evaluate(async()=>{
+  document.body.innerHTML='<aside id="canvas-panel" class="canvas-panel" style="display:flex;width:500px;height:700px;min-width:0"><div class="canvas-toolbar"></div><div id="canvas-preview" class="rich canvas-preview"></div></aside>';
+  window.zoom=qa.initCanvasZoom();window.target=document.querySelector('#canvas-preview');
+  window.deck={version:1,engine:'llm',format:'16:9',motion:'animated',title:'Zoom',pages:[{title:'Uno',status:'ready',html:'<style>body{margin:0;background:white;font:42px Arial}h1{margin:40px}</style><h1>Dettaglio visibile</h1>'},{title:'Due',status:'ready',html:'<h1>Seconda pagina</h1>'}]};
+  window.value={id:'zoom-fixture',content:'```h3-slides\n'+JSON.stringify(deck)+'\n```',media:[]};
+  await qa.renderSlides(target,value);window.original=target.querySelector('iframe');await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));window.before=original.getBoundingClientRect().width;
+ });
+ await page.selectOption('[aria-label="Zoom artefatto"]:is(select)','200');
+ await page.waitForFunction(()=>{const r=original.getBoundingClientRect();return r.width>before*1.95;});
+ const slide=await page.evaluate(()=>{const viewport=document.querySelector('.canvas-zoom-viewport');const same=target.querySelector('iframe')===original;const restore=zoom.suspend(),normal=getComputedStyle(target).zoom;restore();return {same,ratio:original.getBoundingClientRect().width/before,normal,restored:getComputedStyle(target).zoom,scroll:viewport.scrollWidth>viewport.clientWidth};});
+ console.log(JSON.stringify(slide));assert.ok(slide.same);assert.ok(Math.abs(slide.ratio-2)<.03);assert.equal(slide.normal,'1');assert.equal(slide.restored,'2');assert.ok(slide.scroll);
+ await page.getByRole('button',{name:'Espandi canvas',exact:true}).click();assert.ok(await page.locator('#canvas-panel').evaluate(e=>e.classList.contains('canvas-expanded')&&e.getBoundingClientRect().width>1300&&e.getBoundingClientRect().height>900));await page.keyboard.press('Escape');assert.ok(!await page.locator('#canvas-panel').evaluate(e=>e.classList.contains('canvas-expanded')));
+ await page.getByRole('button',{name:'Adatta',exact:true}).click();
+ await page.evaluate(()=>{target.replaceChildren();target.classList.remove('slides-preview');target.innerHTML='<h1>Documento</h1><img alt="Immagine" width="200" height="100" src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22100%22%3E%3Crect width=%22200%22 height=%22100%22 fill=%22teal%22/%3E%3C/svg%3E"><div style="height:1000px">Contenuto lungo</div>';window.imageBefore=target.querySelector('img').getBoundingClientRect().width;});
+ await page.getByRole('button',{name:'Ingrandisci artefatto',exact:true}).click();assert.equal(await page.locator('select[aria-label="Zoom artefatto"]').inputValue(),'125');assert.ok(await page.evaluate(()=>target.querySelector('img').getBoundingClientRect().width>imageBefore*1.24));
+ await page.screenshot({path:folder+'/zoom.png'});
+ const ui=await browser.newPage({viewport:{width:1480,height:1050}});ui.on('pageerror',e=>errors.push(e.message));await ui.goto(fixture.url);await ui.click(`[data-chat="${fixture.chat_id}"]`);await ui.click('#prompt-slides');await ui.click('#slide-image-lots');
+ const dialog=ui.getByRole('dialog',{name:'Immagini per le slide',exact:true});assert.equal(await dialog.locator('[name=count]').getAttribute('max'),'50');await dialog.locator('[data-close]').click();
+ await ui.locator('[data-mode-settings=slides-options]').click();await ui.waitForFunction(()=>!document.querySelector('[data-presentation-presets=slides] [data-save]').disabled);await ui.getByRole('button',{name:'Animate · transizioni e animazioni',exact:true}).click();await ui.locator('#prompt-mode-settings').getByRole('button',{name:'Fatto',exact:true}).click();
+ await ui.reload();await ui.click('#prompt-slides');await ui.locator('[data-mode-settings=slides-options]').click();await ui.waitForFunction(()=>document.querySelector('#slides-motion')?.value==='animated');await ui.locator('#prompt-mode-settings').getByRole('button',{name:'Fatto',exact:true}).click();
+ let sent;await ui.route('**/api/chats/*/messages',async r=>{sent=r.request().postDataJSON();await r.fulfill({status:400,json:{error:'Richiesta simulata: nessuna generazione.'}});});await ui.locator('#prompt').fill('Crea 5 slide');await ui.click('#send');await ui.waitForFunction(()=>document.body.innerText.includes('Richiesta simulata'));assert.equal(sent.slides.motion,'animated');assert.deepEqual(errors,[]);
+ writeFileSync(folder+'/browser.json',JSON.stringify({status:'passed',slide_zoom:slide,generic_image_zoom:true,expand_escape:true,motion_saved_and_sent:true,image_lot_limit:50,real_generations:0},null,2));console.log('Canvas zoom, slide iframe continuity, scroll, expand, motion persistence and image lot capacity passed.');
+}catch(e){console.error(log);throw e;}finally{await browser?.close();child.kill();}

@@ -90,11 +90,12 @@ def edit_request(prompt, content):
 def edit_options(prompt,content):
     deck=json.loads(content[len(PREFIX):-4])
     count=len(deck['pages'])
+    lot_options={'image_source':'lots','image_lots':deck['image_lots']['ids'],'generate_images':False} if deck.get('image_lots') else {}
     extra=re.search(r'\baggiungi\w*\s+(una?|\d+)\s*(?:slides?|diapositive)\b',prompt,re.I)
     if extra:count+=1 if extra[1].lower() in ('un','una') else int(extra[1])
     # An addition specifies an increment, not the new total.
     return options(prompt[:extra.start()]+prompt[extra.end():] if extra else prompt,
-                   {'count':count,'format':deck['format'],'engine':deck.get('engine','deterministic')}|{k:deck[k] for k in ('theme','typography','design','detail','composition','engine','vision_scope','background','background_color','palette','text_tone','duration_minutes','llm_timeout','background_style') if k in deck})
+                   {'count':count,'format':deck['format'],'engine':deck.get('engine','deterministic')}|{k:deck[k] for k in ('theme','typography','design','detail','composition','motion','engine','vision_scope','background','background_color','palette','text_tone','duration_minutes','llm_timeout','background_style') if k in deck}|lot_options)
 
 
 def options(prompt, body=None):
@@ -106,7 +107,10 @@ def options(prompt, body=None):
     if match: aspect = re.sub(r'\s', '', match[1])
     if not isinstance(aspect,str) or aspect not in FORMATS:
         raise ValueError('Slide: scegli un formato 16:9, 9:16, 4:3, 16:10 oppure 1:1.')
+    from .slide_motion import options as motion_options
     result={'count': count, 'format': aspect}
+    motion=motion_options(prompt,body)
+    if motion!='auto' or 'motion' in body:result['motion']=motion
     if 'llm_timeout' in body:
         from .slide_timeout import value as timeout_value
         result['llm_timeout']=timeout_value(body)
@@ -119,6 +123,16 @@ def options(prompt, body=None):
     if 'image_model' in body:
         if not isinstance(body['image_model'],str) or len(body['image_model'])>150:raise ValueError('Modello immagini slide non valido.')
         result['image_model']=body['image_model']
+    if 'image_source' in body:
+        if body['image_source'] not in ('auto','generate','lots'):raise ValueError('Origine immagini slide non valida.')
+        result['image_source']=body['image_source']
+    if 'image_lots' in body:
+        from .slide_image_lots import ids
+        result['image_lots']=ids(body['image_lots'])
+    if result.get('image_source')=='lots':
+        if not result.get('image_lots'):raise ValueError('Scegli almeno un lotto di immagini per le slide.')
+        result['generate_images']=False
+    elif result.get('image_source')=='generate':result['generate_images']=True
     if body.get('engine','llm') not in ('llm','deterministic'):raise ValueError('Motore slide non valido.')
     result['engine']=body.get('engine','llm')
     if body.get('vision_scope','relevant') not in ('relevant','all'):raise ValueError('Analisi figure slide non valida.')
@@ -137,7 +151,7 @@ def options(prompt, body=None):
     elif re.search(r'\b(?:sintetic[oa]|solo\s+(?:titoli|headlines?)|in\s+sintesi)\b',prompt,re.I):result['detail']='concise'
     if re.search(r'\b(?:composizione\s+ricca|grafica\s+ricca|stile\s+infografic[oa]|come\s+(?:le\s+)?infografiche)\b',prompt,re.I):result['composition']='rich'
     elif re.search(r'\b(?:composizione\s+classica|grafica\s+essenziale|stile\s+minimalista)\b',prompt,re.I):result['composition']='standard'
-    if result.get('composition')=='rich':result['engine']='llm'
+    if result.get('composition')=='rich' or result.get('motion')=='animated':result['engine']='llm'
     from .slide_colors import options as color_options
     result.update(color_options(body))
     if body.get('background_style') is not None:
@@ -325,6 +339,8 @@ def validate_content(content, media):
     if deck.get('engine','deterministic') not in ('llm','deterministic'):raise ValueError('Motore slide non valido.')
     if deck.get('theme','lagoon') not in THEMES or deck.get('typography','modern') not in TYPOGRAPHY:raise ValueError('Tema slide non valido.')
     if deck.get('design','professional') not in DESIGNS or deck.get('detail','concise') not in ('concise','full'):raise ValueError('Stile o dettaglio slide non valido.')
+    from .slide_motion import options as motion_options
+    motion_options('',deck)
     if deck.get('composition','standard') not in ('standard','rich'):raise ValueError('Composizione slide non valida.')
     from .slide_duration import requested as requested_duration
     requested_duration('',deck)
@@ -339,6 +355,10 @@ def validate_content(content, media):
     if not isinstance(refs,list) or len(refs)>100 or any(not isinstance(r,dict) or not isinstance(r.get('id'),str) or not isinstance(r.get('label'),str) or len(r['label'])>1000 for r in refs): raise ValueError('Fonti slide non valide.')
     for page in deck['pages']:
         if not isinstance(page,dict) or not isinstance(page.get('title'),str) or len(page['title'])>150: raise ValueError('Titolo slide non valido.')
+        if 'content_viewport' in page:
+            import math
+            view=page['content_viewport'];width,height=FORMATS[deck['format']]
+            if not isinstance(view,dict) or set(view)!={'width','height'} or any(type(view[k]) not in (int,float) or not math.isfinite(view[k]) or not 0<view[k]<=limit for k,limit in (('width',width),('height',height))):raise ValueError('Area interna della slide non valida.')
         if 'text_tone' in page:color_options({'text_tone':page['text_tone']})
         if deck.get('engine')=='llm':
             html=page.get('html','')
@@ -375,6 +395,11 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     # Retrieved figures correspond to the current request; caption those before
     # illustrations copied from older canvas versions in the conversation.
     assets=fresh+[item for item in assets if item['id'] not in fresh_ids]
+    lot_assets=[];lot_captions={}
+    if opts.get('image_source')=='lots':
+        from .slide_image_lots import resolve
+        lot_assets,lot_captions=resolve(app,opts['image_lots']);lot_ids={m['id'] for m in lot_assets}
+        assets=lot_assets+[m for m in assets if m['id'] not in lot_ids][:max(0,128-len(lot_assets))]
     # PDF scan previews produced by context tools are private cache files. Copy
     # only those authorized images to the job's served output area.
     from .downloads import safe_join
@@ -385,20 +410,21 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
             target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(safe_join(app.data,item['path']),target)
             item['path']=target.relative_to(app.data).as_posix();assets[index]=item
     references=[]
-    for i,doc in enumerate(meta.get('documents', []),1): references.append({'id':f'D{i}', 'label':(doc['name']+' · '+', '.join(doc['locations']))[:1000]})
+    for i,doc in enumerate(meta.get('documents', []),1): references.append({'id':doc.get('citation',f'D{i}'), 'label':(doc['name']+' · '+', '.join(doc['locations']))[:1000]})
     for s in meta.get('rag_sources', []): references.append({'id':s['citation'],'label':s['name']+' · '+s['location']})
     for i,s in enumerate(meta.get('web_sources', []),1): references.append({'id':f'W{i}','label':s['title'],'url':s['url']})
     for i,item in enumerate(assets,1): references.append({'id':f'I{i}','label':item['name']})
     allowed={m['id'] for m in assets}; refs={r['id'] for r in references}
     app.engine.start_llama(model, settings, log_path, cancel, stage=stage)
-    descriptions={}
+    descriptions=dict(lot_captions)
     vision=settings.get('vision_enabled',True) and model.get('vision',{}).get('enabled',False)
-    if assets and vision:
+    to_describe=[m for m in assets if m['id'] not in {m['id'] for m in lot_assets}]
+    if to_describe and vision:
         from .slide_vision import describe
         started=time.monotonic()
-        descriptions=describe(app,assets,model,settings,cancel,stage,meta,limit=None if opts.get('vision_scope','relevant')=='all' else 8)
+        descriptions.update(describe(app,to_describe,model,settings,cancel,stage,meta,limit=None if opts.get('vision_scope','relevant')=='all' else 8))
         meta.setdefault('slide_timing',{})['vision_seconds']=round(time.monotonic()-started,2)
-    elif assets:
+    elif to_describe:
         meta['slide_warning']='Vision non disponibile: immagini inseribili, contenuto visivo non analizzato.'
     from .context_tools import budget
     caption_budget=max(160,min(3000,budget(settings,history)//3//max(1,len(assets))))
@@ -413,6 +439,8 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     from .slide_style import brief as style_brief,composition_brief
     base[0]['content']+='\n'+style_brief(opts.get('design','professional'))
     base[0]['content']+='\n'+composition_brief(opts.get('composition','standard'))
+    from .slide_motion import brief as motion_brief
+    base[0]['content']+=motion_brief(opts.get('motion','auto'))
     if opts['engine']=='llm':
         from .slide_colors import brief as color_brief
         base[0]['content']+=color_brief(opts)
@@ -476,6 +504,10 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
         checkpoint_editorial()
         prepare_editorial(app.engine,base,outline,settings,cancel,stage,refs,save_editorial,save_invalid_editorial,recovery_plans)
         meta.setdefault('slide_timing',{})['editorial_seconds']=round(time.monotonic()-started,2)
+    if lot_assets:
+        from .slide_image_lots import assign
+        meta['slide_image_plan'],meta['slide_image_lot_mode']=assign(app.engine,outline,lot_assets,lot_captions,settings,cancel,stage)
+        meta['slide_image_lots']=opts['image_lots'];meta['slide_image_generation_skipped']=True
     if opts.get('generate_images',False):
         from .slide_generation_images import create
         generated,captions=create(app,job,outline,base,settings|{'_slides':opts},model,cancel,stage,log_path,meta)
@@ -493,9 +525,11 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     deck={'version':1,'engine':opts['engine'],'format':opts['format'],'theme':opts.get('theme','lagoon'),'typography':opts.get('typography','modern'),
           'design':opts.get('design','professional'),'detail':opts.get('detail','concise'),'composition':opts.get('composition','standard'),'vision_scope':opts.get('vision_scope','relevant'),
           'title':outline['title'][:150] or 'Presentazione','references':references,'pages':pages,'active':0}
+    deck['motion']=opts.get('motion','auto')
     deck['count_mode']='auto' if auto_count else 'fixed'
     if 'llm_timeout' in opts:deck['llm_timeout']=opts['llm_timeout']
     if opts.get('duration_minutes'):deck['duration_minutes']=opts['duration_minutes']
+    if lot_assets:deck['image_lots']={'ids':opts['image_lots'],'selection':meta['slide_image_lot_mode'],'plan':meta['slide_image_plan']}
     direction=outline.get('visual_direction','')
     if not isinstance(direction,str):raise ValueError('Direzione artistica delle slide non valida.')
     if opts['engine']=='llm':
@@ -503,7 +537,7 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
         deck.update({k:opts[k] for k in ('background','background_color','palette','text_tone') if k in opts})
     if opts.get('generate_images'):deck['image_generation']={'model':meta['slide_image_model'],'count':len(generated),
         'plan':[{k:item[k] for k in ('slide','asset_id','description','aspect','width','height') if k in item} for item in meta['slide_image_plan']]}
-    from .slide_background_style import assign as assign_backgrounds,brief as background_brief
+    from .slide_background_style import assign as assign_backgrounds,brief as background_brief,geometry as background_geometry
     backgrounds=settings.get('_slide_background_assets',[])
     assets.extend(m for m in backgrounds if m['id'] not in {a['id'] for a in assets})
     assign_backgrounds(deck,opts.get('background_style'),assets)
@@ -515,17 +549,20 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
     publish()
     for index,page in enumerate(pages):
         if cancel.is_set(): raise Cancelled()
+        viewport=FORMATS[opts['format']]
+        if opts['engine']=='llm' and deck.get('background_style'):
+            area=background_geometry(deck,page,assets);page['content_viewport']={'width':area['width'],'height':area['height']};viewport=(area['width'],area['height'])
         deck['active']=index; page['status']='writing'; publish(); stage(f"Slide · {index+1}/{len(pages)} · {page['title']}")
         if opts['engine']=='llm':
             from .slide_html import source,generate as generate_html,include_planned_images
             previous=pages[index-1].get('html','') if index else ''
             previous=previous[:max(800,min(4000,budget(settings,history)//4))]
-            request=base+([{'role':'assistant','content':previous}] if previous else [])+[{'role':'user','content':f"Crea SOLO la pagina {index+1}/{len(pages)}: {page['title']}\nObiettivo: {page['purpose']}\nViewport {FORMATS[opts['format']][0]}x{FORMATS[opts['format']][1]} px.\nSequenza completa: "+json.dumps([{k:row[k] for k in ('title','purpose')} for row in outline['slides']],ensure_ascii=False)+"\nMantieni coerenza con la pagina precedente, ma inventa una composizione adatta a questo contenuto. Restituisci subito HTML e CSS completi."}]
+            request=base+([{'role':'assistant','content':previous}] if previous else [])+[{'role':'user','content':f"Crea SOLO la pagina {index+1}/{len(pages)}: {page['title']}\nObiettivo: {page['purpose']}\nViewport {viewport[0]:g}x{viewport[1]:g} px.\nSequenza completa: "+json.dumps([{k:row[k] for k in ('title','purpose')} for row in outline['slides']],ensure_ascii=False)+"\nMantieni coerenza con la pagina precedente, ma inventa una composizione adatta a questo contenuto. Restituisci subito HTML e CSS completi."}]
             request[-1]['content']+='\nCONTENUTI EDITORIALI PREPARATI PER QUESTA PAGINA:\n'+json.dumps(page['editorial'],ensure_ascii=False)+'\nComponi i contenuti visibili preparati: conserva spiegazioni, esempi e fonti, senza ridurli a slogan o sostituirli con una sola illustrazione. Non stampare istruzioni grafiche. Le note relatore sono già salvate separatamente; non trasferire nelle note il testo destinato alla slide. Rispetta comunque i vincoli espliciti della richiesta.'
             request[-1]['content']+='\nDirezione artistica: '+deck['visual_direction']
             request[-1]['content']+=background_brief(deck,page,assets)
             planned=[{'id':item['asset_id'],'description':item['description'],**{k:item[k] for k in ('aspect','width','height') if k in item}} for item in meta.get('slide_image_plan',[]) if item['slide']==index+1]
-            if planned:request[-1]['content']+='\nIllustrazioni già generate PER QUESTA PAGINA: '+json.dumps(planned,ensure_ascii=False)+'\nIncludile tutte come <img data-asset-id="ID">, progettando riquadri adatti al loro formato reale. Rendile protagoniste, senza ridurle a miniature: riserva circa 35–55% della pagina quando la figura è importante. Per queste illustrazioni generate puoi usare data-image-fit="cover" con object-fit:cover per riempire il riquadro senza deformare, mantenendo visibili i soggetti principali. Per documenti e figure informative conserva l’immagine intera.'
+            if planned:request[-1]['content']+='\nFigure assegnate PER QUESTA PAGINA: '+json.dumps(planned,ensure_ascii=False)+'\nIncludile tutte come <img data-asset-id="ID">, progettando riquadri adatti al loro formato reale. Rendile protagoniste, senza ridurle a miniature: riserva circa 35–55% della pagina quando la figura è importante. Per illustrazioni decorative puoi usare data-image-fit="cover" con object-fit:cover per riempire il riquadro senza deformare, mantenendo visibili i soggetti principali. Per documenti e figure informative conserva l’immagine intera.'
             updated=0
             def stream_html(raw):
                 nonlocal updated

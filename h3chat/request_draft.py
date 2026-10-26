@@ -44,7 +44,7 @@ def load(app,chat_id,message_id):
                 media=[{k:source[k] for k in ('id','name','path','mime')}]+media
         except ValueError:pass
     return {'prompt':payload['prompt'],'media':media,'canvas':bool(payload.get('canvas')),**extra,
-            'controls':controls,'lab':settings.get('_lab','auto'),'lab_source':settings.get('_lab_source',''),
+            'agent':settings.get('_agent',{}).get('options'),'controls':controls,'lab':settings.get('_lab','auto'),'lab_source':settings.get('_lab_source',''),
             'slides':settings.get('_slides'),'infographic':settings.get('_infographic'),
             'manim_presentation':settings.get('_manim_presentation'),
             'loras':[{k:x[k] for k in ('id','name','weight','model_id','model_name') if k in x} for x in payload.get('loras',[])]}

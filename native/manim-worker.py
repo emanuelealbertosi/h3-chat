@@ -14,6 +14,9 @@ wire=sys.stdout;sys.stdout=sys.stderr
 def emit(event,**values):wire.write(json.dumps({'event':event,**values},ensure_ascii=False)+'\n');wire.flush()
 
 def render(request):
+    if os.name!='nt':
+        from h3chat.posix_manim import render as posix_render
+        return posix_render(ROOT,request,lambda message:emit('stage',message=message))
     source=validate_source(request['source']);output=Path(request['output']).resolve();output.mkdir(parents=True,exist_ok=True)
     folder=ROOT/'runtime/manim-jobs'/uuid.uuid4().hex;folder.mkdir(parents=True)
     tickets=folder.parent/'.tickets';tickets.mkdir(exist_ok=True)

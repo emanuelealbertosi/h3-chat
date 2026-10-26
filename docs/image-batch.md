@@ -10,7 +10,7 @@ Se non scrivi il modello nel prompt, ogni voce usa quello selezionato nella chat
 
 L'assistant produce un solo piano per tutto il lotto. Ogni voce conserva modello, prompt, riferimenti numerati dall'ordine degli allegati e parametri; quelli non specificati ereditano le impostazioni del modello. Indica INT8 o BF16 se hai più versioni MOSS installate. Un seed fisso numerico viene riutilizzato dove richiesto; casuale genera seed distinti. Modelli differenti non producono immagini equivalenti soltanto perché condividono il seed.
 
-Il piano completo viene validato prima della prima generazione: modelli disponibili, capacità create/edit, riferimenti esistenti e limiti, sampler, scheduler e dimensioni. Da 2 a 24 immagini per richiesta. Non vengono scaricati modelli mancanti. Assistant Off richiede di attivarlo per interpretare il lotto.
+Il piano completo viene validato prima della prima generazione: modelli disponibili, capacità create/edit, riferimenti esistenti e limiti, sampler, scheduler e dimensioni. Da 2 a 50 immagini per richiesta. Non vengono scaricati modelli mancanti. Assistant Off richiede di attivarlo per interpretare il lotto.
 
 I nomi modello sono risolti sul catalogo installato corrente, non su un elenco fisso di varianti. Con più MOSS, il nome generico usa il MOSS selezionato come predefinito se corrisponde; altrimenti si richiede il nome più preciso. Il piano non può inventare una specificazione INT8/BF16 che non compare nel prompt. Nuovi file modello diventano utilizzabili quando hanno un collegamento pronto nel catalogo.
 
@@ -25,3 +25,11 @@ La risposta è una sola, in chat **e** nel canvas: riquadro principale, miniatur
 Ogni immagine pronta viene salvata subito nella galleria e nella stessa risposta/canvas. Stop o errore conservano i risultati precedenti. Non viene ripreso automaticamente un lotto interrotto.
 
 Test isolati del servizio: chiamata assistant unica, modelli raggruppati, riferimenti distinti o vuoti, seed, ordine, preset invariati, conservazione dopo stop. Test browser: chat/canvas, miniature, zoom e mobile. I test del servizio usano motori simulati; la prova GPU reale è documentata separatamente in `work/image-batch-2026-10-19`.
+## Raccolte riutilizzabili
+
+I risultati dei lotti vengono conservati nella libreria **Galleria → Lotti
+immagini e sfondi**, con esportazione ZIP, importazione e catalogazione Vision
+opzionale. Le didascalie effettive restano distinte dai prompt di generazione.
+Vedi [Lotti immagini e sfondi](image-collections.md) per riuso, RAG e limiti.
+
+Per i lotti grandi Assistant resta caricato e prepara gruppi di massimo 12 immagini (meno con un budget token ridotto). Tutto il piano viene verificato prima di generare la prima immagine. Il lotto e la risposta rimangono unici; il limite degli sfondi dedicati resta separato.

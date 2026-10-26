@@ -147,7 +147,8 @@ class Service:
                 "media_server":self.media_server.status(),
                 "llm_options":{"keys":LLM_KEYS,"defaults":{profile:llm_defaults(profile) for profile in PROFILES},"max_context":MAX_CONTEXT,"max_output_tokens":MAX_OUTPUT_TOKENS},
                 "music_runtime":music_status(self.root), "music_options":{"request_controls":True,"resing":True,"defaults":MUSIC_DEFAULTS,"numbers":MUSIC_NUMBERS,"integers":sorted(MUSIC_INTEGER)},
-                "slide_options":{"max_count":MAX_SLIDES,"automatic_count":True,"background_batches":True,"background_styles":True},
+                "agent_options":{"enabled":True,"version":2,"prefix":"agent:","computer":__import__('h3chat.agent_computer',fromlist=['public']).public(self)},
+                "slide_options":{"max_count":MAX_SLIDES,"automatic_count":True,"background_batches":True,"background_styles":True,"settings_presets":True,"automatic_decorations":True},
                 "video_options":{"defaults":VIDEO_DEFAULTS,"aspects":VIDEO_ASPECTS,"request_controls":True,"segment_controls":True,"format_control":True,"request_draft":True,"seed_control":True,"attention_choices":True,"batch_controls":True}, "veda_runtime":veda_status(self.root),
                 "tools_runtime":tools_status(self.root),"transcription_models":[m|{'ready':all(safe_join(self.root,f['path']).is_file() for f in m['files'])} for m in self.downloads.tool_models.values() if m['id'].startswith('whisper-')],
                 "embeddinggemma2_runtime":{"ready":gemma2_runtime_ready(self.root)}, "vision_runtime":vision_status(self.root), "models": models,"image_options":{"request_controls":True,"last_seed":True,"moss_presets":MOSS_RECIPES,"moss_dmd2":moss_dmd2_status(self.root),"moss_negative_prompt":MOSS_NEGATIVE_PROMPT,"samplers":NATIVE_SAMPLERS,"schedulers":NATIVE_SCHEDULERS,"vision_samplers":VISION_SAMPLERS,"vision_schedulers":VISION_SCHEDULERS,"defaults":{k:DEFAULTS[k] for k in IMAGE_DEFAULT_KEYS}},"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
@@ -172,7 +173,8 @@ class Service:
             value=client.exchange(config,key,cancel,timeout=35)
             ids=sorted({x['id'] for x in value.get('data',[]) if isinstance(x,dict) and isinstance(x.get('id'),str) and 1<=len(x['id'])<=200})[:2000]
             if not ids:raise ValueError('Il provider non espone modelli. Inserisci manualmente l’ID modello.')
-            return {'models':ids}
+            from .providers import model_details
+            return {'models':ids,'details':model_details(value.get('data',[]),ids)}
         client.completion(config,key,[{'role':'user','content':'Reply with OK.'}],DEFAULTS|{'max_tokens':64,'temperature':0,'think_level':'off'},cancel)
         return {'ok':True,'message':'Connessione e modello verificati.'}
 
@@ -211,6 +213,9 @@ class Service:
                 from .video_options import inherited_acceleration
                 acceleration=inherited_acceleration(settings,model['id'])
                 if acceleration:self.store.save_settings({'video_overrides':settings.get('video_overrides',{})|{model['id']:acceleration}})
+            if config['profile']=='fasth3-omni' and model['id'] not in settings.get('video_overrides',{}):
+                from .fasth3 import PRESET
+                self.store.save_settings({'video_overrides':settings.get('video_overrides',{})|{model['id']:PRESET}})
             if not settings['video_model'] and config['profile']=='minimax-h3' and Path(config['files']['diffusion']).name.casefold()==EXTERNAL_PROFILES['minimax-h3']['default_files']['diffusion'].casefold():
                 self.store.save_settings({'video_model':model['id']})
             self.engine.configure(self.store.settings())
@@ -422,13 +427,20 @@ class Service:
         return resolved
 
     def send(self, chat_id, body):
+        from .agent_state import requested as agent_requested,enqueue as enqueue_agent
+        if body.get('lab')=='agent' or isinstance(body.get('prompt'),str) and agent_requested(body['prompt']):
+            return enqueue_agent(self,chat_id,body)
         chat=self.store.chat(chat_id)
         prompt = body.get("prompt", "")
         if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 24000:
             raise ValueError("Scrivi una richiesta tra 1 e 24.000 caratteri.")
         media = self.validate_media(body.get("media", []))
         from .image_batch import requested as batch_requested, requested_count, MAX_IMAGES
-        image_batch=batch_requested(prompt) and not any(body.get(k) for k in ('video','music','voice','transcribe')) and body.get('lab','auto')=='auto'
+        image_lot=None
+        if body.get('image_lot') is not None:
+            from .image_collections import generation_options
+            image_lot=generation_options(body['image_lot'])
+        image_batch=(batch_requested(prompt) or image_lot is not None) and not any(body.get(k) for k in ('video','music','voice','transcribe')) and body.get('lab','auto')=='auto'
         if image_batch and requested_count(prompt)>MAX_IMAGES:raise ValueError(f'Un lotto può contenere al massimo {MAX_IMAGES} immagini.')
         if image_batch and not body.get('assistant',True):raise ValueError('Attiva Assistant per pianificare il lotto immagini una sola volta.')
         attached_image_loras=[]
@@ -490,6 +502,7 @@ class Service:
             from .music_options import options as captured_music_options
             captured_music_options(self.catalog[settings['music_model']],settings,randomize=False)
         settings = settings | {'_image_model':selection,'_assistant':assistant,'_music':music,'_music_fields':fields,'_video':video,'_web':web,'_transcribe':transcribe,'_image_batch':image_batch}
+        if image_lot:settings['_image_lot']=image_lot
         settings.update(_voice=voice,_voice_fields=validate_voice_fields(body.get('voice_fields',{})))
         rag=body.get('rag',settings['rag_enabled'])
         if type(rag) is not bool:raise ValueError('RAG: scegli On oppure Off.')
@@ -523,6 +536,9 @@ class Service:
             settings['_slides']=slide_defaults if editing_slides and slide_defaults and body.get('lab','auto')=='auto' else slides_options(prompt,slide_defaults)
             from .slide_background_style import resolve as resolve_backgrounds
             settings['_slide_background_assets']=resolve_backgrounds(self,settings['_slides'].get('background_style'),current_canvas.get('media',[]) if editing_slides else [])
+            if settings['_slides'].get('image_source')=='lots':
+                from .slide_image_lots import resolve as resolve_image_lots
+                resolve_image_lots(self,settings['_slides']['image_lots'])
             self.engine.require_model(settings['chat_model'],'chat')
             if settings['_slides'].get('generate_images'):
                 self.engine.require_model(settings['_slides'].get('image_model') or settings['create_model'],'create')
@@ -669,6 +685,10 @@ class Service:
             def stage(label):
                 LOG.info("Lavoro %s · %s", job["id"][:8], label)
                 self.store.execute("UPDATE jobs SET stage=? WHERE id=?", (label, job["id"]))
+            if settings.get('_agent'):
+                from .agent_runtime import build as build_agent
+                build_agent(self,job,payload,settings,cancel,stage,log_path,meta)
+                self.store.execute("UPDATE jobs SET status='done' WHERE id=?",(job['id'],));return
             if settings.get('_mesh3d'):
                 raise ValueError('La funzionalità di generazione 3D è stata rimossa. I file già creati restano disponibili per il download.')
             if settings.get('_slide_backgrounds'):
@@ -698,6 +718,9 @@ class Service:
                 from .video_assemble import render as assemble_video
                 assemble_video(self,job,payload,settings,cancel,stage,log_path)
                 return
+            if settings.get('_collection_caption'):
+                from .image_collections import caption_job
+                caption_job(self,job,settings,cancel,stage,log_path);return
             if settings.get('_video_clip'):
                 from .video_clip_tools import render as render_clip
                 render_clip(self,job,payload,settings,cancel,stage,log_path)

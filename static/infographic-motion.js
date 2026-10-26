@@ -23,7 +23,7 @@
  function videoTracks(documents,motion){
   const options=motion.options||{},delayed=options.video_start==='panel'&&options.layout&&options.layout!=='full',allowed=new Set((motion.videos||(motion.video?[motion.video]:[])).map(v=>v.asset_id)),tracks=new Map(),targets=[];let offset=0;
   documents.forEach((doc,index)=>{
-   const duration=motion.durations[index],area=doc.querySelector?.('[data-h3-background-content]')||doc.body;if(delayed)for(const panel of panelTimes(doc,options,duration))area.append(panel);
+    const duration=motion.durations[index],area=doc.querySelector?.('[data-h3-content-canvas]')||doc.querySelector?.('[data-h3-background-content]')||doc.body;if(delayed)for(const panel of panelTimes(doc,options,duration))area.append(panel);
    const scale=timingScale(animationNodes(doc),duration);
    for(const slot of doc.querySelectorAll('div[data-video-asset-id],[data-h3-video]')){
     const id=slot.dataset.videoAssetId||slot.dataset.h3Video;if(!allowed.has(id))continue;const panel=slot.closest('[data-panel]');if(delayed&&!panel)continue;
@@ -38,7 +38,7 @@
  }
  function screen(doc,options={},duration=30){
   const layout=options.layout||'full',count=panelCount(layout);if(count===1)return;
-  const area=doc.querySelector?.('[data-h3-background-content]')||doc.body,width=area===doc.body?doc.defaultView.innerWidth:area.clientWidth,height=area===doc.body?doc.defaultView.innerHeight:area.clientHeight;
+  const area=doc.querySelector?.('[data-h3-content-canvas]')||doc.querySelector?.('[data-h3-background-content]')||doc.body,width=area===doc.body?doc.defaultView.innerWidth:area.clientWidth,height=area===doc.body?doc.defaultView.innerHeight:area.clientHeight;
   const overlays=screenOverlays(doc),panels=panelTimes(doc,options,duration);
   doc.body.style.setProperty('position','relative','important');doc.body.style.setProperty('overflow','hidden','important');
   for(const panel of panels){

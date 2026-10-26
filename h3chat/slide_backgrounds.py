@@ -110,10 +110,11 @@ def save(app,collection):
 
 
 def listing(app):
-    folder=app.data/'slide-backgrounds';items=[]
+    from .collection_delete import hidden_ids
+    folder=app.data/'slide-backgrounds';items=[];hidden=hidden_ids(app)
     if not folder.is_dir():return {'items':[]}
     for file in folder.glob('*.json'):
-        if not re.fullmatch('[a-f0-9]{32}',file.stem):continue
+        if not re.fullmatch('[a-f0-9]{32}',file.stem) or file.stem in hidden:continue
         try:
             value=json.loads(file.read_text(encoding='utf8'))
             if value.get('id')!=file.stem:continue

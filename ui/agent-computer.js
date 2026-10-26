@@ -1,0 +1,33 @@
+export function initComputerScope({api,pickDirectory,notify,getState}){
+ let config={scope:'h3',grant_id:''},root='';
+ document.querySelector('#lab-tool')?.addEventListener('change',()=>render());document.querySelector('#prompt')?.addEventListener('input',()=>render());
+ const bar=document.createElement('section');bar.className='agent-scope';bar.id='agent-scope';bar.setAttribute('aria-label','Accesso Agent');
+ bar.innerHTML='<span>Accesso Agent</span><div role="group" aria-label="Modalità Agent"><button type="button" data-scope="h3">H3</button><button type="button" data-scope="sandbox">Sandbox</button><button type="button" data-scope="global">Globale</button></div><small data-scope-note></small>';
+ const dialog=document.createElement('dialog');dialog.className='agent-scope-dialog';dialog.innerHTML='<h2></h2><p data-warning></p><label data-folder>Cartella di lavoro<div><input readonly aria-label="Cartella Sandbox"><button type="button" data-browse>Scegli cartella</button></div></label><label><input type="checkbox" data-confirm> Ho compreso e autorizzo questo accesso per le nuove richieste Agent.</label><p class="message-error" role="alert"></p><footer><button type="button" data-cancel>Annulla</button><button type="button" data-activate disabled>Attiva</button></footer>';document.body.append(dialog);
+ let selected='h3',pending=false;dialog.addEventListener('cancel',event=>{if(pending)event.preventDefault();});const confirm=dialog.querySelector('[data-confirm]'),activate=dialog.querySelector('[data-activate]');
+ function valid(){activate.disabled=!confirm.checked||selected==='sandbox'&&!dialog.querySelector('input[readonly]').value;}
+ confirm.onchange=valid;
+ dialog.querySelector('[data-cancel]').onclick=()=>dialog.close();
+ dialog.querySelector('[data-browse]').onclick=()=>pickDirectory(root,value=>{root=value;dialog.querySelector('input[readonly]').value=value;valid();});
+ async function revoke(){if(config.grant_id)await api('/agent-computer/grants/'+config.grant_id,{},'DELETE');config={scope:'h3',grant_id:''};root='';render();}
+ activate.onclick=async()=>{pending=true;for(const b of dialog.querySelectorAll('button'))b.disabled=true;try{const value=await api('/agent-computer/grants',{scope:selected,root,confirmed:true});if(config.grant_id)await api('/agent-computer/grants/'+config.grant_id,{},'DELETE');config={scope:value.scope,grant_id:value.grant_id};root=value.root;dialog.close();render();}catch(error){dialog.querySelector('[role=alert]').textContent=error.message;}finally{pending=false;for(const b of dialog.querySelectorAll('button'))b.disabled=false;valid();}};
+ for(const button of bar.querySelectorAll('[data-scope]'))button.onclick=async()=>{
+  selected=button.dataset.scope;
+  if(selected==='h3'){try{await revoke();}catch(error){notify(error.message,true);}return;}
+  dialog.querySelector('h2').textContent=selected==='global'?'Attenzione: controllo Globale del PC':'Autorizza la cartella Sandbox';
+  const computer=getState()?.agent_options?.computer;dialog.querySelector('[data-warning]').textContent=selected==='global'?'Agent potrà leggere, creare, modificare e cancellare file ed eseguire programmi sul computer con i tuoi privilegi. I contenuti letti possono essere inviati al modello scelto, anche esterno. Un comando errato può danneggiare file o configurazioni. I privilegi amministratore richiederanno una conferma separata e la finestra del sistema operativo.':'Agent avrà accesso ai file e ai comandi nella cartella scelta, oltre agli strumenti H3. I processi saranno isolati dal sistema operativo. '+(computer?.sandbox_network==='h3-tools'?'Per ricerche e download userà gli strumenti Web H3; i programmi isolati non accedono direttamente alla rete.':'Sono consentiti Internet pubblico e la lettura delle impostazioni necessarie all’avvio; COM e modifiche al registro restano bloccati.')+' I contenuti letti possono essere inviati al modello scelto. Usa una cartella di lavoro dedicata.';
+  dialog.querySelector('[data-folder]').hidden=selected!=='sandbox';dialog.querySelector('input[readonly]').value=root;confirm.checked=false;dialog.querySelector('[role=alert]').textContent='';valid();dialog.showModal();
+ };
+ function render(){const mode=document.querySelector('#lab-tool')?.value;const context=document.querySelector('#prompt-context');if(context&&!bar.isConnected)context.before(bar);bar.hidden=mode!=='agent'&&!/^\s*(?:agent|agente)\s*:/i.test(document.querySelector('#prompt')?.value||'');for(const button of bar.querySelectorAll('[data-scope]')){button.className='prompt-choice';button.setAttribute('aria-pressed',String(button.dataset.scope===config.scope));button.disabled=button.dataset.scope!=='h3'&&!getState()?.agent_options?.computer?.scopes?.includes(button.dataset.scope);}bar.querySelector('[data-scope-note]').textContent=config.scope==='sandbox'?root:config.scope==='global'?'Accesso completo · amministratore su conferma':'Strumenti H3 e Web · nessun accesso libero al PC';}
+ return {read:()=>({...config}),render};
+}
+
+const shown=new Set();
+export function adminPrompt({run,action,api,chatId,onChanged,notify,automatic=false}){
+ const key=run.id+':'+action.id;if(automatic&&shown.has(key)||document.querySelector('.agent-admin-dialog'))return;shown.add(key);
+ const dialog=document.createElement('dialog');dialog.className='agent-admin-dialog';dialog.innerHTML='<h2>Privilegi amministratore</h2><p>Agent propone il comando qui sotto. Se approvi, il sistema operativo chiederà l’autorizzazione: la conferma spetta a te. L’elevazione vale soltanto per questo comando.</p><p data-reason></p><pre></pre><p role="alert"></p><footer><button type="button" data-later>Chiudi per ora</button><button type="button" data-reject>Rifiuta e ferma</button><button type="button" data-approve>Approva e chiedi autorizzazione</button></footer>';
+ dialog.querySelector('[data-reason]').textContent=action.admin.reason;dialog.querySelector('pre').textContent=action.admin.command;
+ dialog.onclose=()=>dialog.remove();dialog.querySelector('[data-later]').onclick=()=>dialog.close();
+ for(const operation of ['approve','reject'])dialog.querySelector('[data-'+operation+']').onclick=async()=>{for(const b of dialog.querySelectorAll('button'))b.disabled=true;try{if(operation==='approve')await api(`/chats/${chatId}/agent-runs/${run.id}/admin`,{action_id:action.id,confirmed:true});else await api(`/chats/${chatId}/agent-runs/${run.id}/resume`,{action_id:action.id,decision:'reject'});dialog.close();await onChanged();}catch(error){notify(error.message,true);for(const b of dialog.querySelectorAll('button'))b.disabled=false;}};
+ document.body.append(dialog);dialog.showModal();
+}

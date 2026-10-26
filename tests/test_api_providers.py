@@ -88,6 +88,11 @@ class ApiTests(unittest.TestCase):
         r=self.app.provider_request(self.config,'models');self.assertEqual(r['models'],['test-model','vision-test'])
         self.assertEqual(self.server.calls[-1][0],'/v1/models');self.assertEqual(self.server.calls[-1][1]['Authorization'],'Bearer private-key-qa')
         self.assertTrue(self.app.provider_request(self.config,'test')['ok']);self.assertEqual(self.server.calls[-1][2]['messages'],[{'role':'user','content':'Reply with OK.'}])
+    def test_model_metadata_preserves_actual_input_capabilities(self):
+        rows=[{'id':'flash','name':'Flash','architecture':{'input_modalities':['text','image']}},{'id':'text','input_modalities':['text']},{'id':'legacy','architecture':{'modality':'text+image->text'}},{'id':'unknown'},{'id':'output-only','architecture':{'input_modalities':['text'],'output_modalities':['image']}}]
+        with patch('h3chat.service.ApiClient.exchange',return_value={'data':rows}):result=self.app.provider_request(self.config,'models')
+        details={m['id']:m for m in result['details']};self.assertTrue(details['flash']['vision']);self.assertTrue(details['legacy']['vision']);self.assertFalse(details['text']['vision']);self.assertFalse(details['output-only']['vision']);self.assertIsNone(details['unknown']['vision'])
+        self.assertEqual(result['models'],sorted(details));self.assertEqual([m['id'] for m in result['details']],result['models'])
     def test_busy_changes_blocked(self):
         self.app.current_id='running'
         for op in ('save','models','test'):

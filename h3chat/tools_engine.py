@@ -15,7 +15,7 @@ from .web_search import requested,search
 class ToolsEngine:
     def tool_call(self,worker,request,cancel,stage,log_path,timeout=90):
         from .platform_runtime import is_macos
-        if is_macos() and worker not in ('document-worker.py',):
+        if is_macos() and worker in ('vision-worker.py','video-worker.py','minimax-music-worker.py','voice-worker.py','upscale-worker.py'):
             raise ValueError('Questo motore locale non è disponibile nella versione macOS. La chat e le presentazioni con API o LLM locale restano utilizzabili.')
         if hasattr(self,'execution_settings'):
             from .execution_mode import cpu,guard_intent
@@ -33,8 +33,11 @@ class ToolsEngine:
         finally:
             owner=session.process.pid if session.process else None
             session.stop()
-            if worker=='manim-worker.py' and owner:
+            if worker=='manim-worker.py' and owner and __import__('os').name=='nt':
                 from .windows_sandbox import cleanup
+                cleanup(self.root,owner)
+            if worker=='agent-computer-worker.py' and owner and __import__('os').name=='nt':
+                from .computer_process import cleanup
                 cleanup(self.root,owner)
             with self.process_lock:
                 if self.tool_session is session:self.tool_session=None

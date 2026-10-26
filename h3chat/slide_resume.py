@@ -52,7 +52,7 @@ def render(app,job,payload,settings,model,cancel,stage,log_path,meta):
             f'Titolo: {page["title"]}. Obiettivo: {page.get("purpose","")}. '
             'Usa i contenuti editoriali e le note già preparati, mantenendo stile, fonti e immagini autorizzate. '
             'Restituisci la pagina completa: non una descrizione delle modifiche, non una bozza parziale.')
-        planned=[p for p in deck.get('image_generation',{}).get('plan',[]) if p.get('slide')==index+1]
+        planned=[p for p in deck.get('image_generation',{}).get('plan',[])+deck.get('image_lots',{}).get('plan',[]) if p.get('slide')==index+1]
         if planned:prompt+='\nIllustrazioni già assegnate a questa pagina: '+json.dumps(planned,ensure_ascii=False)
         if deck.get('engine','deterministic')=='llm':
             value=payload|{'prompt':prompt,'canvas_snapshot':snapshot|{'content':encode(deck),'media':json.dumps(media)}}

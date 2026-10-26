@@ -3,11 +3,13 @@ import {escape as esc} from './render.js';
 import {addBrowserPreview} from './video-browser-preview.js';
 import {appendGalleryDetails} from './gallery-details.js';
 import {appendCreationDetails} from './creation-details.js';
+import {openImageCollections} from './image-collections.js';
 
 export function openGallery({api,onSelect,kind='all',multiple=true,browse=false,actions={}}){
  const dialog=document.createElement('dialog');dialog.className='gallery-dialog';dialog.ariaLabel='Galleria';
  dialog.innerHTML=`<header><div><span class="eyebrow">I TUOI FILE</span><h2>Galleria</h2></div><button type="button" class="icon-button" data-close aria-label="Chiudi galleria">×</button></header><div class="gallery-filters"><input data-query type="search" placeholder="Cerca per nome…" aria-label="Cerca nella galleria"><select data-kind aria-label="Tipo di file">${[['all','Tutti'],['image','Immagini'],['audio','Audio'],['video','Video'],['document','Documenti'],['model','Modelli 3D'],['other','Altri file']].map(([v,t])=>`<option value="${v}">${t}</option>`).join('')}</select><select data-origin aria-label="Origine"><option value="all">Caricati e generati</option><option value="uploaded">Caricati</option><option value="generated">Generati</option></select></div><p data-status role="status"></p><div class="gallery-grid"></div><footer><button class="btn" data-more hidden>Altri file</button><span data-count></span><button class="btn primary" data-select disabled>Usa i file selezionati</button></footer>`;
  document.body.append(dialog);const q=s=>dialog.querySelector(s);q('[data-kind]').value=kind;let offset=0,revision=0,selected=new Map(),timer,items=[],canManage=false;const deleting=new Map();
+ const lots=document.createElement('button');lots.type='button';lots.className='btn';lots.textContent='Lotti immagini e sfondi';q('.gallery-filters').append(lots);lots.onclick=()=>openImageCollections({api,onSelect:browse?null:onSelect,onCreate:done=>openGallery({api,kind:'image',multiple:true,onSelect:done})});
  const removeSelected=document.createElement('button'),selectVisible=document.createElement('button'),deleteCount=document.createElement('span');
  removeSelected.type=selectVisible.type='button';removeSelected.className=selectVisible.className='btn';removeSelected.textContent='Elimina selezionati';selectVisible.textContent='Seleziona visibili';removeSelected.disabled=true;removeSelected.hidden=selectVisible.hidden=true;deleteCount.setAttribute('role','status');
  q('footer').prepend(selectVisible,deleteCount,removeSelected);

@@ -17,6 +17,17 @@ PRESETS={
 class Blob(C.Structure):
     _fields_=[('size',C.c_ulong),('data',C.POINTER(C.c_ubyte))]
 
+def model_details(rows,ids):
+    result={}
+    for row in rows:
+        if not isinstance(row,dict) or not isinstance(row.get('id'),str) or row.get('id') not in ids:continue
+        architecture=row.get('architecture') or {}
+        modalities=row.get('input_modalities',architecture.get('input_modalities') if isinstance(architecture,dict) else None)
+        if not isinstance(modalities,list) and isinstance(architecture,dict) and isinstance(architecture.get('modality'),str):modalities=architecture['modality'].split('->')[0].split('+')
+        vision='image' in modalities if isinstance(modalities,list) else None
+        name=row.get('name');result[row['id']]={'id':row['id'],'name':name[:200] if isinstance(name,str) else row['id'],'vision':vision}
+    return [result.get(ident,{'id':ident,'name':ident,'vision':None}) for ident in ids]
+
 def endpoint(value):
     if not isinstance(value,str) or len(value)>2000 or any(ord(c)<33 for c in value):raise ValueError('Indirizzo API non valido.')
     p=urlsplit(value)
@@ -88,8 +99,16 @@ class Providers:
             secret=row['secret']
         else:secret=''
         return config,secret
-    def save(self,body):
-        config,secret=self.resolve(body)
+    def save(self,body,*,prepared_id=None):
+        # A trusted pending Agent dialog may allocate a stable new ID so a lost
+        # response cannot create duplicate connections. Never accepted from JSON.
+        if prepared_id is not None:
+            if not re.fullmatch(r'api-[a-f0-9]{32}',prepared_id) or body.get('id'):raise ValueError('Collegamento preparato non valido.')
+            if self.store.one('SELECT id FROM api_providers WHERE id=?',(prepared_id,)):
+                config,secret=self.resolve(body|{'id':prepared_id})
+            else:
+                config,key=validate(body,prepared_id);secret=protect(key) if key else ''
+        else:config,secret=self.resolve(body)
         self.store.execute('INSERT OR REPLACE INTO api_providers VALUES (?,?,?)',(config['id'],json.dumps(config),secret))
         return config|{'has_key':bool(secret)}
     def credentials(self,ident):

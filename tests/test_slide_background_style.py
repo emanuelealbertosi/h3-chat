@@ -34,6 +34,19 @@ class BackgroundStyleTests(unittest.TestCase):
         bad=copy.deepcopy(deck);bad['pages'][0]['background_asset_id']='f'*32
         with self.assertRaises(ValueError):validate_content(encode(bad),media)
 
+    def test_automatic_base_keeps_decorations_independent(self):
+        self.assertIsNone(options({'base':'auto','decorations':False}))
+        style=options({'base':'auto','decorations':True})
+        deck={'version':1,'engine':'llm','format':'16:9','pages':[{'title':'Titolo','status':'ready','html':'<h1>Titolo</h1>'}]}
+        assign(deck,style,[]);validate_content(encode(deck),[])
+        self.assertEqual(deck['background_style']['base'],'auto');self.assertTrue(deck['background_style']['decorations'])
+        self.assertIn('Scegli liberamente il fondo',brief(deck,deck['pages'][0],[]))
+        self.assertEqual(geometry(deck,deck['pages'][0],[]),{'x':56,'y':56,'width':1168,'height':608})
+        deck['pages'][0]['content_viewport']={'width':1168,'height':608};validate_content(encode(deck),[])
+        for invalid in ({'width':2000,'height':608},{'width':True,'height':608},{'width':1168,'height':0}):
+            deck['pages'][0]['content_viewport']=invalid
+            with self.assertRaises(ValueError):validate_content(encode(deck),[])
+
     def test_full_send_and_single_page_revision_keep_assigned_background(self):
         chat,collection,style=self.library();before=self.app.store.settings()
         request=self.app.send(chat,{'prompt':'Crea 5 slide sulle porte logiche','lab':'slides','rag':False,'slides':{'count':5,'engine':'llm','background_style':style}})
@@ -49,6 +62,9 @@ class BackgroundStyleTests(unittest.TestCase):
         artifact=answer['meta']['artifact'];deck=json.loads(artifact['content'][len(PREFIX):-4]);ids=[p['background_asset_id'] for p in deck['pages']]
         self.assertEqual(ids,style['asset_ids']+style['asset_ids'][:2]);generate.assert_not_called();self.assertEqual(len(observed),5)
         self.assertTrue(all('SFONDO GESTITO DALL’APP' in text for text in observed));self.assertEqual(self.app.store.settings(),before)
+        for page,text in zip(deck['pages'],observed):
+            box=geometry(deck,page,artifact['media']);self.assertEqual(page['content_viewport'],{'width':box['width'],'height':box['height']})
+            self.assertIn(f'Viewport {box["width"]:g}x{box["height"]:g} px.',text)
         saved=self.app.store.canvas_history.get(chat)
         response=revise(self.app,chat,{'artifact_id':saved['id'],'page':2,'prompt':'Amplia la spiegazione'})
         job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(response['job_id'],))

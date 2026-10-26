@@ -1,6 +1,8 @@
+import {contentRects} from './slide-content-fit.js';
 // Repair intrinsic sizing and clipped SVG coordinates without selecting a new layout.
 export function contentOverflows(doc,height){
  const content=doc.querySelector('[data-h3-background-content]'),bounds=content?.getBoundingClientRect();
+ if(content?.querySelector('[data-h3-content-canvas]'))return contentRects(content).some(r=>r.right>bounds.right+2||r.bottom>bounds.bottom+2||r.left<bounds.left-2||r.top<bounds.top-2);
  return [...doc.body.querySelectorAll('*')].some(element=>{
   if(element.closest('style,[data-h3-editor],[data-h3-trusted]')||element.closest('svg')&&element.tagName.toLowerCase()!=='svg')return false;
   if(!element.getClientRects().length)return false;

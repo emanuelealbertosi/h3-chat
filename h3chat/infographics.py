@@ -182,6 +182,7 @@ def build(app,job,payload,history,settings,model,cancel,stage,log,meta):
     stage('Infografica · regia, contenuti e narrazione')
     plan=plan_regia(app.engine,base,brief,schema,settings,cancel,stage,opts['scenes'])
     references=[{'id':s['citation'],'label':s['name']+' · '+s['location']} for s in meta.get('rag_sources',[])]
+    references.extend({'id':d.get('citation','D'+str(i)),'label':d['name']+' · '+', '.join(d.get('locations',[]))} for i,d in enumerate(meta.get('documents',[]),1))
     references += [{'id':'D'+str(i),'label':d['name']} for i,d in enumerate(meta.get('documents',[]),1)]
     references += [{'id':'W'+str(i),'label':s['title'],'url':s['url']} for i,s in enumerate(meta.get('web_sources',[]),1)]
     references += [{'id':'I'+str(i),'label':m['name']} for i,m in enumerate(assets,1)]

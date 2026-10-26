@@ -46,10 +46,20 @@ H3-Chat dopo la fine di tutti i lavori per attivare la nuova funzione.
 ## Usare gli sfondi in slide e infografiche
 
 Nelle rispettive impostazioni, **Composizione dello sfondo** offre:
-**Automatico** (mantiene il comportamento precedente), **Plain** (tinta unita),
+**Automatico** (lascia scegliere lo sfondo al modello), **Plain** (tinta unita),
 **Gradient** (sfumatura) e **Raccolta**. **Decoration** aggiunge bordi e accenti
-HTML/SVG, combinabili con ciascuna base. Non genera nuove immagini. Raccolta
-parte senza decorazioni aggiuntive per evitare doppie cornici.
+HTML/SVG, combinabili con ciascuna base, compreso Automatico. Il flag resta
+indipendente quando cambi base. Non genera nuove immagini. Senza il flag,
+Automatico conserva il comportamento precedente. I bordi restano visibili
+anche sopra riquadri opachi, nel canvas e negli export.
+
+Con **Automatico senza Decoration** resta disponibile l’intera pagina, con la
+stessa occupazione dello spazio di prima. Attivando Decoration si riserva una
+fascia interna di 56 px per lato, separando contenuti e ornamenti. Le pagine
+nuove e quelle ricreate ricevono dal generatore le dimensioni effettivamente
+disponibili. Le pagine già salvate con misure fisse vengono adattate in modo
+proporzionale dentro la cornice, senza schiacciarle o tagliare testo e immagini.
+La stessa area resta valida nel canvas, nella modifica grafica e negli export.
 
 Con Raccolta scegli il batch, spunta gli sfondi e cambia l’ordine con le frecce;
 le miniature si possono ingrandire. La sequenza ruota nelle pagine/scene:
@@ -199,3 +209,33 @@ e nelle Preferenze, distingue **Naturale · come il campione**, **Sobria** ed
 **Espressiva**. La modalità naturale non impone il tag di espressività bassa.
 Emozione, velocità, registro e temperatura restano indipendenti. I campioni
 determinano identità vocale e pronuncia: per l’italiano usa un riferimento italiano.
+
+## Impostazioni salvate e preset
+
+I pannelli **Impostazioni Slide** e **Crea sfondi** conservano automaticamente
+le ultime scelte nello spazio di lavoro, anche dopo refresh e da un altro browser.
+Alla prima apertura recuperano anche le opzioni delle ultime richieste già salvate.
+Questo comprende formato, quantità, durata, timeout, stile, colori, modello per
+le illustrazioni e la selezione ordinata degli sfondi della raccolta. Nei batch
+si conservano anche temi, palette, margini, megapixel e seed. Il prompt principale
+non viene sostituito e la modalità di invio «solo sfondi» non si riattiva da sola.
+
+In alto a entrambi i pannelli, **Salva preset** apre una finestra per assegnare
+un nome. La tendina richiama i preset senza lanciare generazioni. Salvare con
+lo stesso nome aggiorna il preset, come indicato nella finestra. **Elimina preset**
+chiede conferma e conserva le impostazioni attuali. Fino a 50 preset per pannello,
+separati per spazio di lavoro. Le indicazioni esplicite nel prompt continuano
+ad avere la precedenza; modelli o raccolte mancanti non sono sostituiti automaticamente.
+
+## Movimento e zoom del canvas
+
+In Impostazioni Slide, Movimento offre Automatico dal prompt, Statiche e Animate.
+La richiesta esplicita nel prompt prevale. Animate usa HTML libero e richiede al
+modello animazioni CSS/SVG effettive, ingressi e transizioni brevi. La scelta viene
+salvata nelle ultime impostazioni, nei preset e nell'artefatto, anche per ripresa e
+revisione. Gli artefatti precedenti mantengono il comportamento automatico.
+Canvas e HTML possono riprodurre animazioni; PDF/PPT usano la cattura statica.
+
+Il canvas offre zoom 50–300%, Adatta ed Espandi canvas per ogni tipo di artefatto.
+A ingrandimenti elevati si può scorrere nei due assi. Espandi occupa la finestra;
+Esc ripristina il pannello. Lo zoom non modifica i file o le dimensioni esportate.

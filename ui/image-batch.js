@@ -1,6 +1,7 @@
 import {openImageZoom} from './image-zoom.js';
 import {appendCreationDetails} from './creation-details.js';
 import {appendBackgroundGrid} from './background-grid.js';
+import {collectionExportButton} from './image-collections.js';
 
 const selections=new Map();
 const viewers=new Set();
@@ -11,7 +12,7 @@ function select(key,index){
 
 export function appendImageBatch(target,media,options={}){
   if(!media?.length||!media.every(m=>m.batch_id&&m.mime?.startsWith('image/'))||new Set(media.map(m=>m.batch_id)).size!==1)return false;
-  if(media.every(m=>m.slide_background)){appendBackgroundGrid(target,[...media].sort((a,b)=>a.batch_index-b.batch_index));return true;}
+  if(media.every(m=>m.slide_background)){appendBackgroundGrid(target,[...media].sort((a,b)=>a.batch_index-b.batch_index));collectionExportButton(target,options.api,media[0].batch_id);return true;}
   const images=[...media].sort((a,b)=>a.batch_index-b.batch_index),key=images[0].batch_id;
   const host=document.createElement('figure');host.className='image-batch image-output';host.dataset.batchId=key;
   const main=document.createElement('button');main.type='button';main.className='image-zoom-trigger';
@@ -37,6 +38,7 @@ export function appendImageBatch(target,media,options={}){
     thumbs.forEach((b,i)=>b.setAttribute('aria-pressed',String(images[i]===chosen)));
   }
   host.append(main,caption,strip,creation);target.append(host);
+  collectionExportButton(caption,options.api,key);
   for(const view of viewers)if(!view.host.isConnected)viewers.delete(view);
   viewers.add({host,key,show});show(selections.get(key));return true;
 }

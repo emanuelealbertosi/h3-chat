@@ -1,18 +1,20 @@
 """Small host-platform boundary; Windows defaults remain unchanged."""
 import sys
+import os
 from pathlib import Path
 
 
 def is_macos():return sys.platform=='darwin'
 
+def is_linux():return sys.platform.startswith('linux')
+
 
 def python_executable(root):
-    return Path(root)/('runtime/python/bin/python3' if is_macos() else 'runtime/python/python.exe')
+    return Path(root)/('runtime/python/bin/python3' if is_macos() or is_linux() else 'runtime/python/python.exe')
 
 
 def prepare_environment(root):
-    if is_macos():
-        import os
+    if os.name!='nt':
         certificates=Path(root)/'runtime/tools/documents/certifi/cacert.pem'
         if certificates.is_file():
             os.environ.setdefault('SSL_CERT_FILE',str(certificates))
@@ -22,7 +24,7 @@ def prepare_environment(root):
 def info():
     import platform
     return {'system':sys.platform,'architecture':platform.machine(),
-            'local_media':not is_macos(),'local_code_execution':not is_macos(),
+            'local_media':not is_macos(),'local_code_execution':True,
             'backends':['cpu','metal'] if is_macos() else ['cpu','vulkan','cuda']}
 
 
@@ -32,8 +34,9 @@ def require_local_model(model):
 
 
 def guard_settings(settings):
-    if is_macos() and settings.get('_lab')=='manim':
-        raise ValueError('Manim non è ancora disponibile in questa edizione macOS. Puoi usare slide, canvas e calcolo numerico.')
+    # CPU tools and isolated code have native POSIX implementations. CUDA
+    # generation is separately guarded by require_local_model.
+    return
 
 
 def runtime_ready(root,key):
@@ -41,4 +44,5 @@ def runtime_ready(root,key):
     from .tools_runtime import status
     if key in ('cpu','metal'):return bool(runtime_executable(root,key,'llama'))
     if key=='tools_documents':return status(root)['documents']['ready']
+    if key.startswith('tools_') and key[6:] in status(root):return status(root)[key[6:]]['ready']
     return False

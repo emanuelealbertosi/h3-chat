@@ -255,7 +255,7 @@ class Worker:
             return result
         comfy.model_management.load_models_gpu=load_gpu
         comfy.utils.PROGRESS_BAR_ENABLED=False
-        self.files=request['files'];self.offload=request['offload']
+        self.files=request['files'];self.offload=request['offload'];self.fast_omni=request.get('checkpoint_family')=='fasth3-omni'
         # On a 16 GB GPU the encoder and diffuser cannot coexist. Do not even
         # map the large diffuser into RAM until conditioning has finished.
         # This keeps the two weight sets out of the working set together.
@@ -275,7 +275,8 @@ class Worker:
         self.activation_memory_report=install_activation_memory(self.model.model.diffusion_model)
         logging.info('H3 packed activation lifetime: %s',self.activation_memory_report)
         head=self.model.model.diffusion_model.final_layer
-        if head.video_out.weight.shape[0]!=96 or head.audio_out.weight.shape[0]!=32:raise ValueError('PDD/Turbo non supportato: scegli un modello H3 standard FL2VA / REF2VA.')
+        from h3chat.fasth3 import check_heads
+        check_heads(head.video_out.weight.shape[0],head.audio_out.weight.shape[0],getattr(self,'fast_omni',False))
         self.mlp_chunk_mb=0
         if self.offload and self.torch.cuda.get_device_properties(0).total_memory<=24*1024**3:
             from h3chat.video_mlp import install
@@ -302,6 +303,20 @@ class Worker:
 
     def configure_attention(self, preference, chunks=0, veda_options=None):
         from comfy.ldm.modules import attention
+        if preference=='vsa':
+            if not getattr(self,'fast_omni',False):raise ValueError('VSA richiede il caricamento con profilo FastH3 Omni.')
+            if getattr(self,'fast_base_model',None) is not None:self.model=self.fast_base_model
+            self.fast_base_model=self.model
+            # The fallback is dense, while the learned VSA branch uses the
+            # bundled ComfyKitchen block-sparse kernels and compression gates.
+            dense=getattr(attention,'attention_comfy_kitchen_int8',None) if getattr(attention,'COMFY_KITCHEN_INT8_ATTENTION_IS_AVAILABLE',False) else None
+            self.model.set_model_optimized_attention(dense or attention.attention_pytorch)
+            from comfy_extras.nodes_sparse_attention import apply_block_sparse_attention
+            from h3chat.fasth3 import attach
+            self.model=attach(self.model,apply_block_sparse_attention);self.attention_chunks=1
+            emit('stage',message='Video · FastH3 Omni · VSA 10% · 8 passi')
+            logging.info('FastH3 Omni: trained VSA 10%%, start=0, end=1, sink=exact_kv_and_rows, no extra PDD')
+            return 'vsa'
         if getattr(self,'veda_base_model',None) is not None:
             self.model=self.veda_base_model
             from h3chat.veda import release
@@ -488,6 +503,9 @@ class Worker:
             self.sequence=request.get('sequence');self.anchor=None;self.recent=[]
         if request.get('resume_memory'):self.restore_memory(request['resume_memory'])
         opts=resolve_canvas(request['options'],request['plan'],[(im.shape[2],im.shape[1]) for im in images],request.get('format_prompt',request['plan'].get('prompt','')),force_aspect=request.get('forced_aspect'))
+        if getattr(self,'fast_omni',False):
+            from h3chat.fasth3 import validate as validate_fast
+            validate_fast(opts)
         if request.get('canvas'):opts.update(request['canvas'])
         extension=None
         if request.get('extension_context'):

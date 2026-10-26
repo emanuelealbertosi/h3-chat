@@ -271,6 +271,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
             return
         seen = set()
         for field,capability in (('chat_model','chat'),('create_model','create'),('edit_model','edit'),('diagram_model','create'),('_image_model','create'),('music_model','music'),('video_model','video')):
+            if (settings.get('_slides') or {}).get('image_source')=='lots' and capability!='chat':continue
             model = self.catalog.get(settings.get(field))
             if not model or model.get('api') or model.get('remote_media') or model['id'] in seen:
                 continue

@@ -1,6 +1,8 @@
 import {escape as esc} from './render.js';
 import {labImageDefault} from './lab-image-model.js';
 import {appendBackgroundGrid} from './background-grid.js';
+import {collectionExportButton} from './image-collections.js';
+import {deleteCollections} from './collection-delete.js';
 
 const PALETTES=[['pastel','Pastello'],['natural','Naturale'],['blue','Blu e ghiaccio'],['warm','Sabbia e terracotta'],['mono','Monocromatica'],['custom','Personalizzata']];
 const defaults={name:'Set di sfondi',kind:'frame',format:'16:9',themes:[],palettes:['pastel'],custom_palette:'',variants:2,margin:12,opacity:20,tone:'light',design:'professional',model:'',megapixels:null,seed_mode:'saved',seed:0};
@@ -35,7 +37,7 @@ export function initSlideBackgrounds({api,getState,onRecipe,notify}){
  const form=dialog.querySelector('form'),field=name=>form.elements.namedItem(name),library=dialog.querySelector('[data-library]');
  const button=document.createElement('button');button.type='button';button.className='prompt-choice';button.id='create-backgrounds';button.textContent='Crea sfondi';button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-controls',dialog.id);
  const hint=document.createElement('p');hint.className='small-note background-mode-hint';hint.id='background-mode-hint';hint.hidden=true;
- let active=false,collections=[],loading=false,libraryLoaded=false,signature='';
+ let active=false,collections=[],loading=false,libraryLoaded=false,signature='';const selectedSets=new Set();
  function read(){
   return {name:field('name').value.trim(),kind:field('kind').value,format:field('format').value,design:field('design').value,model:field('model').value,
    themes:field('themes').value.split('\n').map(t=>t.trim()).filter(Boolean),palettes:[...form.querySelectorAll('[name=palette]:checked')].map(e=>e.value),custom_palette:field('custom_palette').value.trim(),
@@ -75,11 +77,17 @@ export function initSlideBackgrounds({api,getState,onRecipe,notify}){
  function renderLibrary(){
   library.replaceChildren();
   if(!collections.length){library.textContent='Nessun set salvato. Gli sfondi completati appariranno qui anche se interrompi il batch.';return;}
+  const toolbar=document.createElement('div'),all=document.createElement('input'),allLabel=document.createElement('label'),remove=document.createElement('button');toolbar.className='project-actions';all.type='checkbox';all.ariaLabel='Seleziona tutti i set di sfondi';allLabel.append(all,' Seleziona tutti');remove.type='button';toolbar.append(allLabel,remove);library.append(toolbar);
+  for(const id of selectedSets)if(!collections.some(v=>v.id===id))selectedSets.delete(id);
+  const count=()=>{remove.textContent='Elimina selezionati ('+selectedSets.size+')';remove.disabled=!selectedSets.size;all.checked=collections.every(v=>selectedSets.has(v.id));all.indeterminate=selectedSets.size>0&&!all.checked;};count();
+  all.onchange=()=>{for(const v of collections)all.checked?selectedSets.add(v.id):selectedSets.delete(v.id);renderLibrary();};
+  remove.onclick=async()=>{try{const result=await deleteCollections(api,[...selectedSets]);if(result){for(const id of result.removed)selectedSets.delete(id);await loadLibrary();notify(result.removed.length+' set rimossi · '+result.files_deleted+' file eliminati');}}catch(error){notify(error.message);}};
   for(const set of collections){
    const section=document.createElement('section'),heading=document.createElement('h3'),note=document.createElement('p'),reuse=document.createElement('button');
    heading.textContent=set.name;note.textContent=new Date(set.created*1000).toLocaleString('it-IT')+' · '+set.available+'/'+set.total+' disponibili · '+({done:'Completato',running:'In corso',failed:'Interrotto con errore',cancelled:'Annullato',interrupted:'Interrotto'}[set.status]||set.status);
-   reuse.type='button';reuse.textContent='Riusa ricetta del set';reuse.onclick=()=>{renderModels();fill(set.options);onRecipe(set.prompt||'');active=true;render();notify('Ricetta recuperata. Premi Invia soltanto se vuoi generare un nuovo set.');};
-   section.append(heading,note,reuse);appendBackgroundGrid(section,set.images.map(item=>item.media),{preview:dialog.querySelector('[data-preview]').checked});library.append(section);
+   const label=document.createElement('label'),select=document.createElement('input');select.type='checkbox';select.ariaLabel='Seleziona set '+set.name;select.checked=selectedSets.has(set.id);select.onchange=()=>{select.checked?selectedSets.add(set.id):selectedSets.delete(set.id);count();};label.append(select,' Seleziona set');section.append(label);
+   reuse.type='button';reuse.textContent='Riusa ricetta del set';reuse.onclick=()=>{renderModels();fill(set.options);onRecipe(set.prompt||'');active=true;render();form.dispatchEvent(new Event('change',{bubbles:true}));notify('Ricetta recuperata. Premi Invia soltanto se vuoi generare un nuovo set.');};
+   section.append(heading,note,reuse);collectionExportButton(section,api,set.id,loadLibrary);appendBackgroundGrid(section,set.images.map(item=>item.media),{preview:dialog.querySelector('[data-preview]').checked});library.append(section);
   }
  }
  async function loadLibrary(){
@@ -118,5 +126,5 @@ export function initSlideBackgrounds({api,getState,onRecipe,notify}){
  dialog.querySelector('[data-background-library]').ontoggle=e=>{if(e.target.open&&!libraryLoaded)loadLibrary();};
  dialog.querySelector('[data-preview]').onchange=renderLibrary;
  document.addEventListener('click',event=>{if(event.target.closest('[data-mode-settings="slides-options"]')&&active){active=false;render();}});
- return {render,read:()=>active&&document.querySelector('#lab-tool')?.value==='slides'?(validate()?read():(()=>{throw Error('Controlla le opzioni nella finestra Crea sfondi.');})()):null};
+ return {render,preferences:{holder:dialog.querySelector('.prompt-options-body'),matches:event=>form.contains(event.target),read:()=>{if(!validate())throw Error(dialog.querySelector('[data-error]').textContent);return read();},apply:config=>{renderModels();fill(config);render();}},read:()=>active&&document.querySelector('#lab-tool')?.value==='slides'?(validate()?read():(()=>{throw Error('Controlla le opzioni nella finestra Crea sfondi.');})()):null};
 }

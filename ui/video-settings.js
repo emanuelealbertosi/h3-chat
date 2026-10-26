@@ -6,7 +6,7 @@ export function selectVideoPreferencesModel(id){selected=id;}
 export function renderVideoSettings(container,{state,draft,link,edit,pickFile,install,changed}){
  const models=state.models.filter(m=>m.capabilities.includes('video'));
  if(!models.some(m=>m.id===selected))selected=draft.video_model||models[0]?.id||'';
- const model=models.find(m=>m.id===selected),v={...state.video_options.defaults,...draft.video_overrides?.[selected]};
+ const model=models.find(m=>m.id===selected),fast=model?.external_config?.profile==='fasth3-omni',v={...state.video_options.defaults,...(fast?{steps:8,cfg:1,sampler:'euler',scheduler:'simple',attention:'vsa',pdd_enabled:false}:{}),...draft.video_overrides?.[selected]};
  const choices=chosen=>'<option value="">Hybrid · collega i file…</option>'+models.map(m=>`<option value="${esc(m.id)}" ${m.id===chosen?'selected':''}>${esc(m.name)}</option>`).join('');
  const num=(key,label,min,max,step=1)=>`<label class="field"><span>${label}</span><input type="number" data-video-setting="${key}" value="${key==='megapixels'&&!v.experimental_resolution?Math.min(v[key],.98):v[key]}" min="${min}" max="${max}" step="${step}" ${model?'':'disabled'}></label>`;
  const stepsField=`<div class="field" data-video-step-field><span>Passi del modello</span>${videoStepButtons(v.steps,{disabled:!model})}<input type="number" data-video-setting="steps" aria-label="Passi personalizzati" value="${v.steps}" min="1" max="50" step="1" ${model?'':'disabled'}><p class="small-note">Scegli 12, 16 o 20, oppure inserisci un valore personalizzato. Più passi richiedono più tempo. Il preset si salva per questo modello.</p></div>`;
@@ -35,6 +35,11 @@ export function renderVideoSettings(container,{state,draft,link,edit,pickFile,in
  for(const input of container.querySelectorAll('[data-video-setting]'))input.oninput=()=>{if(!selected)return;draft.video_overrides??={};const change=input.dataset.videoSetting==='attention'?attentionControl.read():{[input.dataset.videoSetting]:input.type==='checkbox'?input.checked:input.type==='number'?Number(input.value):input.value};draft.video_overrides[selected]={...draft.video_overrides[selected],...change};if(['attention','experimental_resolution'].includes(input.dataset.videoSetting))render();changed();};
  pdd.querySelector('[data-video-setting="pdd_enabled"]').oninput=e=>{if(!selected)return;draft.video_overrides??={};const previous=draft.video_overrides[selected]||{};draft.video_overrides[selected]={...previous,pdd_enabled:e.target.checked,...(e.target.checked?{steps:8,sampler:'euler',cfg:1,shift_video:12,shift_audio:3}:{})};changed();render();};
  bindVideoSteps(container.querySelector('[data-video-step-field]'),container.querySelector('[data-video-setting="steps"]'));
+ if(fast){
+  const note=document.createElement('p');note.className='small-note';note.textContent='FastH3 Omni: ricetta dedicata 8 passi · Euler/simple · CFG 1 · shift 12/3 · VSA 10% · nessun PDD aggiuntivo. Risoluzione, formato, durata e seed restano regolabili.';container.prepend(note);
+  for(const key of ['steps','cfg','sampler','scheduler','shift_video','shift_audio','attention','pdd_enabled','pdd_lora'])for(const input of container.querySelectorAll(`[data-video-setting="${key}"]`))input.disabled=true;
+  for(const button of container.querySelectorAll('[data-video-step]'))button.disabled=true;
+ }
  container.querySelector('[data-video-action="reset"]').onclick=()=>{if(draft.video_overrides)delete draft.video_overrides[selected];render();changed();};
 }
 export function appendVideoDetails(content,message,advanced){

@@ -48,7 +48,8 @@ def capture_request(settings,body,require_model):
                      '_video_request':{'model':selection,'parameters':dict(changes)}}
     if 'aspect' in changes:result['_video_aspect']=changes['aspect']
     if changes or segment_seconds is not None:
-        candidate=settings.get('video_overrides',{}).get(model_id,{})|changes
+        from .fasth3 import is_fast,PRESET
+        candidate=(PRESET if is_fast(model) else {})|settings.get('video_overrides',{}).get(model_id,{})|changes
         if segment_seconds is not None:candidate['duration']=segment_seconds
         if candidate.get('pdd_enabled'):
             candidate.update(steps=8,sampler='euler',cfg=1,shift_video=12,shift_audio=3)
@@ -107,7 +108,7 @@ def validate(value):
     if result['aspect'] not in ASPECTS:raise ValueError('Formato video non valido.')
     if result['sampler'] not in ('res_multistep','euler','dpmpp_2m') or result['scheduler'] not in ('simple','normal','beta'):raise ValueError('Sampler/scheduler video non supportato.')
     if type(result['offload']) is not bool:raise ValueError('Offload video: scegli attivo o disattivo.')
-    if result['attention'] not in ('auto','sage','pytorch','veda','comfy_kitchen'):raise ValueError('Accelerazione video non supportata.')
+    if result['attention'] not in ('auto','sage','pytorch','veda','comfy_kitchen','vsa'):raise ValueError('Accelerazione video non supportata.')
     for key in ('veda_sparsity','veda_reference_sparsity'):
         v=result[key]
         if type(v) not in (int,float) or not math.isfinite(v) or not 0<=v<=99:raise ValueError('Sparsità VEDA: scegli una percentuale da 0 a 99.')
@@ -122,7 +123,11 @@ def validate(value):
     return result
 
 def options(model,settings,randomize=True):
-    result=apply_quality(validate(settings.get('video_overrides',{}).get(model['id'],{})),settings.get('_video_quality','high'),settings.get('_video_steps'))
+    from .fasth3 import PRESET,is_fast,validate as validate_fast
+    fast=is_fast(model)
+    result=apply_quality(validate((PRESET if fast else {})|settings.get('video_overrides',{}).get(model['id'],{})),settings.get('_video_quality','high'),settings.get('_video_steps'))
+    if fast:validate_fast(result)
+    elif result['attention']=='vsa':raise ValueError('VSA richiede il profilo FastH3 Omni e i suoi pesi dedicati.')
     from .video_pdd import validate as validate_pdd
     validate_pdd(result)
     # Keep older 1.0 MP presets valid without exceeding the native H3 canvas.

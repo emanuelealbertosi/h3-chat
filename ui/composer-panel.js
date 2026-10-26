@@ -34,7 +34,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  for(const id of ['music-toggle','video-toggle','voice-toggle']){const item=$('#'+id);item.className='prompt-choice';modes.append(item);}
  const videoEdit=button('✎ Modifica video','prompt-video-edit');modes.append(videoEdit);
  videoEdit.onclick=()=>{const value=visualControls.read(),active=value.video&&value.video_editing==='modify';setLab('auto');reset();if(!active)visualControls.set({...visualControls.read(),video:true,video_editing:'modify'});render();};
- const tools=new Map([['slides',button('▥ Slide','prompt-slides')],['infographic',button('✧ Infografica','prompt-infographic')],['manim',button('⌁ Manim','prompt-manim')],['calculate',button('∑ Calcolo','prompt-calculate')]]);
+ const tools=new Map([['slides',button('▥ Slide','prompt-slides')],['infographic',button('✧ Infografica','prompt-infographic')],['manim',button('⌁ Manim','prompt-manim')],['calculate',button('∑ Calcolo','prompt-calculate')],['agent',button('◇ Agent','prompt-agent')]]);
  for(const item of tools.values())modes.append(item);
  const transcribe=$('#transcribe-toggle');transcribe.className='prompt-choice';modes.append(transcribe);
  const reset=()=>visualControls.set({...visualControls.read(),image_model:'',music:false,video:false,voice:false,transcribe:false});
@@ -48,7 +48,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  lab.closest('label').hidden=true;
  const imagePanel=field('Modello immagini');imagePanel.id='prompt-image-panel';context.append(imagePanel);imagePanel.append(image.closest('label'));pills(image,'Scegli il modello',true);
  const imageRequest=initImageRequest({holder:imagePanel,getState,visualControls,savePresets:saveImagePresets,getLastSeed:getLastImageSeed,notify});
- for(const id of ['slides-options','music-inputs','voice-inputs','video-hint'])context.append($('#'+id));
+ for(const id of ['agent-options','slides-options','music-inputs','voice-inputs','video-hint'])context.append($('#'+id));
  pills($('#video-quality'),'Qualità');
  pills($('#video-resolution'),'Risoluzione video');
  pills($('#video-format'),'Formato video');
@@ -60,9 +60,9 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  const count=$('#slides-count'),countLabel=count.closest('label');countLabel.classList.add('prompt-count');const minus=button('−'),plus=button('＋');minus.ariaLabel='Meno slide';plus.ariaLabel='Più slide';count.before(minus);count.after(plus);for(const [item,delta] of [[minus,-1],[plus,1]])item.onclick=()=>{count.value=Math.max(1,Math.min(100,(Number(count.value)||8)+delta));count.dispatchEvent(new Event('change',{bubbles:true}));render();};
  const slideTechnical=field('Presentazioni · opzioni tecniche');slides.append(slideTechnical);
  for(const id of ['slides-engine','slides-vision','slides-timeout'])slideTechnical.append($('#'+id).closest('label'));
- for(const [id,title] of [['slides-format','Formato'],['slides-design','Stile'],['slides-detail','Contenuto'],['slides-composition','Composizione'],['slides-background','Sfondo'],['slides-text-tone','Testi'],['slides-palette','Palette']])pills($('#'+id),title);
+ for(const [id,title] of [['slides-format','Formato'],['slides-design','Stile'],['slides-detail','Contenuto'],['slides-composition','Composizione'],['slides-motion','Movimento'],['slides-background','Sfondo'],['slides-text-tone','Testi'],['slides-palette','Palette']])pills($('#'+id),title);
  for(const id of ['slides-engine','slides-vision'])pills($('#'+id),id==='slides-engine'?'Motore slide':'Analisi delle figure');
- const imageToggle=toggle($('#slides-generate-images'),'Illustrazioni AI · tutte insieme',slides);imageToggle.classList.add('prompt-slide-images');
+ const imageToggle=toggle($('#slides-generate-images'),'Illustrazioni AI · tutte insieme',slides);imageToggle.classList.add('prompt-slide-images');imageToggle.hidden=true;
  const imageModels=$('#slides-image-model'),generatedModels=pills(imageModels,'Modello per le illustrazioni',true);
  generatedModels.before(imageToggle);
  for(const select of $('#voice-inputs').querySelectorAll('select'))pills(select,select.closest('label').querySelector('span')?.textContent||'Voce');
@@ -91,6 +91,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  }});
  function render(){
   const state=getState();if(!state)return;
+  tools.get('agent').disabled=!state.agent_options?.enabled||!chatModelId(state);tools.get('agent').title=!state.agent_options?.enabled?'Agent disponibile dopo l’attivazione del servizio aggiornato.':!chatModelId(state)?'Scegli un LLM per Agent.':'Agent sperimentale · usa il modello scelto, gli strumenti H3 e il perimetro di accesso autorizzato.';
   const value=visualControls.read(),mode=lab.value,cpu=cpuMode(state);
   for(const item of [images,videoEdit,$('#music-toggle'),$('#video-toggle'),$('#voice-toggle'),transcribe]){item.disabled=cpu;item.title=cpu?'Disabilitato in modalità CPU':'';}
   const mac=state.platform?.system==='darwin';tools.get('manim').disabled=mac;tools.get('manim').title=mac?'Manim non è ancora disponibile su macOS.':'';
@@ -100,10 +101,11 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
   for(const [name,item] of tools)item.setAttribute('aria-pressed',String(mode===name));
   imagePanel.hidden=!value.image_model;slides.hidden=mode!=='slides';slideTechnical.hidden=mode!=='slides';generatedModels.hidden=!$('#slides-generate-images').checked;
   countLabel.hidden=countMode.value==='auto';count.disabled=countMode.value==='auto';minus.disabled=plus.disabled=count.disabled;
-  voiceMode.hidden=!!value.voice&&mode==='manim';context.hidden=!(mode==='slides'||mode==='manim'||mode==='infographic'||value.image_model||value.voice||value.music||value.video);
+  voiceMode.hidden=!!value.voice&&mode==='manim';const agentPanel=$('#agent-options');if(agentPanel)agentPanel.hidden=mode!=='agent';
+  context.hidden=!(mode==='agent'||mode==='slides'||mode==='manim'||mode==='infographic'||value.image_model||value.voice||value.music||value.video);
   const infographic=document.querySelector('#infographic-options');if(infographic)infographic.hidden=mode!=='infographic';
   const manim=document.querySelector('#manim-presentation-options');if(manim)manim.hidden=mode!=='manim';
-  assistant.textContent='Assistant '+(value.assistant?'On':'Off');assistant.title='Prepara le istruzioni con il LLM della chat';
+  assistant.hidden=mode==='agent';assistant.textContent='Assistant '+(value.assistant?'On':'Off');assistant.title='Prepara le istruzioni con il LLM della chat';
   for(const update of mirrors)update();
   const model=state.models.find(m=>m.id===chatModelId(state)),vision=!state.settings.vision_enabled?'Vision Off':model?.vision?.enabled?'Vision '+(model.api?'API':state.settings.vision_device.toUpperCase()):'Non vision';
   const refs=model?.api?Math.min(state.settings.vision_max_refs??4,model.max_refs??model.vision?.max_refs??4):state.settings.vision_max_refs??4;

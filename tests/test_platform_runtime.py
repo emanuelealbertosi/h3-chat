@@ -12,7 +12,7 @@ class PlatformTests(unittest.TestCase):
             root=Path(folder)
             self.assertEqual(python_executable(root),root/'runtime/python/bin/python3')
             self.assertEqual(info()['backends'],['cpu','metal'])
-            self.assertFalse(info()['local_code_execution'])
+            self.assertTrue(info()['local_code_execution'])
             self.assertEqual(first_run_settings(root,True),{})
             self.assertEqual(first_run_settings(root,False)['backend'],'metal')
             for model in ({'api':True},{'remote_media':True},{'capabilities':['chat']}):require_local_model(model)

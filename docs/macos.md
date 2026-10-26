@@ -16,7 +16,9 @@ Il primo pacchetto ha una firma locale ad hoc, senza notarizzazione Apple. Se ma
 - Slide, canvas, infografiche senza rendering locale CUDA, esportazioni HTML, PowerPoint, PDF e immagini del canvas. Il PDF usa il browser incluso.
 - Servizi esterni configurati per immagini, video, voce e musica. I motori locali CUDA/NVIDIA non sono compatibili con questo pacchetto.
 
-L'esecuzione locale di codice generato, Manim, LaTeX standalone e i motori generativi multimediali Windows non vengono abilitati senza un porting e un isolamento specifici per macOS. Le formule nel canvas continuano a essere visualizzate tramite KaTeX.
+Agent dispone delle modalità H3, Sandbox e Globale. Sandbox usa Seatbelt per limitare file e programmi alla cartella scelta; ricerche e download passano dagli strumenti Web H3. Globale usa i privilegi ordinari dell'utente. Un comando amministratore richiede prima conferma H3, poi autenticazione nativa macOS; il server non resta amministratore.
+
+Il pacchetto include Manim e LaTeX per rendering CPU, trascrizione CPU, gli strumenti per lotti immagini, layout e documenti e il renderer delle infografiche. I pesi dei modelli restano separati. I motori CUDA e gli adattatori che richiedono CUDA non sono inclusi.
 
 Il pulsante CPU mantiene il comportamento delle altre edizioni: disabilita la generazione multimediale e forza chat/Assistant sul dispositivo CPU o sul provider scelto. Per usare servizi multimediali esterni lascia la modalità normale GPU, anche quando il lavoro effettivo viene svolto dal server esterno.
 

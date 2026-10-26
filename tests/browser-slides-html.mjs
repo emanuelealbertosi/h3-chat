@@ -45,7 +45,7 @@ try{
   const revisionBody=(await revision).postDataJSON();assert.equal(revisionBody.page,0);assert.equal(revisionBody.prompt,'Rendi questa pagina più vivace');assert.ok(revisionBody.artifact_id);
   const composer=await browser.newPage();await composer.goto(fixture.url);await composer.click(`[data-chat="${fixture.chat}"]`);
   await composer.click('#prompt-slides');await composer.click('#prompt-options-open');await composer.getByRole('button',{name:'Completa · tutte',exact:true}).click();await composer.getByRole('button',{name:'Fatto',exact:true}).click();
-  assert.equal(await composer.isChecked('#slides-generate-images'),false);await composer.getByRole('button',{name:'Illustrazioni AI · tutte insieme',exact:true}).click();assert.equal(await composer.locator('#slides-image-model-label').isVisible(),true);
+  assert.equal(await composer.isChecked('#slides-generate-images'),false);await composer.selectOption('#slides-image-source','generate');assert.equal(await composer.locator('#slides-image-model-label').isVisible(),true);
   await composer.route('**/api/chats/*/messages',route=>route.fulfill({json:{job_id:'synthetic-only',intent:'slides',canvas:true}}));
   const request=composer.waitForRequest(r=>r.method()==='POST'&&r.url().endsWith('/messages'));
   await composer.fill('#prompt','Crea 4 slide');await composer.locator('#composer').evaluate(e=>e.requestSubmit());const body=(await request).postDataJSON();assert.equal(body.slides.vision_scope,'all');assert.equal(body.slides.generate_images,true);await composer.close();

@@ -9,7 +9,7 @@ def options(value):
     if value is None:return None
     if not isinstance(value,dict) or set(value)-{'base','decorations','set_id','asset_ids','opacity','veil'}:raise ValueError('Impostazioni dello sfondo slide non valide.')
     result={'base':'plain','decorations':False,'set_id':'','asset_ids':[],'opacity':20,'veil':'auto'}|value
-    if result['base'] not in ('plain','gradient','collection') or type(result['decorations']) is not bool:raise ValueError('Scegli Plain, Gradient o Raccolta e le decorazioni desiderate.')
+    if result['base'] not in ('auto','plain','gradient','collection') or type(result['decorations']) is not bool:raise ValueError('Scegli Automatico, Plain, Gradient o Raccolta e le decorazioni desiderate.')
     if result['veil'] not in ('auto','light','dark'):raise ValueError('Velatura slide non valida.')
     if type(result['opacity']) is not int or not 5<=result['opacity']<=45:raise ValueError('Intensità sfondo: scegli da 5 a 45%.')
     ids=result['asset_ids']
@@ -17,7 +17,7 @@ def options(value):
     if result['base']=='collection':
         if not ID.fullmatch(result['set_id']) or not ids:raise ValueError('Scegli un batch dalla raccolta e almeno uno sfondo.')
     else:result.update(set_id='',asset_ids=[])
-    return result
+    return None if result['base']=='auto' and not result['decorations'] else result
 
 
 def resolve(app,style,existing=()):
@@ -58,26 +58,35 @@ def geometry(deck,page,media):
     from .slides import FORMATS
     width,height=FORMATS[deck['format']];style=options(deck.get('background_style'))
     result={'x':0,'y':0,'width':width,'height':height}
-    if not style or style['base']!='collection':return result
-    asset=next((m for m in media if m['id']==page.get('background_asset_id')),None)
-    if not asset:raise ValueError('Sfondo della slide non disponibile.')
-    meta=asset.get('slide_background',{})
-    if meta.get('kind')!='frame':return result
-    ratio=str(meta.get('format',deck['format'])).split(':')
-    try:a,b=map(float,ratio);fraction=float(meta.get('margin',12))/100
-    except (ValueError,TypeError):raise ValueError('Margini della cornice non validi.') from None
-    if not all(math.isfinite(n) and n>0 for n in (a,b)) or not .05<=fraction<=.25:raise ValueError('Margini della cornice non validi.')
-    fit=min(width/a,height/b);w=a*fit;h=b*fit
-    return {'x':(width-w)/2+w*fraction,'y':(height-h)/2+h*fraction,'width':w*(1-2*fraction),'height':h*(1-2*fraction)}
+    if not style:return result
+    if style['base']=='collection':
+        asset=next((m for m in media if m['id']==page.get('background_asset_id')),None)
+        if not asset:raise ValueError('Sfondo della slide non disponibile.')
+        meta=asset.get('slide_background',{})
+        if meta.get('kind')=='frame':
+            ratio=str(meta.get('format',deck['format'])).split(':')
+            try:a,b=map(float,ratio);fraction=float(meta.get('margin',12))/100
+            except (ValueError,TypeError):raise ValueError('Margini della cornice non validi.') from None
+            if not all(math.isfinite(n) and n>0 for n in (a,b)) or not .05<=fraction<=.25:raise ValueError('Margini della cornice non validi.')
+            fit=min(width/a,height/b);w=a*fit;h=b*fit
+            result={'x':(width-w)/2+w*fraction,'y':(height-h)/2+h*fraction,'width':w*(1-2*fraction),'height':h*(1-2*fraction)}
+    if style['decorations']:
+        right=min(width-56,result['x']+result['width']);bottom=min(height-56,result['y']+result['height'])
+        result['x']=max(56,result['x']);result['y']=max(56,result['y']);result['width']=right-result['x'];result['height']=bottom-result['y']
+    return result
 
 
 def brief(deck,page,media):
     style=options(deck.get('background_style'))
     if not style:return ''
     box=geometry(deck,page,media)
-    text=f'\nSFONDO GESTITO DALL’APP: {style["base"]}. '
-    text+='Lo sfondo e le eventuali decorazioni sono già composti dall’app: non disegnarli e non inserire le immagini decorative come figure o prove documentali. '
-    text+='Crea solo il contenuto su fondo trasparente, senza un altro pannello opaco a tutta pagina. Le superfici locali di card, grafici e callout restano consentite. '
-    text+=f'Area di composizione effettiva {box["width"]:.0f}×{box["height"]:.0f} px; l’app la posiziona entro la cornice. Usa main/section responsive al 100% di questa area, non 100vw/100vh o posizioni fixed. Non ridurre i caratteri per far entrare testo eccessivo. '
+    if style['base']=='auto':
+        text='\nDECORAZIONI GESTITE DALL’APP: il visualizzatore aggiunge una cornice con motivi SVG legati a stile e argomento. Scegli liberamente il fondo adatto ai contenuti, rispettando colori e palette richiesti. Non duplicare la cornice: il margine esterno è già riservato dall’app. '
+    else:
+        text=f'\nSFONDO GESTITO DALL’APP: {style["base"]}. '
+        text+='Lo sfondo e le eventuali decorazioni sono già composti dall’app: non disegnarli e non inserire le immagini decorative come figure o prove documentali. '
+        text+='Crea solo il contenuto su fondo trasparente, senza un altro pannello opaco a tutta pagina. Le superfici locali di card, grafici e callout restano consentite. '
+    text+=f'Area di composizione effettiva {box["width"]:.0f}×{box["height"]:.0f} px; l’app la posiziona entro la cornice. Il viewport indicato è già l’area interna: body senza margini o padding esterni, main/section responsive al 100% di questa area, non 100vw/100vh o posizioni fixed. Non ridurre i caratteri per far entrare testo eccessivo. '
     text+='Mantieni contrasto leggibile; le decorazioni non sostituiscono le figure informative.'
+    if style['decorations']:text+=' I motivi SVG sono fuori da questa area interna: non occupare la cornice e non aggiungere un secondo margine esterno.'
     return text

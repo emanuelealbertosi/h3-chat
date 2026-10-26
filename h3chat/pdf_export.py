@@ -16,7 +16,7 @@ from .store import uid
 from .engine import CREATE_NO_WINDOW
 
 ALLOWED=set(('article main section header footer aside nav div span p h1 h2 h3 h4 h5 h6 strong b em i s del sup sub br hr blockquote ul ol li pre code table thead tbody tr th td figure figcaption img '
-             'svg g path rect circle ellipse line polyline polygon text tspan defs marker clipPath mask pattern linearGradient radialGradient stop use title desc '
+             'svg g path rect circle ellipse line polyline polygon text tspan defs marker clipPath mask pattern linearGradient radialGradient stop use title desc filter feGaussianBlur feOffset feColorMatrix feBlend feComposite feFlood feMerge feMergeNode feDropShadow '
              'math semantics mrow mi mn mo msup msub mfrac mroot msqrt mtable mtr mtd annotation').lower().split())
 VOID={'br','hr','img'}
 # Flattened slide CSS and embedded figures can exceed 16 MiB even in short
@@ -36,7 +36,7 @@ class Sanitizer(HTMLParser):
             value=value or ''
             if key.lower().startswith('on') or key in ('srcset','formaction'):continue
             if key in ('src','href','xlink:href') and not (value.startswith('#') or (tag=='img' and re.match(r'^data:image/(png|jpeg);base64,',value))):continue
-            if key=='style' and any(x in value.lower() for x in ('url(','expression','@import')):continue
+            if key=='style' and (any(x in value.lower() for x in ('expression','@import')) or 'url(' in re.sub(r'url\(#[\w:.-]+\)','',value,flags=re.I).lower()):continue
             if key=='class':value=' '.join(x for x in value.split() if x not in ('no-export','canvas-preview'))
             clean.append(f' {key}="{html.escape(value,quote=True)}"')
         self.output.append('<'+tag+''.join(clean)+'>')
@@ -105,11 +105,9 @@ def export_html(root,data,body):
 
 
 def export_pdf(root,data,body):
-    candidates=[Path(os.environ.get('PROGRAMFILES(X86)','C:/Program Files (x86)'))/'Microsoft/Edge/Application/msedge.exe',
-                Path(os.environ.get('PROGRAMFILES','C:/Program Files'))/'Microsoft/Edge/Application/msedge.exe']
+    from .browser_runtime import executable
     from .platform_runtime import is_macos
-    if is_macos():candidates=list((Path(root)/'runtime/browser').rglob('headless_shell'))+list((Path(root)/'runtime/browser').rglob('chrome-headless-shell'))+[p for p in (Path(root)/'runtime/browser').glob('**/Contents/MacOS/*') if p.name in ('Chromium','Google Chrome for Testing','Google Chrome')]
-    edge=next((p for p in candidates if p.exists()),None)
+    edge=executable(root)
     if not edge:raise ValueError('Browser PDF non disponibile: reinstalla il pacchetto macOS.' if is_macos() else 'Per il PDF serve Microsoft Edge, normalmente incluso in Windows.')
     folder,source_file,title=export_document(root,data,body)
     key=folder.name
@@ -117,11 +115,11 @@ def export_pdf(root,data,body):
     args=[str(edge),'--headless','--disable-gpu','--no-first-run','--no-pdf-header-footer','--print-to-pdf='+str(target),
           '--user-data-dir='+str(folder/'browser-profile'),'--virtual-time-budget=2500',source_file.as_uri()]
     if is_macos():args[1:1]=['--use-mock-keychain','--password-store=basic','--disable-background-networking','--no-default-browser-check']
-    if is_macos():
+    if os.name!='nt':
         from .platform_runtime import python_executable
         result=subprocess.run([str(python_executable(root)),'-X','utf8',str(Path(root)/'native/pdf-worker.py'),str(source_file),str(target),str(edge)],capture_output=True,timeout=90)
         if result.returncode or not target.is_file() or target.read_bytes()[:5]!=b'%PDF-':
-            raise RuntimeError('Esportazione PDF Mac non riuscita. '+result.stderr.decode('utf-8','replace')[-1200:])
+            raise RuntimeError('Esportazione PDF non riuscita. '+result.stderr.decode('utf-8','replace')[-1200:])
         return {'url':'/exports/'+key+'/document.pdf','name':title+'.pdf'}
     result=subprocess.run(args,capture_output=True,timeout=90,creationflags=CREATE_NO_WINDOW)
     # Windows Edge may return from its launcher while the browser child is still printing.

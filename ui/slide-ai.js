@@ -1,19 +1,22 @@
 import {escape as esc} from './render.js';
 import {labImageDefault} from './lab-image-model.js';
 import {revisionDraft} from './slide-generation-state.js';
+import {initSlideLotPicker} from './slide-image-lots.js';
 
-export function initSlideImages(){
+export function initSlideImages({api}={}){
  const holder=document.querySelector('#slides-options');
  holder.insertAdjacentHTML('beforeend',' <label><input type="checkbox" id="slides-generate-images"> Immagini AI · tutte insieme</label> <label id="slides-image-model-label" hidden>Modello immagini <select id="slides-image-model" aria-label="Modello immagini della presentazione"></select></label>');
  const enabled=document.querySelector('#slides-generate-images'),select=document.querySelector('#slides-image-model');
  enabled.title='Opzionale: prepara il piano, genera tutte le illustrazioni con un solo modello, poi compone le slide. Se disattivato, il flusso attuale resta invariato.';
  enabled.onchange=()=>document.querySelector('#slides-image-model-label').hidden=!enabled.checked;
+ const lots=initSlideLotPicker(api);
  let signature='';
- return {read:()=>({generate_images:enabled.checked,image_model:enabled.checked?select.value:''}),render(state){
+ return {lots,read:()=>({...lots.read(),generate_images:enabled.checked,image_model:enabled.checked?select.value:''}),render(state){
+  lots.render(state);
   const models=state.models.filter(m=>m.ready&&m.capabilities.includes('create'));
   const next=JSON.stringify(models.map(m=>[m.id,m.name]));if(next===signature)return;signature=next;
   const chosen=select.value,preferred=labImageDefault(state);select.innerHTML=`<option value="">Predefinito · ${esc(preferred?.name||'modello immagini')}</option>`+models.map(m=>`<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
-  if(models.some(m=>m.id===chosen))select.value=chosen;
+  if(chosen){if(!models.some(m=>m.id===chosen)){const missing=document.createElement('option');missing.value=chosen;missing.textContent='Modello salvato non disponibile · scegli un altro';select.append(missing);}select.value=chosen;}
  }};
 }
 

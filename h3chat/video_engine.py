@@ -19,7 +19,8 @@ class VideoEngine:
             if cancel.is_set():raise Cancelled()
             session.start([python_executable(self.root),'-I','-X','utf8',self.root/'native/video-worker.py'],ipc=True,cwd=self.root)
         session.wait('hello',cancel,60)
-        session.send({'op':'load','files':session.files,'offload':options(model,settings,False)['offload'],'threads':settings['threads']})
+        from .fasth3 import is_fast
+        session.send({'op':'load','files':session.files,'offload':options(model,settings,False)['offload'],'threads':settings['threads'],'checkpoint_family':'fasth3-omni' if is_fast(model) else 'standard'})
         session.wait('ready',cancel,1800,stage)
         session.ready=True
         return session

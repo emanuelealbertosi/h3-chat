@@ -108,4 +108,7 @@ with tempfile.TemporaryDirectory(prefix='h3-macos-relocated-') as folder:
             try:process.wait(timeout=12)
             except subprocess.TimeoutExpired:process.terminate();process.wait(timeout=5)
 assert not errors,errors
+sys.path.insert(0,str(ROOT))
+from scripts.check_posix import check as check_posix
+check_posix(STAGE)
 print('macOS arm64: native CPU/Metal startup, Keychain, API chat, documents, RAG, PDF, loopback HTTP and relocated native app launcher/stop passed. No model weights loaded.')

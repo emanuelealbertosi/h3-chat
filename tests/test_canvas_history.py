@@ -141,7 +141,7 @@ class HistoryApiTests(unittest.TestCase):
                 with urllib.request.urlopen(req) as response:
                     return json.load(response)
             try:
-                self.assertEqual(request('/api/state')['slide_options'],{'max_count':100,'automatic_count':True,'background_batches':True,'background_styles':True})
+                self.assertEqual(request('/api/state')['slide_options'],{'max_count':100,'automatic_count':True,'background_batches':True,'background_styles':True,'settings_presets':True,'automatic_decorations':True})
                 chat = app.store.create_chat()['id']
                 image = {'id':'a'*32, 'name':'old.png', 'path':'outputs/old.png', 'mime':'image/png'}
                 old = app.store.canvas_history.save(chat, {'title':'Old', 'content':'', 'media':[image]}, key='job:first')

@@ -12,11 +12,18 @@ REQUIRED={'latex':('TinyTeX/bin/windows/latex.exe','TinyTeX/bin/windows/dvisvgm.
 def status(root):
     root=Path(root)
     from .platform_runtime import is_macos
-    if is_macos():
+    if __import__('os').name!='nt':
         required=('pypdf/__init__.py','docx/__init__.py','lxml/__init__.py','pypdfium2/__init__.py','av/__init__.py','numpy/__init__.py')
         try:ready=json.loads((root/'runtime/tools/documents/ready.json').read_text()).get('manifest')==manifest_digest(root,'documents') and all((root/'runtime/tools/documents'/name).is_file() for name in required)
         except (OSError,ValueError):ready=False
-        return {kind:{'ready':ready if kind=='documents' else False,'supported':kind=='documents'} for kind in REQUIRED}
+        result={'documents':{'ready':ready,'supported':True}}
+        for kind,files in {'lab':('manim/__init__.py','matplotlib/__init__.py','cairo/__init__.py'), 'asr':('faster_whisper/__init__.py','ctranslate2/__init__.py')}.items():
+            try:valid=json.loads((root/'runtime/tools'/kind/'ready.json').read_text()).get('manifest')==manifest_digest(root,kind) and all((root/'runtime/tools'/kind/name).is_file() for name in files)
+            except (OSError,ValueError):valid=False
+            result[kind]={'ready':valid,'supported':True}
+        tex=root/'runtime/tools/latex/TinyTeX'
+        result['latex']={'ready':any((tex/'bin').glob('*/latex')) and any((tex/'bin').glob('*/dvisvgm')),'supported':True}
+        return result
     result={}
     for kind,names in REQUIRED.items():
         try:ready=json.loads((root/'runtime/tools'/kind/'ready.json').read_text(encoding='utf-8')).get('manifest')==manifest_digest(root,kind) and all((root/'runtime/tools'/kind/name).is_file() for name in names)
@@ -26,7 +33,9 @@ def status(root):
 
 def manifest_digest(root,kind):
     from .platform_runtime import is_macos
-    if is_macos():return hashlib.sha256((Path(root)/'scripts/macos-requirements.txt').read_bytes()).hexdigest()
+    if __import__('os').name!='nt':
+        name='lab-requirements.txt' if kind=='lab' else 'posix-asr-requirements.txt' if kind=='asr' else 'macos-requirements.txt'
+        return hashlib.sha256((Path(root)/'scripts'/name).read_bytes()).hexdigest()
     root=Path(root);files=json.loads((root/'runtimes.json').read_text(encoding='utf-8'))['tools_'+kind]['files']
     crt=(root/'native/redist/SOURCES.json').read_text(encoding='utf-8')
     return hashlib.sha256((json.dumps(files,sort_keys=True)+crt).encode()).hexdigest()

@@ -6,6 +6,8 @@ import {readableText} from './slide-html-contrast.js';
 import {portraitLayout} from './infographic-layout.js';
 import {initialExportStyles,applyExportStyles} from './export-style.js';
 import {applyHtmlBackground} from './slide-background-style.js';
+import {fitHtmlBackground} from './slide-content-fit.js';
+import {staticSnapshot} from './slide-static-snapshot.js';
 import '../static/infographic-motion.js';
 
 const heights={'16:9':720,'9:16':1280*16/9,'4:3':960,'16:10':800,'1:1':1280};
@@ -22,7 +24,7 @@ async function localMathCSS(){
 }
 
 async function markup(page,media){
-  const clean=DOMPurify.sanitize(page.html||'',{WHOLE_DOCUMENT:true,ADD_TAGS:['style'],FORBID_TAGS:['script','iframe','object','embed','link','meta','base','form','input','button','video','audio'],FORBID_ATTR:['srcset','action','formaction','autofocus','data-h3-editor','data-h3-trusted','data-h3-video','data-h3-background-content','data-h3-background-layer']});
+  const clean=DOMPurify.sanitize(page.html||'',{WHOLE_DOCUMENT:true,ADD_TAGS:['style'],FORBID_TAGS:['script','iframe','object','embed','link','meta','base','form','input','button','video','audio'],FORBID_ATTR:['srcset','action','formaction','autofocus','data-h3-editor','data-h3-trusted','data-h3-video','data-h3-background-content','data-h3-content-canvas','data-h3-background-layer','data-h3-decoration']});
   const doc=new DOMParser().parseFromString(clean,'text/html');
   doc.querySelectorAll('a').forEach(a=>{a.removeAttribute('href');a.removeAttribute('target');});
   for(const image of doc.querySelectorAll('img')){
@@ -79,6 +81,7 @@ export async function htmlPage(deck,page,index,media,mount){
   const generated=new Set((deck.image_generation?.plan||[]).map(item=>item.asset_id));
   for(const img of doc.images)if(generated.has(img.dataset.assetId)&&!img.dataset.imageFit&&doc.defaultView.getComputedStyle(img).objectFit==='cover')img.dataset.imageFit='cover';
   if(fitMediaBounds(doc,height,!deck.infographic))frame.dataset.layoutAdjusted='true';
+  if(fitHtmlBackground(doc))frame.dataset.layoutAdjusted='true';
   if(deck.infographic&&page.status==='ready'&&portraitLayout(doc,height,deck.infographic.options).issue)frame.dataset.portraitSparse='true';
   sessions.set(frame,{iframe,doc});return frame;
 }
@@ -113,7 +116,8 @@ export function htmlOverflow(frame){
 }
 
 export function flattenHtml(frame){
-  const {doc}=sessions.get(frame),body=doc.body,initial=initialExportStyles(doc),clone=body.cloneNode(true);
+  const {doc}=sessions.get(frame);staticSnapshot(doc);
+  const body=doc.body,initial=initialExportStyles(doc),clone=body.cloneNode(true);
   const sources=[body,...body.querySelectorAll('*')],targets=[clone,...clone.querySelectorAll('*')];
   for(let i=0;i<sources.length;i++){
     const css=doc.defaultView.getComputedStyle(sources[i]);targets[i].removeAttribute('class');
@@ -129,7 +133,7 @@ export function flattenHtml(frame){
     }
   }
   clone.querySelectorAll('[data-h3-video]').forEach(n=>{if(n.poster){const image=document.createElement('img');image.src=n.poster;image.style.cssText=n.style.cssText;n.replaceWith(image);}else n.remove();});
-  clone.querySelectorAll('style,script').forEach(n=>n.remove());
+  clone.querySelectorAll('style,script,animate,animateTransform,animateMotion,set').forEach(n=>n.remove());
   const content=document.createElement('div');content.setAttribute('style',clone.getAttribute('style'));content.innerHTML=clone.innerHTML;
   frame.replaceChildren(content);sessions.delete(frame);
 }

@@ -89,6 +89,11 @@ class Handler(BaseHTTPRequestHandler):
             if not secrets.compare_digest(self.headers.get("X-H3-Token", ""), self.app.token):
                 raise PermissionError("Sessione scaduta. Ricarica la pagina.")
 
+    def require_local_computer(self):
+        identity=getattr(self,'identity',{})
+        if not local_request(self) or identity.get('role')!='owner' or identity.get('bearer'):
+            raise PermissionError('Autorizza il computer dal browser locale del proprietario, non tramite collegamenti remoti o chiavi API.')
+
     def read_body(self):
         if "application/json" not in self.headers.get("Content-Type", ""):
             raise ValueError("È richiesto un corpo JSON.")
@@ -131,8 +136,14 @@ class Handler(BaseHTTPRequestHandler):
             if access and path.startswith('/api/auth/'):
                 return self.auth_request(path,method)
             if method == "GET":
+                if path=='/api/presentation-preferences':
+                    from h3chat.presentation_preferences import load
+                    return self.json(load(self.app))
                 if path=='/api/slide-backgrounds':
                     from h3chat.slide_backgrounds import listing
+                    return self.json(listing(self.app))
+                if path=='/api/image-collections':
+                    from h3chat.image_collections import listing
                     return self.json(listing(self.app))
                 if path=='/api/images/last-seed':
                     from h3chat.image_history import last_seed
@@ -217,7 +228,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.file(safe_join(ROOT / "static", path[len("/static/"):]))
                 if path.startswith("/exports/"):
                     relative = path[len("/exports/"):]
-                    if len(parts) != 3 or parts[-1] not in ("document.pdf","document.html","audio.wav","audio.mp3"):
+                    if len(parts) != 3 or parts[-1] not in ("document.pdf","document.html","audio.wav","audio.mp3","lotto.zip"):
                         raise PermissionError("File non disponibile.")
                     return self.file(safe_join(self.app.data / "exports", relative))
                 if path.startswith("/media/"):
@@ -237,6 +248,9 @@ class Handler(BaseHTTPRequestHandler):
                 if len(raw)!=length:raise ValueError('Blocco documento incompleto.')
                 return self.json(self.app.knowledge.uploads.append(parts[2],parts[4],offset,raw))
             body = self.read_body()
+            if path=='/api/presentation-preferences' and method=='POST':
+                from h3chat.presentation_preferences import update
+                return self.json(update(self.app,body))
             if path=='/api/uploads/start' and method=='POST':return self.json(self.app.uploads.start(body),201)
             if len(parts)==4 and parts[:2]==['api','uploads'] and method=='POST':
                 if parts[3]=='chunk':return self.json(self.app.uploads.append(parts[2],body))
@@ -247,9 +261,24 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(enqueue_render(self.app,parts[2],body),202)
             if path=='/api/gallery/select' and method=='POST':
                 return self.json(self.app.validate_media([{'id':ident} for ident in body.get('ids',[])],canvas=True))
+            if path=='/api/image-collections' and method=='POST':
+                from h3chat.image_collections import create
+                return self.json(create(self.app,body),201)
+            if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='image-lots' and method=='POST':
+                from h3chat.image_collections import enqueue_generation
+                return self.json(enqueue_generation(self.app,parts[2],body),202)
+            if len(parts) in (3,4) and parts[:2]==['api','image-collections']:
+                from h3chat import image_collections as lots
+                if len(parts)==3 and method=='PATCH':return self.json(lots.update(self.app,parts[2],body))
+                if len(parts)==4 and method=='POST':
+                    action={'export':lots.export,'caption':lots.enqueue_caption,'rag':lots.add_to_rag}.get(parts[3])
+                    if action:return self.json(action(self.app,parts[2]) if parts[3]=='export' else action(self.app,parts[2],body))
             if path in ('/api/gallery/delete-plan','/api/gallery/delete') and method=='POST':
                 from h3chat.gallery_delete import plan,remove
                 return self.json((plan if path.endswith('delete-plan') else remove)(self.app.store.gallery,body))
+            if path in ('/api/image-collections/delete-plan','/api/image-collections/delete') and method=='POST':
+                from h3chat.collection_delete import plan,remove
+                return self.json((plan if path.endswith('delete-plan') else remove)(self.app,body))
             if len(parts)==3 and parts[:2]==['api','gallery'] and method=='PATCH':
                 return self.json(self.app.store.gallery.rename(parts[2],body.get('name')))
             if len(parts)==3 and parts[:2]==['api','gallery'] and method=='DELETE':
@@ -371,7 +400,31 @@ class Handler(BaseHTTPRequestHandler):
             if len(parts) == 4 and parts[:2] == ["api", "jobs"] and parts[3] == "cancel":
                 return self.json(self.app.cancel(parts[2]))
             if len(parts) == 4 and parts[:2] == ["api", "chats"] and parts[3] == "messages" and method == "POST":
+                if isinstance(body.get('agent'),dict) and body['agent'].get('scope','h3')!='h3':self.require_local_computer()
                 return self.json(self.app.send(parts[2], body), 202)
+            if path=='/api/agent-computer/grants' and method=='POST':
+                self.require_local_computer()
+                from h3chat.agent_computer import create
+                return self.json(create(self.app,body))
+            if len(parts)==4 and parts[:3]==['api','agent-computer','grants'] and method=='DELETE':
+                self.require_local_computer()
+                from h3chat.agent_computer import revoke
+                return self.json(revoke(self.app,parts[3]))
+            if len(parts)==5 and parts[:2]==['api','chats'] and parts[3]=='agent-runs' and method=='GET':
+                from h3chat.agent_state import load,public
+                return self.json(public(load(self.app,parts[2],parts[4])))
+            if len(parts)==6 and parts[:2]==['api','chats'] and parts[3]=='agent-runs' and parts[5]=='resume' and method=='POST':
+                from h3chat.agent_state import resume,load
+                if load(self.app,parts[2],parts[4])['config'].get('scope','h3')!='h3':self.require_local_computer()
+                return self.json(resume(self.app,parts[2],parts[4],body),202)
+            if len(parts)==6 and parts[:2]==['api','chats'] and parts[3]=='agent-runs' and parts[5]=='admin' and method=='POST':
+                self.require_local_computer()
+                from h3chat.agent_admin import approve
+                return self.json(approve(self.app,parts[2],parts[4],body),202)
+            if len(parts)==6 and parts[:2]==['api','chats'] and parts[3]=='agent-runs' and parts[5]=='connection' and method=='POST':
+                if getattr(self,'identity',{}).get('role')!='owner':raise PermissionError('Configurazione dei collegamenti API riservata al proprietario.')
+                from h3chat.agent_connection import submit
+                return self.json(submit(self.app,parts[2],parts[4],body),202)
             if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='video-probe' and method=='POST':
                 if self.identity.get('role')!='owner':raise PermissionError('Diagnostica riservata all’amministratore.')
                 from h3chat.video_probe import request

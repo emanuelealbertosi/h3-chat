@@ -1,6 +1,7 @@
 import {toCanvas,toPng} from 'html-to-image';
 import {Document,Packer,Paragraph,TextRun,ImageRun,Table,TableRow,TableCell,WidthType,HeadingLevel,LevelFormat,ShadingType} from 'docx';
 import {saveBlob} from './render.js';
+import {exportStyleValue} from './export-style.js';
 
 const captureOptions={pixelRatio:2,backgroundColor:'#fffefa',filter:n=>!n.classList?.contains('no-export'),style:{margin:'0',maxWidth:'none'}};
 const nameOf=title=>(title||'H3-Chat').replace(/[^\p{L}\p{N}\s_-]/gu,'').trim().slice(0,80)||'H3-Chat';
@@ -15,7 +16,7 @@ export async function printableHtml(root) {
   const sourceSvgs=[...root.querySelectorAll('svg')];
   clone.querySelectorAll('svg').forEach((svg,i)=>{
     const sources=[sourceSvgs[i],...sourceSvgs[i].querySelectorAll('*')], targets=[svg,...svg.querySelectorAll('*')];
-    targets.forEach((element,j)=>{const style=getComputedStyle(sources[j]);for(const key of ['fill','fill-opacity','stroke','stroke-width','stroke-opacity','stroke-dasharray','color','font-family','font-size','font-weight','text-anchor','dominant-baseline','opacity']){const value=style.getPropertyValue(key);if(value&&!value.includes('url('))element.style.setProperty(key,value);}});
+    targets.forEach((element,j)=>{const style=getComputedStyle(sources[j]);for(const key of ['fill','fill-opacity','stroke','stroke-width','stroke-opacity','stroke-dasharray','stroke-dashoffset','filter','clip-path','mask','color','font-family','font-size','font-weight','text-anchor','dominant-baseline','opacity']){const value=exportStyleValue(style.getPropertyValue(key));if(value&&!/url\(/i.test(value.replace(/url\(#[\w:.-]+\)/g,'')))element.style.setProperty(key,value);}});
     svg.querySelectorAll('style').forEach(n=>n.remove());
   });
   const sourceCanvases=[...root.querySelectorAll('canvas')];

@@ -21,6 +21,8 @@ jobs:
       - run: uname -m
       - run: npm ci
       - run: npm run build
+      - name: Build-time CPU graphics dependencies
+        run: brew install pkg-config cairo pango
       - uses: actions/cache/restore@v4
         id: native-cache
         with:

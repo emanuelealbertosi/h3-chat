@@ -2,8 +2,12 @@ import {appendBackgroundGrid} from './background-grid.js';
 
 export function initSlideBackgroundPicker({api,getState,holder=document.querySelector('#slides-options'),prefix='slides'}){
  const section=document.createElement('fieldset');section.className='slide-background-controls';
- section.innerHTML='<legend>Composizione dello sfondo</legend><label>Base <select id="slides-background-base" aria-label="Base dello sfondo slide"><option value="auto">Automatico · comportamento attuale</option><option value="plain">Plain · tinta unita</option><option value="gradient">Gradient · sfumatura</option><option value="collection">Raccolta · sfondi salvati</option></select></label><label><input id="slides-background-decorations" type="checkbox"> Decoration · bordi e accenti HTML/SVG</label><div data-library-choice hidden><button type="button" data-choose>Scegli sfondi dalla raccolta</button><p data-selection role="status"></p><label>Intensità (%) <input id="slides-background-opacity" type="number" min="5" max="45" value="20"></label><label>Velatura per la lettura <select id="slides-background-veil"><option value="auto">Automatica · dal set</option><option value="light">Chiara</option><option value="dark">Scura</option></select></label></div><p class="small-note">Decoration si combina con Plain, Gradient o Raccolta. Gli sfondi selezionati ruotano nell’ordine scelto; una slide ricreata conserva il suo sfondo.</p>';
+ section.innerHTML='<legend>Composizione dello sfondo</legend><label>Base <select id="slides-background-base" aria-label="Base dello sfondo slide"><option value="auto">Automatico</option><option value="plain">Plain · tinta unita</option><option value="gradient">Gradient · sfumatura</option><option value="collection">Raccolta · sfondi salvati</option></select></label><label><input id="slides-background-decorations" type="checkbox"> Decoration · bordi e accenti HTML/SVG</label><div data-library-choice hidden><button type="button" data-choose>Scegli sfondi dalla raccolta</button><p data-selection role="status"></p><label>Intensità (%) <input id="slides-background-opacity" type="number" min="5" max="45" value="20"></label><label>Velatura per la lettura <select id="slides-background-veil"><option value="auto">Automatica · dal set</option><option value="light">Chiara</option><option value="dark">Scura</option></select></label></div><p class="small-note">Decoration si combina con Plain, Gradient o Raccolta. Gli sfondi selezionati ruotano nell’ordine scelto; una slide ricreata conserva il suo sfondo.</p>';
  holder.append(section);
+ if(prefix==='slides'){
+  const color=holder.querySelector('#slides-background')?.closest('label'),custom=holder.querySelector('#slides-background-color-label');
+  if(color){const group=document.createElement('div'),colors=document.createElement('div');group.className='slide-background-settings';colors.className='slide-background-color-choice';color.before(group);colors.append(color);if(custom)colors.append(custom);group.append(colors,section);}
+ }
  if(prefix!=='slides')for(const item of section.querySelectorAll('[id]'))item.id=item.id.replace(/^slides-/,prefix+'-');
  const base=section.querySelector('select'),decoration=section.querySelector('input[type=checkbox]'),intensity=section.querySelector('#'+prefix+'-background-opacity'),veil=section.querySelector('#'+prefix+'-background-veil');
  let selected={set_id:'',asset_ids:[]},setName='',collections=[],draft={set_id:'',asset_ids:[]};
@@ -51,17 +55,20 @@ export function initSlideBackgroundPicker({api,getState,holder=document.querySel
  }
  function open(){draft=structuredClone(selected);dialog.showModal();load();}
  section.querySelector('[data-choose]').onclick=open;
- base.onchange=()=>{if(base.value==='collection'){decoration.checked=false;open();}state();};
- decoration.onchange=()=>{if(decoration.checked&&base.value==='auto')base.value='plain';state();};
+ base.onchange=()=>{if(base.value==='collection')open();state();};
+ decoration.onchange=state;
  batch.onchange=()=>{const set=collections.find(s=>s.id===batch.value);draft={set_id:set?.id||'',asset_ids:(set?.images||[]).map(i=>i.media.id)};draw();};
  dialog.querySelector('[data-all]').onclick=()=>{draft.asset_ids=(collections.find(s=>s.id===draft.set_id)?.images||[]).map(i=>i.media.id);draw();};
  dialog.querySelector('[data-none]').onclick=()=>{draft.asset_ids=[];draw();};dialog.querySelector('[data-refresh]').onclick=load;
  dialog.querySelector('[data-close]').onclick=dialog.querySelector('[data-cancel]').onclick=()=>dialog.close();
- dialog.querySelector('[data-use]').onclick=()=>{if(!draft.asset_ids.length)return;selected=structuredClone(draft);const set=collections.find(s=>s.id===selected.set_id);setName=set.name;intensity.value=set.options.opacity||20;base.value='collection';state();dialog.close();};
- return {render:state,read(){
-  if(base.value==='auto')return {};
+ dialog.querySelector('[data-use]').onclick=()=>{if(!draft.asset_ids.length)return;selected=structuredClone(draft);const set=collections.find(s=>s.id===selected.set_id);setName=set.name;intensity.value=set.options.opacity||20;base.value='collection';state();dialog.close();section.dispatchEvent(new Event('change',{bubbles:true}));};
+ return {render:state,apply(value){
+  base.value=value?.base||'auto';decoration.checked=!!value?.decorations;selected={set_id:value?.set_id||'',asset_ids:[...(value?.asset_ids||[])]};setName='Raccolta selezionata';intensity.value=value?.opacity??20;veil.value=value?.veil||'auto';state();
+ },read(){
+  if(base.value==='auto'&&!decoration.checked)return {};
   if(base.value==='collection'&&!selected.asset_ids.length)throw Error('Scegli almeno uno sfondo dalla raccolta nelle Impostazioni Slide.');
   if(!intensity.checkValidity())throw Error('Intensità sfondo: scegli da 5 a 45%.');
-  return {background_style:{base:base.value,decorations:decoration.checked,...selected,opacity:Number(intensity.value),veil:veil.value}};
+  const chosen=base.value==='auto'&&!getState()?.slide_options?.automatic_decorations?'plain':base.value;
+  return {background_style:{base:chosen,decorations:decoration.checked,...(base.value==='collection'?selected:{set_id:'',asset_ids:[]}),opacity:Number(intensity.value),veil:veil.value}};
  }};
 }

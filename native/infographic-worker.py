@@ -154,8 +154,9 @@ def run(request):
     folder=Path(request['output']).parent;folder.mkdir(parents=True,exist_ok=True);source=folder/'infographic-render.html';source.write_text(document(ROOT,request['data'],deck,request['media']),encoding='utf-8')
     profile=folder/'renderer-profile';profile.mkdir(exist_ok=True)
     (profile/'DevToolsActivePort').unlink(missing_ok=True)
-    edge=next((p for p in [Path(os.environ.get('PROGRAMFILES(X86)','C:/Program Files (x86)'))/'Microsoft/Edge/Application/msedge.exe',Path(os.environ.get('PROGRAMFILES','C:/Program Files'))/'Microsoft/Edge/Application/msedge.exe'] if p.is_file()),None)
-    if not edge:raise ValueError('Per il rendering infografica serve Microsoft Edge.')
+    from h3chat.browser_runtime import executable
+    edge=executable(ROOT)
+    if not edge:raise ValueError('Renderer non disponibile: reinstalla il browser incluso nel pacchetto H3.')
     browser=subprocess.Popen([str(edge),'--headless','--disable-gpu','--no-first-run','--no-default-browser-check','--remote-debugging-address=127.0.0.1','--remote-debugging-port=0','--user-data-dir='+str(profile),'--disable-background-networking','--disable-component-update','about:blank'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=CREATE_NO_WINDOW)
     cdp=None;decoders={};partial=folder/'infografica.partial.mp4'
     try:

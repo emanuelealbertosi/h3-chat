@@ -4,6 +4,7 @@ import {readableText} from './slide-html-contrast.js';
 import {fitMediaBounds} from './slide-html-bounds.js';
 import {portraitLayout} from './infographic-layout.js';
 import {applyHtmlBackground} from './slide-background-style.js';
+import {fitHtmlBackground} from './slide-content-fit.js';
 
 // The offline renderer uses the same trusted repairs as the editable canvas.
 globalThis.H3Infographic={measure:portraitLayout,async prepare(doc,height,options={},duration=30){
@@ -13,5 +14,6 @@ globalThis.H3Infographic={measure:portraitLayout,async prepare(doc,height,option
  H3Motion.freeze(doc);
  renderMath(doc.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false});
  readableText(doc);fitMediaBounds(doc,height);
+ fitHtmlBackground(doc);
  H3Motion.configure(doc,options);
 }};

@@ -11,6 +11,9 @@ from .models import metadata
 from .image_options import SAMPLERS, SCHEDULERS
 
 PROFILES = {
+    'fasth3-omni': {'label':'FastH3 Omni · riferimenti, video e audio in 8 passi','main':'diffusion','required':['diffusion','llm','vae','audio_vae'],'optional':[],
+                   'default_files':{'diffusion':'fasth3_omniref_8step_pruned_int8_convrot.safetensors','llm':'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors','vae':'minimax_h3_video_vae_int8_convrot.safetensors','audio_vae':'minimax_h3_audio_vae_fp32.safetensors'},
+                   'architecture':'minimax-h3','engine':'video','capabilities':['video'],'max_refs':9,'checkpoint_family':'fasth3-omni'},
     'minimax-music': {'label':'MiniMax Music 3 · canzoni e musica','main':'diffusion','required':['diffusion','llm','vae'],'optional':[],
              'architecture':'minimax-music','engine':'vision','capabilities':['music'],'max_refs':0},
     'moss': {'label':'MOSS-Image · testo e img2img sperimentale, 5B','main':'diffusion','required':['diffusion','llm','vae'],'optional':[],
@@ -163,7 +166,7 @@ def validate_config(body, model_id=None):
         p=absolute_path(value)
         if not valid_weight(p):raise ValueError(f'{ROLE_LABELS[role]}: scegli un file GGUF o safetensors leggibile e valido.')
         if profile.get('engine')=='vision' and p.suffix.lower()!='.safetensors':raise ValueError('Ming, Qwen Image 2.1 e Krea 2 richiedono i componenti safetensors; GGUF non supportato da questo motore.')
-        if kind=='minimax-h3' and p.suffix.lower()!='.safetensors':raise ValueError('MiniMax H3 richiede quattro componenti safetensors. Usa il modello standard FL2VA / REF2VA, non PDD/Turbo.')
+        if kind in ('minimax-h3','fasth3-omni') and p.suffix.lower()!='.safetensors':raise ValueError('MiniMax H3 richiede quattro componenti safetensors compatibili con il profilo scelto.')
         if kind=='yue2' and p.suffix.lower()!='.gguf':raise ValueError('YuE2 richiede pesi e VAE in formato GGUF.')
         if kind=='chat' and p.suffix.lower()!='.gguf':raise ValueError('Il motore chat richiede file GGUF.')
         if role=='mmproj' and metadata(p).get('general.architecture')!='clip':raise ValueError('Il mmproj non contiene metadati di un proiettore vision.')
@@ -174,7 +177,7 @@ def validate_config(body, model_id=None):
         raise ValueError('Seleziona la prima parte GGUF (00001); sono supportate fino a 256 parti.')
     ident=model_id or 'external-'+hashlib.sha256((kind+'\0'+os.path.normcase(str(main))).encode()).hexdigest()[:20]
     config={'id':ident,'profile':kind,'name':name.strip(),'files':resolved,'projector_mode':mode}
-    if kind not in ('chat','yue2','minimax-h3'):
+    if kind not in ('chat','yue2','minimax-h3','fasth3-omni'):
         steps=body.get('steps',profile.get('steps',0));cfg=body.get('cfg',profile.get('cfg',7))
         if type(steps) is not int or not 0<=steps<=100 or type(cfg) not in (int,float) or not 0<=cfg<=30:
             raise ValueError('Passi o CFG non validi.')
