@@ -9,6 +9,7 @@ import math
 import os
 import re
 import subprocess
+import sys
 import time
 from html.parser import HTMLParser
 from pathlib import Path
@@ -117,7 +118,15 @@ def export_pdf(root,data,body):
     if is_macos():args[1:1]=['--use-mock-keychain','--password-store=basic','--disable-background-networking','--no-default-browser-check']
     if os.name!='nt':
         from .platform_runtime import python_executable
-        result=subprocess.run([str(python_executable(root)),'-X','utf8',str(Path(root)/'native/pdf-worker.py'),str(source_file),str(target),str(edge)],capture_output=True,timeout=90)
+        command=[str(python_executable(root)),'-X','utf8',str(Path(root)/'native/pdf-worker.py'),str(source_file),str(target),str(edge)]
+        if sys.platform.startswith('linux'):
+            # Enter the existing bubblewrap policy before Chromium starts. It
+            # can then create its own user namespace on AppArmor-restricted
+            # Ubuntu; its internal sandbox stays enabled. No --no-sandbox.
+            from .posix_computer import sandbox_command
+            env={'PATH':'/usr/bin:/bin','HOME':str(folder),'TMPDIR':'/tmp','LANG':'C.UTF-8'}
+            command=sandbox_command(root,command,folder,env,reads=(Path(root)/'runtime/browser',Path(root)/'runtime/tools/documents',Path(root)/'native/pdf-worker.py'),preserve_uid=True)
+        result=subprocess.run(command,capture_output=True,timeout=90)
         if result.returncode or not target.is_file() or target.read_bytes()[:5]!=b'%PDF-':
             raise RuntimeError('Esportazione PDF non riuscita. '+result.stderr.decode('utf-8','replace')[-1200:])
         return {'url':'/exports/'+key+'/document.pdf','name':title+'.pdf'}

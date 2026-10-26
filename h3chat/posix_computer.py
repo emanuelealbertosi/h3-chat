@@ -38,7 +38,7 @@ def mac_profile(reads,writes):
     return '\n'.join(parts)
 
 
-def sandbox_command(root,argv,cwd,env,*,reads=()):
+def sandbox_command(root,argv,cwd,env,*,reads=(),preserve_uid=False):
     root=Path(root).resolve();cwd=Path(cwd).resolve();backend=sandbox_backend()
     if not backend:raise PermissionError('Isolamento non disponibile: installa bubblewrap su Linux o usa un macOS con sandbox-exec. Nessun comando avviato senza isolamento.')
     runtime=root/'runtime';runner=root/'native'
@@ -47,6 +47,7 @@ def sandbox_command(root,argv,cwd,env,*,reads=()):
     # Empty mount namespace: no host /home, /run, /tmp, credentials or sockets.
     # --unshare-all includes network + PID isolation. No privileged fallback.
     args=[backend,'--die-with-parent','--new-session','--unshare-all','--unshare-user','--cap-drop','ALL','--proc','/proc','--dev','/dev','--tmpfs','/tmp']
+    if preserve_uid:args+=['--uid',str(os.getuid()),'--gid',str(os.getgid())]
     for name in ('/usr','/bin','/sbin','/lib','/lib64'):
         p=Path(name)
         if p.exists():args+=['--ro-bind',name,name]

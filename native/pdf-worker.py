@@ -1,4 +1,4 @@
-"""Trusted offline PDF printing with the bundled macOS browser and its driver."""
+"""Trusted offline PDF printing with the bundled POSIX browser and its driver."""
 import sys
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]

@@ -15,7 +15,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - run: sudo apt-get update && sudo apt-get install -y bubblewrap g++
+      - name: Native test and browser dependencies
+        timeout-minutes: 12
+        run: |
+          if [ -f /etc/apt/apt-mirrors.txt ]; then printf '%s\n' 'https://archive.ubuntu.com/ubuntu' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null; fi
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::https::Timeout=30 update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y bubblewrap g++ libnss3 libatk1.0-0 libatk-bridge2.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libxkbcommon0 libasound2t64
       - name: Install the explicitly authorized bubblewrap exception on the disposable runner
         run: sh scripts/install-linux-sandbox.sh --ci
       - name: Diagnose namespace prerequisites without changing host policy
@@ -35,3 +40,9 @@ jobs:
           cc -O2 scripts/linux-process-guard.c -o build/linux-preflight/H3-Chat/runtime/tools/h3-process-guard
       - name: Check native file/process boundaries with an explicit user namespace
         run: build/linux-preflight/H3-Chat/runtime/python/bin/python3 -X utf8 scripts/check_posix.py build/linux-preflight/H3-Chat
+      - name: Install the actual packaged browser for the PDF probe
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: build/linux-preflight/H3-Chat/runtime/browser
+        run: build/linux-preflight/H3-Chat/runtime/python/bin/python3 -c 'import sys,runpy;sys.path.insert(0,"build/linux-preflight/H3-Chat/runtime/tools/documents");sys.argv=["playwright","install","chromium","--only-shell"];runpy.run_module("playwright",run_name="__main__")'
+      - name: Verify offline PDF with Chromium sandbox and outer file/network isolation
+        run: build/linux-preflight/H3-Chat/runtime/python/bin/python3 -X utf8 scripts/check_linux_pdf.py build/linux-preflight/H3-Chat

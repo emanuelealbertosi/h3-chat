@@ -13,6 +13,15 @@ from h3chat.linux_runtime import manifests
 
 
 class PosixTests(unittest.TestCase):
+    def test_pdf_namespace_keeps_a_nonroot_uid_without_disabling_chromium_sandbox(self):
+        from h3chat.posix_computer import sandbox_command
+        with tempfile.TemporaryDirectory() as temporary,patch('sys.platform','linux'),patch('h3chat.posix_computer.sandbox_backend',return_value='/usr/bin/bwrap'),patch('os.getuid',return_value=1001,create=True),patch('os.getgid',return_value=1001,create=True):
+            folder=Path(temporary);args=sandbox_command(folder,['python','pdf-worker.py'],folder,{},preserve_uid=True)
+            self.assertEqual(args[args.index('--uid')+1],'1001')
+            self.assertEqual(args[args.index('--gid')+1],'1001')
+            self.assertIn('--unshare-all',args)
+            self.assertNotIn('--no-sandbox',args)
+
     def test_linux_has_native_python_cpu_first_run_and_no_windows_downloads(self):
         with tempfile.TemporaryDirectory() as temporary,patch('sys.platform','linux'):
             root=Path(temporary)
