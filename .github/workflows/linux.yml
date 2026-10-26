@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: '3.13'
       - name: Linux build and desktop dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build build-essential pkg-config libcairo2-dev libpango1.0-dev bubblewrap libsecret-1-0 gnome-keyring dbus-x11 libnss3 libatk1.0-0 libatk-bridge2.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libxkbcommon0 libasound2t64 libvulkan-dev glslc
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build build-essential pkg-config libcairo2-dev libpango1.0-dev bubblewrap libsecret-1-0 gnome-keyring dbus-x11 libnss3 libatk1.0-0 libatk-bridge2.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libxkbcommon0 libasound2t64 libvulkan-dev glslc spirv-headers glslang-tools
       - run: npm ci && npm run build
       - name: Build self-contained Linux CPU and API distribution
         run: python scripts/build_linux.py

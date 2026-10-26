@@ -39,6 +39,8 @@ from .agent_model_tools import definitions as model_definitions,WRITES as MODEL_
 TOOLS.update(model_definitions())
 from .agent_background_tools import definitions as background_definitions
 TOOLS.update(background_definitions())
+from .agent_video_tools import definitions as video_definitions,WRITES as VIDEO_WRITES
+TOOLS.update(video_definitions())
 TOOLS['create_slides'][1]['properties']['background_style']=copy.deepcopy(TOOLS['apply_slide_background'][1]['properties']['background_style'])
 WRITES={'create_slides','revise_slide','complete_slides','create_image_lot','edit_image','create_voice','create_music','resing_music','create_infographic','apply_infographic_music','render_infographic','create_manim','transcribe_audio','calculate'}
 WRITES|=MUTATIONS
@@ -48,13 +50,16 @@ WRITES|=WEB_WRITES
 WRITES.update(computer_definitions())
 WRITES|=MODEL_WRITES
 WRITES|={'create_slide_backgrounds','apply_slide_background'}
-LINKABLE={'create_slides','create_image_lot','create_voice','create_music','create_infographic','create_manim'}
+WRITES|=VIDEO_WRITES
+LINKABLE={'create_slides','create_image_lot','create_voice','create_music','create_infographic','create_manim','create_video','edit_video','inspect_video_timeline','assemble_video'}
 LINKABLE.update(file_definitions())
 for tool in LINKABLE:TOOLS[tool][1]['properties']['source_artifact_ids']={'type':'array','items':ID,'maxItems':8}
 SKILLS={'sources':'agent-sources.md','slides':'agent-slides.md','images':'agent-images.md','audio':'agent-audio.md','graphics':'agent-graphics.md'}
+SKILLS['video']='agent-video.md'
 TOOLS['read_skill'][1]['properties']['name']['enum']=list(SKILLS)
 
 def permission(config,name,args):
+    if name in VIDEO_WRITES and not config.get('allow_video',False):raise PermissionError('Video non autorizzati nelle impostazioni Agent.')
     if name in computer_definitions() and config.get('scope','h3')=='h3':raise PermissionError('Questo strumento richiede la modalità Sandbox o Globale autorizzata dal proprietario locale.')
     if name in MUTATIONS or name=='read_project' or name=='list_projects':
         if not config.get('allow_projects'):raise PermissionError('Gestione progetti e RAG non autorizzata nelle impostazioni Agent.')
@@ -125,6 +130,9 @@ def execute(ctx,name,args):
     if name in background_definitions():
         from .agent_background_tools import execute as execute_background
         return execute_background(ctx,name,args)
+    if name in video_definitions():
+        from .agent_video_tools import execute as execute_video
+        return execute_video(ctx,name,args)
     if name in file_definitions():
         from .agent_files import execute as execute_file
         return execute_file(ctx,name,args)
@@ -158,12 +166,12 @@ def execute(ctx,name,args):
     if name=='list_models':
         result=[]
         for m in app.catalog.values():
-            if not set(m.get('capabilities',[]))&{'create','edit','chat','music'}:continue
-            try:ready=app.engine.require_model(m['id'],'chat' if 'chat' in m['capabilities'] else 'create' if 'create' in m['capabilities'] else 'edit' if 'edit' in m['capabilities'] else 'music')
+            if not set(m.get('capabilities',[]))&{'create','edit','chat','music','video'}:continue
+            try:ready=app.engine.require_model(m['id'],'chat' if 'chat' in m['capabilities'] else 'create' if 'create' in m['capabilities'] else 'edit' if 'edit' in m['capabilities'] else 'music' if 'music' in m['capabilities'] else 'video')
             except ValueError:continue
             result.append({k:ready[k] for k in ('id','name','capabilities')}|{'vision':bool(ready.get('vision',{}).get('enabled'))})
         return {'models':result[:100],'create_default':settings.get('create_model'),'edit_default':settings.get('edit_model'),
-                'music_default':settings.get('music_model'),'voice_engine':settings.get('voice_engine'),'asr_model':settings.get('asr_model')}
+                'video_default':settings.get('video_model'),'music_default':settings.get('music_model'),'voice_engine':settings.get('voice_engine'),'asr_model':settings.get('asr_model')}
     if name=='project_search':
         if not settings.get('_rag'):raise PermissionError('RAG disabilitato per questa richiesta.')
         project=args.get('project_id') or payload.get('project_id')

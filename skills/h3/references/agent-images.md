@@ -13,6 +13,17 @@ del lotto risolve riferimenti e modelli, poi verifica tutto prima di generare.
 Il risultato contiene lot_id: puoi usarlo in create_slides. Non generare nuovamente
 lo stesso lotto per recuperare un risultato già salvato. Nessun download automatico.
 
+Per formati diversi scrivi un elenco numerato con il rapporto di ciascuna immagine,
+per esempio «1. panorama 16:9; 2. ritratto 9:16». Un formato globale si applica alle
+immagini che non hanno una scelta propria. Il prompt esplicito prevale sui preset.
+
+Una cornice non è una figura informativa. Usa create_slide_backgrounds per creare
+cornici con centro libero, poi passa il background_style restituito a create_slides.
+list_slide_backgrounds elenca i set riutilizzabili. Per applicare una cornice già
+salvata a slide esistenti usa apply_slide_background e poi inspect_slides: i margini
+riservati possono richiedere un adattamento dei contenuti. Questo passaggio non
+corregge un'immagine quadrata già generata né ne cambia automaticamente il formato.
+
 edit_image ritocca l'immagine numero N di un artefatto della chat, o di un allegato.
 Scegli un model_id con capacità edit da list_models, ad esempio Qwen Image 2.1;
 se omesso usa edit_model delle impostazioni. L'originale resta salvato.

@@ -32,7 +32,8 @@ def attach(ctx,args,name=''):
         if not text.strip():text='\n\n'.join(b['text'] for d in extracted for b in d['blocks'])[:16000]
         record=info(value)|{'text':text};records.append(record)
         kinds=set(record['media_types'])
-        if not record['text'].strip() and kinds and kinds<= {'audio','video'} and not (name=='create_manim' and kinds=={'audio'}):
+        video_tool=name in ('create_video','edit_video','inspect_video_timeline','assemble_video')
+        if not record['text'].strip() and kinds and kinds<= {'audio','video'} and not video_tool and not (name=='create_manim' and kinds=={'audio'}):
             raise ValueError('La sorgente contiene solo '+', '.join(sorted(kinds))+': prima trascrivi l’audio con transcribe_audio. Agent non analizza o modifica video.')
         if not record['text'].strip() and kinds=={'image'} and name in ('create_voice','create_music'):
             raise ValueError('La sorgente è solo un’immagine senza descrizione: usa prima inspect_image con Vision, poi riutilizza la descrizione. Non è stata inventata una descrizione.')

@@ -148,10 +148,22 @@ ricerche del run e non cambia il modello RAG globale. Altre sessioni seguono le 
 impostazioni e possono ricostruire l'indice, come nel flusso ordinario di H3.
 Per cercare i contenuti e usarli nelle creazioni attiva anche il pulsante RAG.
 
-Sono esclusi motore generativo video, modifica video e timeline. I filmati prodotti
-proceduralmente da Manim e dalle infografiche restano disponibili. Le infografiche
+Con il permesso separato **Consenti video**, Agent può creare video, leggere le
+timeline della chat, modificare clip con memoria/finale guidato, riprendere clip
+mancanti su richiesta e montare le versioni scelte. Il video usa un vero lavoro
+nella coda H3: al completamento Agent prosegue con gli stessi limiti, senza
+conteggiare l'attesa del rendering nel tempo attivo. Un errore o Stop ferma la
+continuazione e conserva le clip; non rilancia automaticamente. Massimo 8 lavori
+video per sessione. Le varianti per clip o per video seguono il batch H3 esistente.
+La lettura della timeline non equivale a vedere movimenti o ascoltare voci.
+I filmati prodotti proceduralmente da Manim e dalle infografiche restano disponibili. Le infografiche
 con video di sfondo non vengono modificate da Agent in questa versione.
-Manim resta indisponibile nell'edizione macOS, come nel flusso ordinario.
+Manim usa il renderer CPU isolato anche nell'edizione macOS.
+
+Per sfondi e cornici Agent usa la raccolta Slide: create_slide_backgrounds restituisce
+una selezione da passare a create_slides. apply_slide_background applica anche
+un'immagine già salvata a una presentazione esistente, riservando il margine interno.
+I contenuti possono richiedere una revisione del layout dopo la nuova cornice.
 
 Per le slide si acquisiscono gli ultimi preset salvati. Infografiche, voce, musica,
 modelli e dispositivi riutilizzano le impostazioni H3, entro i permessi del run.

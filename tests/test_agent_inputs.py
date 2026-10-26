@@ -38,9 +38,12 @@ class AgentInputTests(unittest.TestCase):
 
     def test_wrong_media_requires_conversion_and_never_crosses_chat_boundary(self):
         chat,_=self.ticket();ctx=self.context(chat);audio=self.save(chat,'Solo audio',media=[self.media()])
-        for tool in LINKABLE-{'create_manim'}:
+        for tool in LINKABLE-{'create_manim','create_video','edit_video','inspect_video_timeline','assemble_video'}:
             with self.subTest(tool=tool),self.assertRaisesRegex(ValueError,'trascrivi'):agent_inputs.attach(ctx,{'source_artifact_ids':[audio['id']]},tool)
         agent_inputs.attach(ctx,{'source_artifact_ids':[audio['id']]},'create_manim')
+        for tool in ('create_video','edit_video','inspect_video_timeline','assemble_video'):
+            agent_inputs.attach(ctx,{'source_artifact_ids':[audio['id']]},tool)
+            self.assertEqual(ctx.tool_payload['media'][0]['id'],audio['media'][0]['id'])
         image=self.save(chat,'Solo immagine',media=[self.media('image.png','image/png')])
         with self.assertRaisesRegex(ValueError,'inspect_image'):agent_inputs.attach(ctx,{'source_artifact_ids':[image['id']]},'create_music')
         ctx.state['documents']=[{'id':'b'*32,'blocks':[{'text':'Panorama montano'}]}]

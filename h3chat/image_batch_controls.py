@@ -51,7 +51,7 @@ def global_controls(text):
 
 def source_controls(prompt,index):
     markers=[(m.start(),m.end(),{ORDINALS[word.casefold()] for word in m.groups() if word}) for m in MARKER.finditer(prompt)]
-    markers += [(m.start(),m.end(),{int(next(v for v in m.groups() if v))}) for m in NUMBERED.finditer(prompt) if 1<=int(next(v for v in m.groups() if v))<=24]
+    markers += [(m.start(),m.end(),{int(next(v for v in m.groups() if v))}) for m in NUMBERED.finditer(prompt) if 1<=int(next(v for v in m.groups() if v))<=50]
     markers.sort()
     if not markers:return global_controls(prompt)
     header=global_controls(prompt[:markers[0][0]]);local=[]

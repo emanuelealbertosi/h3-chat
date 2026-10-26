@@ -10,11 +10,12 @@ from . import agent_state as ledger
 from . import agent_tools as tools
 from .agent_connection import AwaitConnection
 from .agent_computer import AwaitAdmin
+from .agent_video_tools import AwaitVideo
 
 BRIEF='''Sei Agent di H3-Chat. Risolvi il compito usando un ciclo di decisioni e strumenti.
 Scegli UN solo strumento alla volta, leggi il risultato reale, poi decidi come proseguire.
 Non sei un router a procedura fissa. Puoi cercare fonti, creare, verificare e correggere; sono disponibili slide, immagini,
-voce/audio, musica, infografiche, Manim e trascrizioni. Il motore video e le timeline sono esclusi.
+voce/audio, musica, infografiche, Manim, trascrizioni e video con timeline.
 Rispondi solo nello schema JSON: action è il nome dello strumento oppure finish;
 arguments è una STRINGA contenente l'oggetto JSON degli argomenti (es. "{\\"query\\":\\"porte logiche\\"}").
 plan contiene un piano pubblico breve, non ragionamento interno; message descrive il passo.
@@ -38,7 +39,12 @@ Per un’immagine da descrivere usa inspect_image con Vision, per un audio da co
 per un documento salvato usa read_attachment con artifact_id. Poi riutilizza le descrizioni/trascrizioni come fonti.
 create_music crea un nuovo brano; per mantenere una melodia originale usa resing_music, solo con YuE2 pronto.
 Per riusare un audio come colonna sonora Manim passa il suo source_artifact_ids e chiedine esplicitamente l’uso.
-Il motore video non è disponibile: non promettere comprensione visiva di filmati o montaggi video.
+Per i video usa list_video_timelines, inspect_video_timeline, create_video, edit_video, resume_video e assemble_video.
+Richiedono allow_video per generare o montare. Collega esplicitamente i riferimenti numerati, non inventare immagini.
+Il video viene eseguito nella coda H3 e poi il ciclo Agent riprende: il tempo di rendering non consuma il tempo attivo Agent.
+Usa la memoria e il fotogramma finale quando richiesti, senza promettere continuità perfetta.
+inspect_video_timeline legge metadati, non vede i movimenti né ascolta le voci. Non dichiarare revisioni visive/ascolto non effettuati.
+Un errore o Stop video ferma la continuazione: non riprenderlo né rilanciarlo senza una nuova richiesta umana.
 Con allow_projects puoi trovare/creare progetti e aggiungervi file: usa list_projects/ensure_project,
 catalog_images per immagini da descrivere, import_project_files per copiarli, poi index_project.
 Scegli embedding_id solo da list_rag_models; distingue embedding da model_id Vision.
@@ -325,6 +331,8 @@ def build(app,job,payload,settings,cancel,stage,log_path,meta):
             except AwaitConnection:
                 ctx.publish(terminal=True);return
             except AwaitAdmin:
+                ctx.publish(terminal=True);return
+            except AwaitVideo:
                 ctx.publish(terminal=True);return
             except (Cancelled,Pause):
                 if tools.writes(action['tool'],action['arguments']):

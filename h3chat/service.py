@@ -99,6 +99,8 @@ class Service:
         # Linked models must be available before jobs run, independently of
         # whether a browser has requested /api/state after startup.
         self.refresh_models()
+        from .agent_video_tools import reconcile_pending
+        reconcile_pending(self)
         if start_worker:
             self.worker.start()
 
@@ -616,6 +618,9 @@ class Service:
             job = self.store.one("SELECT * FROM jobs WHERE id=?", (job_id,))
             if not job:
                 raise ValueError("Lavoro non trovato.")
+            if job['status']=='done':
+                from .agent_video_tools import stop_waiting
+                if stop_waiting(self,job):return {'ok':True}
             if self.current_id == job_id and self.cancel_event:
                 self.cancel_event.set()
                 self.engine.stop()
@@ -624,6 +629,8 @@ class Service:
                 self.store.execute("UPDATE messages SET status='cancelled' WHERE id=?", (job["message_id"],))
                 from .request_timing import finish
                 finish(self.store,job)
+                from .agent_video_tools import reconcile_pending
+                reconcile_pending(self)
         return {"ok": True}
 
     def delete_chat(self, chat_id):
@@ -1126,6 +1133,8 @@ class Service:
                 self.store.execute("UPDATE chats SET updated=? WHERE id=?", (time.time(), job["chat_id"]))
             finally:
                 if locked:self.compute_lock.release()
+                from .agent_video_tools import reconcile_pending
+                reconcile_pending(self,cancelled_job=job['id'] if cancel.is_set() else None)
 
     def save_artifact(self, chat_id, title, content, media):
         job = self.store.one("SELECT id,message_id FROM jobs WHERE chat_id=? AND status IN ('queued','running') ORDER BY created DESC LIMIT 1", (chat_id,))

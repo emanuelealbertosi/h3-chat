@@ -60,6 +60,15 @@ subprocess.run([sys.executable,'-I','-c',"print('CHILD_OK')"],check=True)
         result=subprocess.run([str(python),'-X','utf8',str(root/'native'/name)],input='',text=True,capture_output=True,timeout=40)
         assert result.returncode==0,(name,result.stderr[-2000:])
     reports.append('recent CPU workers import')
+    if (root/'runtime/tools/lab/manim').is_dir():
+        # Actual Cairo render and MP4 decode, not merely an import/readiness flag.
+        from h3chat.posix_manim import render
+        with tempfile.TemporaryDirectory(prefix='h3-manim-cpu-check-') as temporary:
+            result=render(root,{'source':{'title':'Native CPU check','scene_name':'Probe',
+                'code':'from manim import *\nclass Probe(Scene):\n    def construct(self):\n        self.add(Circle(radius=0.5))\n        self.wait(0.25)\n'},
+                'options':{'width':320,'height':180,'fps':12,'device':'cpu','timeout':90},'output':temporary},lambda message:print(message,flush=True))
+            assert Path(result['path']).stat().st_size>1000 and result['duration']>0,result
+        reports.append('native isolated Manim CPU render and MP4 decode')
     print(json.dumps({'status':'passed','platform':sys.platform,'checks':reports,'gpu_inference':False,'native_admin_invoked':False},indent=2))
     return reports
 

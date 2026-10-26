@@ -77,9 +77,10 @@ class AgentMediaTests(unittest.TestCase):
         self.assertEqual(asr.call_args.args[0]['id'],media['id']);self.assertEqual(asr.call_args.args[1]['asr_language'],'it')
         self.assertIn('Testo riconosciuto',str(state['actions'][0]['result']))
 
-    def test_permissions_and_video_exclusion(self):
+    def test_permissions_and_video_opt_in(self):
         self.assertTrue({'create_voice','create_music','create_infographic','create_manim','transcribe_audio'}<=set(TOOLS))
-        self.assertFalse(any(name in TOOLS for name in ('create_video','edit_video','video_timeline')))
+        self.assertTrue({'create_video','edit_video','assemble_video','resume_video'}<=set(TOOLS))
+        with self.assertRaises(PermissionError):permission({},'create_video',{'prompt':'Un video'})
         for name,args in [('create_voice',{'text':'Testo'}),('create_music',{'prompt':'Musica'}),('create_manim',{'prompt':'Grafico'}),('create_infographic',{'prompt':'Test','voice':True})]:
             with self.assertRaises(PermissionError):permission({'allow_images':False,'allow_audio':False,'allow_manim':False},name,args)
         with self.assertRaises(ValueError):validate('create_manim',{'prompt':'Test','code':'import os'})

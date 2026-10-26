@@ -8,7 +8,7 @@ from .downloads import safe_join
 from .store import uid
 
 DEFAULTS={'max_steps':16,'max_minutes':30,'max_calls':80,'token_budget':500000,
-          'confirm_writes':True,'allow_images':False,'allow_audio':False,'allow_manim':False,'allow_transcription':True,'allow_projects':False,'scope':'h3','grant_id':''}
+          'confirm_writes':True,'allow_images':False,'allow_audio':False,'allow_video':False,'allow_manim':False,'allow_transcription':True,'allow_projects':False,'scope':'h3','grant_id':''}
 
 def options(value=None):
     value={} if value is None else value
@@ -17,7 +17,7 @@ def options(value=None):
     if result['scope'] not in ('h3','sandbox','global') or not isinstance(result['grant_id'],str) or result['grant_id'] and not re.fullmatch('[a-f0-9]{32}',result['grant_id']):raise ValueError('Modalità Agent non valida.')
     for key,lo,hi in (('max_steps',1,50),('max_minutes',1,120),('max_calls',1,500),('token_budget',8000,2000000)):
         if type(result[key]) is not int or not lo<=result[key]<=hi:raise ValueError(f'Agent: {key} deve essere tra {lo} e {hi}.')
-    for key in ('confirm_writes','allow_images','allow_audio','allow_manim','allow_transcription','allow_projects'):
+    for key in ('confirm_writes','allow_images','allow_audio','allow_video','allow_manim','allow_transcription','allow_projects'):
         if type(result[key]) is not bool:raise ValueError('Permessi Agent non validi.')
     return result
 
@@ -90,7 +90,7 @@ def enqueue(app,chat_id,body):
         grant(app,config)
     settings=app.effective_settings(app.validate_settings({'think_level':body.get('think_level',app.store.settings()['think_level'])}))
     guard_job(settings);app.engine.require_model(settings['chat_model'],'chat')
-    if cpu(settings):config.update(allow_images=False,allow_audio=False,allow_transcription=False)
+    if cpu(settings):config.update(allow_images=False,allow_audio=False,allow_video=False,allow_transcription=False)
     rag=body.get('rag',settings['rag_enabled'])
     if type(rag) is not bool:raise ValueError('RAG: scegli On oppure Off.')
     sources=body.get('rag_sources')
@@ -132,6 +132,7 @@ def resume(app,chat_id,ident,body):
     with app.lock:
         state=load(app,chat_id,ident)
         if state['status']=='done':raise ValueError('Questa sessione Agent è già completata.')
+        if state['status']=='awaiting_video':raise ValueError('Agent attende il lavoro video: usa Stop sul video per interromperlo, senza duplicare la richiesta.')
         existing=app.store.one("SELECT id FROM jobs WHERE chat_id=? AND status IN ('queued','running') AND json_extract(payload,'$.settings._agent.run_id')=?",(chat_id,ident))
         if existing:return {'job_id':existing['id'],'canvas':True,'intent':'agent'}
         if state['status'] in ('running','queued'):raise ValueError('Agent è già in esecuzione.')
@@ -165,7 +166,7 @@ def resume(app,chat_id,ident,body):
         if not isinstance(limits,dict):raise ValueError('Limiti Agent non validi.')
         config=options(state['config']|limits)
         # Continuing may change limits, never silently broaden permissions.
-        if any(config[k]!=state['config'].get(k,DEFAULTS[k]) for k in ('confirm_writes','allow_images','allow_audio','allow_manim','allow_transcription','allow_projects','scope','grant_id')):raise ValueError('Una ripresa non può cambiare i permessi della sessione.')
+        if any(config[k]!=state['config'].get(k,DEFAULTS[k]) for k in ('confirm_writes','allow_images','allow_audio','allow_video','allow_manim','allow_transcription','allow_projects','scope','grant_id')):raise ValueError('Una ripresa non può cambiare i permessi della sessione.')
         original=app.store.one('SELECT payload FROM jobs WHERE id=? AND chat_id=?',(ident,chat_id));saved=json.loads(original['payload'])
         settings=saved['settings'];settings['_agent']=settings['_agent']|{'run_id':ident,'options':config,'approval':approval}
         from .llm_options import KEYS
