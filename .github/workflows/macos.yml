@@ -44,7 +44,9 @@ jobs:
         run: build/macos/H3-Chat/runtime/python/bin/python3 -X utf8 scripts/check_macos.py
       - name: Native sandbox failure diagnostics
         if: failure()
-        run: /usr/bin/log show --last 5m --style compact --predicate 'process == "sandboxd" OR eventMessage CONTAINS "Sandbox:"' | tail -80
+        run: |
+          python scripts/diagnose_macos_sandbox.py
+          /usr/bin/log show --last 5m --style compact --predicate 'eventMessage CONTAINS "Sandbox:" AND (eventMessage CONTAINS "Python" OR eventMessage CONTAINS "python" OR eventMessage CONTAINS "sandbox-exec")' | tail -60
       - name: Verify ZIP members and create checksum
         run: python scripts/build_macos.py --package
       - uses: actions/upload-artifact@v4
