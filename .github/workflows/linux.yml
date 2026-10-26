@@ -2,12 +2,20 @@ name: Build Linux Ubuntu and Kali
 on:
   workflow_dispatch:
     inputs:
+      reuse_cpu_run:
+        description: 'Optional verified CPU base when only packaging changed'
+        required: false
+        type: string
       reuse_cuda_run:
         description: 'Optional successful native CUDA job run to reuse without recompiling unchanged engines'
         required: false
         type: string
   workflow_call:
     inputs:
+      reuse_cpu_run:
+        description: 'Verified CPU base with identical application sources'
+        required: false
+        type: string
       reuse_cuda_run:
         description: 'Verified native CUDA artifact from an unchanged source build'
         required: false
@@ -17,6 +25,7 @@ permissions:
   actions: read
 jobs:
   cpu:
+    if: ${{ !inputs.reuse_cpu_run }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -77,17 +86,33 @@ jobs:
           path: H3-Chat-linux-cuda-components.tar.gz
   package:
     needs: [cpu, cuda]
-    if: ${{ always() && needs.cpu.result == 'success' && (needs.cuda.result == 'success' || (needs.cuda.result == 'skipped' && inputs.reuse_cuda_run)) }}
+    if: ${{ always() && (needs.cpu.result == 'success' || (needs.cpu.result == 'skipped' && inputs.reuse_cpu_run)) && (needs.cuda.result == 'success' || (needs.cuda.result == 'skipped' && inputs.reuse_cuda_run)) }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - name: Verify hardlink compaction and archive exclusions on Linux
+        run: python -m unittest discover -s tests -p test_linux_package.py -v
       - uses: actions/download-artifact@v4
+        if: ${{ !inputs.reuse_cpu_run }}
         with:
           name: H3-Chat-linux-cpu-base
           path: build/base
+      - name: Verify the selected CPU base application source identity
+        if: ${{ inputs.reuse_cpu_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CPU_RUN: ${{ inputs.reuse_cpu_run }}
+        run: python scripts/verify_linux_cpu_reuse.py "$CPU_RUN"
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.reuse_cpu_run }}
+        with:
+          name: H3-Chat-linux-cpu-base
+          path: build/base
+          run-id: ${{ inputs.reuse_cpu_run }}
+          github-token: ${{ github.token }}
       - uses: actions/download-artifact@v4
         if: ${{ !inputs.reuse_cuda_run }}
         with:
@@ -111,6 +136,7 @@ jobs:
           mkdir -p build/linux
           tar -xzf build/base/H3-Chat-*-linux-x64.tar.gz -C build/linux
           tar -xzf build/cuda/H3-Chat-linux-cuda-components.tar.gz -C build/linux
+          python scripts/compact_linux_runtime.py build/linux/H3-Chat
           python -c 'import json,pathlib;pathlib.Path("build/linux-stage.json").write_text(json.dumps({"path":str(pathlib.Path("build/linux/H3-Chat").resolve())}))'
           python scripts/build_linux.py --package
       - name: Verify archive payloads, links and private-data exclusions

@@ -9,6 +9,20 @@ from scripts.verify_linux_package import verify
 
 
 class LinuxPackageTests(unittest.TestCase):
+    @unittest.skipIf(__import__('os').name=='nt','Linux packaging hardlinks')
+    def test_only_identical_libraries_are_compacted_without_changing_paths(self):
+        from scripts.compact_linux_runtime import compact
+        import os
+        with tempfile.TemporaryDirectory() as folder:
+            base=Path(folder)/'runtime'
+            for name,data in (('a',b'a'),('b',b'a'),('c',b'b')):
+                p=base/name/'libsample.so';p.parent.mkdir(parents=True);p.write_bytes(data*1024**2)
+            result=compact(folder)
+            self.assertEqual(result['hardlinks_created'],1)
+            self.assertTrue(os.path.samefile(base/'a/libsample.so',base/'b/libsample.so'))
+            self.assertFalse(os.path.samefile(base/'a/libsample.so',base/'c/libsample.so'))
+            self.assertEqual((base/'c/libsample.so').read_bytes(),b'b'*1024**2)
+
     def archive(self,folder,extra=None):
         target=Path(folder)/'package.tar.gz'
         required=('Avvia-H3-Chat.sh','Ferma-H3-Chat.sh','Installa-dipendenze-Linux.sh','runtime/python/bin/python3','native/h3-sd-worker','runtime/cpu/llama/llama-server','skills/h3/SKILL.md')
