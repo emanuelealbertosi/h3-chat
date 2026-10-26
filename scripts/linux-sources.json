@@ -1,0 +1,21 @@
+{
+  "python": {
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.13.15%2B20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "8a689a077337bea6d1c4bc0b7df1d52fcaa28f5f67e50df8bf417c1e3f9d8874",
+    "size": 34810677
+  },
+  "llama": {
+    "url": "https://github.com/ggml-org/llama.cpp/releases/download/b10809/llama-b10809-bin-ubuntu-x64.tar.gz",
+    "sha256": "5e34434ddc6d03cd1584f403201aff0d4bd1a5793a72ff7e286532dfd1e4b941",
+    "size": 16734586
+  },
+  "score_python": {
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.11.16%2B20260901-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "64427febea27864d136db46c8efe968eb6fa5ca2813ce1dca4bb95aec31cb2e4",
+    "size": 30778779
+  },
+  "sd_revision": "7f410a3793c5bba8eb198e962ce7a3d6095f9d89",
+  "music_revision": "13c4192a28d6a212f075c4cbefc5e4983e6ed52a",
+  "llama_revision": "b10809",
+  "playwright": "1.64.1"
+}

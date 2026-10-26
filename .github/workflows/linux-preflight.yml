@@ -1,0 +1,26 @@
+name: Check Linux source and process boundaries
+on:
+  workflow_dispatch:
+  push:
+    branches: ['codex/platforms-2026-10-26']
+    paths: ['.github/workflows/linux-preflight.yml']
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: sudo apt-get update && sudo apt-get install -y bubblewrap g++
+      - name: Prepare a disposable minimal native test tree
+        run: |
+          python -c 'import json,pathlib,shutil;from scripts.build_macos import archive;root=pathlib.Path("build/linux-preflight/H3-Chat");spec=json.loads(pathlib.Path("scripts/linux-sources.json").read_text());archive(spec["python"],pathlib.Path("build/linux-preflight-unpack"),pathlib.Path("build/linux-downloads"));shutil.copytree("build/linux-preflight-unpack/python",root/"runtime/python",symlinks=True,dirs_exist_ok=True);shutil.copytree("h3chat",root/"h3chat",dirs_exist_ok=True);(root/"native").mkdir();[shutil.copy2(p,root/"native"/p.name) for p in pathlib.Path("native").glob("*.py")]'
+          build/linux-preflight/H3-Chat/runtime/python/bin/python3 -m pip install --only-binary=:all: --target build/linux-preflight/H3-Chat/runtime/tools/documents -r scripts/linux-requirements.txt
+      - name: Compile the persistent image bridge on Linux
+        run: g++ -O2 -std=c++17 native/sd-worker.cpp -ldl -pthread -o build/linux-preflight/H3-Chat/native/h3-sd-worker
+      - name: Check actual native file/process boundaries
+        run: build/linux-preflight/H3-Chat/runtime/python/bin/python3 -X utf8 scripts/check_posix.py build/linux-preflight/H3-Chat

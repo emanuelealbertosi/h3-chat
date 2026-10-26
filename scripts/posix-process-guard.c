@@ -3,6 +3,7 @@
 #include <sys/event.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/resource.h>
 #include <signal.h>
 #include <unistd.h>
 #include <errno.h>
@@ -32,7 +33,7 @@ int main(int argc,char **argv){
  if(pipe(gate))return 125;
  int queue=kqueue();if(queue<0)return 125;
  pid_t child=fork();if(child<0)return 125;
- if(!child){close(gate[1]);char value;if(read(gate[0],&value,1)!=1)_exit(125);close(gate[0]);close(queue);execvp(argv[1],argv+1);_exit(127);}
+ if(!child){close(gate[1]);char value;if(read(gate[0],&value,1)!=1)_exit(125);close(gate[0]);close(queue);struct rlimit core={0,0},files={256,256};setrlimit(RLIMIT_CORE,&core);setrlimit(RLIMIT_NOFILE,&files);execvp(argv[1],argv+1);_exit(127);}
  close(gate[0]);pids[count++]=child;
  struct kevent change,events[64];
  EV_SET(&change,child,EVFILT_PROC,EV_ADD|EV_ENABLE,NOTE_FORK|NOTE_EXIT,0,NULL);

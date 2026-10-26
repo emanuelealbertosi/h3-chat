@@ -54,7 +54,7 @@ def sandbox_command(root,argv,cwd,env,*,reads=()):
     return [*args,'--',*map(str,argv)]
 
 
-def run(root,argv,cwd,env,stdin,stdout,timeout=600,*,sandbox=None,reads=(),cancel=None):
+def run(root,argv,cwd,env,stdin,stdout,timeout=600,*,sandbox=None,reads=(),cancel=None,max_file_mb=64):
     if os.name=='nt':raise ValueError('POSIX broker cannot run on Windows.')
     if sandbox:argv=sandbox_command(root,argv,sandbox,env,reads=reads)
     if sys.platform=='darwin':
@@ -67,17 +67,12 @@ def run(root,argv,cwd,env,stdin,stdout,timeout=600,*,sandbox=None,reads=(),cance
         # Full ordinary-user filesystem/network access, separate PID namespace
         # solely for reliable Stop of detached children. No host root privileges.
         argv=[backend,'--die-with-parent','--new-session','--unshare-pid','--bind','/','/','--proc','/proc','--dev-bind','/dev','/dev','--chdir',str(cwd),'--',*map(str,argv)]
-    # The broker is single-threaded. Resource limits are inherited by children.
-    def limits():
-        import resource
-        resource.setrlimit(resource.RLIMIT_CORE,(0,0))
-        resource.setrlimit(resource.RLIMIT_FSIZE,(64*1024**2,64*1024**2))
-        resource.setrlimit(resource.RLIMIT_NOFILE,(256,256))
-        if sys.platform.startswith('linux'):resource.setrlimit(resource.RLIMIT_AS,(8*1024**3,8*1024**3))
+    if sys.platform.startswith('linux'):
+        argv=['/usr/bin/prlimit','--core=0','--fsize='+str(max_file_mb*1024**2),'--nofile=256','--as='+str(8*1024**3),'--',*map(str,argv)]
     with open(stdin,'rb') as source,open(stdout,'wb') as output:
         # Do not pass host data/log file descriptors through Seatbelt. Only
         # anonymous pipes cross the boundary; the broker owns the actual files.
-        child=subprocess.Popen(list(map(str,argv)),cwd=cwd,env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True,preexec_fn=limits)
+        child=subprocess.Popen(list(map(str,argv)),cwd=cwd,env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,start_new_session=True)
         import threading
         overflow=threading.Event()
         def feed():

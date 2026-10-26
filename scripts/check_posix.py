@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import socket
 import sys
 import tempfile
 import time
@@ -20,6 +21,7 @@ def check(root):
     with tempfile.TemporaryDirectory(prefix='h3-posix-check-') as temporary:
         parent=Path(temporary).resolve();sandbox=parent/'chosen folder';sandbox.mkdir();outside=parent/'outside-secret';outside.write_text('CANARY-PRIVATE')
         log=parent/'broker';base={'scope':'sandbox','root':str(sandbox),'folder':str(log),'app_root':str(root)}
+        listener=socket.socket();listener.bind(('127.0.0.1',0));listener.listen(2)
         code='''from pathlib import Path
 import subprocess,sys,socket
 Path('created.txt').write_text('ok')
@@ -27,11 +29,12 @@ try: Path(%r).read_text(); print('ESCAPED_READ')
 except (PermissionError,FileNotFoundError): print('READ_DENIED')
 try: Path(%r).write_text('wrong'); print('ESCAPED_WRITE')
 except (PermissionError,FileNotFoundError): print('WRITE_DENIED')
-try: socket.create_connection(('127.0.0.1',9),timeout=.3); print('ESCAPED_NET')
+try: socket.create_connection(('127.0.0.1',%d),timeout=.3); print('ESCAPED_NET')
 except OSError: print('NET_DENIED')
 subprocess.run([sys.executable,'-I','-c',"print('CHILD_OK')"],check=True)
-'''%(str(outside),str(outside))
-        result=worker(base|{'op':'computer_run','args':{'engine':'python','code':code,'timeout':15}})
+'''%(str(outside),str(outside),listener.getsockname()[1])
+        try:result=worker(base|{'op':'computer_run','args':{'engine':'python','code':code,'timeout':15}})
+        finally:listener.close()
         assert result['exit_code']==0,result
         for expected in ('READ_DENIED','WRITE_DENIED','NET_DENIED','CHILD_OK'):assert expected in result['output'],result
         assert outside.read_text()=='CANARY-PRIVATE' and (sandbox/'created.txt').read_text()=='ok'

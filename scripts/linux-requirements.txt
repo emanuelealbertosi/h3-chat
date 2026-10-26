@@ -1,0 +1,2 @@
+-r macos-requirements.txt
+SecretStorage==3.5.0
