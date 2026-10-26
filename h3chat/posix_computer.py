@@ -22,6 +22,10 @@ def mac_profile(reads,writes):
     parts=['(version 1)','(deny default)','(allow process-exec process-fork)',
            '(allow signal (target same-sandbox))','(allow sysctl-read)',
            '(allow file-read-metadata)',
+           # libsecinit asks whether its own process expects an App Sandbox
+           # container. This permits only that self-query, not Mach services,
+           # file access, networking or general mac_syscall operations.
+           '(allow system-mac-syscall (require-all (mac-policy-name "Sandbox") (mac-syscall-number 67)))',
            '(allow file-read* file-map-executable (subpath "/System") (subpath "/usr/lib") (subpath "/usr/share") (subpath "/bin") (subpath "/usr/bin") (subpath "/dev") (literal "/private/etc/localtime"))',
            '(allow file-write* (literal "/dev/null"))']
     for path in reads:parts.append('(allow file-read* file-map-executable (subpath '+quoted(path)+'))')

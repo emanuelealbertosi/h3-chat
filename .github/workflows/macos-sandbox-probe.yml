@@ -1,0 +1,20 @@
+name: Diagnose native Mac sandbox startup
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Prepare only the private Python and process supervisor
+        run: |
+          python -c 'import json,pathlib,shutil;from scripts.build_macos import archive;root=pathlib.Path("build/macos/H3-Chat");spec=json.loads(pathlib.Path("scripts/macos-sources.json").read_text());archive(spec["python"],pathlib.Path("build/probe-unpack"),pathlib.Path("build/probe-downloads"));shutil.copytree("build/probe-unpack/python",root/"runtime/python",symlinks=True,dirs_exist_ok=True);(root/"runtime/tools").mkdir(parents=True,exist_ok=True)'
+          clang -O2 -arch arm64 scripts/posix-process-guard.c -o build/macos/H3-Chat/runtime/tools/h3-process-guard
+      - name: Probe the exact restrictive profile
+        run: python scripts/diagnose_macos_sandbox.py
