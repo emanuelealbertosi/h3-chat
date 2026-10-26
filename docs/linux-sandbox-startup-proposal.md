@@ -1,7 +1,9 @@
 # Ubuntu: autorizzazione per l'avvio di Agent Sandbox
 
-Stato: proposta, non applicata. La revisione automatica ha respinto l'installazione
-senza consenso specifico. Nessuna modifica a Windows, Mac o al PC attuale.
+Stato: autorizzata dall'utente il 26 ottobre 2026: «Sì: collaudo e opzione esplicita
+nell’installer». La revisione automatica aveva respinto l'installazione senza questo
+consenso specifico. Nessuna modifica a Windows, Mac o al PC attuale. Il profilo è
+previsto per le VM di collaudo e come scelta amministratore nell'installer Linux.
 
 La sonda Ubuntu 24.04 in GitHub Actions ha registrato AppArmor DENIED per setpcap
 e net_admin durante la preparazione dei namespace di /usr/bin/bwrap. Il programma

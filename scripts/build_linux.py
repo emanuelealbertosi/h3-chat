@@ -35,6 +35,16 @@ def build_native(stage,backend='cpu'):
     cuda=backend=='cuda';build=ROOT/'build'/('linux-native-'+backend);build.mkdir(parents=True,exist_ok=True)
     sd_build=build/'sd';music_build=build/'music'
     common=['-G','Ninja','-DCMAKE_BUILD_TYPE=Release','-DCMAKE_INSTALL_RPATH=$ORIGIN','-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON']
+    if cuda:
+        # NVIDIA's driver stub is used ONLY at link time in GPU-less CI. Its
+        # SONAME is libcuda.so.1; the toolkit distributes it as libcuda.so.
+        # Keep it outside every packaged engine directory and runtime RPATH.
+        stub=Path('/usr/local/cuda/lib64/stubs/libcuda.so')
+        if not stub.is_file():raise ValueError('CUDA toolkit driver stub missing; cannot link without an NVIDIA driver.')
+        link_only=build/'driver-link-only';link_only.mkdir(exist_ok=True)
+        alias=link_only/'libcuda.so.1'
+        if not alias.exists():alias.symlink_to(stub)
+        common+=['-DCMAKE_EXE_LINKER_FLAGS=-Wl,-rpath-link,'+str(link_only),'-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-rpath-link,'+str(link_only)]
     run(['cmake','-S',sd,'-B',sd_build,*common,'-DSD_BUILD_SHARED_LIBS=ON','-DSD_CUDA='+('ON' if cuda else 'OFF'),'-DSD_VULKAN='+('ON' if backend=='vulkan' else 'OFF'),'-DGGML_NATIVE=OFF','-DCMAKE_CUDA_ARCHITECTURES=86-virtual;120-real'])
     run(['cmake','--build',sd_build,'--parallel','2'])
     sd_out=stage/'runtime'/backend/'sd';sd_out.mkdir(parents=True,exist_ok=True)
@@ -108,6 +118,7 @@ def build():
     for filename,flags in (('Avvia-H3-Chat.sh',''),('Ferma-H3-Chat.sh','--stop')):
         p=stage/filename;p.write_text('#!/bin/sh\nset -eu\nHERE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"\nexec "$HERE/runtime/python/bin/python3" -X utf8 "$HERE/launcher.py" '+flags+'\n');p.chmod(0o755)
     shutil.copy2(ROOT/'scripts/install-linux-system.sh',stage/'Installa-dipendenze-Linux.sh');(stage/'Installa-dipendenze-Linux.sh').chmod(0o755)
+    shutil.copy2(ROOT/'scripts/install-linux-sandbox.sh',stage/'install-linux-sandbox.sh');(stage/'install-linux-sandbox.sh').chmod(0o755)
     build_native(stage)
     build_native(stage,'vulkan')
     vulkan={'url':'https://github.com/ggml-org/llama.cpp/releases/download/b10809/llama-b10809-bin-ubuntu-vulkan-x64.tar.gz','size':33799345,'sha256':'07f029cef440c82c3cff5310641eb6347e5cbcd865a5d88990215058aa049e93'}
