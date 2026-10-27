@@ -16,6 +16,6 @@ artifacts=api('actions/runs/'+run+'/artifacts?per_page=100')['artifacts']
 if not any(a['name']=='H3-Chat-linux-cpu-base' and not a['expired'] for a in artifacts):raise ValueError('Verified CPU base artifact missing.')
 revision=info['head_sha'];subprocess.run(['git','fetch','--depth=1','origin',revision],check=True)
 changed=set(subprocess.check_output(['git','diff','--name-only',revision,'HEAD'],text=True).splitlines())
-allowed={'.github/workflows/linux.yml','scripts/compact_linux_runtime.py','scripts/verify_linux_cpu_reuse.py','tests/test_linux_package.py'}
+allowed={'.github/workflows/linux.yml','scripts/compact_linux_runtime.py','scripts/verify_linux_cpu_reuse.py','scripts/install-linux-system.sh','tests/test_linux_package.py'}
 if changed-allowed:raise ValueError('Application/build inputs changed: '+str(sorted(changed-allowed)))
 print('Reusing the successfully verified CPU base; application and native sources are identical:',revision)

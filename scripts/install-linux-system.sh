@@ -9,6 +9,6 @@ if ! command -v apt-get >/dev/null 2>&1; then
   exit 1
 fi
 sudo apt-get update
-sudo apt-get install -y bubblewrap policykit-1 gnome-keyring libsecret-1-0 libnss3 libatk1.0-0 libatk-bridge2.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libxkbcommon0 libcairo2 libpango-1.0-0 libasound2t64 libgomp1 libvulkan1 build-essential
+sudo apt-get install -y bubblewrap polkitd pkexec gnome-keyring libsecret-1-0 libnss3 libatk1.0-0 libatk-bridge2.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libxkbcommon0 libcairo2 libpango-1.0-0 libasound2t64 libgomp1 libvulkan1 build-essential
 sh "$(dirname "$0")/install-linux-sandbox.sh"
 printf '\nDipendenze installate. Apri Avvia-H3-Chat.sh come utente normale.\n'

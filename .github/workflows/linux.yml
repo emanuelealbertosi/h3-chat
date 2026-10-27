@@ -136,6 +136,8 @@ jobs:
           mkdir -p build/linux
           tar -xzf build/base/H3-Chat-*-linux-x64.tar.gz -C build/linux
           tar -xzf build/cuda/H3-Chat-linux-cuda-components.tar.gz -C build/linux
+          install -m 755 scripts/install-linux-system.sh build/linux/H3-Chat/Installa-dipendenze-Linux.sh
+          install -m 644 scripts/install-linux-system.sh build/linux/H3-Chat/scripts/install-linux-system.sh
           python scripts/compact_linux_runtime.py build/linux/H3-Chat
           python -c 'import json,pathlib;pathlib.Path("build/linux-stage.json").write_text(json.dumps({"path":str(pathlib.Path("build/linux/H3-Chat").resolve())}))'
           python scripts/build_linux.py --package
@@ -160,7 +162,7 @@ jobs:
         run: |
           docker run --rm --cap-add SYS_ADMIN --security-opt apparmor=unconfined --security-opt seccomp=unconfined -v "$PWD:/h3-input:ro" kalilinux/kali-rolling bash -ec '
             apt-get update
-            apt-get install -y bubblewrap policykit-1 dbus-x11 gnome-keyring libsecret-1-0 libnss3 libatk1.0-0 libatk-bridge2.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libxkbcommon0 libcairo2 libpango-1.0-0 libasound2t64 libgomp1
+            apt-get install -y bubblewrap polkitd pkexec dbus-x11 gnome-keyring libsecret-1-0 libnss3 libatk1.0-0 libatk-bridge2.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libxkbcommon0 libcairo2 libpango-1.0-0 libasound2t64 libgomp1
             useradd -m -s /bin/bash h3check
             tar -xzf /h3-input/build/kali-input/H3-Chat-*-linux-x64.tar.gz -C /home/h3check
             chown -R h3check:h3check /home/h3check/H3-Chat
