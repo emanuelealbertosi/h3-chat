@@ -2,6 +2,10 @@ name: Build Linux Ubuntu and Kali
 on:
   workflow_dispatch:
     inputs:
+      reuse_final_run:
+        description: 'Optional verified final archive for a Kali-only environment retest'
+        required: false
+        type: string
       reuse_cpu_run:
         description: 'Optional verified CPU base when only packaging changed'
         required: false
@@ -12,6 +16,10 @@ on:
         type: string
   workflow_call:
     inputs:
+      reuse_final_run:
+        description: 'Verified final archive with unchanged application and installer'
+        required: false
+        type: string
       reuse_cpu_run:
         description: 'Verified CPU base with identical application sources'
         required: false
@@ -25,7 +33,7 @@ permissions:
   actions: read
 jobs:
   cpu:
-    if: ${{ !inputs.reuse_cpu_run }}
+    if: ${{ !inputs.reuse_cpu_run && !inputs.reuse_final_run }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -61,7 +69,7 @@ jobs:
           name: H3-Chat-linux-cpu-base
           path: dist/*linux-x64*
   cuda:
-    if: ${{ !inputs.reuse_cuda_run }}
+    if: ${{ !inputs.reuse_cuda_run && !inputs.reuse_final_run }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     container: nvidia/cuda:12.8.1-devel-ubuntu24.04
@@ -86,7 +94,7 @@ jobs:
           path: H3-Chat-linux-cuda-components.tar.gz
   package:
     needs: [cpu, cuda]
-    if: ${{ always() && (needs.cpu.result == 'success' || (needs.cpu.result == 'skipped' && inputs.reuse_cpu_run)) && (needs.cuda.result == 'success' || (needs.cuda.result == 'skipped' && inputs.reuse_cuda_run)) }}
+    if: ${{ always() && !inputs.reuse_final_run && (needs.cpu.result == 'success' || (needs.cpu.result == 'skipped' && inputs.reuse_cpu_run)) && (needs.cuda.result == 'success' || (needs.cuda.result == 'skipped' && inputs.reuse_cuda_run)) }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -149,15 +157,28 @@ jobs:
           path: dist/*linux-x64*
   kali:
     needs: package
-    if: ${{ always() && needs.package.result == 'success' }}
+    if: ${{ always() && (needs.package.result == 'success' || inputs.reuse_final_run) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify source identity for the selected final archive
+        if: ${{ inputs.reuse_final_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE_RUN: ${{ inputs.reuse_final_run }}
+        run: python scripts/verify_linux_package_reuse.py "$PACKAGE_RUN"
+      - name: Install the already authorized bubblewrap profile on the disposable Ubuntu host
+        run: sh scripts/install-linux-sandbox.sh --ci
       - uses: actions/download-artifact@v4
         with:
           name: H3-Chat-linux-x64
           path: build/kali-input
+          run-id: ${{ inputs.reuse_final_run }}
+          github-token: ${{ github.token }}
       - name: Verify actual packaged components on Kali Rolling
         run: |
           docker run --rm --cap-add SYS_ADMIN --security-opt apparmor=unconfined --security-opt seccomp=unconfined -v "$PWD:/h3-input:ro" kalilinux/kali-rolling bash -ec '
@@ -168,3 +189,6 @@ jobs:
             chown -R h3check:h3check /home/h3check/H3-Chat
             su h3check -c '\''dbus-run-session -- bash -c "printf h3-disposable-ci-only | gnome-keyring-daemon --unlock --components=secrets; /home/h3check/H3-Chat/runtime/python/bin/python3 -X utf8 /h3-input/scripts/check_linux.py /home/h3check/H3-Chat"'\''
           '
+      - name: Capture container namespace diagnostics on failure
+        if: failure()
+        run: sudo journalctl -k --since '-10 minutes' --no-pager | grep -i -E 'apparmor|bwrap|denied' | tail -35 || true
