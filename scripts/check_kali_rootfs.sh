@@ -42,13 +42,18 @@ KALI
 chown -R "$owner_uid:$owner_gid" "$root/home/h3check"
 setpriv --reuid="$owner_uid" --regid="$owner_gid" --clear-groups \
   /usr/bin/bwrap --die-with-parent --unshare-all --unshare-user --uid 1000 --gid 1000 --cap-drop ALL \
-  --bind "$root" / --dev /dev --proc /proc \
+  --bind "$root" / --dev /dev --proc /proc --clearenv \
   --ro-bind "$source/scripts" /h3-input/scripts \
   --ro-bind "$source/build/kali-input" /h3-input/build/kali-input \
   --setenv HOME /home/h3check --setenv USER h3check --setenv LOGNAME h3check \
   --setenv PATH /usr/bin:/bin:/usr/sbin:/sbin --setenv LANG C.UTF-8 \
+  --setenv XDG_RUNTIME_DIR /home/h3check/.runtime \
   --chdir /home/h3check -- /usr/bin/dbus-run-session -- /bin/bash <<'SESSION'
 set -euo pipefail
+umask 077
+mkdir -p "$XDG_RUNTIME_DIR"
+test "$(stat -c %u "$XDG_RUNTIME_DIR")" = "$(id -u)"
+test "$(stat -c %a "$XDG_RUNTIME_DIR")" = 700
 printf 'h3-disposable-ci-only\n' | gnome-keyring-daemon --unlock --components=secrets
 /home/h3check/H3-Chat/runtime/python/bin/python3 -X utf8 /h3-input/scripts/check_linux.py /home/h3check/H3-Chat
 SESSION
