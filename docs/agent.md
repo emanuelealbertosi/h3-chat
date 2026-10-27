@@ -69,7 +69,8 @@ licenze non vengono aggirate. Skill dedicate: `computer` e `models`.
   di pagine realmente lette nel progetto con URL di provenienza.
 - Download di documenti originali PDF/DOCX/TXT/Markdown dal Web pubblico, con URL.
 - Elenco modelli del catalogo, avvio/stato download verificati e preset immagini/video validati.
-- File/comandi Windows e importazione/esportazione con H3, solo nel perimetro scelto.
+- File/comandi Windows, macOS e Linux e importazione/esportazione con H3,
+  solo nel perimetro scelto.
 - Preparazione di collegamenti LLM API con finestra protetta per la chiave.
 
 ## File e collegamenti API
@@ -84,7 +85,8 @@ Per file e comandi nella cartella scelta o sul PC usa i pulsanti Sandbox/Globale
 Per un nuovo server LLM l'agente usa `configure_api`, con nome, indirizzo e modello:
 compare una finestra compilata da verificare, con il campo chiave separato. La chiave
 non è un argomento dello strumento e non entra in prompt, osservazioni o checkpoint.
-Viene salvata tramite la protezione credenziali già usata da H3 per Windows/macOS.
+Viene salvata tramite la protezione credenziali di H3: Windows, Portachiavi macOS
+o Secret Service nella sessione desktop Linux.
 Chiudi per ora svuota il campo; puoi riaprire la finestra dalla risposta Agent.
 Annulla richiesta ferma il run; Salva e continua registra il collegamento e riprende.
 La prova della connessione è un pulsante esplicito e può consumare credito.
@@ -270,8 +272,12 @@ Le approvazioni richiedono `action_id` e `decision: "approve" | "reject"`.
 Una ripresa ordinaria può fornire i nuovi `limits`; non può ampliare i permessi.
 Il checkpoint è sotto `outputs/RUN/agent/`, nella cartella dati del relativo workspace.
 
-Non esistono strumenti Agent per shell, query SQL, lettura delle credenziali,
-installazioni o cartelle esterne. Gli URL Web devono essere pubblici; i download
+In modalità H3 non sono disponibili shell o accesso a cartelle arbitrarie del PC.
+Sandbox abilita file ed esecuzione nella cartella scelta; Globale estende questo
+accesso ai file raggiungibili dal processo. I privilegi amministratore richiedono
+sempre la conferma nativa dedicata. I tool H3 non espongono le credenziali salvate;
+la modalità Globale va concessa soltanto per compiti fidati, perché i comandi
+possono usare tutti i permessi dell'utente. Gli URL Web devono essere pubblici; i download
 immagini bloccano indirizzi privati e verificano ogni reindirizzamento, con DNS
 vincolato all'indirizzo validato. Gli ID degli artefatti sono verificati sulla chat
 e i lotti sul workspace. Gli strumenti richiamano i servizi esistenti attraverso
