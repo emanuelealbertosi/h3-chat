@@ -1,6 +1,7 @@
 name: Publish verified 0.19.0 packages
 on:
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
   actions: read

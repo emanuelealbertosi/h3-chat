@@ -25,6 +25,7 @@ PACKAGES = {
 }
 ALLOWED_CHANGES = {
     '.github/workflows/linux.yml', '.github/workflows/publish-verified.yml',
+    '.github/workflows/release.yml',
     'scripts/check_kali_rootfs.sh', 'scripts/compact_linux_runtime.py',
     'scripts/install-linux-system.sh', 'scripts/verify_linux_cpu_reuse.py',
     'scripts/verify_linux_package_reuse.py', 'scripts/publish_verified.py',

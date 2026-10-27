@@ -1,10 +1,16 @@
 import tempfile
 from pathlib import Path
 import unittest
-from scripts.publish_verified import safe_name, verify_packages, asset_inventory
+from unittest.mock import patch
+from scripts.publish_verified import safe_name, verify_packages, asset_inventory, provenance
 
 
 class PublicationValidators(unittest.TestCase):
+    def test_automatic_events_cannot_publish(self):
+        for event in ('push', 'pull_request', 'schedule', 'workflow_run'):
+            with self.subTest(event=event), patch.dict('os.environ', {'GITHUB_EVENT_NAME': event}), self.assertRaisesRegex(ValueError, 'Manual dispatch'):
+                provenance()
+
     def test_safe_paths(self):
         safe_name('h3chat/agent_runtime.py')
         for path in ('../key', '/etc/passwd', 'data/chat.sqlite', 'models/x.gguf',
