@@ -15,5 +15,5 @@ artifacts=api('actions/runs/'+run+'/artifacts?per_page=100')['artifacts']
 if not any(a['name']=='H3-Chat-linux-x64' and not a['expired'] for a in artifacts):raise ValueError('Verified final package artifact unavailable.')
 revision=info['head_sha'];subprocess.run(['git','fetch','--depth=1','origin',revision],check=True)
 changes=set(subprocess.check_output(['git','diff','--name-only',revision,'HEAD'],text=True).splitlines())
-if changes-{'.github/workflows/linux.yml','scripts/verify_linux_package_reuse.py'}:raise ValueError('Application/package source changed since archive verification: '+str(changes))
+if changes-{'.github/workflows/linux.yml','scripts/verify_linux_package_reuse.py','scripts/check_kali_rootfs.sh'}:raise ValueError('Application/package source changed since archive verification: '+str(changes))
 print('Kali-only retest: exact verified archive, unchanged application and installer:',revision)

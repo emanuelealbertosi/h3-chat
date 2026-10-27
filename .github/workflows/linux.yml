@@ -180,15 +180,7 @@ jobs:
           run-id: ${{ inputs.reuse_final_run }}
           github-token: ${{ github.token }}
       - name: Verify actual packaged components on Kali Rolling
-        run: |
-          docker run --rm --cap-add SYS_ADMIN --security-opt apparmor=unconfined --security-opt seccomp=unconfined -v "$PWD:/h3-input:ro" kalilinux/kali-rolling bash -ec '
-            apt-get update
-            apt-get install -y bubblewrap polkitd pkexec dbus-x11 gnome-keyring libsecret-1-0 libnss3 libatk1.0-0 libatk-bridge2.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libxkbcommon0 libcairo2 libpango-1.0-0 libasound2t64 libgomp1
-            useradd -m -s /bin/bash h3check
-            tar -xzf /h3-input/build/kali-input/H3-Chat-*-linux-x64.tar.gz -C /home/h3check
-            chown -R h3check:h3check /home/h3check/H3-Chat
-            su h3check -c '\''dbus-run-session -- bash -c "printf h3-disposable-ci-only | gnome-keyring-daemon --unlock --components=secrets; /home/h3check/H3-Chat/runtime/python/bin/python3 -X utf8 /h3-input/scripts/check_linux.py /home/h3check/H3-Chat"'\''
-          '
+        run: bash scripts/check_kali_rootfs.sh
       - name: Capture container namespace diagnostics on failure
         if: failure()
         run: sudo journalctl -k --since '-10 minutes' --no-pager | grep -i -E 'apparmor|bwrap|denied' | tail -35 || true
