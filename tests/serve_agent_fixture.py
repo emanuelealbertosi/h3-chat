@@ -28,6 +28,8 @@ def completion(messages,settings,cancel,**kwargs):
             return decision('request_admin',{'command':'Write-Output test','reason':'Prova della finestra, nessun comando approvato automaticamente.'})
         if 'connessione' in data['request'].lower():
             return decision('finish',message='Collegamento salvato senza cambiare il modello predefinito.') if data['observations'] else decision('configure_api',{'name':'Server prova Agent','base_url':'http://127.0.0.1:9/v1','model':'example-model'})
+        if 'chiarimento' in data['request'].lower():
+            return decision('finish',message='Chiarimento ricevuto: '+json.loads(data['observations'][-1]['data'])['answer']) if data['observations'] else decision('ask_user',{'question':'Quante pagine vuoi?','options':['5','10']})
         return decision('finish',message='Presentazione salvata.') if data['artifacts'] else decision('create_slides',{'prompt':'Crea una slide sulle porte logiche','count':1},'Creo una slide sulle porte logiche.')
     if 'slides' in props:return json.dumps({'title':'Porte logiche','visual_direction':'Diagrammi semplici','slides':[{'title':'AND','purpose':'Congiunzione'}]}),'stop'
     if 'content' in props:return json.dumps({'content':'La porta AND produce uno solo se entrambi gli ingressi sono uno.','visual_plan':'Tabella','notes':'Spiegazione completa','sources':[]}),'stop'

@@ -228,6 +228,19 @@ Skill, fonti e risultati non possono cambiare questi permessi.
 
 ## Stop, limiti e recupero
 
+Se manca un dato indispensabile, `ask_user` mette in pausa il lavoro e mostra una
+domanda con risposte suggerite e campo libero. **Rispondi e continua** riprende
+lo stesso run; **Annulla lavoro** lo ferma. La domanda resta recuperabile dopo
+un refresh. Non è un'approvazione: i permessi rimangono quelli iniziali e le
+chiavi API vanno soltanto nella finestra protetta. `get_agent_capabilities`
+permette al modello di verificare quali strumenti e accessi sono effettivamente
+disponibili prima di promettere una funzione.
+
+Il modello riceve solo le osservazioni recenti per non saturare il contesto.
+`search_run_history` e `read_run_action` recuperano i risultati più vecchi già
+salvati nello stesso run, anche dopo una ripresa; quelli lunghi sono paginati.
+Non danno accesso ad altre chat e non riavviano le operazioni precedenti.
+
 Stop interrompe il modello e gli strumenti in corso; non avvia altri passaggi.
 Con **Riprendi Agent** si continua lo stesso run, conservando risultati e permessi.
 Puoi aumentare i limiti nelle impostazioni Agent prima di riprendere. La ripresa

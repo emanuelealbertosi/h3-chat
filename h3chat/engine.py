@@ -386,8 +386,8 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
             args += ["--mmproj-offload" if vision_gpu else "--no-mmproj-offload"]
         if steering:
             args+=steering['args']
-            session.steering={k:steering[k] for k in ('sha256','strength','layers')}
-            if stage:stage('Steering additivo sperimentale · layer '+str(steering['layers'])+' · intensità '+str(steering['strength']))
+            session.steering={k:steering[k] for k in ('sha256','strength','layers','mode')}
+            if stage:stage(('Steering LoRA GLP sperimentale' if steering['mode']=='glp_lora' else 'Steering additivo sperimentale')+' · layer '+str(steering['layers'])+' · intensità '+str(steering['strength']))
         with self.process_lock:
             if cancel.is_set():
                 raise Cancelled()

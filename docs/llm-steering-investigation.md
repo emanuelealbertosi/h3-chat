@@ -1,125 +1,73 @@
-# Steering LLM — verifica del 26 ottobre 2026
+# Steering locale Qwen27B — 27 ottobre 2026
 
-Stato per la 0.19.0: opzione additiva implementata e verificata con fixture
-strutturali e avvio simulato; nessun vettore reale installato o applicato,
-nessuna prova GPU di steering. L'installazione automatica di un vettore per
-l'ISTA resta non disponibile, non viene dichiarata completata.
+Sono disponibili due percorsi opzionali, spenti per default e salvati per modello:
 
-## Opzione implementata
+- **Control vector additivo**: GGUF con direzioni F32 per layer. L'intensità
+  modifica le attivazioni; 0 è neutro. Un file projectivo GLP non è additivo.
+- **LoRA GLP-49 · rango 1**: adapter GGUF convertito dal PEFT ufficiale, con
+  `alpha=1`. H3 lo applica con `--lora`, conservando i pesi del modello originale.
+  La scala è fissa a 1; l'intervallo dei layer riduce la copertura estraendo
+  soltanto i relativi tensori in una copia di cache. Non vengono rinumerati.
 
-Nelle opzioni tecniche LLM e nelle Preferenze dello stesso modello è disponibile
-«Steering · sperimentale», disattivato per default. Conserva per modello percorso
-GGUF, intensità (0 è neutro) e layer. La prima famiglia ammessa è qwen35 27B,
-5120 dimensioni, 64 layer principali; i layer ammessi sono 1–63 e il blocco MTP
-resta escluso. I provider API non possono attivare l'opzione.
+Entrambi richiedono Qwen `qwen35` 27B: embedding 5120 e 64 layer principali.
+Layer zero e blocco MTP sono esclusi; intervallo consentito 1–63. Non sono
+supportati dai collegamenti API remoti. Cambiare file, modo o intervallo ricarica
+il processo gestito alla richiesta successiva. Disattivare ripristina il percorso
+normale senza alterare modello o preset restanti.
 
-Prima di avviare il modello H3 controlla directory, dimensioni, copertura layer,
-tipo F32 e valori finiti; rifiuta file incompleti, GLP/projectivi e architetture
-diverse. Una copia identificata da SHA256 evita il separatore del disco Windows
-nei parametri di llama.cpp. Intensità/file/layer entrano nella chiave di residenza:
-cambiarli ricarica il processo gestito alla prossima richiesta. Disattivandolo si
-torna al percorso normale, senza cambiare pesi o le altre impostazioni.
+## GLP-49
 
-Ricerca: UCVG documenta vettori additivi e pubblica esempi di valutazione, ma
-nell'albero pubblico e negli allegati delle release esaminati non è stato
-trovato un GGUF appropriato per il 27B locale. Gli esempi Qwen3.8 presenti
-nell'albero includono il 9B: non sono stati scambiati per vettori del 27B.
-Non sono stati sostituiti con file inventati.
-I candidati GLP richiedono invece proiezione, non il supporto additivo disponibile
-nei motori installati. Non esiste ancora una prova di un vettore sul preciso ISTA
-locale: forma compatibile e dichiarazioni dell'autore non bastano a garantirla.
-Il lancio con MTP è coperto solo da test simulati; qualità, velocità e accettazione
-delle bozze devono ancora essere misurate con un vettore reale appropriato.
+Il repository dell'autore richiede l'accettazione delle condizioni Hugging Face.
+Nessun peso viene incluso nel codice o scaricato automaticamente dall'app.
+Scarica `adapter_config.json` e `adapter_model.safetensors` dopo l'autorizzazione,
+poi usa il convertitore offline senza PyTorch e senza un secondo modello:
 
-## Installazione verificata
+```text
+runtime/python/python.exe -X utf8 scripts/convert-glp-lora.py --adapter CARTELLA_ADAPTER --output CARTELLA_MODELLI/glp49-qwen35-rank1.gguf
+```
 
-Il catalogo locale contiene il modello ISTA-DASLab
-`Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp.gguf`, 12.120.016.960 byte. Il profilo ottimizzato
-H3 lo riconosce come qwen35, 65 layer e dimensione embedding 5120, con MTP.
-Al momento della lettura lo LLM selezionato nella chat era invece un provider API:
-la presenza del Qwen locale non significa che fosse il modello attivo.
+Il convertitore conserva i byte F32, controlla rango, dimensioni, offset e tutte
+le 252 matrici. Il loader controlla architettura, coppie A/B, blocchi ibridi,
+valori finiti, file completo e alpha. Una copia identificata dal contenuto entra
+nella ricetta di residenza. File incompatibili producono un errore prima di
+interrompere un modello già pronto.
 
-Entrambi gli eseguibili installati sono stati interrogati con il solo `--help`,
-senza caricare modelli: motore CUDA standard e motore Qwen27 ottimizzato
-`qwen27-mtp-555d1ec-window8k`. Entrambi espongono `--control-vector`,
-`--control-vector-scaled` e `--control-vector-layer-range`.
+Il formato **GGUF projectivo** pubblicato dallo stesso autore richiede un altro
+operatore e non è accettato come vettore additivo. L'integrazione H3 usa invece
+l'adapter LoRA convertito; non cambia il runtime ottimizzato né le sue DLL.
+L'autore avverte che aumentare alpha può riflettere la componente invece di
+rimuoverla: H3 impedisce una scala GLP diversa da 1.
 
-## Cosa è fattibile e cosa manca
+## Prove effettuate
 
-Un control vector GGUF separato permette una modifica delle attivazioni durante
-l'inferenza, senza riscaricare l'intero modello. Disabilitarlo ripristina il flusso
-di base. Non equivale a ricostruire automaticamente una specifica variante
-«abliterated»: una trasformazione dei pesi e una modifica runtime delle attivazioni
-sono operazioni diverse, da confrontare sperimentalmente.
+Il GGUF ISTA-DASLab `Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp.gguf` locale, da
+12.120.016.960 byte, è stato provato realmente su GPU. GLP-49 è stato scaricato
+con autorizzazione umana alla revisione `5f1be31cfde653f24fe74c71047433012b8ede9e`.
+Il GGUF convertito è da 8.533.280 byte; SHA256:
+`6f5087bfb2db362ec4cfd0aba898c7152428ae1232d0c5fc2b8b54d979dee4a6`.
 
-La sola presenza dei parametri nella guida non prova che il vettore venga applicato
-correttamente a ogni blocco di questo modello e alla bozza MTP. Il supporto upstream
-per control vector di qwen3.5/qwen-next è stato aggiunto con la PR #20653. Serve una
-verifica del ramo concreto, della propagazione al modello principale e del rapporto
-con MTP, evitando un aggiornamento indiscriminato del motore ottimizzato.
+Standard e profilo ottimizzato MTP2 hanno superato controlli brevi di aritmetica,
+JSON strutturato, scelta di un tool, grounding su una fonte chiusa, italiano e
+scrittura narrativa. Il motore ha confermato l'adapter attivo a scala 1 tramite
+la sua API. La prova verifica caricamento e compatibilità dei compiti campione;
+non misura una rimozione universale dei rifiuti né certifica qualità a 80–128K.
+L'intensità corretta di un additivo non va trasferita a GLP.
 
-Non è stato ancora identificato o verificato un vettore specifico per questo
-checkpoint ISTA. Non basta che un file abbia «Qwen» nel nome: vanno controllati
-modello di origine, architettura, dimensioni, tensori/layer e provenienza.
-La trasferibilità fra checkpoint/quantizzazioni non è una garanzia di equivalenza.
+È stato anche ricavato un **vettore additivo locale di direttezza** dall'esatto
+ISTA, con 24 coppie di prompt innocui. Il generatore è stato compilato allo stesso
+commit del motore, correggendo la raccolta delle uscite fisiche 1–63 del Qwen
+ibrido. Intensità 0,1 ha superato le prove brevi Standard e MTP2; intensità 1 ha
+prodotto una risposta vuota ed è stata scartata. Questo esperimento non viene
+presentato come un'abliteration verificata.
 
-Aggiornamento della ricerca: esistono candidati pubblici per il Qwen base, tra cui
-GLP-49 (LoRA PEFT 8,6 MB e GGUF projectivi sperimentali da 1–1,3 MB) e una direzione
-distribuita per la variante Mirai. Sono checkpoint/formati diversi dall'ISTA locale:
-non è stata verificata la loro compatibilità. La pagina GLP-49 richiede inoltre
-l'accettazione delle condizioni per accedere ai file; non sono stati scaricati.
-
-La seconda verifica `--help` mostra che entrambi i motori locali hanno `--lora`
-e control vector standard, ma non espongono `--cvec-mode`. Il GGUF projectivo dei
-candidati non va quindi trattato come un normale vettore additivo: il supporto
-generico all'argomento non dimostra il supporto a `glp.mode`. Prima di integrarlo
-serve verificare/adattare il runtime o valutare una conversione dell'adapter LoRA,
-con prove sull'esatta architettura e sulla quantizzazione ISTA. La sola presenza
-di `--lora` non garantisce che l'adapter PEFT sia direttamente caricabile.
-
-## Regole dell'integrazione H3
-
-Opzione sperimentale in Opzioni tecniche LLM, inizialmente disabilitata, salvata
-per modello: file vettore locale, intensità e intervallo dei layer. Una selezione
-incompatibile produce un errore esplicito prima del caricamento. Il processo e la
-cache di residenza includono la ricetta del vettore: cambiare impostazione richiede
-un ricaricamento controllato a coda libera, non una modifica dei pesi originali.
-
-Per provider API H3 non può applicare vettori al server remoto; la funzione deve
-restare disabilitata, salvo un eventuale supporto specifico fornito dal server.
-Le autorizzazioni Agent, l'accesso ai file e i controlli sui tool rimangono controlli
-del servizio H3, separati dal comportamento del LLM.
-
-Prima dell'attivazione: confronto controllato senza/con vettore su italiano,
-JSON, scelta strumenti, grounding RAG e continuità degli artefatti; memoria,
-velocità e qualità vanno misurate, non dedotte dalla piccola dimensione del file.
-Prima prova senza MTP, poi con MTP solo dopo aver verificato la compatibilità.
-Questa nota non autorizza generazioni di test, download o sostituzione del motore.
+Le prove sono state eseguite con un Engine e dati temporanei isolati: nessuna
+preferenza di produzione è stata attivata implicitamente, nessuna chat o
+credenziale è stata usata per il confronto. I test sono su Windows/RTX 5070 Ti;
+non rappresentano un collaudo GPU fisico Mac/Linux.
 
 ## Fonti primarie
 
-- Modello: https://huggingface.co/ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF
-- Control vector: https://github.com/ggml-org/llama.cpp/blob/master/tools/cvector-generator/README.md
-- Supporto dei modelli: https://github.com/ggml-org/llama.cpp/pull/20653
-- Candidato GLP-49, dichiarazioni dell'autore: https://huggingface.co/msuiche/Qwen3.8-27B-abliterated-cyber-GLP-49
-- Variante Mirai, documentazione dell'autore: https://huggingface.co/alesha-pro/Qwen3.8-27B-S-mirai-GGUF
-- UCVG, formato additivo e limiti dei percorsi Windows: https://github.com/Egor4More/ucvg.cpp
-
-## Controllo finale dei candidati, 27 ottobre 2026
-
-Sono stati verificati anche gli allegati delle release UCVG v0.1/v0.2: contengono
-i motori compilati, non un vettore 27B pronto. La variante Mirai richiede
-esplicitamente l'operatore projectivo e un motore dedicato; i due eseguibili H3
-non espongono quel modo, quindi il file non è stato applicato come additivo.
-
-Il candidato pubblico `com-kotobalabs/Ternary-Bonsai-2-27B-Refusal-Steering-GGUF`
-è piccolo e additivo, ma deriva da un altro checkpoint/quantizzazione. Il suo
-stesso autore riporta quattro rifiuti su quattro prove fuori campione e collasso
-con dosi maggiori. Non fornisce una base verificata per promettere il risultato
-richiesto sull'ISTA locale e non è stato installato o attivato.
-
-La scelta di rilascio è mantenere il caricamento manuale sperimentale, spento
-per default e con validazione rigorosa. Questa è una limitazione esplicita,
-non una conferma di efficacia o di compatibilità di un vettore non provato.
-
-- Candidato e misure dell'autore: https://huggingface.co/com-kotobalabs/Ternary-Bonsai-2-27B-Refusal-Steering-GGUF
+- [ISTA-DASLab, modello e quantizzazioni](https://huggingface.co/ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF)
+- [GLP-49: adapter, scala e metodo](https://huggingface.co/msuiche/Qwen3.8-27B-abliterated-cyber-GLP-49)
+- [llama.cpp: generatore di vettori](https://github.com/ggml-org/llama.cpp/tree/master/tools/cvector-generator)
+- [UCVG: vettori e limiti](https://github.com/Egor4More/ucvg.cpp)

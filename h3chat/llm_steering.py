@@ -5,13 +5,14 @@ from pathlib import Path
 import re
 import struct
 
-DEFAULTS={'llm_steering_enabled':False,'llm_steering_file':'',
+DEFAULTS={'llm_steering_enabled':False,'llm_steering_file':'','llm_steering_mode':'additive',
           'llm_steering_strength':0.0,'llm_steering_layer_start':1,'llm_steering_layer_end':0}
 MAX_BYTES=16*1024**2
 FORMATS={0:'B',1:'b',2:'H',3:'h',4:'I',5:'i',6:'f',7:'?',10:'Q',11:'q',12:'d'}
 
 
 def validate(values):
+    if values.get('llm_steering_mode','additive') not in ('additive','glp_lora'):raise ValueError('Tipo steering non valido.')
     if 'llm_steering_enabled' in values and type(values['llm_steering_enabled']) is not bool:raise ValueError('Steering: scegli attivato o disattivato.')
     path=values.get('llm_steering_file','')
     if not isinstance(path,str) or len(path)>1000 or any(ord(c)<32 for c in path):raise ValueError('Percorso vettore steering non valido.')
@@ -22,6 +23,8 @@ def validate(values):
         if type(v) is not int or not low<=v<=999:raise ValueError('Layer steering non valido.')
     if values.get('llm_steering_layer_end',0) and values['llm_steering_layer_end']<values.get('llm_steering_layer_start',1):raise ValueError('L’ultimo layer steering precede il primo.')
     if values.get('llm_steering_enabled') and not path:raise ValueError('Seleziona il file GGUF del vettore steering.')
+    if values.get('llm_steering_enabled') and values.get('llm_steering_mode')=='glp_lora' and strength!=1:
+        raise ValueError('LoRA GLP: scala obbligatoria 1. Per regolare usa i layer, non aumentare alpha.')
 
 
 def inspect_bytes(raw):
@@ -79,19 +82,22 @@ def inspect_bytes(raw):
             'model_hint':meta.get('controlvector.model_hint',''),'bytes':len(raw)}
 
 
-def read_vector(path):
+def read_vector(path,mode='additive'):
     path=Path(path)
     if not path.is_absolute() or path.suffix.lower()!='.gguf':raise ValueError('Scegli un percorso assoluto a un vettore .gguf locale.')
     try:
         with path.open('rb') as stream:raw=stream.read(MAX_BYTES+1)
+        if mode=='glp_lora':
+            from .llm_steering_lora import inspect
+            return raw,inspect(raw)
         return raw,inspect_bytes(raw)
     except (OSError,UnicodeError,struct.error) as exc:raise ValueError('Impossibile leggere il vettore steering GGUF.') from exc
 
 
 def fingerprint(settings):
     if not settings.get('llm_steering_enabled'):return None
-    validate(settings);_,info=read_vector(settings['llm_steering_file'])
-    return (info['sha256'],settings.get('llm_steering_strength',0),settings.get('llm_steering_layer_start',1),settings.get('llm_steering_layer_end',0))
+    validate(settings);mode=settings.get('llm_steering_mode','additive');_,info=read_vector(settings['llm_steering_file'],mode)
+    return (mode,info['sha256'],settings.get('llm_steering_strength',0),settings.get('llm_steering_layer_start',1),settings.get('llm_steering_layer_end',0))
 
 
 def selection(model,settings,files):
@@ -104,7 +110,7 @@ def selection(model,settings,files):
     # shape is necessary, not proof that a vector transfers between fine-tunes.
     width=info.get('qwen35.embedding_length');blocks=info.get('qwen35.block_count')
     if arch!='qwen35' or width!=5120 or blocks not in (64,65):raise ValueError('Steering sperimentale disponibile per Qwen qwen35 27B · 5120 dimensioni · 64 layer principali.')
-    raw,vector=read_vector(settings['llm_steering_file'])
+    raw,vector=read_vector(settings['llm_steering_file'],settings.get('llm_steering_mode','additive'))
     if vector['embedding']!=width or vector['model_hint'] not in ('qwen35','qwen3.5','qwen3.8-27b'):raise ValueError('Architettura o dimensione del vettore diversa dal Qwen 27B selezionato.')
     first=settings.get('llm_steering_layer_start',1);last=settings.get('llm_steering_layer_end',0) or 63
     if not 1<=first<=last<=63 or max(vector['layers'])>63:raise ValueError('Steering: seleziona layer principali da 1 a 63; il blocco MTP è escluso.')
@@ -116,9 +122,16 @@ def prepare(data,model,settings,files):
     if not settings.get('llm_steering_enabled'):return None
     raw,vector,first,last=selection(model,settings,files)
     folder=(Path(data)/'llm-steering/cache').resolve();folder.mkdir(parents=True,exist_ok=True)
+    if settings.get('llm_steering_mode')=='glp_lora':
+        from .llm_steering_lora import subset
+        raw=subset(raw,vector,first,last);digest=hashlib.sha256(raw).hexdigest()
+        target=folder/(digest+'.gguf')
+        if not target.exists() or target.read_bytes()!=raw:target.write_bytes(raw)
+        return {'cwd':folder,'sha256':digest,'args':['--lora',target.name],
+                'strength':1.0,'layers':[first,last],'mode':'glp_lora'}
     name=vector['sha256']+'.gguf';target=folder/name
     if not target.exists() or target.read_bytes()!=raw:target.write_bytes(raw)
     # A content-addressed relative filename avoids the C: drive separator being
     # parsed as the strength delimiter by llama.cpp on Windows.
     return {'cwd':folder,'sha256':vector['sha256'],'args':['--control-vector-scaled',name+':'+format(settings.get('llm_steering_strength',0),'.9g'),
-            '--control-vector-layer-range',first,last], 'strength':settings.get('llm_steering_strength',0),'layers':[first,last]}
+            '--control-vector-layer-range',first,last], 'strength':settings.get('llm_steering_strength',0),'layers':[first,last],'mode':'additive'}

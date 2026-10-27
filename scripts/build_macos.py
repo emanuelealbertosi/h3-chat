@@ -33,7 +33,7 @@ def build():
     (stage/'native').mkdir(exist_ok=True)
     for path in (ROOT/'native').glob('*.py'):shutil.copy2(path,stage/'native'/path.name)
     (stage/'scripts').mkdir(exist_ok=True)
-    for name in ('macos-requirements.txt','macos-sources.json','reset_admin_password.py'):shutil.copy2(ROOT/'scripts'/name,stage/'scripts'/name)
+    for name in ('macos-requirements.txt','macos-sources.json','reset_admin_password.py','convert-glp-lora.py'):shutil.copy2(ROOT/'scripts'/name,stage/'scripts'/name)
     cache=ROOT/'build/macos-downloads';unpack=ROOT/'build/macos-unpack'
     archive(source['python'],unpack/'python',cache)
     shutil.copytree(unpack/'python/python',stage/'runtime/python',symlinks=True,dirs_exist_ok=True)

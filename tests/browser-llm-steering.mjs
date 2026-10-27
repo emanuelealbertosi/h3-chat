@@ -20,7 +20,7 @@ try{
  await page.goto(fixture.url);await page.click(`[data-chat="${fixture.chat}"]`);await page.click('#settings-open');await page.waitForFunction(()=>document.querySelector('#settings').open);await page.click('[data-tab="advanced"]');await page.selectOption('#llm-settings-model',fixture.model);
  assert.equal(await field('llm_steering_enabled').isChecked(),false);assert.equal(await field('llm_steering_enabled').isEnabled(),true);
  assert.equal(await field('llm_steering_file').isDisabled(),true);
- await field('llm_steering_enabled').check();await field('llm_steering_file').fill(fixture.steering_file);await field('llm_steering_strength').fill('0.03');
+ await field('llm_steering_enabled').check();await field('llm_steering_mode').selectOption('glp_lora');assert.equal(await field('llm_steering_strength').inputValue(),'1');assert.equal(await field('llm_steering_strength').evaluate(el=>el.readOnly),true);await field('llm_steering_mode').selectOption('additive');assert.equal(await field('llm_steering_strength').evaluate(el=>el.readOnly),false);await field('llm_steering_file').fill(fixture.steering_file);await field('llm_steering_strength').fill('0.03');
  await page.selectOption('#llm-settings-model',fixture.second_model);assert.equal(await field('llm_steering_enabled').isDisabled(),true);assert.equal(await field('llm_steering_enabled').isChecked(),false);
  await page.selectOption('#llm-settings-model',fixture.model);assert.equal(await field('llm_steering_enabled').isChecked(),true);assert.equal(await field('llm_steering_strength').inputValue(),'0.03');
  const saved=page.waitForResponse(r=>r.url().endsWith('/api/settings'));await page.click('#settings-save');assert.equal((await saved).status(),200);

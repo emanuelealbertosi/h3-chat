@@ -1,4 +1,15 @@
 """Shared art direction for LLM-authored pages and their generated illustrations."""
+import re
+
+
+def explicit_design(prompt):
+    """Bind an unambiguous human art style; mixed per-asset styles stay explicit."""
+    found=set()
+    for pattern,design in ((r'\b(?:fumettos[oa]|fumetti|comic)\b','comic'),
+                          (r'\b(?:giocos[oa]|playful)\b','playful'),
+                          (r'\b(?:professionale|professional)\b','professional')):
+        if re.search(pattern,prompt,re.I):found.add(design)
+    return next(iter(found)) if len(found)==1 else None
 
 GUIDES = {
     'professional': '''STILE VISIVO: serio / professionale.

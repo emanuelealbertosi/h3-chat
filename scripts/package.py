@@ -11,7 +11,7 @@ INCLUDE=('native','h3chat','static','licenses','docs','scripts/Launcher.cs','scr
          'H3-Chat.exe','Installa-H3-Chat.bat','Avvia-H3-Chat.bat','Ferma-H3-Chat.bat','README.md','LICENSE','NOTICE','runtime/python','runtime/music/cpu','runtime/tools/documents','tools-models.json','upscale-runtimes.json','scripts/tools-sources.json','scripts/lab-sources.json','scripts/lab-requirements.txt','scripts/latex-sources.json','scripts/install_qwen27_accelerator.py','scripts/benchmark_llm_accelerator.py')
 
 INCLUDE=(*INCLUDE,'scripts/reset_admin_password.py','remix-runtimes.json','scripts/install-remix-score.py','scripts/build-remix-runtime.ps1','scripts/package-remix-runtime.py','scripts/model_download.py','runtime/bootstrap/pip.pyz','scripts/install-moss.py','scripts/moss-sources.json',
-         'Avvia-server-immagini.bat','Installa-API-senza-GPU.bat','scripts/start-image-server.py','scripts/image-api-server.py','scripts/download-moss-bf16.py','skills/h3')
+         'Avvia-server-immagini.bat','Installa-API-senza-GPU.bat','scripts/start-image-server.py','scripts/image-api-server.py','scripts/download-moss-bf16.py','scripts/convert-glp-lora.py','skills/h3')
 
 # Git ignore rules do not apply to release archives. Keep local handoffs and
 # production-run notes out even when an older checkout still contains them.

@@ -65,7 +65,7 @@ def fingerprint(tool,arguments):
 def public(state):
     actions=[]
     for action in state.get('actions',[]):
-        row={k:action[k] for k in ('id','tool','arguments','status','summary','error','connection','admin') if k in action}
+        row={k:action[k] for k in ('id','tool','arguments','status','summary','error','connection','admin','question') if k in action}
         if 'result' in action:
             encoded=json.dumps(action['result'],ensure_ascii=False)
             row['result_preview']=encoded[:1200];row['result_truncated']=len(encoded)>1200
@@ -145,9 +145,10 @@ def resume(app,chat_id,ident,body):
         pending=next((a for a in reversed(state['actions']) if a['status']=='awaiting_approval'),None)
         connection=next((a for a in reversed(state['actions']) if a['status']=='awaiting_connection'),None)
         admin=next((a for a in reversed(state['actions']) if a['status']=='awaiting_admin'),None)
+        question=next((a for a in reversed(state['actions']) if a['status']=='awaiting_input'),None)
         if body.get('decision')=='reject':
-            pending=pending or connection or admin
-            if state['status'] not in ('awaiting_approval','awaiting_connection','awaiting_admin') or not pending or body.get('action_id')!=pending['id']:raise ValueError('Conferma Agent non più valida.')
+            pending=pending or connection or admin or question
+            if state['status'] not in ('awaiting_approval','awaiting_connection','awaiting_admin','awaiting_input') or not pending or body.get('action_id')!=pending['id']:raise ValueError('Conferma Agent non più valida.')
             pending['status']='rejected';state.update(status='rejected',message='Passaggio rifiutato: sessione fermata.');save(app,state)
             row=app.store.one('SELECT * FROM jobs WHERE id=? AND chat_id=?',(state['current_job_id'],chat_id))
             if row:
@@ -156,6 +157,9 @@ def resume(app,chat_id,ident,body):
             return {'rejected':True}
         if connection:raise ValueError('Completa o annulla la finestra della connessione API prima di riprendere Agent.')
         if admin:raise ValueError('Approva o annulla il comando amministratore nella finestra dedicata.')
+        if question:
+            from .agent_questions import answer
+            answer(state,question,body)
         if state['status']=='rejected':raise ValueError('Sessione rifiutata: invia una nuova richiesta per un nuovo compito.')
         uncertain=[a for a in state['actions'] if a['status'] in ('executing','uncertain')]
         if uncertain:
@@ -167,7 +171,7 @@ def resume(app,chat_id,ident,body):
         if pending:
             if body.get('decision')!='approve' or body.get('action_id')!=pending['id']:raise ValueError('Approva il passaggio concreto in attesa oppure rifiutalo.')
             approval=pending['id']
-        elif body.get('decision') not in (None,'keep_partial'):raise ValueError('Nessuna approvazione in attesa.')
+        elif body.get('decision') not in ((None,'keep_partial','answer') if question else (None,'keep_partial')):raise ValueError('Nessuna approvazione in attesa.')
         limits=body.get('limits',{})
         if not isinstance(limits,dict):raise ValueError('Limiti Agent non validi.')
         config=options(state['config']|limits)

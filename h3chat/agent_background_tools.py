@@ -6,6 +6,7 @@ import time
 
 def definitions():
     from .agent_tools import obj,string,ID
+    from .slide_style import IMAGE_CUES
     style=obj({'base':{'type':'string','enum':['auto','plain','gradient','collection']},
         'decorations':{'type':'boolean'},'set_id':ID,'asset_ids':{'type':'array','items':ID,'maxItems':24},
         'opacity':{'type':'integer','minimum':5,'maximum':45},'veil':{'type':'string','enum':['auto','light','dark']}})
@@ -16,6 +17,7 @@ def definitions():
           'format':{'type':'string','enum':['16:9','9:16','4:3','1:1']},'model_id':string(150),
           'kind':{'type':'string','enum':['frame','soft']},'margin':{'type':'integer','minimum':5,'maximum':25},
           'palette':{'type':'string','enum':['pastel','natural','blue','warm','mono']},
+          'design':{'type':'string','enum':list(IMAGE_CUES),'description':'Direzione artistica: professional, playful o comic. Conserva stile, tema e tecnica espliciti della richiesta nel prompt.'},
           'tone':{'type':'string','enum':['light','dark']}},['name','prompt','count'])),
       'apply_slide_background':('Applica alla presentazione uno sfondo della raccolta o una immagine già salvata nella stessa chat. Le cornici riservano un margine interno; non rigenera immagini né contenuti. Usa poi inspect_slides per misurare il nuovo spazio.',obj({
           'artifact_id':ID,'background_style':style,'image_artifact_id':ID,
@@ -37,15 +39,18 @@ def execute(ctx,name,args):
         local=ctx.tool_settings();guard_intent(ctx.app.effective_settings(local),'create')
         ident=select(ctx.app.engine,local,args.get('model_id',''))
         model=ctx.app.engine.require_model(ident,'create')
+        from .slide_style import explicit_design
+        saved=ctx.settings.get('_agent',{}).get('slide_defaults',{})
+        design=explicit_design(ctx.state['request']) or args.get('design') or saved.get('design','professional')
         config=library.options({'name':args['name'],'variants':args['count'],'model':ident,
             'format':args.get('format','16:9'),'kind':args.get('kind','frame'),
-            'margin':args.get('margin',12),'palettes':[args.get('palette','blue')],'tone':args.get('tone','light')})
+            'margin':args.get('margin',12),'palettes':[args.get('palette','blue')],'tone':args.get('tone','light'),'design':design})
         request={'options':config,'tasks':library.plan(config,args['prompt'],model,local),'prompt':args['prompt']}
         meta=ctx.tool_meta()
         library.render(ctx.tool_app,ctx.tool_job(),ctx.tool_payload,local|{'_slide_backgrounds':request},ctx.cancel,ctx.stage,meta)
         value=meta['artifact'];style={'base':'collection','set_id':ctx.action['id'],
             'asset_ids':[m['id'] for m in value['media']]}
-        return ctx.artifact_result(value)|{'background_style':composition.options(style)}
+        return ctx.artifact_result(value)|{'background_style':composition.options(style),'art_direction':{'design':design,'prompt':args['prompt']}}
     value=copy.deepcopy(artifact(ctx.app,ctx.job['chat_id'],args['artifact_id']));deck=deck_of(value)
     if bool(args.get('image_artifact_id'))==bool(args.get('background_style')):
         raise ValueError('Scegli background_style oppure image_artifact_id, una sola sorgente sfondo.')

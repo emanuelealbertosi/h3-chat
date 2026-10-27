@@ -46,14 +46,17 @@ export function initAgentControls({getState,api,pickDirectory,notify,onPreferenc
 }
 
 Object.assign(labels,{download_web_file:'Scarica file da URL',install_lora_from_url:'Installa LoRA verificato'});
+Object.assign(labels,{ask_user:'Chiarimento richiesto'});
+statuses.awaiting_input='Attende la tua risposta';
 function imageParameters(entry,action){if(!action.image_parameters?.length)return;const details=document.createElement('details'),title=document.createElement('summary');title.textContent='Parametri immagini passati al generatore';details.append(title);for(const row of action.image_parameters){const p=document.createElement('p'),v=row.parameters;p.textContent='Immagine '+row.index+' · '+row.model_id+' · '+(v.moss_turbo?'MOSS Turbo DMD2 · ':'')+[v.width&&v.height?v.width+'×'+v.height:'',v.aspect,v.steps+' passi','CFG '+v.cfg,v.sampler,v.scheduler,'seed '+v.seed].filter(Boolean).join(' · ');details.append(p);}entry.append(details);}
 const expanded=new Set();
+const questionDrafts=new Map();
 export function renderAgentRun(target,{message,api,chatId,busy,onChanged,notify,readLimits,openArtifact,latest=true}){
  const run=message.meta.agent;if(!run)return;
  const stopped=['cancelled','interrupted','failed'].includes(message.status)&&run.status==='running';
  const status=stopped?'interrupted':run.status;
  const title=!latest?'Agent · sessione continuata nel messaggio successivo':{awaiting_video:'Agent attende il video',awaiting_admin:'Agent attende la conferma amministratore',running:'Agent al lavoro',queued:'Agent in coda',awaiting_connection:'Agent attende i dati della connessione',awaiting_approval:'Agent attende la tua conferma',paused:'Agent in pausa per un limite',stopped:'Agent fermato',interrupted:'Agent interrotto',uncertain:'Esito da verificare',failed:'Agent: errore',done:'Agent completato',rejected:'Agent fermato: passaggio rifiutato'}[status]||status;
- const box=document.createElement('section');box.className='agent-run';box.dataset.agentRun=run.id;const heading=document.createElement('h3');heading.textContent=title;box.append(heading);
+ const box=document.createElement('section');box.className='agent-run';box.dataset.agentRun=run.id;const heading=document.createElement('h3');heading.textContent=status==='awaiting_input'?'Agent attende una tua risposta':title;box.append(heading);
  const summary=document.createElement('p');summary.textContent=`Passaggi ${run.step}/${run.config.max_steps} · Chiamate LLM ${run.usage.llm_calls}/${run.config.max_calls} · Budget prenotato ${run.usage.reserved_tokens.toLocaleString('it-IT')}/${run.config.token_budget.toLocaleString('it-IT')} · Tempo attivo ${Math.round(run.elapsed_seconds)} s`;box.append(summary);
  if(run.preparation?.length){const details=document.createElement('details'),title=document.createElement('summary');title.textContent='Preparazione multiagente · '+run.preparation.length+' contributi';details.append(title);for(const row of run.preparation){const p=document.createElement('p');p.textContent=row.role+': '+row.summary;details.append(p);}box.append(details);}
  if(run.plan?.length){const list=document.createElement('ol');for(const item of run.plan){const li=document.createElement('li');li.textContent=item;list.append(li);}box.append(list);}
@@ -63,6 +66,17 @@ export function renderAgentRun(target,{message,api,chatId,busy,onChanged,notify,
  const pending=run.actions?.findLast(a=>a.status==='awaiting_approval');
  const connection=run.actions?.findLast(a=>a.status==='awaiting_connection');
  const admin=run.actions?.findLast(a=>a.status==='awaiting_admin');
+ const question=run.actions?.findLast(a=>a.status==='awaiting_input');
+ if(latest&&status==='awaiting_input'&&question){
+  const form=document.createElement('form');form.className='agent-approval';
+  const label=document.createElement('label');label.textContent=question.question?.text||question.arguments.question;
+  const input=document.createElement('textarea');input.rows=3;input.maxLength=4000;input.required=true;input.setAttribute('aria-label','Risposta al chiarimento');input.value=questionDrafts.get(question.id)||'';input.oninput=()=>{if(questionDrafts.size>100)questionDrafts.delete(questionDrafts.keys().next().value);questionDrafts.set(question.id,input.value);};label.append(input);form.append(label);
+  for(const text of question.question?.options||[]){const choice=document.createElement('button');choice.type='button';choice.className='btn';choice.textContent=text;choice.onclick=()=>{input.value=text;input.oninput();input.focus();};form.append(choice);}
+  const note=document.createElement('p');note.className='small-note';note.textContent='Non inserire password o chiavi API. La risposta non cambia i permessi del lavoro.';form.append(note);
+  const answer=document.createElement('button');answer.type='submit';answer.className='btn primary';answer.textContent='Rispondi e continua';answer.disabled=busy();form.append(answer);
+  const stop=document.createElement('button');stop.type='button';stop.className='btn';stop.textContent='Annulla lavoro';stop.onclick=()=>send({action_id:question.id,decision:'reject'},stop);form.append(stop);
+  form.onsubmit=event=>{event.preventDefault();if(input.value.trim())send({action_id:question.id,decision:'answer',answer:input.value.trim()},answer);};box.append(form);
+ }
  if(latest&&status==='awaiting_admin'&&admin){const options={run,action:admin,chatId,api,onChanged,notify};const button=document.createElement('button');button.className='btn primary';button.textContent='Controlla comando amministratore';button.onclick=()=>adminPrompt(options);box.append(button);queueMicrotask(()=>{if(box.isConnected)adminPrompt({...options,automatic:true});});}
  if(latest&&status==='awaiting_connection'&&connection){
   const open=automatic=>connectionPrompt({run,action:connection,chatId,api,onChanged,notify,automatic});
