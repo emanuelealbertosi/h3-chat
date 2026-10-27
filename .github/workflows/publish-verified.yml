@@ -1,0 +1,51 @@
+name: Publish verified 0.19.0 packages
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: publish-verified-0.19.0
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Test publication validators without publishing
+        run: python -m unittest discover -s tests -p test_publish_verified.py -v
+      - name: Verify exact successful jobs and unchanged application sources
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/publish_verified.py provenance
+      - uses: actions/download-artifact@v4
+        with:
+          name: H3-Chat-windows-x64
+          run-id: 40419214432
+          github-token: ${{ github.token }}
+          path: verified/windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: H3-Chat-macos-arm64
+          run-id: 40419214432
+          github-token: ${{ github.token }}
+          path: verified/macos
+      - uses: actions/download-artifact@v4
+        with:
+          name: H3-Chat-linux-x64
+          run-id: 40424369315
+          github-token: ${{ github.token }}
+          path: verified/linux
+      - name: Verify all nine files, fast-forward main and publish a fresh release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/publish_verified.py publish verified
