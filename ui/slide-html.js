@@ -8,9 +8,11 @@ import {initialExportStyles,applyExportStyles} from './export-style.js';
 import {applyHtmlBackground} from './slide-background-style.js';
 import {fitHtmlBackground} from './slide-content-fit.js';
 import {staticSnapshot} from './slide-static-snapshot.js';
+import {documentHeights} from './document-formats.js';
+import fontFamilies from '../static/typography-fonts.json';
 import '../static/infographic-motion.js';
 
-const heights={'16:9':720,'9:16':1280*16/9,'4:3':960,'16:10':800,'1:1':1280};
+const heights=documentHeights;
 const safePath=path=>/^(uploads|outputs)\/[\w./-]+\.(png|jpg|jpeg|webp)$/i.test(path);
 const encode=deck=>'```h3-slides\n'+JSON.stringify(deck)+'\n```';
 const sessions=new WeakMap();
@@ -46,8 +48,8 @@ export async function htmlPage(deck,page,index,media,mount){
   const iframe=document.createElement('iframe');iframe.title=page.title;iframe.sandbox='allow-same-origin';iframe.style.cssText='display:block;border:0;width:1280px;height:100%;';
   const content=await markup(page,media);
   const loaded=new Promise((resolve,reject)=>{iframe.onload=resolve;iframe.onerror=()=>reject(Error('Anteprima HTML non disponibile.'));});
-  const fontNames=['Manrope','Cormorant'].filter(name=>content.includes(name));
-  const fonts=(await Promise.all(fontNames.map(async name=>`@font-face{font-family:${name};src:url("${await localFont('/static/'+name+'.ttf')}")}`))).join('');
+  const fontNames=fontFamilies.filter(name=>content.includes(name));
+  const fonts=(await Promise.all(fontNames.map(async name=>`@font-face{font-family:${name};font-weight:100 900;src:url("${await localFont('/static/'+name+'.ttf')}")}`))).join('');
   const background=deck.infographic?.video,clip=background&&media.find(m=>m.id===background.asset_id&&m.mime==='video/mp4'&&/^(uploads|outputs)\/[\w./-]+\.mp4$/i.test(m.path)&&!m.path.split('/').includes('..'));
   if(background&&!clip)throw Error('Video di sfondo non disponibile negli allegati.');
   const splitClips=(deck.infographic?.videos||[]).map(spec=>({spec,asset:media.find(m=>m.id===spec.asset_id&&m.mime==='video/mp4'&&/^(uploads|outputs)\/[\w./-]+\.mp4$/i.test(m.path)&&!m.path.split('/').includes('..'))}));if(splitClips.some(c=>!c.asset))throw Error('Video del riquadro non disponibile negli allegati.');
@@ -117,6 +119,9 @@ export function htmlOverflow(frame){
 
 export function flattenHtml(frame){
   const {doc}=sessions.get(frame);staticSnapshot(doc);
+  // The flattened DOM leaves its iframe. Keep the trusted embedded typefaces
+  // available in the parent document before PNG/Word rasterization.
+  const faces=[];for(const sheet of doc.querySelectorAll('style[data-h3-trusted]'))for(const rule of sheet.sheet?.cssRules||[])if(rule.type===5&&/data:(?:font\/|application\/(?:octet-stream|x-font-ttf|font-sfnt))/.test(rule.cssText))faces.push(rule.cssText);
   const body=doc.body,initial=initialExportStyles(doc),clone=body.cloneNode(true);
   const sources=[body,...body.querySelectorAll('*')],targets=[clone,...clone.querySelectorAll('*')];
   for(let i=0;i<sources.length;i++){
@@ -135,9 +140,10 @@ export function flattenHtml(frame){
   clone.querySelectorAll('[data-h3-video]').forEach(n=>{if(n.poster){const image=document.createElement('img');image.src=n.poster;image.style.cssText=n.style.cssText;n.replaceWith(image);}else n.remove();});
   clone.querySelectorAll('style,script,animate,animateTransform,animateMotion,set').forEach(n=>n.remove());
   const content=document.createElement('div');content.setAttribute('style',clone.getAttribute('style'));content.innerHTML=clone.innerHTML;
-  frame.replaceChildren(content);sessions.delete(frame);
+  const fontStyle=document.createElement('style');fontStyle.textContent=faces.join('\n');frame.replaceChildren(fontStyle,content);sessions.delete(frame);
 }
 
 export function mountHtmlEditor(target,deck,index,frame,onChange,options,media){
-  return editHtmlSlide(target,deck,index,frame,onChange,{...options,repairContrast:readableText},media,{...sessions.get(frame),overflow:htmlOverflow,encode});
+  const loadLocalFont=async name=>{if(!fontFamilies.includes(name))return;const doc=sessions.get(frame).doc,style=doc.createElement('style');style.dataset.h3Trusted='';style.textContent=`@font-face{font-family:${name};font-weight:100 900;src:url("${await localFont('/static/'+name+'.ttf')}")}`;doc.head.append(style);await doc.fonts.load('40px '+name);};
+  return editHtmlSlide(target,deck,index,frame,onChange,{...options,repairContrast:readableText,loadLocalFont},media,{...sessions.get(frame),overflow:htmlOverflow,encode});
 }

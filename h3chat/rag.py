@@ -229,13 +229,14 @@ class Knowledge:
         else:
             ident=uid();self.store.execute('INSERT INTO projects VALUES (?,?,?,?,?)',(ident,name.strip(),instructions,int(only),time.time()))
         return self.project(ident)
-    def mutable(self,ident,*,active_job=None):
+    def mutable(self,ident,*,active_job=None,queued_readers=False):
         self.project(ident)
         if self.tasks.get(ident,{}).get('status')=='running':raise ValueError('Attendi il completamento dell’indicizzazione.')
         # Only the synchronous Agent adapter may amend its own project's sources.
         # Browser/API callers never provide this internal job exemption.
         if active_job and not self.store.one("SELECT id FROM jobs WHERE id=? AND status IN ('queued','running')",(active_job,)):raise ValueError('Lavoro Agent non più attivo.')
-        if self.store.one("SELECT j.id FROM jobs j JOIN chats c ON c.id=j.chat_id WHERE c.project_id=? AND j.status IN ('queued','running') AND j.id!=?",(ident,active_job or '')):raise ValueError('Attendi o interrompi i lavori nel progetto.')
+        statuses="('running')" if queued_readers and active_job else "('queued','running')"
+        if self.store.one("SELECT j.id FROM jobs j JOIN chats c ON c.id=j.chat_id WHERE c.project_id=? AND j.status IN "+statuses+" AND j.id!=?",(ident,active_job or '')):raise ValueError('Attendi o interrompi i lavori nel progetto.')
     def delete(self,ident):
         with self.index_lock:
             self.mutable(ident);self.uploads.cancel_project(ident);self.store.execute('DELETE FROM projects WHERE id=?',(ident,))
@@ -254,7 +255,7 @@ class Knowledge:
             return self.register_import(ident,body,temporary)
         finally:temporary.unlink(missing_ok=True)
 
-    def register_import(self,ident,body,path,*,active_job=None):
+    def register_import(self,ident,body,path,*,active_job=None,queued_readers=False):
         """Register a complete private staging file without loading its bytes."""
         name,label,extension,defer=import_metadata(body);path=Path(path)
         if self.closed.is_set():raise ValueError('Applicazione in chiusura.')
@@ -263,7 +264,7 @@ class Knowledge:
             for piece in iter(lambda:inp.read(IMPORT_CHUNK_BYTES),b''):hasher.update(piece)
         digest=hasher.hexdigest()
         with self.index_lock:
-            self.mutable(ident,active_job=active_job)
+            self.mutable(ident,active_job=active_job,queued_readers=queued_readers)
             target=safe_join(self.data,'project-imports/'+ident+'/'+digest+'/document'+extension)
             existing=self.store.one('SELECT id FROM project_sources WHERE project_id=? AND path=?',(ident,str(target)))
             duplicate=bool(existing)

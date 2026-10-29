@@ -306,19 +306,27 @@ class Worker:
 
     def configure_attention(self, preference, chunks=0, veda_options=None):
         from comfy.ldm.modules import attention
+        if getattr(self,'vsa_base_model',None) is not None:self.model=self.vsa_base_model
+        self.vsa_base_model=None
         if preference=='vsa':
-            if not getattr(self,'fast_omni',False):raise ValueError('VSA richiede il caricamento con profilo FastH3 Omni.')
-            if getattr(self,'fast_base_model',None) is not None:self.model=self.fast_base_model
-            self.fast_base_model=self.model
+            if getattr(self,'veda_base_model',None) is not None:
+                self.model=self.veda_base_model
+                from h3chat.veda import release
+                release(getattr(self,'veda_patch',None))
+            self.veda_base_model=None;self.veda_patch=None
             # The fallback is dense, while the learned VSA branch uses the
             # bundled ComfyKitchen block-sparse kernels and compression gates.
             dense=getattr(attention,'attention_comfy_kitchen_int8',None) if getattr(attention,'COMFY_KITCHEN_INT8_ATTENTION_IS_AVAILABLE',False) else None
+            fast=getattr(self,'fast_omni',False)
+            if not fast and not callable(dense):raise ValueError('VSA H3 richiede ComfyKitchen INT8 nel runtime. Nessun ripiego silenzioso.')
             self.model.set_model_optimized_attention(dense or attention.attention_pytorch)
             from comfy_extras.nodes_sparse_attention import apply_block_sparse_attention
-            from h3chat.fasth3 import attach
+            if fast:from h3chat.fasth3 import attach
+            else:from h3chat.video_sparse import attach
+            self.vsa_base_model=self.model
             self.model=attach(self.model,apply_block_sparse_attention);self.attention_chunks=1
-            emit('stage',message='Video · FastH3 Omni · VSA 10% · 8 passi')
-            logging.info('FastH3 Omni: trained VSA 10%%, start=0, end=1, sink=exact_kv_and_rows, no extra PDD')
+            emit('stage',message='Video · FastH3 Omni · VSA 10% · 8 passi' if fast else 'Video · H3 · VSA 90% sparsità · ComfyKitchen INT8 · sperimentale')
+            logging.info('H3 VSA: keep=10%%, start=0, end=1, sink=exact_kv_and_rows, fast=%s, dense fallback below 12288 tokens',fast)
             return 'vsa'
         if getattr(self,'veda_base_model',None) is not None:
             self.model=self.veda_base_model
@@ -367,6 +375,7 @@ class Worker:
         # has no graph executor: release transfer buffers and their module
         # references explicitly before dropping the finished phase's weights.
         self.comfy.model_management.reset_cast_buffers()
+        if 'model' in names:self.vsa_base_model=None
         for name in names:setattr(self,name,None)
         gc.collect()
         self.comfy.model_management.cleanup_models()

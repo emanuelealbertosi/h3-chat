@@ -2,6 +2,7 @@ import {chatModelId,cpuMode} from './execution-mode.js';
 import {initComposerSettings} from './composer-settings.js';
 import {initImageRequest} from './image-request.js';
 import {initComposerCollapse} from './composer-collapse.js';
+import {initInterfaceMode} from './interface-mode.js';
 const $=selector=>document.querySelector(selector);
 function button(text,id){const element=document.createElement('button');element.type='button';element.className='prompt-choice';element.textContent=text;if(id)element.id=id;return element;}
 function field(title){const element=document.createElement('div');element.className='prompt-field';const heading=document.createElement('span');heading.className='prompt-field-label';heading.textContent=title;element.append(heading);return element;}
@@ -34,7 +35,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  for(const id of ['music-toggle','video-toggle','voice-toggle']){const item=$('#'+id);item.className='prompt-choice';modes.append(item);}
  const videoEdit=button('✎ Modifica video','prompt-video-edit');modes.append(videoEdit);
  videoEdit.onclick=()=>{const value=visualControls.read(),active=value.video&&value.video_editing==='modify';setLab('auto');reset();if(!active)visualControls.set({...visualControls.read(),video:true,video_editing:'modify'});render();};
- const tools=new Map([['slides',button('▥ Slide','prompt-slides')],['infographic',button('✧ Infografica','prompt-infographic')],['manim',button('⌁ Manim','prompt-manim')],['calculate',button('∑ Calcolo','prompt-calculate')],['agent',button('◇ Agent','prompt-agent')]]);
+ const tools=new Map([['study',button('▤ Studio','prompt-study')],['slides',button('▥ Slide','prompt-slides')],['poster',button('▧ Locandine','prompt-posters')],['infographic',button('✧ Infografica','prompt-infographic')],['manim',button('⌁ Manim','prompt-manim')],['calculate',button('∑ Calcolo','prompt-calculate')],['agent',button('◇ Agent','prompt-agent')]]);
  for(const item of tools.values())modes.append(item);
  const transcribe=$('#transcribe-toggle');transcribe.className='prompt-choice';modes.append(transcribe);
  modes.append(tools.get('agent'));tools.get('agent').classList.add('prompt-agent-mode');
@@ -49,7 +50,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  lab.closest('label').hidden=true;
  const imagePanel=field('Modello immagini');imagePanel.id='prompt-image-panel';context.append(imagePanel);imagePanel.append(image.closest('label'));pills(image,'Scegli il modello',true);
  const imageRequest=initImageRequest({holder:imagePanel,getState,visualControls,savePresets:saveImagePresets,getLastSeed:getLastImageSeed,notify});
- for(const id of ['agent-options','slides-options','music-inputs','voice-inputs','video-hint'])context.append($('#'+id));
+ for(const id of ['agent-options','slides-options','posters-options','study-options','music-inputs','voice-inputs','video-hint'])context.append($('#'+id));
  pills($('#video-quality'),'Qualità');
  pills($('#video-resolution'),'Risoluzione video');
  pills($('#video-format'),'Formato video');
@@ -76,7 +77,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  technicalBody.append($('#chat-vision-max-refs').closest('label'),$('#chat-vision-refs-note'));
  technicalBody.append($('#vision-badge'),$('#think-note'),$('#chat-vision-device-note'),$('#generation-settings'));
  $('#generation-settings').addEventListener('click',()=>dialog.close(),{capture:true});
- const assistant=toggle($('#image-assistant'),'Assistant',sources);sources.append($('#project-chat-label'));toggle($('#rag-enabled'),'RAG',sources);const web=$('#web-toggle');web.className='prompt-choice';sources.append(web);
+ const assistant=toggle($('#image-assistant'),'Assistant',sources);sources.append($('#project-chat-label'));toggle($('#rag-enabled'),'RAG',sources);sources.append($('#rag-request-sources'),$('#rag-request-depth'));const web=$('#web-toggle');web.className='prompt-choice';sources.append(web);
  toggle($('#music-inputs [data-music-field="instrumental"]'),'Strumentale',$('#music-inputs .settings-grid'));
  $('#project-chat-label').classList.add('prompt-project');
  for(const row of composer.querySelectorAll('.chat-controls')){row.classList.add('prompt-legacy-row');row.hidden=true;}
@@ -92,6 +93,7 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  }});
  function render(){
   const state=getState();if(!state)return;
+  tools.get('poster').disabled=!state.poster_options?.enabled||!chatModelId(state);tools.get('poster').title=!state.poster_options?.enabled?'Locandine disponibili dopo l’attivazione del servizio aggiornato.':!chatModelId(state)?'Scegli un LLM per creare locandine.':'Locandine con testi modificabili, formati stampa/social e composizione dedicata.';
   tools.get('agent').disabled=!state.agent_options?.enabled||!chatModelId(state);tools.get('agent').title=!state.agent_options?.enabled?'Agent disponibile dopo l’attivazione del servizio aggiornato.':!chatModelId(state)?'Scegli un LLM per Agent.':'Agent sperimentale · usa il modello scelto, gli strumenti H3 e il perimetro di accesso autorizzato.';
   const value=visualControls.read(),mode=lab.value,cpu=cpuMode(state);
   for(const item of [images,videoEdit,$('#music-toggle'),$('#video-toggle'),$('#voice-toggle'),transcribe]){item.disabled=cpu;item.title=cpu?'Disabilitato in modalità CPU':'';}
@@ -101,7 +103,8 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
   imagePanel.hidden=!value.image_model;slides.hidden=mode!=='slides';slideTechnical.hidden=mode!=='slides';generatedModels.hidden=!$('#slides-generate-images').checked;
   countLabel.hidden=countMode.value==='auto';count.disabled=countMode.value==='auto';minus.disabled=plus.disabled=count.disabled;
   voiceMode.hidden=!!value.voice&&mode==='manim';const agentPanel=$('#agent-options');if(agentPanel)agentPanel.hidden=mode!=='agent';
-  context.hidden=!(mode==='agent'||mode==='slides'||mode==='manim'||mode==='infographic'||value.image_model||value.voice||value.music||value.video);
+  const posters=document.querySelector('#posters-options');if(posters)posters.hidden=mode!=='poster';
+  context.hidden=!(mode==='study'||mode==='agent'||mode==='slides'||mode==='poster'||mode==='manim'||mode==='infographic'||value.image_model||value.voice||value.music||value.video);
   const infographic=document.querySelector('#infographic-options');if(infographic)infographic.hidden=mode!=='infographic';
   const manim=document.querySelector('#manim-presentation-options');if(manim)manim.hidden=mode!=='manim';
   assistant.hidden=mode==='agent';assistant.textContent='Assistant '+(value.assistant?'On':'Off');assistant.title='Prepara le istruzioni con il LLM della chat';
@@ -115,5 +118,6 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
   imageRequest.render();modeSettings.render();
   collapse.render();
  }
+ initInterfaceMode({onBasic:()=>{if(['agent','manim','calculate'].includes(lab.value))auto.click();}});
  return {render,reveal:collapse.reveal};
 }

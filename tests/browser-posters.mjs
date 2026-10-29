@@ -1,0 +1,48 @@
+import {spawn} from 'node:child_process';
+import {createRequire} from 'node:module';
+import {once} from 'node:events';
+import {createInterface} from 'node:readline';
+import {mkdir,readFile} from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
+await mkdir('work/posters-qa',{recursive:true});
+const child=spawn('runtime/python/python.exe',['-X','utf8','tests/serve_posters_fixture.py'],{stdio:['ignore','pipe','pipe'],env:process.env});let diagnostic='';child.stderr.on('data',x=>diagnostic+=x);
+const lines=createInterface({input:child.stdout});const [line]=await Promise.race([once(lines,'line'),once(child,'exit').then(()=>{throw Error(diagnostic);})]);lines.close();
+const fixture=JSON.parse(line),browser=await chromium.launch({channel:'msedge',headless:true,args:['--disable-gpu']});
+const page=await browser.newPage({viewport:{width:1500,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+const post=(path,body={})=>page.evaluate(async({path,body})=>{const token=await fetch('/api/state').then(r=>r.json()).then(v=>v.token);return fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-H3-Token':token},body:JSON.stringify(body)}).then(r=>r.json());},{path,body});
+try{
+ await page.goto(fixture.url);await page.click(`[data-chat="${fixture.chat}"]`);
+ await page.locator('#prompt-posters').click();await page.locator('[data-mode-settings="posters-options"]').click();
+ const modal=page.locator('#prompt-mode-settings');assert.match(await modal.locator('h2').textContent(),/Locandine/);
+ await modal.locator('[data-poster="composition"]').selectOption('moss_layout');
+ assert.equal(await modal.locator('[data-poster="reference_image"]').isVisible(),true);
+ await modal.locator('[data-poster="reference_image"]').fill('1');await modal.locator('[data-poster="reference_image"]').dispatchEvent('change');
+ assert.match(await modal.locator('[data-poster-note]').textContent(),/compositore espressivo/);
+ assert.match(await modal.locator('[data-poster-note]').textContent(),/brevi titoli/);
+ await modal.locator('footer .primary').click();await page.reload();await page.locator('#prompt-posters').click();await page.locator('[data-mode-settings="posters-options"]').click();
+ assert.equal(await modal.locator('[data-poster="composition"]').inputValue(),'moss_layout');assert.equal(await modal.locator('[data-poster="reference_image"]').inputValue(),'1');
+ await modal.locator('[data-poster="composition"]').selectOption('html');assert.equal(await modal.locator('[data-poster="reference_image"]').isVisible(),false);
+ await modal.locator('[data-poster="format"]').selectOption('A3');await modal.locator('[data-poster="style"]').selectOption('editorial');
+ await modal.locator('[data-poster="count"]').fill('2');await modal.locator('[data-poster="count"]').dispatchEvent('change');await modal.locator('[data-poster="images"]').selectOption('none');await modal.locator('footer .primary').click();
+ await page.reload();await page.locator('#prompt-posters').click();await page.locator('[data-mode-settings="posters-options"]').click();assert.equal(await modal.locator('[data-poster="count"]').inputValue(),'2');await modal.locator('footer .primary').click();
+ await page.fill('#prompt','Crea 2 locandine A3 OPEN LAB. 12 novembre, ore 17, Aula Blu, senza immagini.');
+ const ticket=page.waitForResponse(r=>r.url().endsWith('/messages')&&r.request().method()==='POST');await page.click('#send');const response=await ticket,sent=await response.json();assert.equal(sent.intent,'poster');assert.equal(response.request().postDataJSON().poster.style,'editorial');
+ await post('/fixture/execute',{job:sent.job_id});
+ const frame=()=>page.frameLocator('#canvas-preview .h3-html-page iframe');
+ await frame().locator('h1').waitFor();await page.waitForFunction(()=>!document.querySelector('#slide-edit')?.disabled);
+ assert.match(await frame().locator('h1').textContent(),/OPEN/);assert.equal(await page.locator('[data-export="pptx"]').isVisible(),true);
+ assert.equal(await frame().locator('h1').evaluate(e=>getComputedStyle(e).fontSize),'205px');
+ assert.ok(Math.abs((await page.locator('.h3-html-page').evaluate(e=>e.offsetHeight))/1280-420/297)<.002);
+ const select=page.locator('.slides-navigation select');await select.selectOption('0');await page.screenshot({path:'work/posters-qa/poster-desktop.png'});
+ await page.locator('#slide-edit').click();await frame().locator('h1').click();await page.locator('#slide-html-properties summary').click();await page.fill('#slide-html-text','OPEN LAB MODIFICATO');await page.locator('#slide-html-save').click();await page.waitForFunction(()=>document.querySelector('#canvas-save-status')?.textContent.includes('Salvato'));await page.locator('#slide-edit').click();
+ await select.selectOption('1');const pngWait=page.waitForEvent('download');await page.locator('#canvas-panel [data-export="png"]').click();const png=await pngWait;await png.saveAs('work/posters-qa/selected.png');const image=await readFile('work/posters-qa/selected.png');assert.equal(image.readUInt32BE(16),2560);assert.ok(image.readUInt32BE(20)<4000);
+ const pdfWait=page.waitForEvent('download');await page.locator('#canvas-panel [data-export="pdf"]').click();await (await pdfWait).saveAs('work/posters-qa/posters.pdf');
+ const proof=await post('/fixture/proof');assert.equal(proof.pdf.at(-1).pages,2);for(const [w,h] of proof.pdf.at(-1).sizes_mm){assert.ok(Math.abs(w-297)<.3,w);assert.ok(Math.abs(h-420)<.3,h);}assert.match(proof.pdf.at(-1).text,/OPEN\s+LAB\s+MODIFICATO/);assert.match(proof.pdf.at(-1).text,/Aula Blu/);
+ const htmlWait=page.waitForEvent('download');await page.locator('#canvas-panel [data-export="html"]').click();await (await htmlWait).saveAs('work/posters-qa/posters.html');assert.match(await readFile('work/posters-qa/posters.html','utf8'),/1810\.10/);
+ const pptxWait=page.waitForEvent('download');await page.locator('#canvas-panel [data-export="pptx"]').click();await (await pptxWait).saveAs('work/posters-qa/posters.pptx');
+ const JSZip=require('jszip'),zip=await JSZip.loadAsync(await readFile('work/posters-qa/posters.pptx')),presentation=await zip.file('ppt/presentation.xml').async('string'),size=/<p:sldSz cx="(\d+)" cy="(\d+)"/.exec(presentation);assert.ok(size,presentation.slice(0,300));assert.ok(Math.abs(Number(size[1])/914400*25.4-297)<.1);assert.ok(Math.abs(Number(size[2])/914400*25.4-420)<.1);assert.equal(Object.keys(zip.files).filter(n=>/^ppt\/slides\/slide\d+\.xml$/.test(n)).length,2);
+ for(const file of Object.values(zip.files).filter(n=>/^ppt\/media\/.*\.png$/.test(n.name))){const pixels=await file.async('nodebuffer');assert.ok(pixels.readUInt32BE(16)>=3800);const varied=await page.evaluate(async src=>{const im=new Image();im.src=src;await im.decode();const c=document.createElement('canvas');c.width=im.width;c.height=im.height;const x=c.getContext('2d');x.drawImage(im,0,0);const p=x.getImageData(0,0,c.width,c.height).data,colors=new Set();for(let i=0;i<p.length;i+=400)colors.add((p[i]>>4)+','+(p[i+1]>>4)+','+(p[i+2]>>4));return colors.size;},'data:image/png;base64,'+pixels.toString('base64'));assert.ok(varied>20,'Blank poster in PowerPoint');}
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:'work/posters-qa/poster-mobile.png'});assert.ok(await page.locator('#chat-menu').evaluate(e=>e.getBoundingClientRect().right)<=390);
+ assert.deepEqual(errors,[]);console.log(JSON.stringify({passed:true,pdf:proof.pdf.at(-1),gpu_models:0,synthetic_model_output:true}));
+}catch(error){await page.screenshot({path:'work/posters-qa/error.png',fullPage:true});console.error(diagnostic);throw error;}finally{await browser.close();child.kill();}

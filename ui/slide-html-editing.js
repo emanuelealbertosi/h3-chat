@@ -1,5 +1,6 @@
 import {imagePicker} from './slide-image-picker.js';
 import {fitHtmlBackground,contentScale} from './slide-content-fit.js';
+import fontFamilies from '../static/typography-fonts.json';
 
 const containerTags='main,section,article,div,aside,header,footer';
 const contentChildren=element=>[...element.children].filter(e=>!e.matches('style,script,[data-h3-editor]')&&(e.textContent.trim()||e.matches('img,svg')||e.querySelector('img,svg')));
@@ -65,6 +66,7 @@ export function editHtmlSlide(target,deck,index,frame,onChange,options,media,{do
     <div id="slide-image-fit-controls" hidden><label>Adattamento immagine<select id="slide-image-fit"><option value="contain">Intera · nessun ritaglio</option><option value="cover">Riempi riquadro · ritaglio proporzionale</option></select></label><label>Centro orizzontale<input id="slide-image-x" type="range" min="0" max="100" value="50"></label><label>Centro verticale<input id="slide-image-y" type="range" min="0" max="100" value="50"></label></div><details id="slide-html-properties"><summary>Testo e dimensioni</summary><div class="slide-html-properties"><label class="slide-editor-text">Testo<textarea id="slide-html-text" rows="3"></textarea></label><label>Carattere<select id="slide-html-font"><option>Segoe UI</option><option>Arial</option><option>Georgia</option><option>Manrope</option><option>Cormorant</option><option>Consolas</option><option>Comic Sans MS</option></select></label><label>Dimensione carattere<input id="slide-html-size" type="number" min="8" max="160"></label><label>Colore testo<input id="slide-html-color" type="color"></label><label>Sfondo<input id="slide-html-bg" type="color"></label><label>Larghezza<input id="slide-html-width" type="number" min="10" max="1280"></label><label>Altezza<input id="slide-html-height" type="number" min="10" max="1280"></label></div></details><p id="slide-html-status" role="status" aria-live="polite"></p>`;
   target.querySelector('.slides-navigation').after(toolbar);
   const q=s=>toolbar.querySelector(s),status=q('#slide-html-status');
+  for(const family of fontFamilies)if(![...q('#slide-html-font').options].some(o=>o.value===family)){const option=document.createElement('option');option.value=option.textContent=family;q('#slide-html-font').append(option);}
   q('#slide-html-height').max=String(Math.ceil(frame.offsetHeight));
   const overlay=doc.createElement('div');overlay.dataset.h3Editor='';
   overlay.style.cssText='all:initial;position:fixed;z-index:2147483647;pointer-events:none;border:2px dashed #138a92;box-sizing:border-box;display:none;';
@@ -156,8 +158,9 @@ export function editHtmlSlide(target,deck,index,frame,onChange,options,media,{do
   });
   q('#slide-html-delete').onclick=()=>change(()=>{if(!selected)return;const parent=selected.parentElement;selected.remove();select(null);refreshLayout(parent);});
   q('#slide-html-text').oninput=()=>{if(selected&&!q('#slide-html-text').disabled)change(()=>selected.textContent=q('#slide-html-text').value);};
-  for(const [id,property,unit] of [['size','font-size','px'],['color','color',''],['bg','background-color',''],['width','width','px'],['height','height','px'],['font','font-family','']])q('#slide-html-'+id).oninput=()=>{
-    const input=q('#slide-html-'+id);if(!selected||unit&&!input.checkValidity())return;change(()=>selected.style.setProperty(property,input.value+unit));
+  for(const [id,property,unit] of [['size','font-size','px'],['color','color',''],['bg','background-color',''],['width','width','px'],['height','height','px'],['font','font-family','']])q('#slide-html-'+id).oninput=async()=>{
+    const input=q('#slide-html-'+id);if(!selected||unit&&!input.checkValidity())return;const target=selected,value=input.value;
+    try{if(id==='font')await options.loadLocalFont?.(value);if(target===selected)change(()=>target.style.setProperty(property,value+unit));}catch(error){status.textContent=error.message;}
   };
   doc.addEventListener('pointerdown',e=>{
     const handle=e.target.closest('[data-h3-editor] button');if(e.button!==0||!selected||!handle)return;e.preventDefault();

@@ -59,3 +59,13 @@
 .composer-area.prompt-is-collapsed>.composer-foot,.composer-area.prompt-is-collapsed>.mode-hint{display:none!important}
 .composer-area.prompt-is-collapsed{padding-top:7px;padding-bottom:10px}
 @media(max-width:640px){.composer-area{max-height:58dvh}.prompt-bar{gap:6px}.prompt-collapse{font-size:10px;padding:6px 8px}.prompt-collapsed-summary{font-size:9px}.prompt-bar>.stop-button{font-size:10px;padding:7px}}
+.interface-mode{white-space:nowrap;flex-shrink:0}
+.interface-mode button{font-size:11px;padding:6px 9px}
+.interface-mode button[aria-pressed="true"]{background:var(--ink,#214f48);color:var(--paper,#fff)}
+body[data-interface-mode="basic"] :is(#prompt-agent,#prompt-manim,#prompt-calculate,#prompt-options-open,#prompt-technical-summary,.prompt-llm,#settings-open,#engine-badge,#lora-open,#lora-attachments,.chat-advanced-toggle,#memory-status,#model-name){display:none!important}
+body[data-interface-mode="basic"] #prompt-sources{display:none!important}
+body[data-interface-mode="basic"] [data-advanced-only]{display:none!important}
+body[data-interface-mode="basic"] :is(.image-request-controls,.prompt-field:has(>.prompt-model-list),[data-music-request-parameters]){display:none!important}
+body[data-interface-mode="basic"] #prompt-mode-settings :is(.prompt-model-list,.prompt-field:has(#slides-engine),.prompt-field:has(#slides-vision),.prompt-field:has(#slides-timeout),.prompt-field:has(#video-steps),.prompt-field:has(#video-segments)){display:none!important}
+@media(max-width:650px){.interface-mode button{font-size:10px;padding:5px 6px}body[data-interface-mode="basic"] .top-actions{gap:5px}}
+@media(max-width:800px){.topbar:has(#interface-mode){height:auto;min-height:65px;padding:7px 0;flex-wrap:wrap;gap:6px}.topbar:has(#interface-mode) .breadcrumb{flex:1 0 100%}.topbar:has(#interface-mode) .top-actions{flex:1;max-width:100%;justify-content:flex-end;flex-wrap:wrap}}

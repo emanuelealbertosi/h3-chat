@@ -7,7 +7,16 @@ const captureOptions={pixelRatio:2,backgroundColor:'#fffefa',filter:n=>!n.classL
 const nameOf=title=>(title||'H3-Chat').replace(/[^\p{L}\p{N}\s_-]/gu,'').trim().slice(0,80)||'H3-Chat';
 async function waitImages(root){await document.fonts.ready;await Promise.all([...root.querySelectorAll('img')].map(img=>img.decode().catch(()=>{})));}
 
-export async function exportPng(root,title){await waitImages(root);const width=root.clientWidth,height=root.scrollHeight;const c=await toCanvas(root,{...captureOptions,width,height,style:{...captureOptions.style,width:width+'px',height:height+'px',maxHeight:'none',overflow:'visible',flex:'none'}});c.toBlob(b=>saveBlob(b,nameOf(title)+'.png'));}
+export async function exportPng(root,title){
+ await waitImages(root);const width=root.clientWidth,height=root.scrollHeight,before=root.style.cssText;
+ try{
+  // Recompute physical AND logical inset values before cloning. Merely changing
+  // left on the clone leaves Chromium's offscreen logical insets in its styles.
+  if(root.classList.contains('slides-export'))Object.assign(root.style,{position:'fixed',inset:'0 auto auto 0',zIndex:'-1'});
+  const c=await toCanvas(root,{...captureOptions,width,height,style:{...captureOptions.style,width:width+'px',height:height+'px',maxHeight:'none',overflow:'visible',flex:'none',position:'relative',inset:'auto',insetInline:'auto',insetBlock:'auto',left:'0',top:'0',zIndex:'0',transform:'none'}});
+  c.toBlob(b=>saveBlob(b,nameOf(title)+'.png'));
+ }finally{root.style.cssText=before;}
+}
 
 export async function printableHtml(root) {
   await waitImages(root);

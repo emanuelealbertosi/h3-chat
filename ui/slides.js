@@ -8,13 +8,15 @@ import {repairSlideContrast} from './slide-contrast.js';
 import {mountInfographic} from './infographics.js';
 import {slideProgress} from './slide-generation-state.js';
 import {validateBackgroundStyle,applyDeclarativeBackground,validateContentViewport} from './slide-background-style.js';
+import {documentHeights,posterPaper} from './document-formats.js';
 
-export const slideFormats={'16:9':720,'9:16':1280*16/9,'4:3':960,'16:10':800,'1:1':1280};
+export const slideFormats=documentHeights;
 export function readDeck(content){
   if(!content.startsWith('```h3-slides\n'))return null;
   if(content.length>9200000||!content.endsWith('\n```'))throw Error('Sorgente slide incompleto o troppo grande.');
   const deck=JSON.parse(content.slice(13,-4));
   if(deck.version!==1||!Object.hasOwn(slideFormats,deck.format)||!Array.isArray(deck.pages)||!deck.pages.length||deck.pages.length>(deck.infographic?30:100))throw Error('Presentazione non valida.');
+  if(deck.document_kind==='poster'&&(!deck.poster||deck.poster.format!==deck.format||deck.poster.count!==deck.pages.length||deck.pages.length>6))throw Error('Documento locandine non valido.');
   if(deck.title!==undefined&&(typeof deck.title!=='string'||deck.title.length>150))throw Error('Titolo presentazione non valido.');
   if(deck.duration_minutes!==undefined&&(typeof deck.duration_minutes!=='number'||!Number.isFinite(deck.duration_minutes)||deck.duration_minutes<0||deck.duration_minutes>20))throw Error('Durata indicativa slide non valida.');
   deck.title||='Presentazione';deck.references||=[];
@@ -106,14 +108,18 @@ export async function renderSlides(target,value,options={}){
   controls.append(prev,picker,next,follow);target.append(controls);
   const progress=slideProgress(deck,selected.index,options.job);
   const status=document.createElement('p');status.className='slide-generation-progress small-note no-export';status.setAttribute('role','status');status.textContent=progress.text;status.hidden=!progress.text;target.append(status);
-  if(progress.missing&&!deck.infographic&&options.onResume){
+  if(progress.missing&&!deck.infographic&&deck.document_kind!=='poster'&&options.onResume){
     const resume=document.createElement('button');resume.type='button';resume.className='btn small no-export';resume.dataset.slidesResume='';resume.textContent='Completa slide mancanti · '+progress.missing;resume.disabled=!!options.busy;
     resume.onclick=async()=>{resume.disabled=true;try{selected.follow=true;await options.onResume();}catch(error){const message=document.createElement('p');message.className='message-error';message.textContent=error.message;resume.after(message);}finally{resume.disabled=!!options.busy;}};target.append(resume);
   }
   const edit=document.createElement('button');edit.id='slide-edit';edit.textContent=selected.editing?'Termina modifica':'Modifica grafica';edit.disabled=!options.editable||!options.onChange||pageNotReady(deck.pages[selected.index]);
   edit.onclick=()=>{selected.editing=!selected.editing;again();};controls.append(edit);
+  if(deck.document_kind==='poster'&&deck.pages[selected.index]?.poster_layout&&options.onTypography){
+    const type=document.createElement('button');type.type='button';type.className='btn small';type.textContent='Applica font ed effetti';type.title='Crea una revisione usando lo stile scelto in Impostazioni Locandine. Conserva l’immagine e la versione precedente.';type.disabled=!!options.busy;
+    type.onclick=async()=>{type.disabled=true;try{await options.onTypography(selected.index+1);}catch(e){const error=document.createElement('p');error.className='message-error';error.textContent=e.message;controls.after(error);}finally{type.disabled=!!options.busy;}};controls.append(type);
+  }
   if(deck.engine==='llm'){
-    const {mountSlideRevision}=await import('./slide-ai.js');mountSlideRevision(target,selected,deck.pages[selected.index],{...options,animatedInfographic:!!deck.infographic&&deck.infographic.options?.output!=='static'});
+    const {mountSlideRevision}=await import('./slide-ai.js');mountSlideRevision(target,selected,deck.pages[selected.index],{...options,poster:deck.document_kind==='poster',animatedInfographic:!!deck.infographic&&deck.infographic.options?.output!=='static'});
   }
   const viewport=document.createElement('div');viewport.className='slides-viewport'+(deck.motion==='animated'?' slide-motion':'');target.append(viewport);
   const initialScale=Math.max(.1,(viewport.clientWidth||600)/1280);viewport.style.height=(slideFormats[deck.format]*initialScale+16)+'px';
@@ -133,7 +139,7 @@ export async function renderSlides(target,value,options={}){
   if(selected.editing&&options.editable&&deck.engine==='llm')mountHtmlEditor(target,deck,selected.index,frame,options.onChange,options,value.media);
   if(deck.infographic&&page.status==='ready'&&!selected.editing)mountInfographic(target,deck,selected.index,frame,options,value);
   if(selected.editing&&options.editable&&deck.engine!=='llm'){const {mountEditor}=await import('./slide-editor.js');mountEditor(target,deck,selected.index,frames,async (content,media)=>{await assertLayouts(deck,media||value.media,options);await options.onChange(content,media);},selected,options,value.media);}
-  const notes=document.createElement('details');notes.className='slide-notes no-export';const summary=document.createElement('summary');summary.textContent='Note e fonti della slide';notes.append(summary);
+  const notes=document.createElement('details');notes.className='slide-notes no-export';const summary=document.createElement('summary');summary.textContent=deck.document_kind==='poster'?'Note e fonti della locandina':'Note e fonti della slide';notes.append(summary);
   const text=document.createElement('p');text.textContent=page.notes||'Nessuna nota.';notes.append(text);
   for(const id of page.sources||[]){const ref=(deck.references||[]).find(r=>r.id===id);if(!ref)continue;const p=document.createElement('p');p.textContent='['+id+'] '+ref.label;const rag=options.sources?.find(s=>s.citation===id);if(rag&&options.onCitation){p.className='rag-citation';p.tabIndex=0;p.onclick=()=>options.onCitation(rag,options.sources);p.onkeydown=e=>{if(e.key==='Enter')p.click();};}notes.append(p);}target.append(notes);
   if(deck.engine==='llm'&&!deck.infographic&&!selected.editing)previews.set(target,{context,pageSignature,frame,live,update(nextDeck,nextOptions){
@@ -170,6 +176,7 @@ export async function exportSlides(value,kind,token){
   const deck=readDeck(value.content),root=document.createElement('div');root.className='slides-export';root.style.cssText='position:fixed;left:-20000px;top:0;width:1280px;background:white;';document.body.append(root);
   try{
     for(const [i,page] of deck.pages.entries()){
+      if(kind==='png'&&deck.document_kind==='poster'&&i!==Math.max(0,Math.min(deck.pages.length-1,selections.get(value.id||'draft')?.index??deck.active??0)))continue;
       if(page.status!=='ready')throw Error('Completa tutte le pagine prima di esportare le slide.');
       await pageElement(deck,page,i,value.media,{},root);
     }
@@ -177,10 +184,16 @@ export async function exportSlides(value,kind,token){
     for(const frame of [...root.children])if(deck.engine!=='llm')layoutSlide(frame,deck.pages[Number(frame.dataset.page)-1].title);
     if(kind==='html'&&!deck.infographic)return await (await import('./slide-presentation-export.js')).exportPresentation(root,deck,value.title,token);
     for(const frame of [...root.children])if(deck.engine==='llm')flattenHtml(frame);
+    const paper=deck.document_kind==='poster'&&posterPaper[deck.format];
+    if(paper&&['pdf','source-pdf'].includes(kind)){
+      const scale=(paper[0]*96/25.4)/1280;
+      for(const frame of [...root.children]){const sheet=document.createElement('div');sheet.style.cssText=`position:relative;width:${paper[0]}mm;height:${paper[1]}mm;overflow:hidden;break-after:page;break-inside:avoid;`;frame.before(sheet);sheet.append(frame);frame.style.cssText+=`;position:absolute;left:0;top:0;margin:0;break-after:auto;transform:scale(${scale});transform-origin:top left;`;}
+      root.lastElementChild.style.breakAfter='auto';
+    }
     if(kind==='html'){const html=await (await import('./exports.js')).printableHtml(root);const response=await fetch('/api/export/html',{method:'POST',headers:{'Content-Type':'application/json','X-H3-Token':token},body:JSON.stringify({title:value.title,html,slide_format:deck.format})});const result=await response.json();if(!response.ok)throw Error(result.error);const blob=await fetch(result.url).then(r=>r.blob());saveBlob(blob,value.title+'.html');return;}
     if(kind==='pptx')return await (await import('./slide-pptx.js')).exportPowerPoint(root,deck,value.title);
-    if(kind==='pdf')return await exportPdf(root,value.title,token,{slide_format:deck.format});
-    if(kind==='source-pdf'){const url=await exportPdf(root,value.title,token,{slide_format:deck.format,download:false});const response=await fetch(url);if(!response.ok)throw Error('PDF della presentazione non disponibile.');return await response.blob();}
+    if(kind==='pdf')return await exportPdf(root,value.title,token,{slide_format:deck.format,...(paper?{page_size_mm:paper}:{})});
+    if(kind==='source-pdf'){const url=await exportPdf(root,value.title,token,{slide_format:deck.format,...(paper?{page_size_mm:paper}:{}),download:false});const response=await fetch(url);if(!response.ok)throw Error('PDF della presentazione non disponibile.');return await response.blob();}
     if(kind==='docx')return await exportDocx(root,value.title);
     if(kind==='png')return await exportPng(root,value.title);
 

@@ -23,7 +23,9 @@ Whisper model weights are MIT-licensed upstream and are not bundled.
 
 llama.cpp and stable-diffusion.cpp: MIT; copyright their respective contributors.
 Python: Python Software Foundation License, included in runtime/python/LICENSE.txt.
-Manrope and Cormorant: SIL Open Font License 1.1.
+Manrope and Cormorant: SIL Open Font License 1.1 (licenses/Manrope-OFL.txt and licenses/Cormorant-OFL.txt).
+Bebas Neue (Dharma Type), Baloo 2 (Ek Type), Caveat and Bangers: SIL Open Font License 1.1.
+Their copyright and license notices are retained in static/font-licenses/.
 Frontend dependencies and their notices are in licenses/ and package-lock.json.
 Bundled JavaScript preserves esbuild's legal notices in static/app.js.LEGAL.txt.
 

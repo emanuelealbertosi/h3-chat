@@ -1,4 +1,4 @@
-export const attentionChoices=[['vsa','VSA 10% · solo FastH3 Omni'],['auto','Automatico · Sage'],['veda','VEDA · gruppi automatici'],['veda8','VEDA 8 · gruppi espliciti'],['veda56','VEDA 56 · gruppi espliciti'],['sage','SageAttention'],['comfy_kitchen','ComfyKitchen INT8 · sperimentale'],['pytorch','Nessuna accelerazione aggiuntiva · PyTorch']];
+export const attentionChoices=[['vsa','VSA 90% sparsità · H3 / FastH3 · sperimentale'],['auto','Automatico · Sage'],['veda','VEDA · gruppi automatici'],['veda8','VEDA 8 · gruppi espliciti'],['veda56','VEDA 56 · gruppi espliciti'],['sage','SageAttention'],['comfy_kitchen','ComfyKitchen INT8 · sperimentale'],['pytorch','Nessuna accelerazione aggiuntiva · PyTorch']];
 export const needsAttentionUpdate=value=>['veda8','veda56','comfy_kitchen'].includes(value);
 
 export function attentionSelection(parameters={}){

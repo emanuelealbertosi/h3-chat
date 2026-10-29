@@ -18,6 +18,17 @@ def header(layers):
 
 
 class LoraFamilyTests(unittest.TestCase):
+    def test_moss_without_metadata_requires_attention_and_both_gated_ffn_shapes(self):
+        layers={'diffusion_model.layers.0.proj.q':(3072,3072),
+                'diffusion_model.layers.0.proj.ffn_up_gate':(16384,3072),
+                'diffusion_model.layers.0.proj.ffn_down':(3072,8192)}
+        self.assertEqual(tensor_family(header(layers)),'moss')
+        for missing in layers:
+            self.assertEqual(tensor_family(header({k:v for k,v in layers.items() if k!=missing})), '')
+        wrong=layers|{'diffusion_model.layers.0.proj.ffn_down':(3072,4096)}
+        self.assertEqual(tensor_family(header(wrong)),'')
+        self.assertTrue(compatible('moss',{'architecture':'moss'}));self.assertFalse(compatible('moss',{'architecture':'flux1'}))
+
     def test_generic_sd_profile_uses_actual_checkpoint_family(self):
         from h3chat.external_models import build_model,validate_config
         from test_krea2_loras import adapter

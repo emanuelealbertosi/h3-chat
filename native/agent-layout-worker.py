@@ -18,7 +18,7 @@ emit=capture.emit
 MEASURE=r'''Array.from(document.querySelectorAll('iframe'),(frame)=>{
  const d=frame.contentDocument,w=WIDTH,h=HEIGHT,area=d.querySelector('[data-h3-background-content]');
  const bounds=area?area.getBoundingClientRect():{left:0,top:0,right:w,bottom:h};
- const root=d.querySelector('[data-h3-content-canvas]')||d.body,out=[],small=[];
+ const root=d.querySelector('[data-h3-content-canvas]')||d.body,out=[],small=[],poster=[];
  for(const el of root.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,pre,code,td,th,figure,img,svg,div,span')){
   if(el.closest('[hidden],defs,clipPath,mask,pattern'))continue;
   const style=d.defaultView.getComputedStyle(el),r=el.getBoundingClientRect();
@@ -31,7 +31,25 @@ MEASURE=r'''Array.from(document.querySelectorAll('iframe'),(frame)=>{
   }
   if(text&&parseFloat(style.fontSize)<12&&small.length<10)small.push({text,font:style.fontSize});
  }
- return {width:w,height:h,out_of_bounds:out,small_text:small,issue:out.length>0};
+ // Text may fit on the page while being clipped by a reserved poster zone.
+ // Measure actual text runs, including SVG text, against that local boundary.
+ // Decorative shapes are allowed to bleed intentionally inside their zone.
+ for(const zone of root.querySelectorAll('[data-poster-zone]')){
+  const box=zone.getBoundingClientRect(),walk=d.createTreeWalker(zone,4);let node;
+  while((node=walk.nextNode())&&poster.length<25){
+   const text=(node.textContent||'').trim().replace(/\s+/g,' ');if(!text)continue;
+   const el=node.parentElement;if(!el||el.closest('defs,clipPath,mask,pattern'))continue;
+   const id=zone.dataset.posterZone;let hidden=false;
+   for(let p=el;p&&zone.contains(p);p=p.parentElement){const style=d.defaultView.getComputedStyle(p);if(style.display==='none'||style.visibility==='hidden'||parseFloat(style.opacity)===0)hidden=true;}
+   if(hidden){poster.push({id,text:text.slice(0,130),reason:'testo nascosto'});continue;}
+   const range=d.createRange();range.selectNodeContents(node);const rects=Array.from(range.getClientRects()).filter(r=>r.width&&r.height);
+   if(!rects.length){poster.push({id,text:text.slice(0,130),reason:'testo non renderizzato'});continue;}
+   for(const r of rects)if(r.left<box.left-2||r.top<box.top-2||r.right>box.right+2||r.bottom>box.bottom+2){
+    poster.push({id,text:text.slice(0,130),reason:'testo tagliato dal riquadro',box:{x:Math.round(r.x),y:Math.round(r.y),width:Math.round(r.width),height:Math.round(r.height)}});break;
+   }
+  }
+ }
+ return {width:w,height:h,out_of_bounds:out,small_text:small,poster_overflow:poster,issue:out.length>0||poster.length>0};
 })'''
 
 def run(request):

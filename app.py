@@ -99,8 +99,9 @@ class Handler(BaseHTTPRequestHandler):
         if "application/json" not in self.headers.get("Content-Type", ""):
             raise ValueError("È richiesto un corpo JSON.")
         length = int(self.headers.get("Content-Length", "0"))
-        limit=4096 if urllib.parse.urlsplit(self.path).path.startswith('/api/auth/') else 90*1024*1024
-        if length < 0 or length > limit:
+        path=urllib.parse.urlsplit(self.path).path
+        limit=None if path in ('/api/export/pdf','/api/export/html') else 4096 if path.startswith('/api/auth/') else 90*1024*1024
+        if length < 0 or limit is not None and length > limit:
             raise ValueError("Richiesta troppo grande.")
         body = json.loads(self.rfile.read(length) or b"{}")
         if not isinstance(body, dict):
@@ -175,6 +176,9 @@ class Handler(BaseHTTPRequestHandler):
                         value['token']=self.identity['csrf'];value['access']={k:self.identity[k] for k in ('id','name','role')}
                         if self.identity['role']=='guest':value=guest_state(value)
                     return self.json(value)
+                if len(parts)==6 and parts[:2]==['api','chats'] and parts[3]=='messages' and parts[5]=='live':
+                    from h3chat.chat_live import read as live_chat_message
+                    return self.json(live_chat_message(self.app,parts[2],parts[4]))
                 if path=='/api/upscale/settings':
                     from h3chat.upscale_runtime import describe
                     return self.json(describe(ROOT,admin=True))
@@ -219,6 +223,12 @@ class Handler(BaseHTTPRequestHandler):
                     return self.json(describe(self.app,parts[2],parts[4]))
                 if len(parts) == 3 and parts[:2] == ["api", "canvas"]:
                     return self.json(self.app.store.canvas_history.get(parts[2]))
+                if len(parts)==6 and parts[:2]==['api','projects'] and parts[3]=='sources' and parts[5]=='origin':
+                    from h3chat.study_import import origin
+                    return self.json(origin(self.app,parts[2],parts[4]))
+                if len(parts)==6 and parts[:2]==['api','canvas'] and parts[3]=='study' and parts[5]=='progress':
+                    from h3chat.study import progress
+                    return self.json(progress(self.app,parts[2],parts[4]))
                 if len(parts) == 4 and parts[:2] == ['api', 'canvas'] and parts[3] == 'history':
                     return self.json(self.app.store.canvas_history.listing(parts[2]))
                 if len(parts) == 5 and parts[:2] == ['api', 'canvas'] and parts[3] == 'history':
@@ -305,6 +315,26 @@ class Handler(BaseHTTPRequestHandler):
                     try:return self.json(self.app.store.gallery.get(existing['id']))
                     except ValueError:pass
                 item=self.app.upload(body|{'_gallery_export':True});self.app.store.execute('INSERT OR REPLACE INTO gallery_exports VALUES (?,?)',(digest,item['id']));return self.json(item,201)
+            if len(parts)==4 and parts[:2]==['api','projects'] and parts[3]=='media-import' and method=='POST':
+                from h3chat.study_import import enqueue_project
+                return self.json(enqueue_project(self.app,parts[2],body),202)
+            if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='study-import' and method=='POST':
+                from h3chat.study_import import enqueue
+                return self.json(enqueue(self.app,parts[2],body),202)
+            if len(parts)==4 and parts[:2]==['api','canvas'] and parts[3]=='poster-typography' and method=='POST':
+                from h3chat.poster_typography import revise
+                return self.json(revise(self.app,parts[2],body))
+            if len(parts)==4 and parts[:2]==['api','canvas'] and parts[3]=='poster-creative' and method=='POST':
+                from h3chat.poster_typography import enqueue_creative
+                return self.json(enqueue_creative(self.app,parts[2],body),202)
+            if len(parts)==6 and parts[:2]==['api','canvas'] and parts[3]=='study':
+                from h3chat.study import progress,explain,resume
+                if parts[5]=='progress' and method in ('GET','POST'):return self.json(progress(self.app,parts[2],parts[4],body if method=='POST' else None))
+                if parts[5]=='explain' and method=='POST':return self.json(explain(self.app,parts[2],body|{'artifact_id':parts[4]}),202)
+                if parts[5]=='resume' and method=='POST':return self.json(resume(self.app,parts[2],parts[4]),202)
+                if parts[5]=='audio' and method=='POST':
+                    from h3chat.study_audio import enqueue
+                    return self.json(enqueue(self.app,parts[2],parts[4]),202)
             if len(parts)==5 and parts[:2]==['api','chats'] and parts[3:]==['slides','resume'] and method=='POST':
                 from h3chat.slide_resume import enqueue
                 return self.json(enqueue(self.app,parts[2],body),202)
@@ -508,7 +538,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.app.store.chat(parts[2])
                 title, content = body.get("title", "Canvas"), body.get("content", "")
                 from h3chat.slides import PREFIX,MAX_DECK_CHARACTERS
-                content_limit=MAX_DECK_CHARACTERS if isinstance(content,str) and content.startswith(PREFIX) else 200000
+                content_limit=MAX_DECK_CHARACTERS if isinstance(content,str) and content.startswith(PREFIX) else 1600000 if isinstance(content,str) and content.startswith('```h3-study\n') else 200000
                 if not isinstance(title, str) or len(title) > 150 or not isinstance(content, str) or len(content) > content_limit:
                     raise ValueError("Canvas troppo grande o non valido.")
                 if self.app.store.one("SELECT id FROM jobs WHERE chat_id=? AND status IN ('queued','running') AND json_extract(payload,'$.canvas')=1", (parts[2],)):
@@ -516,6 +546,8 @@ class Handler(BaseHTTPRequestHandler):
                 media = self.app.validate_media(body.get("media", []),canvas=True)
                 from h3chat.slides import validate_content
                 validate_content(content,media)
+                from h3chat.study import PREFIX as STUDY_PREFIX,decode as decode_study
+                if content.startswith(STUDY_PREFIX):decode_study(content)
                 if body.get('id') is not None and not isinstance(body['id'], str):
                     raise ValueError('Riferimento artefatto non valido.')
                 return self.json(self.app.store.canvas_history.save(parts[2], {'title':title, 'content':content, 'media':media}, edit_id=body.get('id'), editable=True))

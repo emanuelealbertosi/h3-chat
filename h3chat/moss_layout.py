@@ -12,13 +12,17 @@ def requested(prompt):
     return bool(re.search(r'\b(?:layout|posiziona\w*|disponi|colloca|a sinistra|a destra|in alto|in basso|al centro|centrat[oaie]|top left|top right|bottom left|bottom right|on the left|on the right|at the top|at the bottom|in the cent(?:er|re))\b',prompt,re.I))
 
 
-def brief(width,height):
+def disabled(prompt):
+    return bool(re.search(r'\b(?:senza (?:box|layout)|composizione libera|no (?:boxes|layout)|free composition)\b',prompt,re.I))
+
+
+def brief(width,height,*,automatic=False):
     item={'type':'object','properties':{'label':{'type':'string','enum':['text','object']},
           'caption':{'type':'string'},'text':{'type':'string'},
           'bbox':{'type':'array','items':{'type':'number'},'minItems':4,'maxItems':4}},
           'required':['label','caption','text','bbox'],'additionalProperties':False}
     schema={'type':'object','properties':{'summary':{'type':'string'},
-            'items':{'type':'array','items':item,'minItems':1,'maxItems':12}},
+            'items':{'type':'array','items':item,'minItems':0 if automatic else 1,'maxItems':12}},
             'required':['summary','items'],'additionalProperties':False}
     instructions=f'''You prepare a spatial layout for MOSS-Image, an image generator.
 Return only JSON matching the schema. The final canvas is {width} pixels wide
@@ -36,7 +40,23 @@ objects from old requests. Do not turn a normal photograph into an infographic.
 Use at most 12 main elements. No invented coordinate tags, commentary or code.
 The application converts these draft boxes to MOSS's official pixel coordinates.
 Sampling settings and output dimensions are handled separately; do not alter them.'''
+    if automatic:instructions+='''
+Decide automatically whether spatial control helps this request. Use boxes for
+multiple principal subjects, relative positions, foreground/background, requested
+visible text or an intentional arrangement, even when the user never says JSON
+or layout. Explicit user positions always take priority over your composition.
+For a simple unconstrained scene, return items=[] and a final English prose
+prompt in summary. Do not box every detail or invent content to fill the frame.'''
     return instructions,schema
+
+
+def planned(value,width,height,*,allow_prose=True):
+    """One planner decision, before inference; never reinterpret official JSON."""
+    if allow_prose and isinstance(value,dict) and value.get('items')==[]:
+        summary=value.get('summary')
+        if not isinstance(summary,str) or not summary.strip():raise ValueError('Descrizione MOSS vuota.')
+        return summary.strip()
+    return compile_layout(value,width,height)
 
 
 def number(value):

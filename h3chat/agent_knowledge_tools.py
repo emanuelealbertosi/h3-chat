@@ -5,18 +5,19 @@ from contextlib import contextmanager
 from pathlib import Path
 from .store import uid
 
-MUTATIONS={'ensure_project','import_project_files','catalog_images','index_project'}
+MUTATIONS={'ensure_project','import_project_files','catalog_images','index_project','import_public_study_source'}
 
 def definitions():
     def s(n=200):return {'type':'string','maxLength':n}
     def obj(p,r=()):return {'type':'object','properties':p,'required':list(r),'additionalProperties':False}
     files={'type':'array','items':{'type':'integer','minimum':1,'maximum':128},'minItems':1,'maxItems':50}
     return {
+      'import_public_study_source':('Importa una pagina pubblica o i sottotitoli IT/EN di un singolo video YouTube nel RAG del progetto, con provenienza e tempi. Richiede Web autorizzato e gestione progetti. Indicizza il testo per tutti gli strumenti; non guarda i fotogrammi, non scarica il video e non inventa una trascrizione se i sottotitoli mancano.',obj({'project_id':s(32),'kind':{'type':'string','enum':['web','youtube']},'url':s(4096),'name':s(150)},['project_id','kind','url','name'])),
       'list_projects':('Elenca i progetti del workspace, con ID e nomi, senza percorsi privati.',obj({})),
       'read_project':('Leggi istruzioni, fonti e stato di indicizzazione di un progetto del workspace.',obj({'project_id':s(32)},['project_id'])),
       'list_rag_models':('Elenca gli embedding RAG già disponibili: configurato, EmbeddingGemma, EmbeddingGemma 2, Ovis o ricerca lessicale. Non installa nulla.',obj({})),
       'ensure_project':('Trova un progetto per nome esatto; se manca lo crea con istruzioni e solo-fonti opzionali. Non altera i progetti già esistenti. Lo usa come progetto di questa sessione Agent senza spostare la chat.',obj({'name':s(80),'instructions':s(8000),'sources_only':{'type':'boolean'}},['name'])),
-      'import_project_files':('Copia nel progetto i file esplicitamente numerati degli allegati o di un artefatto della chat. Conserva originali e caption, riconosce duplicati. Non indicizza: usa poi index_project.',obj({'project_id':s(32),'numbers':files,'artifact_id':s(32)},['project_id','numbers'])),
+      'import_project_files':('Copia nel progetto i file esplicitamente numerati degli allegati o di un artefatto della chat. Conserva originali e caption, riconosce duplicati. Audio/video richiedono permesso Trascrivi: il loro parlato viene trascritto e indicizzato con tempi; per gli altri file usa poi index_project.',obj({'project_id':s(32),'numbers':files,'artifact_id':s(32)},['project_id','numbers'])),
       'catalog_images':('Descrivi e cataloga con Vision le immagini numerate, allegati o artefatto della chat. Conserva caption riutilizzabili dal RAG e dai lotti. Non indicizza: importa poi le immagini nel progetto e usa index_project. Il modello Vision deve essere già disponibile e Vision attiva.',obj({'numbers':files,'artifact_id':s(32),'model_id':s(150),'prompt':s(4000)},['numbers'])),
       'index_project':('Indicizza le fonti del progetto con embedding_id restituito da list_rag_models o le impostazioni configurate. visual abilita l’indice multimodale solo con Ovis/Gemma 2. La scelta vale per questo run e non modifica i default globali. Restituisce lo stato reale di ogni fonte.',obj({'project_id':s(32),'embedding_id':s(150),'visual':{'type':'boolean'}},['project_id'])),
     }
@@ -72,6 +73,14 @@ def report(ctx,title,record):
 
 def execute(ctx,name,args):
     k=ctx.app.knowledge
+    if name=='import_public_study_source':
+        if not ctx.settings.get('_web'):raise PermissionError('L’importazione da Internet richiede Web autorizzato per questo run.')
+        from .study_import import ingest
+        from .agent_online_video import youtube_url
+        url=youtube_url(args['url']) if args['kind']=='youtube' else args['url']
+        settings=ctx.tool_settings()|{'_study_import':{'kind':args['kind'],'project_id':args['project_id'],'name':args['name'],'url':url}}
+        result=ingest(ctx.app,ctx.tool_job(),ctx.payload,settings,ctx.cancel,ctx.stage,ctx.log_path,active_job=ctx.job['id'])
+        activate(ctx,args['project_id']);return report(ctx,'Fonte pubblica importata nel RAG',result)
     if name=='list_projects':return {'projects':[public_project(v) for v in k.list()]}
     if name=='read_project':return public_project(k.project(args['project_id']))
     if name=='list_rag_models':return {'models':[{'id':ident,**{k:v for k,v in value.items() if k!='path'}} for ident,value in model_options(ctx).items()]}
@@ -105,11 +114,18 @@ def execute(ctx,name,args):
         from .rag import EXTENSIONS
         from .image_collections import caption_for_path,save_caption
         choices=[selected(ctx,args|{'number':n}) for n in args['numbers']]
-        if any(Path(item['path']).suffix.lower() not in EXTENSIONS for item in choices):raise ValueError('RAG: importa documenti testuali, PDF, DOCX o immagini. Trascrivi prima gli audio; i video sono esclusi.')
+        if any(Path(item['path']).suffix.lower() not in EXTENSIONS and not item.get('mime','').startswith(('audio/','video/')) for item in choices):raise ValueError('RAG: formato non indicizzabile. Usa documenti, immagini, audio o video con parlato.')
+        if any(item.get('mime','').startswith(('audio/','video/')) for item in choices):
+            from .agent_tools import permission
+            permission(ctx.state['config'],'transcribe_audio',{})
         records=[];ident=args['project_id']
         with locked(ctx):
             k.mutable(ident,active_job=ctx.job['id'])
             for item in choices:
+                if item.get('mime','').startswith(('audio/','video/')):
+                    from .study_import import ingest
+                    record=ingest(ctx.app,ctx.tool_job()|{'id':uid()},ctx.payload|{'media':[item]},ctx.tool_settings()|{'_study_import':{'kind':'audio','project_id':ident,'name':item['name']}},ctx.cancel,ctx.stage,ctx.log_path,active_job=ctx.job['id'])
+                    records.append(record|{'transcribed':True});continue
                 ctx.check();source=safe_join(ctx.app.data,item['path']);temporary=k.uploads.folder/(uid()+'.partial')
                 label=re.sub(r'[^\w .()\-]','_',Path(item['name']).stem)[:180]+source.suffix.lower()
                 try:
@@ -123,7 +139,7 @@ def execute(ctx,name,args):
                     report(ctx,'File aggiunti al progetto',{'project_id':ident,'files':records,'indexed':False})
                 finally:temporary.unlink(missing_ok=True)
         activate(ctx,ident)
-        return report(ctx,'File aggiunti al progetto',{'project_id':ident,'files':records,'indexed':False})
+        return report(ctx,'File aggiunti al progetto',{'project_id':ident,'files':records,'indexed':bool(records) and all(r.get('indexed') for r in records)})
     if name=='index_project':
         ident=args['project_id'];settings,choice=rag_settings(ctx,ident,args)
         with locked(ctx):

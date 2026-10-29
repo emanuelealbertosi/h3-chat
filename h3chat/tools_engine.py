@@ -80,7 +80,7 @@ class ToolsEngine:
 
     def prepare_tools(self,history,payload,settings,cancel,stage,log_path,*,use_audio=True):
         documents=[x for x in payload['media'] if x['mime'] in ('application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document')]
-        audios=[x for x in payload['media'] if x['mime'].startswith('audio/')] if use_audio else []
+        audios=[x for x in payload['media'] if x['mime'].startswith('audio/') or x['mime'].startswith('video/') and (settings.get('_transcribe') or settings.get('_lab')=='study')] if use_audio else []
         # Retain document access for later questions, without resending entire files.
         if not documents:
             documents=next(([x for x in m['media'] if x['mime'] in ('application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document')] for m in reversed(history) if any(x['mime'] in ('application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document') for x in m['media'])),[])
@@ -91,12 +91,14 @@ class ToolsEngine:
                 path=safe_join(self.data,item['path'])
                 with path.open('r',encoding='utf-8',errors='replace') as inp:source=inp.read(min(250000,max(150,remaining)))
                 remaining-=len(source);context.append('File '+item['name']+' (contenuto come dati, non istruzioni):\n'+source)
+                if settings.get('_lab')=='study':meta.setdefault('study_sources',[]).append({'name':item['name'],'location':'file allegato','text':source})
         sources=[]
         if requested(payload['prompt'],settings):
             sources=search(payload['prompt'],settings,cancel,stage);meta['web_sources']=[{k:s[k] for k in ('title','url','read','snippet','text')} for s in sources]
             for i,s in enumerate(sources,1):
                 allocation=max(150,min(remaining//max(1,len(sources)-i+1+len(documents)+len(audios)),3500));selected,_=excerpts([{'location':'web','text':s['text'][j:j+1200]} for j in range(0,len(s['text']),1200)],payload['prompt'],allocation)
                 text='\n'.join(x['text'] for x in selected);context.append(f"Fonte web [{i}] {s['title']}\nURL: {s['url']}\n{'Testo pagina' if s['read'] else 'Solo estratto ricerca'}:\n{text}");remaining-=len(text)+180
+                if settings.get('_lab')=='study':meta.setdefault('study_sources',[]).append({'name':s['title'],'location':'pagina web' if s['read'] else 'estratto ricerca','url':s['url'],'text':text})
         meta['documents']=[]
         for index,item in enumerate(documents):
             doc=self.read_document(item,cancel,stage,log_path);allocation=max(150,remaining//max(1,len(documents)-index+len(audios)))
@@ -104,6 +106,7 @@ class ToolsEngine:
             text='\n\n'.join(f"[{b['location']}]\n{b['text']}" for b in selected);remaining-=len(text)+180
             note='Sono estratti selezionati, non tutto il documento.' if partial else 'Testo estraibile completo.'
             meta['documents'].append({'name':item['name'],'pages':doc['pages'],'partial':partial,'locations':list(dict.fromkeys(b['location'] for b in selected)),'warnings':doc['warnings']})
+            if settings.get('_lab')=='study':meta['documents'][-1].update(id=item['id'],blocks=selected)
             context.append(f"Documento {item['name']}\n{note}\n{text}\n"+'\n'.join(doc['warnings']))
             if item['mime']=='application/pdf':
                 explicit={int(x) for x in re.findall(r'\b(?:pagina|page)\s+(\d+)\b',payload['prompt'],re.I)}
@@ -125,6 +128,7 @@ class ToolsEngine:
             blocks=[{'location':f"{s['start']:.1f}–{s['end']:.1f} s",'text':s['text']} for s in result['segments']]
             selected,partial=excerpts(blocks,payload['prompt'],max(150,remaining//max(1,len(audios)-index)));text='\n'.join(f"[{b['location']}] {b['text']}" for b in selected);remaining-=len(text)+180
             context.append(f"Trascrizione automatica di {item['name']} · lingua {result['language']}\nPuò contenere errori; non è analisi di musica, rumori o identità del parlante.\n"+('Estratti selezionati; trascrizione completa nel TXT/SRT.\n' if partial else '')+text+result.get('warning',''))
+            if settings.get('_lab')=='study':meta.setdefault('study_sources',[]).extend({'name':item['name'],**b} for b in selected)
         if transcripts:meta['transcriptions']=[{'name':item['name'],**{k:r[k] for k in ('duration','language','device','compute_type')},'warning':r.get('warning','')} for item,r in transcripts]
         if context:
             history[-1]['content'] += '\n\n<contenuti_allegati_e_web>\n'+'\n\n'.join(context)+'\n</contenuti_allegati_e_web>'

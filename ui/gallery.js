@@ -5,11 +5,14 @@ import {appendGalleryDetails} from './gallery-details.js';
 import {appendCreationDetails} from './creation-details.js';
 import {openImageCollections} from './image-collections.js';
 
-export function openGallery({api,onSelect,kind='all',multiple=true,browse=false,actions={}}){
+let projectContext=()=>({projectId:'',projects:[]});
+
+export function openGallery({api,onSelect,kind='all',multiple=true,browse=false,actions={},projectId}){
+ const context=projectContext(),initialProject=projectId===undefined?(context.projectId||''):(projectId||'');
  const dialog=document.createElement('dialog');dialog.className='gallery-dialog';dialog.ariaLabel='Galleria';
  dialog.innerHTML=`<header><div><span class="eyebrow">I TUOI FILE</span><h2>Galleria</h2></div><button type="button" class="icon-button" data-close aria-label="Chiudi galleria">×</button></header><div class="gallery-filters"><input data-query type="search" placeholder="Cerca per nome…" aria-label="Cerca nella galleria"><select data-kind aria-label="Tipo di file">${[['all','Tutti'],['image','Immagini'],['audio','Audio'],['video','Video'],['document','Documenti'],['model','Modelli 3D'],['other','Altri file']].map(([v,t])=>`<option value="${v}">${t}</option>`).join('')}</select><select data-origin aria-label="Origine"><option value="all">Caricati e generati</option><option value="uploaded">Caricati</option><option value="generated">Generati</option></select></div><p data-status role="status"></p><div class="gallery-grid"></div><footer><button class="btn" data-more hidden>Altri file</button><span data-count></span><button class="btn primary" data-select disabled>Usa i file selezionati</button></footer>`;
  document.body.append(dialog);const q=s=>dialog.querySelector(s);q('[data-kind]').value=kind;let offset=0,revision=0,selected=new Map(),timer,items=[],canManage=false;const deleting=new Map();
- const lots=document.createElement('button');lots.type='button';lots.className='btn';lots.textContent='Lotti immagini e sfondi';q('.gallery-filters').append(lots);lots.onclick=()=>openImageCollections({api,onSelect:browse?null:onSelect,onCreate:done=>openGallery({api,kind:'image',multiple:true,onSelect:done})});
+ const lots=document.createElement('button');lots.type='button';lots.className='btn';lots.textContent='Lotti immagini e sfondi';q('.gallery-filters').append(lots);lots.onclick=()=>openImageCollections({api,onSelect:browse?null:onSelect,onCreate:done=>openGallery({api,kind:'image',multiple:true,onSelect:done,projectId:project.value})});
  const removeSelected=document.createElement('button'),selectVisible=document.createElement('button'),deleteCount=document.createElement('span');
  removeSelected.type=selectVisible.type='button';removeSelected.className=selectVisible.className='btn';removeSelected.textContent='Elimina selezionati';selectVisible.textContent='Seleziona visibili';removeSelected.disabled=true;removeSelected.hidden=selectVisible.hidden=true;deleteCount.setAttribute('role','status');
  q('footer').prepend(selectVisible,deleteCount,removeSelected);
@@ -19,7 +22,10 @@ export function openGallery({api,onSelect,kind='all',multiple=true,browse=false,
  const sort=document.createElement('select');sort.ariaLabel='Ordina la galleria';sort.disabled=true;
  for(const [value,label] of [['modified_desc','Ultima modifica · più recenti'],['modified_asc','Ultima modifica · meno recenti'],['added_desc','Aggiunta / caricamento · più recenti'],['added_asc','Aggiunta / caricamento · meno recenti'],['name_asc','Nome · A–Z'],['name_desc','Nome · Z–A'],['type_asc','Tipo · A–Z'],['type_desc','Tipo · Z–A']])sort.add(new Option(label,value));
  q('.gallery-filters').append(sort);sort.onchange=()=>load();
- const project=document.createElement('select');project.ariaLabel='Filtra per progetto';project.add(new Option('Tutti i progetti',''));q('.gallery-filters').append(project);project.onchange=()=>load();
+ const project=document.createElement('select');project.ariaLabel='Filtra per progetto';project.add(new Option('Tutti i progetti',''));
+ for(const p of context.projects||[])project.add(new Option(p.name,p.id));
+ if(initialProject&&!Array.from(project.options).some(p=>p.value===initialProject))project.add(new Option('Progetto corrente',initialProject));
+ project.value=initialProject;q('.gallery-filters').append(project);project.onchange=()=>load();
  q('[data-select]').hidden=browse;q('[data-count]').hidden=browse;
  q('[data-close]').onclick=()=>dialog.close();dialog.onclose=()=>{clearTimeout(timer);revision++;dialog.remove();};
  const status=t=>q('[data-status]').textContent=t;
@@ -29,7 +35,7 @@ export function openGallery({api,onSelect,kind='all',multiple=true,browse=false,
   const request=++revision;q('[data-more]').disabled=true;q('.gallery-grid').setAttribute('aria-busy','true');if(!append){offset=0;items=[];q('.gallery-grid').replaceChildren();}status('Caricamento…');
   try{const params=new URLSearchParams({q:q('[data-query]').value,kind:q('[data-kind]').value,origin:q('[data-origin]').value,offset:String(offset),sort:sort.value,project_id:project.value}),result=await api('/gallery?'+params);
    if(request!==revision||!dialog.open)return;offset=result.offset;q('[data-more]').hidden=!result.more;status(result.total?result.total+' file nella tua galleria':'La galleria è vuota. Carica un file o crea un contenuto nella chat.');
-   if(result.projects){const chosen=project.value;project.replaceChildren(new Option('Tutti i progetti',''));for(const p of result.projects)project.add(new Option(p.name,p.id));project.value=chosen;}
+   if(result.projects){const chosen=project.value;project.replaceChildren(new Option('Tutti i progetti',''));for(const p of result.projects)project.add(new Option(p.name,p.id));if(chosen&&!result.projects.some(p=>p.id===chosen))project.add(new Option('Progetto selezionato',chosen));project.value=chosen;}
    sort.disabled=!result.sorting;sort.title=result.sorting?'':'L’ordinamento sarà disponibile dopo l’aggiornamento del server a generazione terminata.';
    const fragment=document.createDocumentFragment();
    canManage=!!result.manage;removeSelected.hidden=selectVisible.hidden=!canManage;items.push(...result.items);for(const item of result.items){const card=document.createElement('article');card.className='gallery-card';
@@ -99,11 +105,12 @@ export function openGallery({api,onSelect,kind='all',multiple=true,browse=false,
  dialog.showModal();load();return dialog;
 }
 
-export function initGallery({api,getAttachments,setAttachments,notify,actions={}}){
+export function initGallery({api,getAttachments,setAttachments,notify,actions={},getProjectId=()=>'',getProjects=()=>[]}){
+ projectContext=()=>({projectId:getProjectId(),projects:getProjects()});
  document.addEventListener('h3-export',async event=>{try{const {blob,name}=event.detail;await uploadFile(blob,{api,name,origin:'generated'});}catch(e){notify(e.message,true);}});
  const button=document.createElement('button');button.type='button';button.id='gallery-open';button.className='btn small';button.textContent='▧ Galleria';button.title='Riutilizza file caricati e generati in ogni modalità';document.querySelector('#attach').after(button);
  const attach=items=>{const existing=getAttachments(),ids=new Set(existing.map(m=>m.id)),next=[...existing,...items.filter(m=>!ids.has(m.id))];if(next.length>12)throw Error('Seleziona al massimo 12 allegati.');setAttachments(next);notify('File aggiunti al prompt.');};
  button.onclick=()=>openGallery({api,onSelect:attach,actions});
- const navigation=document.createElement('button');navigation.type='button';navigation.id='gallery-nav';navigation.className='settings-button';navigation.innerHTML='▧ <span>Galleria</span>';navigation.title='Tutti i tuoi file caricati e generati';document.querySelector('#settings-open').before(navigation);
+ const navigation=document.createElement('button');navigation.type='button';navigation.id='gallery-nav';navigation.className='settings-button';navigation.innerHTML='▧ <span>Galleria</span>';navigation.title='File del progetto corrente · scegli Tutti per vedere l’intera galleria';document.querySelector('#settings-open').before(navigation);
  navigation.onclick=()=>{document.querySelector('#sidebar').classList.remove('visible');openGallery({api,onSelect:attach,browse:true,actions});};
 }

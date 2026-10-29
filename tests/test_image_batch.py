@@ -122,6 +122,45 @@ class ImageBatchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'effettivamente scritto'):
             model_choice(models,'MOSS BF16','qwen','usa MOSS')
 
+    def test_planner_sees_model_aliases_panel_lora_filename_and_repairs_once(self):
+        from h3chat.image_batch import plan,model_aliases
+        from test_loras_image_options import lora
+        moss=self.app.external_model({'profile':'moss','name':'MOSS-Image SFT BF16 · opzionale','files':self.qwen['external_config']['files']})
+        path=lora(self.base/'MysticXXX-Moss-V1.safetensors','moss');stat=path.stat()
+        adapter={'id':'a'*24,'name':'The Ninety-Eight Percent Run','filename':path.name,
+                 'family':'moss','weight':.8,'model_id':'other-moss-int8','model_name':'MOSS INT8',
+                 'path':str(path),'size':stat.st_size,'mtime_ns':stat.st_mtime_ns}
+        request='Crea 2 immagini di un faro con MOSS BF16 e MysticXXX.'
+        value={'images':[{'prompt':'A lighthouse','model_id':moss['id'],'model_choice':'MOSS BF16',
+                         'references':[],'parameters':{},'loras':[{'id':adapter['id'],'weight':.8}],
+                         'lora_mode':'explicit'} for _ in range(2)]}
+        error={'images':[],'error':'MOSS BF16 non ha il nome esatto; MysticXXX non è allegato.'}
+        with patch.object(self.app.engine,'start_llama') as start,patch.object(self.app.engine,'completion',
+                side_effect=[(json.dumps(error),'stop'),(json.dumps(value),'stop')]) as complete,patch.object(self.app.engine,'generate') as generate:
+            tasks,info=plan(self.app,{'prompt':request,'media':[],'loras':[adapter]},
+                            [{'role':'user','content':request}],self.settings,threading.Event(),lambda _:None,self.base/'log')
+        self.assertEqual(info['planning_calls'],2);start.assert_called_once();generate.assert_not_called()
+        self.assertIn('MOSS BF16',model_aliases(moss))
+        brief=json.loads(complete.call_args_list[0].args[0][1]['content'])
+        self.assertEqual(brief['default_create_model'],self.settings['create_model'])
+        label=brief['loras'][0]
+        self.assertEqual(label['filename'],path.name);self.assertIn(path.stem,label['aliases'])
+        self.assertNotIn(str(path),json.dumps(label));self.assertEqual(label['assigned_model'],'other-moss-int8')
+        self.assertEqual([t['model']['id'] for t in tasks],[moss['id']]*2)
+        self.assertTrue(all(t['loras'][0]['id']==adapter['id'] and t['loras'][0]['weight']==.8 for t in tasks))
+        self.assertEqual(adapter['model_id'],'other-moss-int8')
+
+    def test_rejected_plan_repair_is_bounded_and_does_not_substitute_a_model(self):
+        from h3chat.image_batch import plan
+        request='Crea 2 immagini con un modello assente.'
+        error={'images':[],'error':'Modello richiesto non disponibile.'}
+        with patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',
+                return_value=(json.dumps(error),'stop')) as complete,patch.object(self.app.engine,'generate') as generate:
+            with self.assertRaisesRegex(ValueError,'non disponibile'):
+                plan(self.app,{'prompt':request,'media':[],'loras':[]},[{'role':'user','content':request}],
+                     self.settings,threading.Event(),lambda _:None,self.base/'log')
+        self.assertEqual(complete.call_count,2);generate.assert_not_called()
+
     def test_original_local_controls_override_omitted_or_wrong_planner_parameters(self):
         from h3chat.image_batch_controls import source_controls
         text='Creami 4 immagini, due 16:9 e due 9:16. Prima: faro, 16:9, 0.5 MP, seed fisso 99. La seconda: lago, 9:16, seed casuale. La terza e la quarta: montagna, 9:16, seed fisso 42.'

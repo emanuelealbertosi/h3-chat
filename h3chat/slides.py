@@ -10,7 +10,8 @@ from .downloads import Cancelled
 from .slide_count import MAX_SLIDES, MAX_DECK_CHARACTERS, requested_count, outline_count_instruction, outline_bounds
 
 PREFIX = '```h3-slides\n'
-FORMATS = {'16:9': (1280, 720), '9:16': (1280, 1280*16/9), '4:3': (1280, 960), '16:10': (1280, 800), '1:1': (1280, 1280)}
+FORMATS = {'16:9': (1280, 720), '9:16': (1280, 1280*16/9), '4:3': (1280, 960), '16:10': (1280, 800), '1:1': (1280, 1280),
+           'A3':(1280,1280*420/297),'A4':(1280,1280*297/210),'A3-landscape':(1280,1280*297/420),'A4-landscape':(1280,1280*210/297),'4:5':(1280,1600)}
 KINDS = ('group', 'heading', 'text', 'code', 'image', 'mermaid', 'chart')
 THEMES=('lagoon','indigo','sunset')
 TYPOGRAPHY=('modern','editorial')
@@ -329,6 +330,10 @@ def validate_content(content, media):
     deck=json.loads(content[len(PREFIX):-4]); assets={m['id'] for m in media if m['mime'].startswith('image/')}
     if not isinstance(deck, dict) or deck.get('version')!=1 or deck.get('format') not in FORMATS or not isinstance(deck.get('pages'), list) or not 1<=len(deck['pages'])<=MAX_SLIDES:
         raise ValueError('Presentazione non valida.')
+    if deck.get('document_kind')=='poster':
+        from .posters import options as poster_options
+        poster=poster_options(value=deck.get('poster'))
+        if poster['format']!=deck['format'] or poster['count']!=len(deck['pages']) or deck.get('infographic'):raise ValueError('Documento locandine non valido.')
     if deck.get('infographic'):
         from .infographics import validate_motion
         validate_motion(deck)
@@ -462,7 +467,13 @@ def build(app, job, payload, history, settings, model, cancel, stage, log_path, 
             stage(f'Slide · scaletta breve · {len(text)} caratteri ricevuti · Think Off');last=time.monotonic()
     ceiling=min(settings['max_tokens'],max(768,settings['context']//2),16000)
     for attempt in range(2):
-        raw,finish=app.engine.completion(request, planning, cancel, on_text=plan_progress, schema=outline_schema)
+        try:
+            raw,finish=app.engine.completion(request, planning, cancel, on_text=plan_progress, schema=outline_schema)
+        except ValueError as error:
+            if attempt or 'Numero di elementi API JSON non valido' not in str(error):raise
+            stage('Slide · correggo il numero di pagine della scaletta')
+            request=request+[{'role':'user','content':f'Il piano precedente non rispetta il numero di pagine richiesto. Restituisci un oggetto JSON completo con title, slides e gli altri campi obbligatori. L’array slides deve contenere da {min_count} a {max_count} elementi: conta gli elementi prima di rispondere. Ogni elemento contiene solo titolo e obiettivo breve. Non raggruppare più slide in un unico elemento e non aggiungere copertine o pause al di fuori di questo numero.'}]
+            continue
         if finish!='length':break
         meta['slide_outline_truncated']={'budget':planning['max_tokens'],'characters':len(raw)}
         if attempt or planning['max_tokens']>=ceiling:

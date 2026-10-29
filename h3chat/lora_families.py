@@ -58,6 +58,11 @@ def targets(header):
 def tensor_family(header):
     layers=targets(header)
     def has(pattern,out,inp):return any(re.search(pattern,k) and v[:2]==(out,inp) for k,v in layers.items())
+    # MOSS's 3072-wide attention plus its gated 8192 FFN distinguish it from
+    # FLUX/Qwen adapters of the same hidden width. Never infer from filename.
+    if (has(r'(?:^|\.)layers\.\d+\.proj\.(?:q|k|v|o)$',3072,3072)
+            and has(r'(?:^|\.)layers\.\d+\.proj\.ffn_up_gate$',16384,3072)
+            and has(r'(?:^|\.)layers\.\d+\.proj\.ffn_down$',3072,8192)):return 'moss'
     if has(r'blocks[._]\d+[._]attn[._]qkv_proj$',21504,5376) or has(r'blocks[._]\d+[._]attn[._]out_proj$',5376,7168):return 'minimax-h3'
     if has(r'blocks[._]\d+[._]mlp[._]fc1$',28672,5376) and has(r'blocks[._]\d+[._]mlp[._]fc2$',5376,14336):return 'minimax-h3'
     if has(r'blocks\.\d+\.cross_attn\.k_proj$',2048,1024) and has(r'blocks\.\d+\.adaln_modulation_cross_attn\.1$',256,2048):return 'anima'

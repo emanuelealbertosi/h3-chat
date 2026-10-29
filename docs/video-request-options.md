@@ -2,6 +2,23 @@
 
 In chat scegli **Video → Impostazioni Video → Impostazioni avanzate**.
 
+## Animare una foto: I2V con Assistant o Agente
+
+Allega l'immagine, scegli **Video** e scrivi per esempio:
+«Crea un video I2V di 5 secondi. Usa l'immagine 1 come primo fotogramma.
+Mantieni l'inquadratura iniziale e anima soltanto un movimento lento della camera».
+Puoi lasciare **Assistant On**: l'app conserva il ruolo di primo fotogramma
+anche se il piano LLM propone soltanto una reference. Con più immagini indica
+il numero preciso; il numero riguarda le immagini, separatamente dagli audio.
+Le altre immagini possono restare riferimenti d'identità o fotogrammi successivi.
+
+In **Agente**, abilita prima **Consenti generazione, modifica e montaggio video**.
+Lo strumento `create_video` accetta `input_mode: "i2v"`: la prima immagine
+esplicitamente selezionata diventa il fotogramma iniziale, anche passando
+`assistant: true`. `auto` conserva la normale scelta dal prompt. L'Agente usa
+le impostazioni video salvate e può specificare durata, formato e risoluzione.
+Non serve un LoRA Character Swap per animare il fotogramma iniziale.
+
 Nella parte principale della stessa modale scegli **Formato video** e **Durata segmenti**. Un formato esplicito (16:9, 9:16, 1:1, 4:3 o 3:4) prevale sul prompt e sulle proporzioni delle immagini, anche per i fotogrammi iniziali. **Automatico** mantiene il comportamento precedente.
 
 **Risoluzione video** offre i pulsanti **Preset / 0,50 / 0,70 / 0,98 MP**. Il pulsante Preset mostra la risoluzione effettiva del modello; il riepilogo sotto il prompt mostra sempre i MP del prossimo video. Scegliere 0,70 o 0,98 MP attiva il profilo Alta per evitare il limite di Media a 0,50 MP. Tornare a Media rimuove la risoluzione esplicita e applica il suo limite. La risoluzione scelta resta nella chat anche cambiando modello; Ripristina preset la azzera. Non cambia i preset amministrativi né un video in corso.
@@ -28,3 +45,21 @@ ComfyKitchen seleziona l’implementazione INT8 dell’attenzione presente nel r
 I test di integrazione verificano le opzioni lungo la coda, la ricarica richiesta, la ricreazione di tutte le clip e la modifica locale; i test del browser verificano i menu e i preset. Non è ancora stato svolto un confronto GPU fra ComfyKitchen, Sage e PyTorch su questa ricetta. Le nuove scelte restano disabilitate quando il server in esecuzione non espone ancora questa funzionalità; diventano disponibili dopo l’aggiornamento a coda libera. Il video già avviato conserva la sua configurazione.
 
 Il pulsante **Ricarica richiesta**, sotto una risposta anche annullata o fallita, recupera testo, allegati e impostazioni della richiesta originale. Non avvia un lavoro e non cancella la versione precedente: modifica il prompt, scegli il formato o i segmenti e premi **Invia** quando sei pronto. **Riutilizza** resta disponibile nel riquadro della richiesta.
+# Preset sperimentale 10Eros Beta5 / Beta7
+
+Er_sde e Sgm_uniform sono disponibili nelle preferenze video e nella
+rigenerazione. H3 standard può scegliere VSA 90% sparsità con ComfyKitchen
+INT8; il percorso è distinto da VEDA e non richiede i gate di FastH3.
+FastH3 mantiene la propria ricetta e la verifica dei gate.
+Il runtime usa attenzione densa sotto 12288 token: 90% è l'obiettivo della
+parte sparsa, non una misura garantita per ogni chiamata.
+
+La ricetta richiesta per entrambi i 10Eros è 8 passi, CFG 1, Er_sde,
+Sgm_uniform, shift video/audio 12/3, 0,98 MP, 16:9, VSA, PDD disattivato.
+Il canvas è 1344×768; l'esportazione conserva il 16:9 a 1344×756.
+La Beta5 locale è Hybrid senza Turbo aggiuntivo; la Beta7 ha il Turbo incluso.
+I preset sono distinti per modello e non modificano gli altri modelli.
+
+Questa integrazione rimane a un passaggio e 24 fps. Il secondo passaggio
+2K a 4 passi/denoise 0,35 e RIFE 4.9 a 48 fps del workflow condiviso
+non sono eseguiti dal worker attuale e non sono dichiarati attivi.

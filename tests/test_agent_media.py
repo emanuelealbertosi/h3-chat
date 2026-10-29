@@ -45,7 +45,16 @@ class AgentMediaTests(unittest.TestCase):
         with patch.object(self.app.engine,'require_model',side_effect=model),patch.object(self.app.engine,'generate_music',return_value=self.media()) as generate:
             state=self.drive(job,'create_music',{'prompt':'Una canzone allegra','duration':20})
         self.assertEqual(generate.call_args.args[1]['_music_max_duration'],20)
+        self.assertTrue(generate.call_args.args[1]['_assistant'])
+        self.assertEqual(generate.call_args.args[2]['lyrics'],'[Verse]\nUna prova originale')
         self.assertEqual(state['usage']['llm_calls'],3)
+
+    def test_music_tool_lyrics_are_optional_and_agent_knows_who_composes_them(self):
+        from h3chat.agent_runtime import BRIEF
+        description,schema=TOOLS['create_music']
+        self.assertEqual(schema['required'],['prompt'])
+        self.assertIn('FACOLTATIVO',description)
+        self.assertIn('non chiedere parole all’utente',BRIEF)
 
     def test_infographic_reuses_builder_with_no_video_background(self):
         chat,job=self.ticket('agent: Crea infografica',confirm_writes=False)
@@ -97,6 +106,41 @@ class AgentMediaTests(unittest.TestCase):
         self.assertEqual((self.app.data/source['path']).read_bytes(),before)
         edited=self.app.store.canvas_history.get(chat,state['artifacts'][0]['id']);self.assertEqual(edited['media'][0]['generation']['seed'],42)
         self.assertEqual(len(self.app.store.canvas_history.listing(chat)['items']),2)
+
+    def test_moss_edit_composition_is_budgeted_and_sent_as_official_layout(self):
+        from test_moss_auto_layout import DRAFT
+        moss=self.app.external_model({'profile':'moss','files':self.qwen['external_config']['files']})
+        chat,job=self.ticket('agent: Ritocca con MOSS: pera accanto alla mela',allow_images=True,confirm_writes=False)
+        source=self.media('source.png','image/png')
+        selected=self.app.store.canvas_history.save(chat,{'title':'Originale','content':'','media':[source]})
+        def completion(messages,settings,cancel,**kw):
+            if 'action' in kw['schema']['properties']:
+                value=json.loads(messages[-1]['content'])
+                return decision('finish',message='Fatto') if value['artifacts'] else decision('edit_image',{'artifact_id':selected['id'],'number':1,'model_id':moss['id'],'prompt':'Una pera accanto a una mela'})
+            return json.dumps(DRAFT),'stop'
+        with patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=completion),patch.object(self.app.engine,'generate',return_value=self.media('edited.png','image/png')) as generate:
+            self.app.execute_job(job,threading.Event())
+        state=load(self.app,chat,job['id']);self.assertEqual(state['status'],'done',state)
+        self.assertEqual(state['usage']['llm_calls'],3)
+        self.assertEqual(json.loads(generate.call_args.args[2])['bbox_format'],'yxyx')
+
+    def test_agent_uses_dedicated_posters_tool_and_counts_composition_calls(self):
+        from test_posters import plan,HTML
+        chat,job=self.ticket('agent: Crea una locandina A4 senza immagini',confirm_writes=False)
+        def completion(messages,settings,cancel,**kw):
+            schema=kw.get('schema') or {}
+            if 'action' in schema.get('properties',{}):
+                value=json.loads(messages[-1]['content'])
+                return decision('finish',message='Locandina pronta') if value['artifacts'] else decision('create_posters',{'prompt':'OPEN LAB, locandina senza immagini','format':'A4','images':'none'})
+            if 'variants' in schema.get('properties',{}):return json.dumps(plan()),'stop'
+            if kw.get('on_text'):kw['on_text'](HTML)
+            return HTML,'stop'
+        with patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=completion),patch.object(self.app.engine,'generate') as images:
+            self.app.execute_job(job,threading.Event())
+        state=load(self.app,chat,job['id']);self.assertEqual(state['status'],'done',state)
+        self.assertEqual(state['usage']['llm_calls'],4);images.assert_not_called()
+        value=self.app.store.canvas_history.get(chat,state['artifacts'][0]['id'])
+        self.assertIn('"document_kind":"poster"',value['content'].replace(' ',''))
 
     def infographic(self,chat):
         from h3chat.infographics import options

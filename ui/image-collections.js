@@ -2,6 +2,7 @@ import JSZip from 'jszip';
 import {uploadFile} from './file-upload.js';
 import {openImageZoom} from './image-zoom.js';
 import {deleteCollections,collectionDeleteButton} from './collection-delete.js';
+import {chooseRagSources} from './rag-selection.js';
 
 export async function downloadCollection(api,id){
  const result=await api('/image-collections/'+id+'/export',{});const a=document.createElement('a');a.href=result.url;a.download=result.name;a.click();
@@ -28,8 +29,12 @@ export function openImageCollections({api,onSelect,onCreate,slideMode=false,onGe
   form.innerHTML='<h3>Crea un lotto di illustrazioni</h3><div class="settings-grid"><label>Nome del lotto<input name="name" required maxlength="150" value="Illustrazioni per le slide"></label><label>Numero di immagini<input name="count" type="number" min="1" max="50" value="4" required></label><label>Formato<select name="format"><option>16:9</option><option>9:16</option><option>4:3</option><option>3:4</option><option>1:1</option><option>3:2</option><option>2:3</option></select></label><label>Modello immagini<select name="model"></select></label></div><label>Tema e istruzioni<textarea name="prompt" rows="4" required maxlength="16000" placeholder="Es. illustrazioni sulle porte logiche, stile fumettoso. La prima…, la seconda…"></textarea></label><label><input name="rag" type="checkbox"> Usa le fonti RAG del progetto della chat per pianificare le immagini</label><p class="small-note" data-project-note></p><button class="btn primary" type="submit">Genera solo il lotto</button><p class="small-note">Fino a 50 immagini. Assistant prepara il piano, in gruppi per i lotti grandi restando caricato; poi le immagini vengono generate in sequenza e salvate nel lotto. Non vengono create slide. Passi, seed e altri parametri seguono il modello o le richieste esplicite nel testo.</p>';
   const fields=form.elements;fields.model.add(new Option('Predefinito dalle impostazioni',''));for(const m of state?.models||[])if(m.ready&&m.capabilities.includes('create'))fields.model.add(new Option(m.name,m.id));
   fields.rag.disabled=!projectId;form.querySelector('[data-project-note]').textContent=projectId?'Progetto: '+(state?.projects?.find(p=>p.id===projectId)?.name||'progetto della chat'):'Per usare il RAG, apri prima una chat appartenente a un progetto con fonti.';
+  let ragSources=null;const sourceButton=document.createElement('button');sourceButton.type='button';sourceButton.className='btn small';sourceButton.textContent='Fonti RAG · tutte';sourceButton.hidden=true;fields.rag.closest('label').after(sourceButton);
+  const pickSources=async()=>{const next=await chooseRagSources({api,projectId,selected:ragSources});if(next!==null){ragSources=next;sourceButton.textContent='Fonti RAG · '+next.length+' selezionate';}};
+  sourceButton.onclick=run(pickSources);fields.rag.onchange=()=>{sourceButton.hidden=!fields.rag.checked;if(fields.rag.checked)run(pickSources)();};
+  const depth=document.createElement('input'),depthLabel=document.createElement('label');depth.type='number';depth.min=1;depth.max=12;depth.step=1;depth.value=state?.settings?.rag_top_k??6;depth.ariaLabel='Estratti RAG per questo lotto';depthLabel.append('Estratti RAG per questo lotto ',depth);sourceButton.after(depthLabel);
   fields.prompt.value=document.querySelector('#prompt')?.value||'';q('[data-lots]').before(form);
-  form.onsubmit=e=>{e.preventDefault();run(async()=>{if(!form.reportValidity())return;const options={name:fields.name.value,count:Number(fields.count.value),format:fields.format.value,model:fields.model.value,rag:fields.rag.checked};await onGenerate({prompt:fields.prompt.value,options});dialog.close();})();};
+  form.onsubmit=e=>{e.preventDefault();run(async()=>{if(!form.reportValidity())return;const options={name:fields.name.value,count:Number(fields.count.value),format:fields.format.value,model:fields.model.value,rag:fields.rag.checked};await onGenerate({prompt:fields.prompt.value,options,...(fields.rag.checked?{rag_top_k:Number(depth.value),...(ragSources!==null?{rag_sources:ragSources}:{})}:{})});dialog.close();})();};
  }
  async function load(){
   const [data,projects]=await Promise.all([api('/image-collections'),api('/state')]);q('[data-lots]').replaceChildren();

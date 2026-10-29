@@ -14,6 +14,13 @@ Il piano completo viene validato prima della prima generazione: modelli disponib
 
 I nomi modello sono risolti sul catalogo installato corrente, non su un elenco fisso di varianti. Con più MOSS, il nome generico usa il MOSS selezionato come predefinito se corrisponde; altrimenti si richiede il nome più preciso. Il piano non può inventare una specificazione INT8/BF16 che non compare nel prompt. Nuovi file modello diventano utilizzabili quando hanno un collegamento pronto nel catalogo.
 
+Il planner riceve anche gli alias brevi (per esempio `MOSS BF16`) e, per i LoRA
+selezionati, sia il titolo dei metadati sia il nome del file. Un LoRA già scelto
+nel pannello non deve essere allegato di nuovo. Se il primo piano viene rifiutato,
+è consentita una sola verifica testuale aggiuntiva contro lo stesso catalogo,
+prima di qualunque generazione. Restano obbligatori ID, compatibilità e riferimenti
+validi; non si sostituiscono modelli mancanti né si scelgono LoRA non forniti.
+
 I controlli letterali vengono riletti anche dal prompt originale: istruzioni comuni e sezioni «la prima», «la seconda», «la terza e la quarta», oppure liste numerate. In particolare «seed fisso 99» e «seed casuale» prevalgono sui valori proposti o omessi dall'assistant. Un'introduzione con più formati diversi («due 16:9 e due 9:16») viene lasciata alla ripartizione del piano, anziché imporre l'ultimo formato a tutte le immagini.
 
 I LoRA selezionati nel pannello conservano il destinatario assegnato. Nei lotti si possono anche allegare direttamente file `.safetensors`: vengono ispezionati come adapter, mai inviati come immagini. La famiglia viene letta da metadati o struttura; gli adapter sconosciuti vengono rifiutati. L'assegnazione automatica considera solo i modelli compatibili. Si può specificare nel prompt quale LoRA e peso usare per ciascuna immagine, anche escludendolo esplicitamente. Il file viene ricontrollato prima dell'uso; la compatibilità effettiva dei tensori viene verificata dal motore al caricamento. Famiglia comune non significa compatibilità garantita per qualsiasi futuro checkpoint.
@@ -33,3 +40,18 @@ opzionale. Le didascalie effettive restano distinte dai prompt di generazione.
 Vedi [Lotti immagini e sfondi](image-collections.md) per riuso, RAG e limiti.
 
 Per i lotti grandi Assistant resta caricato e prepara gruppi di massimo 12 immagini (meno con un budget token ridotto). Tutto il piano viene verificato prima di generare la prima immagine. Il lotto e la risposta rimangono unici; il limite degli sfondi dedicati resta separato.
+# Composizione MOSS automatica
+
+Con Assistant attivo, MOSS INT8, BF16 e Kromoss possono usare il layout JSON
+ufficiale senza parole chiave: l'LLM decide quando servono box per soggetti,
+relazioni spaziali e testo. Per una scena semplice può mantenere la prosa.
+Posizioni e testo espliciti dell'utente hanno priorità. «Senza box» o
+«composizione libera» mantengono il prompt in prosa; un JSON MOSS ufficiale
+già scritto viene conservato.
+
+Nei lotti (anche creati dall'Agente) la decisione fa parte dello stesso piano,
+prima delle generazioni: non viene ricaricato l'Assistant per ogni immagine.
+I box normalizzati vengono convertiti alle dimensioni effettive di ogni
+immagine, senza cambiare seed, formato o parametri salvati. Anche il ritocco
+MOSS dell'Agente usa il pianificatore, conteggiandolo nel budget.
+È un controllo generativo sperimentale, non un vincolo perfetto sui pixel.

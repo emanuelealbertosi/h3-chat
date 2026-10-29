@@ -143,6 +143,7 @@ class Workspaces:
 
 
 def guest_allowed(path,method):
+    if method=='POST' and re.fullmatch(r'/api/projects/[a-f0-9]{32}/media-import',path):return True
     if path in ('/api/image-collections/delete-plan','/api/image-collections/delete') and method=='POST':return True
     if path=='/api/presentation-preferences' and method in ('GET','POST'):return True
     if path=='/api/slide-backgrounds' and method=='GET':return True

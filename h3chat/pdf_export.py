@@ -20,9 +20,7 @@ ALLOWED=set(('article main section header footer aside nav div span p h1 h2 h3 h
              'svg g path rect circle ellipse line polyline polygon text tspan defs marker clipPath mask pattern linearGradient radialGradient stop use title desc filter feGaussianBlur feOffset feColorMatrix feBlend feComposite feFlood feMerge feMergeNode feDropShadow '
              'math semantics mrow mi mn mo msup msub mfrac mroot msqrt mtable mtr mtd annotation').lower().split())
 VOID={'br','hr','img'}
-# Flattened slide CSS and embedded figures can exceed 16 MiB even in short
-# decks. Keep a bounded budget below the HTTP request limit (90 MiB).
-MAX_EXPORT_HTML_BYTES=64*1024*1024
+
 
 
 class Sanitizer(HTMLParser):
@@ -51,7 +49,7 @@ class Sanitizer(HTMLParser):
 
 def embedded_css(root):
     sheets=[]
-    for relative in ('style.css','slides.css','vendor/katex.min.css','vendor/highlight.css'):
+    for relative in ('style.css','slides.css','poster-fonts.css','vendor/katex.min.css','vendor/highlight.css'):
         file=root/'static'/relative
         def replace(match):
             name=match.group(1).strip('"\'')
@@ -66,12 +64,14 @@ def embedded_css(root):
 def export_document(root,data,body):
     source=body.get('html','');title=body.get('title','Documento H3')
     if not isinstance(source,str):raise ValueError('Il contenuto da esportare deve essere HTML.')
-    if len(source)>MAX_EXPORT_HTML_BYTES or len(source.encode('utf-8'))>MAX_EXPORT_HTML_BYTES:
-        raise ValueError('La presentazione o il documento supera il limite di 64 MB per l’esportazione. Dividilo in più parti o riduci le dimensioni delle immagini.')
     if not isinstance(title,str) or len(title)>150:raise ValueError('Il titolo del documento deve essere un testo di massimo 150 caratteri.')
     parser=Sanitizer();parser.feed(source)
     slide_format=body.get('slide_format')
     page_dimensions=body.get('page_dimensions')
+    paper=body.get('page_size_mm')
+    if paper is not None:
+        if not isinstance(paper,list) or len(paper)!=2 or any(type(v) not in (int,float) or not math.isfinite(v) or not 50<=v<=1000 for v in paper):raise ValueError('Formato di stampa non valido.')
+        page_dimensions=[v*96/25.4 for v in paper]
     if page_dimensions is not None and (not isinstance(page_dimensions,list) or len(page_dimensions)!=2 or any(type(v) not in (int,float) or not math.isfinite(v) or not 100<=v<=8192 for v in page_dimensions)):
         raise ValueError('Dimensioni della pagina non valide.')
     if slide_format is not None:
@@ -93,7 +93,7 @@ def export_document(root,data,body):
         css=base_css
         width,height=page_dimensions or FORMATS[slide_format]
         css+='\n'+f'@page{{size:{width}px {height}px;margin:0}}'
-        css+='body{margin:0;background:#e8ece7}.slides-document{width:1280px;margin:auto}.h3-slide-page{break-after:page;margin:0 0 24px;box-shadow:0 4px 24px #0002}.h3-slide-page:last-child{break-after:auto}@media print{body{background:white}.h3-slide-page{margin:0;box-shadow:none}}'
+        css+=f'body{{margin:0;background:#e8ece7}}.slides-document{{width:{width}px;margin:auto}}'+'.h3-slide-page{break-after:page;margin:0 0 24px;box-shadow:0 4px 24px #0002}.h3-slide-page:last-child{break-after:auto}@media print{body{background:white}.h3-slide-page{margin:0;box-shadow:none}}'
     wrapper='slides-document' if slide_format or page_dimensions else 'rich'
     document='<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:; font-src data:; script-src \'none\'"><title>'+html.escape(title)+'</title><style>'+css+'</style></head><body><article class="'+wrapper+'">'+''.join(parser.output)+'</article></body></html>'
     source_file=folder/'document.html';source_file.write_text(document,encoding='utf-8')

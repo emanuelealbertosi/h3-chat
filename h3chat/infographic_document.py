@@ -49,7 +49,7 @@ def document(root,data,deck,media):
     width,height=FORMATS[deck['format']];frames=[];root=Path(root)
     opts=deck.get('infographic',{}).get('options',{});radius={'square':0,'soft':48,'round':110}.get(opts.get('corners','square'),0);background='#f5f4ef' if opts.get('frame')=='light' else '#101820'
     fonts=''
-    for name in ('Manrope','Cormorant'):
+    for name in ('Manrope','Cormorant','BebasNeue','Baloo2','Caveat','Bangers'):
         file=root/'static'/(name+'.ttf')
         if file.is_file():fonts+='@font-face{font-family:'+name+';src:url(data:font/ttf;base64,'+base64.b64encode(file.read_bytes()).decode()+')}'
     math_css=''

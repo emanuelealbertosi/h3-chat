@@ -27,7 +27,8 @@ def definitions():
       'create_video':('Genera un video corto, lungo, musicale o con riferimenti usando il motore H3 e le impostazioni salvate. reference_numbers sceglie esplicitamente gli allegati numerati (anche da source_artifact_ids). Assistant è spento di default. La coda esegue il video, poi Agent riprende con lo stesso budget; nessun rilancio automatico in caso di errore o Stop.',obj({
         'prompt':string(24000),'model_id':string(150),'reference_numbers':{'type':'array','items':{'type':'integer','minimum':1,'maximum':128},'maxItems':13},
         'parameters':parameters,'segment_seconds':segment,'assistant':{'type':'boolean'},
-        'editing':{'type':'string','enum':['continuous','storyboard']}},['prompt'])),
+        'editing':{'type':'string','enum':['continuous','storyboard']},
+        'input_mode':{'type':'string','enum':['auto','i2v'],'description':'Per animare una foto usa i2v: la prima immagine scelta è il fotogramma iniziale vincolante anche con Assistant On. auto conserva le istruzioni del prompt, inclusi i normali riferimenti di identità/stile.'}},['prompt'])),
       'edit_video':('Rigenera clip intere con il normale editor H3, salvando versioni e memoria. source deve essere un lavoro o un video allegato della stessa chat. Gli indici immagini seguono inspect_video_timeline; end_frame usa il raccordo finale esistente. Non inventare l’identità o la voce osservata.',obj(common|{'patches':{'type':'array','items':patch,'minItems':1,'maxItems':100},'model_id':string(150),'assistant':{'type':'boolean'},'remount':{'type':'boolean'}},['source','patches'])),
       'resume_video':('Riprende solo clip mancanti di un lavoro preciso, già interrotto, di questa chat. Usalo solo se l’utente chiede di riprendere: non aggirare Stop o errori con rilanci automatici.',obj({'source':ID},['source'])),
       'assemble_video':('Monta su CPU una timeline della chat e le versioni scelte, senza nuove generazioni. Le versioni originali restano salvate.',obj(common|{'versions':versions},['source']))}
@@ -67,8 +68,12 @@ def execute(ctx,name,args):
         if len(numbers)!=len(set(numbers)) or any(n>len(media) for n in numbers):raise ValueError('Riferimenti video numerati non validi.')
         selected=[media[n-1] for n in numbers]
         if any(not m['mime'].startswith(('image/','audio/','video/')) for m in selected):raise ValueError('Per Video scegli immagini, audio o video espliciti.')
+        prompt=args['prompt']
+        if args.get('input_mode')=='i2v':
+            if not any(m['mime'].startswith('image/') for m in selected):raise ValueError('I2V: scegli l’immagine iniziale con reference_numbers.')
+            prompt='I2V. Use <Picture 1> as the first frame at 0 seconds. Preserve the initial composition, then animate the requested motion.\n'+prompt
         # The actual H3 validators enforce media counts and model compatibility.
-        body={'prompt':args['prompt'],'video':True,'canvas':True,'assistant':args.get('assistant',False),'rag':False,'web':False,
+        body={'prompt':prompt,'video':True,'canvas':True,'assistant':args.get('assistant',False),'rag':False,'web':False,
             'media':[{'id':m['id']} for m in selected],'video_editing':args.get('editing','continuous')}
         body['loras']=[{k:l[k] for k in ('id','weight','model_id')} for l in ctx.payload.get('loras',[]) if 'video' in ctx.app.catalog.get(l['model_id'],{}).get('capabilities',[])]
         if args.get('model_id'):body['video_model']=args['model_id']

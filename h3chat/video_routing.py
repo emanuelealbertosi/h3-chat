@@ -114,17 +114,51 @@ def route(history,settings):
         if not re.search(r'\b(?:codice|tutorial|prompt|come fare|how to)\b',opening[:100]):return {'intent':'video','prompt':text,'selection':'auto'}
     return None
 
+def requested_start_image(prompt,refs):
+    """Recognize an explicit initial-image instruction, independent of an LLM."""
+    first=r'(?:start\s+frame|first\s+frame|frame\s+iniziale|primo\s+fotogramma)'
+    label=r'<?(?:immagine|image|picture|foto)\s*(\d+)>?'
+    # A negative use instruction is not an initial-frame request. Preserve
+    # positive constraints such as "non cambiare il primo fotogramma".
+    text=re.sub(r"\b(?:non\s+usar\w*|do\s+not\s+use|don't\s+use|never\s+use)\b[^.\n;]*"+first+r'[^.\n;]*','',prompt,flags=re.I)
+    match=re.search(label+r'[^.\n;]{0,70}?'+first,text,re.I) or re.search(first+r'[^.\n;]{0,70}?'+label,text,re.I)
+    explicit=bool(match or re.search(first+r'|\bi2v\b|\bimage[ -]to[ -]video\b',text,re.I))
+    if not explicit:return None
+    count=sum(r['mime'].startswith('image/') for r in refs)
+    if not count:raise ValueError('I2V richiede un’immagine allegata da usare come primo fotogramma.')
+    if match:index=int(match[1])
+    elif count==1:index=1
+    else:raise ValueError('I2V: indica quale immagine usare come primo fotogramma, per esempio «immagine 1 come primo fotogramma».')
+    if not 1<=index<=count:raise ValueError('Immagine iniziale I2V non disponibile tra gli allegati.')
+    return index
+
+
+def bind_start_image(plan,index):
+    if index is None:return plan
+    if not isinstance(plan,dict) or not isinstance(plan.get('images'),list):return plan
+    images=[dict(item) if isinstance(item,dict) else item for item in plan['images']]
+    found=False
+    for item in images:
+        if isinstance(item,dict) and item.get('index')==index:
+            item.update(role='keyframe',seconds=0);found=True
+        elif isinstance(item,dict) and item.get('role')=='keyframe' and item.get('seconds',0)==0:
+            item.update(role='reference',seconds=0)
+    if not found:images.append({'index':index,'role':'keyframe','seconds':0})
+    return plan|{'images':images}
+
+
 def direct_plan(prompt,refs,duration,*,source_video=False):
     """Assistant Off: deterministic labels, without rewriting the user's prompt."""
     pictures=[x for x in refs if x['mime'].startswith('image/')]
     audios=[x for x in refs if x['mime'].startswith('audio/')]
+    forced_start=None if source_video else requested_start_image(prompt,refs)
     images=[]
     for index in range(1,len(pictures)+1):
         match=re.search(rf'(?:immagine|image|picture|foto)\s*{index}\s*(?:a|at|@)\s*(\d+(?:[.,]\d+)?)\s*(?:s|sec|secondi|seconds)\b',prompt,re.I)
         if match:role,seconds='keyframe',float(match[1].replace(',','.'))
-        elif index==1 and (len(pictures)==1 and not re.search(r'\b(reference|riferimento)\b',prompt,re.I) or re.search(r'\b(start frame|first frame|frame iniziale|primo fotogramma)\b',prompt,re.I)):role,seconds='keyframe',0
+        elif forced_start==index or forced_start is None and index==1 and len(pictures)==1 and not re.search(r'\b(reference|riferimento)\b',prompt,re.I):role,seconds='keyframe',0
         else:role,seconds='reference',0
         images.append({'index':index,'role':role,'seconds':seconds})
     audio_role='lipsync' if re.search(r'lip[ -]?sync|sincronizz\w*\s+(?:labial|labbra)|canta|\b(?:sing|sings|singing)\b|mouth movements|movimenti labiali',prompt,re.I) else 'reuse' if re.search(r'audio originale|original audio|conserva.*audio',prompt,re.I) else 'reference'
     plan={'prompt':prompt,'images':images,'audios':[{'index':i,'role':audio_role if i==1 else 'reference','start':0} for i in range(1,len(audios)+1)]}
-    return validate_plan(plan,refs,duration,source_video=source_video)
+    return validate_plan(bind_start_image(plan,forced_start),refs,duration,source_video=source_video)

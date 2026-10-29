@@ -165,6 +165,13 @@ premi **Anteprima** per riprodurre la scena.
 Apri **Galleria** dal menu sinistro, sopra **Impostazioni e modelli**, oppure
 dal pulsante **▧ Galleria** accanto al **＋** degli allegati sotto il prompt.
 
+Quando la apri da una chat o da un progetto, la galleria mostra inizialmente
+solo gli asset di quel progetto. Lo stesso filtro iniziale vale per i selettori
+di file nelle altre modalità. La tendina **Filtra per progetto** permette di
+scegliere un altro progetto oppure **Tutti i progetti**; la scelta resta valida
+durante ricerca, ordinamento e caricamento di altri file. A una nuova apertura
+si riparte dal progetto corrente. Fuori da un progetto si mostrano tutti i file.
+
 **Galleria**, accanto ad Allegati, raccoglie file caricati, documenti importati via
 browser nel RAG, risultati generati ed esportazioni. Cerca per nome e filtra per
 tipo e origine; seleziona uno o più file per aggiungerli al prompt in qualsiasi

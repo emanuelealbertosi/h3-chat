@@ -432,7 +432,8 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
             # this native runtime disable GPU sampling; retain nonzero budgets.
             body.pop('reasoning_budget_tokens')
         if schema:
-            body.update(temperature=0 if on_text is None else settings['temperature'], max_tokens=settings["max_tokens"] if on_text else 768, response_format={"type": "json_schema", "json_schema": {"name": "route", "strict": True, "schema": schema}})
+            from .native_json_schema import grammar_schema
+            body.update(temperature=0 if on_text is None else settings['temperature'], max_tokens=settings["max_tokens"] if on_text else 768, response_format={"type": "json_schema", "json_schema": {"name": "route", "strict": True, "schema": grammar_schema(schema)}})
         req = urllib.request.Request(f"http://127.0.0.1:{self.port}/v1/chat/completions", data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.key}"})
         try:
@@ -442,7 +443,11 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                     value = json.load(response)
                     if cancel.is_set():
                         raise Cancelled()
-                    return value["choices"][0]["message"]["content"]
+                    content=value["choices"][0]["message"]["content"]
+                    if schema:
+                        from .native_json_schema import validate_response
+                        validate_response(content,schema)
+                    return content
                 content, finish = "", None
                 for line in response:
                     if time.monotonic()>completion_deadline:raise RuntimeError('Il modello non ha completato la risposta entro il tempo LLM configurato. Aumentalo nelle preferenze del modello oppure riduci thinking o complessità.')
@@ -470,6 +475,9 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                     raise EmptyCompletion("Il modello ha restituito una risposta vuota. Riduci i riferimenti o scegli un modello chat/vision più capace.")
                 if finish is None:
                     raise RuntimeError("Il motore ha interrotto lo stream prima di completare la risposta.")
+                if schema and finish!='length':
+                    from .native_json_schema import validate_response
+                    validate_response(content,schema)
                 return content, finish
         except urllib.error.HTTPError as exc:
             detail = exc.read(4096).decode("utf-8", "replace")
@@ -636,14 +644,14 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
     def refine_image_prompt(self, history, prompt, refs, settings, cancel, log_path, stage, *, image_model):
         layout=False
         if image_model.get('architecture')=='moss':
-            from .moss_layout import explicit,requested,brief as layout_brief,compile_layout
+            from .moss_layout import explicit,requested,disabled,brief as layout_brief,planned
             authored=explicit(prompt)
             if authored:return authored,{'model':'Layout esplicito','vision':False,'prompt_format':'layout','image_model':image_model['name']}
-            layout=requested(prompt)
+            layout=not disabled(prompt)
         model = self.require_model(settings['chat_model'], 'chat')
         prompt_format = 'layout' if layout else assistant_format(image_model)
         self.start_llama(model, settings, log_path, cancel, stage=stage)
-        stage('Assistant · MOSS · traduzione delle posizioni' if layout else 'Assistant · tag in inglese' if prompt_format == 'tags' else 'Assistant · preparazione delle istruzioni')
+        stage('Assistant · MOSS · composizione automatica' if layout else 'Assistant · tag in inglese' if prompt_format == 'tags' else 'Assistant · preparazione delle istruzioni')
         visual = settings.get('vision_enabled',True) and model.get('vision',{}).get('enabled',False)
         context = [{'role':m['role'],'text':m['content'][-4000:]} for m in history[-6:] if m['status']=='done']
         brief = json.dumps({'conversation':context,'request':prompt,'reference_count':len(refs),
@@ -656,7 +664,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
         instructions, schema = image_brief(image_model)
         if layout:
             dimensions=image_options(image_model,settings,prompt)
-            instructions,schema=layout_brief(dimensions['width'],dimensions['height'])
+            instructions,schema=layout_brief(dimensions['width'],dimensions['height'],automatic=not requested(prompt))
         tuning = settings | {'temperature':0.2,'think_level':'off','max_tokens':min(settings['prompt_max_tokens'],settings['context']//2)}
         raw, finish = self.completion([{'role':'system','content':instructions},{'role':'user','content':content if visual and refs else brief}],
                                       tuning,cancel,on_text=lambda text:None,schema=schema)
@@ -669,12 +677,13 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                 if not isinstance(tags,list) or not tags or any(not isinstance(tag,str) or not tag.strip() or '\n' in tag or '\r' in tag for tag in tags):raise ValueError()
                 result = ', '.join(tag.strip() for tag in tags)
             elif layout:
-                result=compile_layout(value,dimensions['width'],dimensions['height'])
+                result=planned(value,dimensions['width'],dimensions['height'],allow_prose=not requested(prompt))
             else:
                 result = value['prompt']
             if not isinstance(result,str) or not result.strip():raise ValueError()
         except (KeyError,TypeError,ValueError) as exc:
             raise ValueError('Assistant non ha prodotto istruzioni valide. Riprova o disattiva Assistant in chat.') from exc
+        if layout and not explicit(result):prompt_format='prose'
         return result.strip(), {'model':model_label(model),'vision':bool(visual and refs),'max_tokens':tuning['max_tokens'],
                                 'prompt_format':prompt_format,'image_model':image_model['name']}
 

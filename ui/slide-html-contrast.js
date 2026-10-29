@@ -8,7 +8,7 @@ function surfaces(element,doc){
   colors=colors.map(bg=>composite(base,bg));
   // Evaluate every gradient stop instead of skipping all gradient-backed text.
   // A mixed light/dark surface may need a local text backing for readability.
-  if(css.backgroundImage!=='none'){
+  if(css.backgroundImage!=='none'&&!css.backgroundClip.includes('text')){
    const stops=[...css.backgroundImage.matchAll(/rgba?\([^)]*\)|#[\da-f]{3,8}\b/gi)].map(m=>parseColor(m[0])).filter(Boolean);
    if(stops.length)colors=stops.flatMap(stop=>colors.map(bg=>composite(stop,bg))).slice(0,32);
    if(css.backgroundImage.includes('url(')||!stops.length)unknown=true;
@@ -30,6 +30,11 @@ export function readableText(doc,tone=doc.documentElement.dataset.h3TextTone||'a
   const svg=element.namespaceURI==='http://www.w3.org/2000/svg';if(svg&&element.localName!=='text'&&element.localName!=='tspan')continue;
   const {colors,opacity,unknown}=surfaces(element,doc),css=doc.defaultView.getComputedStyle(element),property=svg?'fill':'color';
   const original=parseColor(css.getPropertyValue(property));if(!original)continue;
+  let gradientInk=null;for(let p=element;p&&p!==doc.body;p=p.parentElement){const s=doc.defaultView.getComputedStyle(p);if(s.backgroundClip.includes('text')&&s.backgroundImage!=='none'){gradientInk=p;break;}}
+  // A clipped gradient is the ink, not the paper. Replacing transparent text
+  // with a contrast fallback paints over metallic/gradient lettering.
+  if(gradientInk&&!forced&&original[3]===0)continue;
+  if(gradientInk&&forced)gradientInk.style.setProperty('background-image','none','important');
   let chosen=forced?(tone==='light'?[248,250,252,1]:[23,36,43,1]):original;
   const score=color=>Math.min(...colors.map(bg=>contrastRatio(color,bg,opacity)));
   const bad=score(chosen)<4.5;

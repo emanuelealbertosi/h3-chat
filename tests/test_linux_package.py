@@ -6,6 +6,7 @@ import tempfile
 import unittest
 
 from scripts.verify_linux_package import verify
+from scripts.verify_feature_files import REQUIRED
 
 
 class LinuxPackageTests(unittest.TestCase):
@@ -23,11 +24,12 @@ class LinuxPackageTests(unittest.TestCase):
             self.assertFalse(os.path.samefile(base/'a/libsample.so',base/'c/libsample.so'))
             self.assertEqual((base/'c/libsample.so').read_bytes(),b'b'*1024**2)
 
-    def archive(self,folder,extra=None):
+    def archive(self,folder,extra=None,missing=None):
         target=Path(folder)/'package.tar.gz'
         required=('Avvia-H3-Chat.sh','Ferma-H3-Chat.sh','Installa-dipendenze-Linux.sh','runtime/python/bin/python3','native/h3-sd-worker','runtime/cpu/llama/llama-server','skills/h3/SKILL.md')
         with tarfile.open(target,'w:gz') as package:
-            for name in required:
+            for name in sorted(set(required)|REQUIRED):
+                if name==missing:continue
                 item=tarfile.TarInfo('H3-Chat/'+name);item.size=4;package.addfile(item,io.BytesIO(b'test'))
             if extra:package.addfile(extra)
         digest=hashlib.sha256(target.read_bytes()).hexdigest();target.with_name(target.name+'.sha256').write_text(digest+'  '+target.name)
@@ -35,7 +37,12 @@ class LinuxPackageTests(unittest.TestCase):
 
     def test_complete_archive_is_read_and_reported(self):
         with tempfile.TemporaryDirectory() as folder:
-            report=verify(self.archive(folder));self.assertEqual(report['regular_files'],7);self.assertTrue(report['all_member_payloads_read'])
+            report=verify(self.archive(folder));self.assertEqual(report['regular_files'],7+len(REQUIRED));self.assertTrue(report['all_member_payloads_read']);self.assertEqual(report['feature_files']['total_required_files'],len(REQUIRED))
+
+    def test_missing_poster_font_or_studio_module_is_rejected(self):
+        for name in ('static/Bangers.ttf','static/font-licenses/caveat/OFL.txt','h3chat/study.py','h3chat/poster_overlay.py'):
+            with self.subTest(name=name),tempfile.TemporaryDirectory() as folder:
+                with self.assertRaisesRegex(ValueError,'Release incomplete'):verify(self.archive(folder,missing=name))
 
     def test_private_files_and_path_traversal_are_rejected(self):
         for name in ('H3-Chat/data/chat.sqlite','H3-Chat/docs/h3-session-state.json','H3-Chat/../../outside'):

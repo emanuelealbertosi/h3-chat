@@ -30,12 +30,22 @@ class ExportSizeTests(unittest.TestCase):
             self.assertIn('data:image/png;base64,YQ==',saved)
             self.assertIn('@page{size:1280px 720px;margin:0}',saved)
 
-    def test_limit_counts_utf8_bytes_and_rejects_before_creating_files(self):
-        with tempfile.TemporaryDirectory() as directory,patch('h3chat.pdf_export.MAX_EXPORT_HTML_BYTES',1024):
-            for source in ('x'*1025,'è'*513):
-                with self.assertRaisesRegex(ValueError,'limite di 64 MB'):
-                    export_document(Path(directory),Path(directory),{'html':source})
-            self.assertEqual(list(Path(directory).iterdir()),[])
+    def test_slides_above_64_mib_are_exported(self):
+        source='<p>'+('x'*(65*1024*1024))+'</p>'
+        with tempfile.TemporaryDirectory() as directory,patch('h3chat.pdf_export.embedded_css',return_value=''):
+            _,file,_=export_document(Path(directory),Path(directory),{'html':source,'slide_format':'16:9'})
+            self.assertGreater(file.stat().st_size,64*1024*1024)
+
+    def test_export_http_routes_accept_large_bodies_without_raising_general_limits(self):
+        from app import Handler
+        from types import SimpleNamespace
+        import io
+        for path in ('/api/export/pdf','/api/export/html'):
+            request=SimpleNamespace(path=path,headers={'Content-Type':'application/json','Content-Length':str(100*1024*1024)},rfile=io.BytesIO(b'{}'))
+            self.assertEqual(Handler.read_body(request),{})
+        for path in ('/api/chats/abc/messages','/api/auth/login'):
+            request=SimpleNamespace(path=path,headers={'Content-Type':'application/json','Content-Length':str(100*1024*1024)},rfile=io.BytesIO(b'{}'))
+            with self.assertRaisesRegex(ValueError,'troppo grande'):Handler.read_body(request)
 
     def test_invalid_content_and_title_have_distinct_errors(self):
         with tempfile.TemporaryDirectory() as directory:

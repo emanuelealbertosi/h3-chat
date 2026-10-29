@@ -16,6 +16,18 @@ class VideoAgentTests(unittest.TestCase):
     ticket=AgentTests.ticket
     run_job=AgentTests.run_job
 
+    def test_disabled_video_capability_explains_the_actual_ui_permission(self):
+        from h3chat.agent_capabilities import snapshot
+        from h3chat.agent_state import options
+        disabled=snapshot(options({'allow_video':False}),self.app.store.settings(),self.app.root)
+        self.assertNotIn('create_video',disabled['tools'])
+        reason=disabled['disabled_tools']['create_video']
+        self.assertIn('Consenti generazione, modifica e montaggio video',reason)
+        self.assertIn('nuova richiesta',reason)
+        enabled=snapshot(options({'allow_video':True}),self.app.store.settings(),self.app.root)
+        self.assertIn('create_video',enabled['tools'])
+        self.assertNotIn('create_video',enabled['disabled_tools'])
+
     def test_fast_h3_request_keeps_its_profile_during_service_preflight(self):
         files={r:str(safetensors(self.base/('fast-'+r+'.safetensors'))) for r in ('diffusion','llm','vae','audio_vae')}
         model=self.app.external_model({'profile':'fasth3-omni','files':files})

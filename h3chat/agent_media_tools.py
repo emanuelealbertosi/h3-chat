@@ -12,9 +12,9 @@ def definitions():
       'resing_music':('Ricanta un audio con nuovo testo sulla melodia originale usando Re-sing YuE2 locale già configurato. Conserva originale, separazione e sincronizzazione H3. Richiede permesso audio e runtime pronti, non installa nulla.',obj({'number':number,'artifact_id':text(32),'prompt':text(),'lyrics':text(16000),'style':text(4000),'model_id':text(150)},['number','prompt'])),
       'edit_image':('Ritocca un’immagine allegata o di un artefatto della chat con Qwen o un altro modello edit disponibile. Usa edit_model delle impostazioni se model_id è omesso; conserva originale e parametri.',obj({'prompt':text(),'artifact_id':text(32),'number':number,'model_id':text(150)},['prompt'])),
       'create_voice':('Leggi esattamente il testo o prepara una narrazione con Voice; usa il motore e i controlli vocali configurati.',obj({'text':text(16000),'mode':{'type':'string','enum':['read','compose']}},['text'])),
-      'create_music':('Crea o ricrea un brano con il motore musicale configurato. target_artifact_id ricava la durata dall’infografica o presentazione destinazione. Stile/testo espliciti o preparati dal prompt. Non esegue Re-sing implicito.',obj({'prompt':text(),'title':text(120),'style':text(4000),'lyrics':text(16000),'instrumental':{'type':'boolean'},'model_id':text(150),'duration':{'type':'integer','minimum':1,'maximum':900},'target_artifact_id':text(32)},['prompt'])),
+      'create_music':('Crea o ricrea un brano con il motore musicale configurato. Il testo è FACOLTATIVO: se manca, il compositore LLM lo inventa dal prompt prima della sintesi YuE2/MiniMax; non chiedere all’utente di fornirlo. Per un brano senza canto usa instrumental=true. target_artifact_id ricava la durata dalla destinazione. Non esegue Re-sing implicito.',obj({'prompt':text(),'title':text(120),'style':text(4000),'lyrics':text(16000),'instrumental':{'type':'boolean'},'model_id':text(150),'duration':{'type':'integer','minimum':1,'maximum':900},'target_artifact_id':text(32)},['prompt'])),
       'apply_infographic_music':('Applica un audio salvato a un’infografica pronta. Crea una copia CPU della musica della durata esatta, con ripetizione se corta e dissolvenza finale; aggiorna il filmato procedurale senza rigenerare le scene o usare il motore video.',obj({'artifact_id':text(32),'audio_artifact_id':text(32),'number':number,'loop':{'type':'boolean'}},['artifact_id','audio_artifact_id'])),
-      'transcribe_audio':('Trascrivi un audio allegato o appartenente a un artefatto di questa chat. number è la posizione nel relativo elenco media; usa Whisper e la lingua configurati.',obj({'number':number,'artifact_id':text(32),'language':text(12)},['number'])),
+      'transcribe_audio':('Trascrivi un audio o la traccia audio di un video allegato o appartenente a un artefatto di questa chat. number è la posizione nel relativo elenco media; usa Whisper e la lingua configurati. Non analizza i fotogrammi.',obj({'number':number,'artifact_id':text(32),'language':text(12)},['number'])),
       'create_infographic':('Crea un’infografica modificabile, statica o animata proceduralmente. Voce, musica e nuove immagini richiedono i relativi permessi. Non usa il motore video né video di sfondo.',obj({'prompt':text(),'format':{'type':'string','enum':['16:9','9:16','4:3','16:10','1:1']},'scenes':{'type':'integer','minimum':1,'maximum':30},'duration':{'type':'integer','minimum':5,'maximum':600},'animated':{'type':'boolean'},'voice':{'type':'boolean'},'music':{'type':'string','enum':['none','generate']},'generate_images':{'type':'boolean'}},['prompt'])),
       'create_manim':('Crea un’animazione Manim con il renderer e l’isolamento di H3, entro il budget configurato. Non accetta codice o percorsi manuali; usa solo gli allegati della richiesta.',obj({'prompt':text(),'duration':{'type':'integer','minimum':1,'maximum':300}},['prompt'])),
       'render_infographic':('Aggiorna il filmato procedurale di una infografica già pronta dopo modifiche alle scene. Non usa il motore generativo video.',obj({'artifact_id':text(32)},['artifact_id'])),
@@ -79,9 +79,12 @@ def execute(ctx,name,args):
         reference=selected(ctx,args,'image');model=ctx.engine.require_model(args.get('model_id') or local['edit_model'],'edit')
         params=options(model,local,args['prompt']);loras=for_model(ctx.payload.get('loras',[]),model)
         local.update(_image_model=model['id'],_loras=loras,_image_options=params,_assistant=False)
-        result=ctx.engine.generate(model,local,args['prompt'],[reference],job['id'],ctx.cancel,ctx.stage)
-        params.update(result.get('generation',{}));record_image(app,result,model,params,args['prompt'],[reference],loras)
-        return saved(ctx,'Immagine ritoccata','',[result],meta|{'image_parameters':params})
+        prompt=args['prompt']
+        if model.get('architecture')=='moss':
+            prompt,meta['assistant']=ctx.engine.refine_image_prompt(ctx.history(prompt),prompt,[reference],local,ctx.cancel,ctx.log_path,ctx.stage,image_model=model)
+        result=ctx.engine.generate(model,local,prompt,[reference],job['id'],ctx.cancel,ctx.stage)
+        params.update(result.get('generation',{}));record_image(app,result,model,params,prompt,[reference],loras)
+        return saved(ctx,'Immagine ritoccata','',[result],meta|{'image_parameters':params})|{'image_id':result['id'],'model_id':model['id']}
     if name=='create_voice':
         guard_intent(ctx.app.effective_settings(local),'voice')
         from .voice import build,validate_fields,synthesize
@@ -138,7 +141,8 @@ def execute(ctx,name,args):
     if name=='transcribe_audio':
         guard_intent(ctx.app.effective_settings(local),'transcribe')
         from .agent_inputs import selected
-        item=selected(ctx,args,'audio')
+        item=selected(ctx,args)
+        if not item.get('mime','').startswith(('audio/','video/')):raise ValueError('Trascrivi richiede un audio o un video con parlato.')
         if 'language' in args:
             from .tools_runtime import validate
             local['asr_language']=args['language'];validate(local)

@@ -12,6 +12,9 @@ from .downloads import Cancelled
 class EmptyCompletion(RuntimeError):
     """A completed exchange that produced no usable text."""
 
+class SchemaNumericError(ValueError):
+    """A numeric field failed validation; contains no prompt or string value."""
+
 class StructuredCompletionError(ValueError):
     """Usable transport, but invalid structured model output."""
     def __init__(self,message,*,content='',reason=''):
@@ -36,7 +39,7 @@ def structured_text(content,schema):
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):raise ValueError('Il provider reindirizza la richiesta. Imposta direttamente il suo indirizzo API finale.')
 
-def check_schema(value,schema):
+def check_schema(value,schema,path='$'):
     kind=schema.get('type');types={'object':dict,'array':list,'string':str,'boolean':bool,'integer':int,'number':(int,float),'null':type(None)}
     if kind and (not isinstance(value,types[kind]) or kind in ('integer','number') and isinstance(value,bool)):raise ValueError('Risposta API non conforme allo schema JSON richiesto.')
     if 'enum' in schema and value not in schema['enum']:raise ValueError('Valore API fuori dallo schema JSON.')
@@ -45,11 +48,13 @@ def check_schema(value,schema):
         props=schema.get('properties',{})
         if schema.get('additionalProperties') is False and set(value)-set(props):raise ValueError('Campi API JSON non previsti.')
         for key,item in value.items():
-            if key in props:check_schema(item,props[key])
+            if key in props:check_schema(item,props[key],path+'.'+key)
     if isinstance(value,list):
         if len(value)<schema.get('minItems',0) or len(value)>schema.get('maxItems',1000000):raise ValueError('Numero di elementi API JSON non valido.')
-        for item in value:check_schema(item,schema.get('items',{}))
-    if type(value) in (int,float) and not schema.get('minimum',float('-inf'))<=value<=schema.get('maximum',float('inf')):raise ValueError('Valore numerico API JSON non valido.')
+        for index,item in enumerate(value):check_schema(item,schema.get('items',{}),path+'['+str(index)+']')
+    if type(value) in (int,float) and not schema.get('minimum',float('-inf'))<=value<=schema.get('maximum',float('inf')):
+        lower=schema.get('minimum','nessun minimo');upper=schema.get('maximum','nessun massimo')
+        raise SchemaNumericError(f'Valore numerico API JSON non valido: campo {path}, valore {value}, intervallo consentito {lower}–{upper}.')
 
 def request_body(config,messages,settings,stream,schema):
     body={'model':config['model'],'messages':[dict(m) for m in messages],'max_tokens':settings['max_tokens'] if stream or not schema else 768,'stream':stream}
@@ -109,6 +114,9 @@ class Client:
             except urllib.error.HTTPError as exc:
                 # Providers may echo headers or request text. Never persist their raw errors.
                 labels={400:'Richiesta o parametri non supportati: verifica modello, Vision, thinking e formato JSON.',401:'Chiave API non valida.',403:'Accesso al modello non consentito.',404:'Indirizzo API o modello non trovato.',429:'Limite richieste o credito del provider: riprova più tardi.'}
+                if exc.code==400:
+                    from .provider_errors import bad_request
+                    labels[400]=bad_request(exc.read(16384))
                 emit('error',RuntimeError('Provider API '+str(exc.code)+': '+labels.get(exc.code,'Servizio non disponibile. Riprova più tardi.')))
                 exc.close()
             except Exception as exc:

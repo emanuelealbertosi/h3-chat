@@ -153,8 +153,10 @@ class Service:
                 "media_server":self.media_server.status(),
                 "llm_options":{"keys":LLM_KEYS,"defaults":{profile:llm_defaults(profile) for profile in PROFILES},"max_context":MAX_CONTEXT,"max_output_tokens":MAX_OUTPUT_TOKENS},
                 "music_runtime":music_status(self.root), "music_options":{"request_controls":True,"resing":True,"defaults":MUSIC_DEFAULTS,"numbers":MUSIC_NUMBERS,"integers":sorted(MUSIC_INTEGER)},
-                "agent_options":{"enabled":True,"version":3,"prefix":"agent:","computer":__import__('h3chat.agent_computer',fromlist=['public']).public(self)},
+                "agent_options":{"enabled":True,"version":4,"prefix":"agent:","computer":__import__('h3chat.agent_computer',fromlist=['public']).public(self)},"chat_live_updates":True,
                 "slide_options":{"max_count":MAX_SLIDES,"automatic_count":True,"background_batches":True,"background_styles":True,"settings_presets":True,"automatic_decorations":True},
+                "poster_options":{"enabled":True,"max_variants":6,"formats":['A3','A4','A3-landscape','A4-landscape','4:5','9:16','1:1','16:9']},
+                "study_options":{"enabled":True,"max_items":50,"kinds":['flashcards','summary','faq','guide','timeline','dialogue']},
                 "video_options":{"defaults":VIDEO_DEFAULTS,"aspects":VIDEO_ASPECTS,"request_controls":True,"segment_controls":True,"format_control":True,"request_draft":True,"seed_control":True,"attention_choices":True,"batch_controls":True}, "veda_runtime":veda_status(self.root),
                 "tools_runtime":tools_status(self.root),"transcription_models":[m|{'ready':all(safe_join(self.root,f['path']).is_file() for f in m['files'])} for m in self.downloads.tool_models.values() if m['id'].startswith('whisper-')],
                 "embeddinggemma2_runtime":{"ready":gemma2_runtime_ready(self.root)}, "vision_runtime":vision_status(self.root), "models": models,"image_options":{"request_controls":True,"last_seed":True,"moss_presets":MOSS_RECIPES,"moss_dmd2":moss_dmd2_status(self.root),"moss_negative_prompt":MOSS_NEGATIVE_PROMPT,"samplers":NATIVE_SAMPLERS,"schedulers":NATIVE_SCHEDULERS,"vision_samplers":VISION_SAMPLERS,"vision_schedulers":VISION_SCHEDULERS,"defaults":{k:DEFAULTS[k] for k in IMAGE_DEFAULT_KEYS}},"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
@@ -486,7 +488,7 @@ class Service:
         video=body.get('video',False)
         web=body.get('web',False);transcribe=body.get('transcribe',False)
         if type(web) is not bool or type(transcribe) is not bool:raise ValueError('Web/Trascrivi: scegli attivo o disattivo.')
-        if transcribe and not any(x['mime'].startswith('audio/') for x in media):raise ValueError('Allega un audio per trascriverlo.')
+        if transcribe and not any(x['mime'].startswith(('audio/','video/')) for x in media):raise ValueError('Allega un audio o un video con parlato per trascriverlo.')
         if type(video) is not bool:raise ValueError('Video: scegli attivo o disattivo.')
         from .video_options import capture_request
         settings=capture_request(settings,body,self.engine.require_model)
@@ -522,6 +524,9 @@ class Service:
         settings.update(_voice=voice,_voice_fields=validate_voice_fields(body.get('voice_fields',{})))
         rag=body.get('rag',settings['rag_enabled'])
         if type(rag) is not bool:raise ValueError('RAG: scegli On oppure Off.')
+        if 'rag_top_k' in body:
+            if type(body['rag_top_k']) is not int or not 1<=body['rag_top_k']<=12:raise ValueError('Estratti RAG per questa richiesta: scegli un intero da 1 a 12.')
+            settings=settings|{'rag_top_k':body['rag_top_k']}
         source_ids=body.get('rag_sources')
         if source_ids is not None:
             if not chat.get('project_id'):raise ValueError('Seleziona un progetto prima delle fonti RAG.')
@@ -529,7 +534,30 @@ class Service:
             if not isinstance(source_ids,list) or any(not isinstance(x,str) or x not in valid for x in source_ids):raise ValueError('Selezione fonti RAG non valida.')
         settings.update(_rag=rag,_rag_sources=source_ids)
         lab=body.get('lab','auto');source=body.get('lab_source','')
-        if lab not in ('auto','calculate','manim','slides','infographic') or not isinstance(source,str) or len(source)>(100000 if lab=='manim' else 20000):raise ValueError('Strumento o sorgente non valido.')
+        if lab not in ('auto','calculate','manim','slides','infographic','poster','study') or not isinstance(source,str) or len(source)>(100000 if lab=='manim' else 20000):raise ValueError('Strumento o sorgente non valido.')
+        from .study import requested as study_requested,options as study_options,loaded as study_loaded
+        study_request=lab=='study' or lab=='auto' and not any((selection,music,video,transcribe,voice)) and study_requested(prompt)
+        if study_request:
+            if source:raise ValueError('Usa il canvas per modificare le schede Studio.')
+            lab='study';settings['_study']=study_options(prompt,body.get('study'))
+            self.engine.require_model(settings['chat_model'],'chat')
+            if body.get('study_explain') is not None:
+                spec=body['study_explain']
+                if not isinstance(spec,dict) or set(spec)!={'artifact_id','card_id'}:raise ValueError('Richiesta Spiega non valida.')
+                _,deck=study_loaded(self,chat_id,spec['artifact_id'])
+                if not any(i['id']==spec['card_id'] for i in deck['items']):raise ValueError('Scheda non trovata.')
+                settings['_study_explain']=spec
+            if body.get('study_resume') is not None:
+                _,deck=study_loaded(self,chat_id,body['study_resume'])
+                if len(deck['items'])>=deck.get('requested',len(deck['items'])):raise ValueError('Il documento Studio è già completo.')
+                settings['_study_resume']=body['study_resume']
+        from .posters import requested as poster_requested,options as poster_options,image_model as poster_image_model
+        poster_request=lab=='poster' or lab=='auto' and not any((selection,music,video,transcribe,voice)) and poster_requested(prompt)
+        if poster_request:
+            if source:raise ValueError('Modifica il sorgente della locandina nel canvas.')
+            lab='poster';settings['_posters']=poster_options(prompt,body.get('poster'))
+            self.engine.require_model(settings['chat_model'],'chat')
+            poster_image_model(self,settings,settings['_posters'],media)
         from .infographics import requested as infographic_requested,options as infographic_options
         infographic_request=lab=='infographic' or (lab=='auto' and not any((selection,music,video,transcribe,voice)) and infographic_requested(prompt))
         if infographic_request:
@@ -592,14 +620,14 @@ class Service:
         canvas = body.get("canvas", False)
         if type(canvas) is not bool:
             raise ValueError("Destinazione canvas non valida.")
-        if slide_request or infographic_request or image_batch:canvas=True
+        if slide_request or infographic_request or image_batch or poster_request or study_request:canvas=True
         loras=self.loras.capture(body.get('loras',[]),settings['lora_dirs'],self.catalog)
         if image_batch:
             loras+=attached_image_loras
             if len(loras)>8:raise ValueError('Massimo 8 LoRA fra pannello e allegati del lotto.')
         job_id = self.store.enqueue(chat_id, prompt.strip(), media, settings, canvas, loras)
         self.wake.set()
-        return {"job_id": job_id, "canvas": canvas, "intent": 'image_batch' if image_batch else 'infographic' if infographic_request else 'slides' if slide_request else None}
+        return {"job_id": job_id, "canvas": canvas, "intent": 'study' if study_request else 'poster' if poster_request else 'image_batch' if image_batch else 'infographic' if infographic_request else 'slides' if slide_request else None}
 
     def regenerate(self, chat_id):
         with self.lock:
@@ -698,7 +726,7 @@ class Service:
             if snapshot:
                 history.insert(-1, {"role":"user", "content":"Canvas attuale da modificare se richiesto:\n" + snapshot["content"],
                                    "media":json.loads(snapshot["media"]), "status":"done", "seq":-1})
-            if settings.get('_lab') in ('slides','infographic'):
+            if settings.get('_lab') in ('slides','infographic','poster'):
                 from .slide_context import compact_history
                 history=compact_history(history)
             log_path = self.data / "logs" / (job["id"] + ".log")
@@ -706,6 +734,15 @@ class Service:
             def stage(label):
                 LOG.info("Lavoro %s · %s", job["id"][:8], label)
                 self.store.execute("UPDATE jobs SET stage=? WHERE id=?", (label, job["id"]))
+            if settings.get('_poster_creative'):
+                from .poster_typography import run_creative
+                run_creative(self,job,payload,settings,cancel,stage,log_path);return
+            if settings.get('_study_audio'):
+                from .study_audio import run as render_study_audio
+                render_study_audio(self,job,payload,settings,cancel,stage,log_path);return
+            if settings.get('_study_import'):
+                from .study_import import run as import_study_source
+                import_study_source(self,job,payload,settings,cancel,stage,log_path);return
             if settings.get('_agent'):
                 from .agent_runtime import build as build_agent
                 build_agent(self,job,payload,settings,cancel,stage,log_path,meta)
@@ -806,7 +843,7 @@ class Service:
                 project=self.knowledge.project(project_id)
                 settings['system_prompt']+='\nIstruzioni del progetto:\n'+project['instructions']
                 if settings.get('_rag',settings['rag_enabled']):
-                    settings['_rag_overview']=settings.get('_lab') in ('slides','infographic')
+                    settings['_rag_overview']=settings.get('_lab') in ('slides','infographic','poster','study')
                     retrieved,rag_mode=self.knowledge.retrieve(project_id,rag_query,settings,cancel,stage,settings.get('_rag_sources'))
                     remaining=retrieval_budget(settings,history)
                     for row in retrieved:
@@ -817,6 +854,8 @@ class Service:
                         rag_sources.append({'citation':'R'+str(len(rag_sources)+1),'chunk_id':row['id'],'source_id':row['source_id'],'name':row['name'],'location':row['location'],'page':row['page'],'text':excerpt_text,'url':row['source_url'],
                             **({'image_path':row['image_path'],'modality':'image'} if row.get('image_path') else {})})
                         remaining-=len(excerpt_text)+180
+                        from .study_import import has_origin
+                        if has_origin(self,project_id,row['source_id']):rag_sources[-1]['media_origin']=True
                     if project['sources_only']:
                         settings['system_prompt']+='\nRispondi solo usando le fonti RAG fornite. Se non contengono la risposta, dichiaralo. Non colmare le lacune con conoscenze generali.'
                     settings['_context_reserved']=sum(len(s['text'])+180 for s in rag_sources)
@@ -834,7 +873,7 @@ class Service:
             tool_meta={};transcripts=[];sources=[];transcript_media=[]
             if not selected_route or selected_route['intent'] not in ('video','image_batch'):
                 slide_documents=[]
-                if selected_route and selected_route['intent'] in ('slides','infographic'):
+                if selected_route and selected_route['intent'] in ('slides','infographic','poster'):
                     slide_documents=next(([x for x in m['media'] if x['mime'] in ('application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document')] for m in reversed(history) if any(x['mime'] in ('application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document') for x in m['media'])),[])
                 if settings.get('_manim_presentation'):
                     from .manim_presentation import supported as presentation_supported
@@ -844,15 +883,15 @@ class Service:
                     tool_payload=payload|{'media':[x for x in payload['media'] if not presentation_supported(x)]}
                     history,tool_meta,transcripts,sources=self.engine.prepare_tools(history,tool_payload,settings,cancel,stage,log_path,use_audio=False)
                 else:history,tool_meta,transcripts,sources=self.engine.prepare_tools(history,payload,settings,cancel,stage,log_path,use_audio=not (selected_route and selected_route['intent']=='infographic' and settings.get('_infographic',{}).get('music')=='uploaded'))
-                if selected_route and selected_route['intent'] in ('slides','infographic'):
+                if selected_route and selected_route['intent'] in ('slides','infographic','poster'):
                     from .slide_sources import extract_assets
                     tool_meta['_slide_assets']=extract_assets(self,job,slide_documents,rag_sources,project_id,cancel,stage,log_path)
                 visual_history=history
                 transcript_media=self.engine.transcript_files(transcripts,job['id'])
             from .rag_visual import attach as attach_rag_visuals
-            visual_options=settings if not selected_route or selected_route['intent'] in ('chat','slides','infographic','manim','calculate','voice') else settings|{'vision_enabled':False}
+            visual_options=settings if not selected_route or selected_route['intent'] in ('chat','slides','infographic','poster','manim','calculate','voice') else settings|{'vision_enabled':False}
             tool_meta.update(attach_rag_visuals(self,job,history,rag_sources,visual_options))
-            if selected_route and selected_route['intent'] in ('slides','infographic'):tool_meta['_slide_assets']=([s['image'] for s in rag_sources if s.get('image')]+tool_meta.get('_slide_assets',[]))[:32]
+            if selected_route and selected_route['intent'] in ('slides','infographic','poster'):tool_meta['_slide_assets']=([s['image'] for s in rag_sources if s.get('image')]+tool_meta.get('_slide_assets',[]))[:32]
             if project_id and settings.get('_rag',settings['rag_enabled']):
                 block='\n\n'.join(f"[{s['citation']}] {s['name']} · {s['location']}\n{s['text']}" for s in rag_sources)
                 history[-1]['content']+='\n\n<fonti_progetto>\n'+(block or 'Nessun estratto pertinente trovato nelle fonti selezionate.')+'\n</fonti_progetto>'
@@ -880,8 +919,8 @@ class Service:
                 meta['model_identity'] = model['identity']
             if model.get('api'):meta['api']=True
             meta.update(tool_meta)
-            role='llm' if intent in ('chat','slides','infographic') else 'image' if intent in ('create','edit','image_batch') else 'asr' if intent=='transcribe' else intent
-            meta['execution_mode']='Server esterno · LLM' if model.get('api') and intent in ('chat','slides','infographic') else 'Standalone · '+device_label(settings,role)
+            role='llm' if intent in ('chat','slides','infographic','poster','study') else 'image' if intent in ('create','edit','image_batch') else 'asr' if intent=='transcribe' else intent
+            meta['execution_mode']='Server esterno · LLM' if model.get('api') and intent in ('chat','slides','infographic','poster','study') else 'Standalone · '+device_label(settings,role)
             if intent in ('calculate','manim'):meta['execution_mode']='Standalone · '+('CPU · Interprete numerico' if intent=='calculate' else ('GPU · OpenGL' if settings['manim_device']=='gpu' else 'CPU · Cairo')+' · Manim')
             if role in ('image','music') and device_label(settings,role)=='CPU':meta['device_warning']=CPU_WARNING
             selected_id=route.get('image_model') or settings.get('create_model' if intent=='create' else 'edit_model' if intent=='edit' else intent+'_model')
@@ -916,6 +955,14 @@ class Service:
                 meta['artifact']=build_infographic(self,job,payload,history,settings,model,cancel,stage,log_path,meta)
                 self.store.update_answer(job,'Ho creato l’infografica nel canvas. Puoi modificarne grafica e animazioni.','done',[],meta)
                 stage('Infografica pronta')
+            elif intent=='study':
+                from .study import build as build_study,build_explanation
+                meta['artifact']=(build_explanation if settings.get('_study_explain') else build_study)(self,job,payload,settings,model,cancel,stage,log_path,meta)
+                self.store.update_answer(job,'Studio pronto nel canvas. Le citazioni aprono gli estratti usati; puoi studiare, modificare ed esportare le schede.','done',[],meta)
+            elif intent=='poster':
+                from .posters import build as build_posters
+                meta['artifact']=build_posters(self,job,payload,history,settings,model,cancel,stage,log_path,meta)
+                self.store.update_answer(job,f"Ho creato {settings['_posters']['count']} locandine nel canvas. Puoi modificarle ed esportarle in PNG, PDF o HTML.",'done',[],meta)
             elif intent=='slides':
                 from .slides import build as build_slides
                 meta['artifact']=build_slides(self,job,payload,history,settings,model,cancel,stage,log_path,meta)
@@ -1159,6 +1206,7 @@ class Service:
         self.wake.set()
         if self.cancel_event:
             self.cancel_event.set()
+        if hasattr(self,'agent_browsers'):self.agent_browsers.close()
         self.knowledge.close()
         for task in self.downloads.snapshot():
             self.downloads.cancel(task["id"])

@@ -1,3 +1,5 @@
+import {initPosters} from './posters.js';
+import {initStudy,renderStudy,studyPrefix} from './study.js';
 import {initAgentControls,renderAgentRun} from './agent-ui.js';
 import {initCanvasZoom} from './canvas-zoom.js';
 import {organizeSettings} from './settings-sections.js';
@@ -12,6 +14,7 @@ import {renderLlmPreferences,selectLlmPreferencesModel,syncLlmDraft,llmOptions} 
 import {renderVideoSettings,appendVideoDetails,selectVideoPreferencesModel} from './video-settings.js';
 import {chatActivities,chatActivityIcon} from './chat-activity.js';
 import {initChatScroll} from './chat-scroll.js';
+import {createChatStream} from './chat-stream.js';
 import {requestTiming} from './request-timing.js';
 import {collapseInput,inputMedia} from './message-input.js';
 import {resolveVideoEditInputs} from './video-edit-inputs.js';
@@ -64,6 +67,7 @@ const api=async(path,body,method='POST')=>{
   const response=await fetch('/api'+path,{cache:'no-store',method:body===undefined?'GET':method,headers:body===undefined?{}:{'Content-Type':'application/json','X-H3-Token':state?.token||''},body:body===undefined?undefined:JSON.stringify(body)});
   const data=await response.json();if(!response.ok)throw Error(data.error||'Operazione non riuscita.');return path==='/state'&&chatModels?chatModels.reconcile(data,modelRevision):data;
 };
+const chatStream=createChatStream({read:(chatId,messageId)=>api('/chats/'+chatId+'/messages/'+messageId+'/live'),render:(target,text,options)=>renderRich(target,text,{...options,final:false}),onProgress:()=>chatScroll.update()});
 function toast(text,error=false){
   const notice=$('#toast');
   const host=document.activeElement?.closest('dialog[open]')||[...document.querySelectorAll('dialog:modal')].at(-1)||document.body;
@@ -95,7 +99,7 @@ const localModels=initLocalModels({api,getState:()=>state,notify:toast,onChange:
 const loraUI=initLoras({api,getState:()=>state,getChatId:()=>current,pickDirectory:(path,callback)=>localModels.pickDirectory(path,callback),openPreferences:()=>openSettings('advanced'),notify:toast,onChange:()=>scheduleAssessment()});
 const projects=initProjects({api,getState:()=>state,getChat:()=>chat,refresh,notify:toast,act,select:act(async id=>{project=id;collection=null;filter='all';lastSidebar='';renderSidebar();if(id&&chat?.project_id!==id){const existing=state.chats.find(c=>c.project_id===id&&!c.archived);if(existing)await openChat(existing.id);else await newChat();}}),showCanvas:value=>value===null?($('#canvas-panel').hidden=!canvasOpen,$('#workspace').classList.toggle('has-canvas',canvasOpen)):toggleCanvas(value),pickDirectory:(path,callback)=>localModels.pickDirectory(path,callback)});
 chatModels=initChatModels({api,getState:()=>state,notify:toast,onChange:settings=>{if(settings)state.settings=settings;renderStatus();}});
-$('#rag-enabled').closest('label').insertAdjacentHTML('afterend','<label class="think-control">Strumenti <select id="lab-tool" aria-label="Strumenti della chat"><option value="auto">Automatico · dal prompt</option><option value="calculate">Interprete numerico</option><option value="manim">Animazione Manim</option><option value="slides">Slide · HTML in tempo reale</option><option value="infographic">Infografica animata</option></select></label><span id="slides-options" hidden><label>Quantità <select id="slides-count-mode" aria-label="Come scegliere il numero di slide"><option value="fixed">Numero fisso</option><option value="auto">Automatico · dai contenuti</option></select></label><label>Slide <input id="slides-count" aria-label="Numero di slide" type="number" min="1" max="100" value="8" style="width:65px"></label><p class="small-note prompt-slide-count-note">Da 1 a 100 slide. In automatico il modello sceglie in base ai contenuti e alle fonti. Il numero o la scelta automatica richiesti nel prompt hanno la precedenza.</p> <label>Formato <select id="slides-format" aria-label="Formato slide"><option>16:9</option><option>9:16</option><option>4:3</option><option>16:10</option><option>1:1</option></select></label></span>');
+$('#rag-enabled').closest('label').insertAdjacentHTML('afterend','<label class="think-control">Strumenti <select id="lab-tool" aria-label="Strumenti della chat"><option value="auto">Automatico · dal prompt</option><option value="calculate">Interprete numerico</option><option value="manim">Animazione Manim</option><option value="slides">Slide · HTML in tempo reale</option><option value="poster">Locandine</option><option value="infographic">Infografica animata</option></select></label><span id="slides-options" hidden><label>Quantità <select id="slides-count-mode" aria-label="Come scegliere il numero di slide"><option value="fixed">Numero fisso</option><option value="auto">Automatico · dai contenuti</option></select></label><label>Slide <input id="slides-count" aria-label="Numero di slide" type="number" min="1" max="100" value="8" style="width:65px"></label><p class="small-note prompt-slide-count-note">Da 1 a 100 slide. In automatico il modello sceglie in base ai contenuti e alle fonti. Il numero o la scelta automatica richiesti nel prompt hanno la precedenza.</p> <label>Formato <select id="slides-format" aria-label="Formato slide"><option>16:9</option><option>9:16</option><option>4:3</option><option>16:10</option><option>1:1</option></select></label></span>');
 const agentUI=initAgentControls({getState:()=>state,api,notify:toast,pickDirectory:(path,callback)=>localModels.pickDirectory(path,callback),onPreferencesSaved:value=>{if(settingsDraft)settingsDraft.agent_defaults=value;if(state?.settings)state.settings.agent_defaults=value;}});
 $('#lab-tool').onchange=()=>{manimPresentation?.render();infographicsUI?.render();$('#slides-options').hidden=$('#lab-tool').value!=='slides';$('#agent-options').hidden=$('#lab-tool').value!=='agent';visualControls.render();};
 $('#slides-options').insertAdjacentHTML('beforeend',' <label>Durata indicativa (min)<input id="slides-duration" aria-label="Durata indicativa della presentazione in minuti" type="number" min="0" max="20" step="0.5" value="0"></label><p class="small-note">0 = Automatico. Fino a 20 minuti di esposizione, incluse pause e attività. La durata scritta nel prompt prevale.</p> <label>Motore <select id="slides-engine" aria-label="Motore slide"><option value="llm">LLM · HTML libero</option><option value="deterministic">Deterministico</option></select></label> <label>Stile <select id="slides-design"><option value="professional">Serio / professionale</option><option value="playful">Giocoso / colorato</option><option value="comic">Fumettoso</option></select></label> <label>Contenuto <select id="slides-detail"><option value="concise">Sintesi</option><option value="full">Testi completi</option></select></label>');
@@ -107,6 +111,13 @@ $('#slides-composition').addEventListener('change',()=>{if($('#slides-compositio
 $('#slides-engine').addEventListener('change',()=>{if($('#slides-engine').value==='deterministic'&&$('#slides-composition').value==='rich'){$('#slides-composition').value='standard';$('#slides-composition').dispatchEvent(new Event('change',{bubbles:true}));}});
 $('#slides-motion').addEventListener('change',()=>{if($('#slides-motion').value==='animated'&&$('#slides-engine').value!=='llm'){$('#slides-engine').value='llm';$('#slides-engine').dispatchEvent(new Event('change',{bubbles:true}));}});
 $('#slides-engine').addEventListener('change',()=>{if($('#slides-engine').value==='deterministic'&&$('#slides-motion').value==='animated'){$('#slides-motion').value='static';$('#slides-motion').dispatchEvent(new Event('change',{bubbles:true}));}});
+const postersUI=initPosters({getState:()=>state});
+$('#lab-tool').append(new Option('Studio · flashcard e fonti','study'));
+const studyUI=initStudy({getState:()=>state,getAttachments:()=>attachments,onImport:async body=>{
+  if(userJob())throw Error('Attendi o interrompi il lavoro in corso.');
+  if(!current){if(!project)throw Error('Seleziona prima un progetto.');const fresh=await api('/chats',{project_id:project});current=fresh.id;chat=fresh;}
+  const result=await api('/chats/'+current+'/study-import',body);queuedCanvasJob(result,current,'Studio · importazione fonte in coda');await refresh();
+}});
 const slideImages=initSlideImages({api});
 const slideBackgrounds=initSlideBackgrounds({api,getState:()=>state,notify:toast,onRecipe:prompt=>{$('#prompt').value=prompt;$('#prompt').dispatchEvent(new Event('input',{bubbles:true}));}});
 const slideImageLots=initSlideImageLots({api,getState:()=>state,getProjectId:()=>current?chat?.project_id:project,onConfigureVision:async()=>{const id=state.settings.chat_model;await openSettings('providers');document.querySelector('[data-provider-vision="'+id+'"]')?.click();},onGenerate:async body=>{
@@ -116,7 +127,7 @@ const slideImageLots=initSlideImageLots({api,getState:()=>state,getProjectId:()=
 const slideColors=initSlideColors();
 const slideBackgroundPicker=initSlideBackgroundPicker({api,getState:()=>state});
 const presentationPreferences=initPresentationPreferences({api,getState:()=>state,notify:toast,adapters:{slides:slidePreferencesAdapter(slideBackgroundPicker,()=>composerUI?.render(),slideImages),backgrounds:slideBackgrounds.preferences}});
-async function executeArtifact(lang,source){if(activeJob())throw Error('Attendi o interrompi il lavoro corrente.');if(!current)await newChat();await api('/chats/'+current+'/messages',{prompt:lang.startsWith('manim')?'Renderizza questa scena Manim':'Esegui questo calcolo con l’interprete',lab:lang.startsWith('manim')?'manim':'calculate',lab_source:source,canvas:canvasOpen,...projects.read()});await refresh();}
+async function executeArtifact(lang,source){if(activeJob())throw Error('Attendi o interrompi il lavoro corrente.');if(!current)await newChat();const ragRequest=projects.read();await api('/chats/'+current+'/messages',{prompt:lang.startsWith('manim')?'Renderizza questa scena Manim':'Esegui questo calcolo con l’interprete',lab:lang.startsWith('manim')?'manim':'calculate',lab_source:source,canvas:canvasOpen,...ragRequest});projects.submitted(ragRequest);await refresh();}
 function localCard(model){
   const m=model;
   return `<article class="model-card" data-external-card="${m.id}"><div class="model-top"><h3>${esc(modelLabel(m))}</h3><div class="model-link-actions"><button type="button" class="btn small" data-model-parameters="${m.id}">Parametri del modello</button><button type="button" class="btn small" data-edit-external="${m.id}">Modifica collegamento</button><button type="button" class="text-button" data-remove-external="${m.id}">Scollega</button></div></div><p>${esc(m.description)}</p>${modelIdentityHtml(m)}<div class="model-meta"><span class="badge">PERCORSO ESTERNO</span><span class="badge ${m.ready?'ready':'warning'}">${m.ready?'Disponibile':'Non disponibile'}</span>${m.vision?`<span class="badge ${m.vision.enabled?'ready':'warning'}">${m.vision.enabled?'Vision attiva':'Non vision'}</span>`:''}${m.thinking?.supported?'<span class="badge">THINK</span>':''}${m.mtp?.supported?'<span class="badge">MTP</span>':''}${m.capabilities.map(c=>`<span class="badge">${({chat:'CHAT',create:'CREA',edit:'MODIFICA',music:'MUSICA',video:'VIDEO'})[c]||esc(c)}</span>`).join('')}</div>${m.external_problems?.length?`<p class="local-error">${esc(m.external_problems.join(' '))}</p>`:''}${m.vision?.warning?`<p class="small-note">${esc(m.vision.warning)}</p>`:''}<details><summary>Percorsi collegati e componenti</summary>${m.files.map(f=>`<div class="external-path"><strong>${esc(state.model_role_labels[f.role]||f.role)}</strong><span>${esc(f.path)}</span><small>${gb(f.size)}</small></div>`).join('')}${m.vision?.projector&&!m.files.some(f=>f.role==='mmproj')?`<div class="external-path"><strong>mmproj automatico</strong><span>${esc(m.vision.projector)}</span></div>`:''}<p class="small-note">${esc(m.license)}</p></details></article>`;
@@ -178,7 +189,7 @@ function renderStatus(){
   loraUI.render();visualControls.render();
   $('#chat-advanced').checked=!!state.settings.chat_advanced;
   const job=userJob(),canvasJob=activeJob(),any=state.jobs.some(j=>j.status==='running');
-  slideImages.render(state);
+  slideImages.render(state);postersUI.render();
   slideBackgrounds.render();
   slideImageLots.render();
   slideBackgroundPicker.render();
@@ -223,6 +234,7 @@ function renderStatus(){
 function focusPrompt(){if(composerUI)composerUI.reveal();else $('#prompt').focus();}
 async function newChat(){if(current)await persistCanvas();const fresh=await api('/chats',{collection_id:collection,project_id:project});await openChat(fresh.id);await refresh();focusPrompt();}
 async function openChat(id){
+  chatStream.clear();
   if(current){drafts.set(current,{prompt:$('#prompt').value,attachments:[...attachments]});await persistCanvas();}
   current=id;chat=await api('/chats/'+id);chatScroll.begin();$('#messages').innerHTML='';
   clearUnusedVideoProgress();
@@ -257,6 +269,8 @@ async function reloadRequest(message){
   $('#lab-tool').value=draft.lab||'auto';$('#lab-tool').dispatchEvent(new Event('change',{bubbles:true}));
   manimPresentation?.set(draft.manim_presentation?{enabled:true,...draft.manim_presentation}:null);
   loraUI.setSelections(draft.loras||[]);visualControls.set(draft.controls);
+  if(draft.poster)postersUI.set(draft.poster);
+  if(draft.study)studyUI.set(draft.study);
   if(draft.slides?.count!=null){
     $('#slides-duration').value=String(draft.slides.duration_minutes||0);
     $('#slides-timeout').value=String(draft.slides.llm_timeout||0);
@@ -273,11 +287,14 @@ async function reloadRequest(message){
 
 async function renderChat(){
   $('#welcome').hidden=!!chat?.messages.length;
-  if(!chat)return;
+  if(!chat){chatStream.clear();return;}
   await resolveVideoEditInputs(chat,state.jobs,api);
   const latestAgents=new Map(chat.messages.filter(m=>m.meta.agent).map(m=>[m.meta.agent.id,m.id]));
+  const streamingKeys=new Set();
   for(const message of chat.messages){
     const pending=message.role==='assistant'&&['queued','running'].includes(message.status);
+    const smooth=pending&&message.status==='running'&&message.meta.intent==='chat'&&!message.meta.canvas&&!message.meta.agent;
+    if(smooth)streamingKeys.add(current+':'+message.id);
     const job=pending?(state.jobs.find(j=>j.message_id===message.id)||activeJob()):null;
     const timing=requestTiming(message,job,state.server_time??Date.now()/1000);
     let article=document.getElementById('msg-'+message.id);const signature=JSON.stringify([message.content,message.status,message.media,message.display_media,message.meta,latestAgents.get(message.meta.agent?.id),message.meta.agent?!!userJob():null,state.settings.chat_advanced,pending?job?.stage:null,timing?.text]);
@@ -292,10 +309,13 @@ async function renderChat(){
     article.dataset.signature=signature;
     article.innerHTML=`<div class="message-head">${message.role==='user'?'<span class="user-avatar">TU</span>':'<img src="/static/icon.svg" alt="">'}<strong>${message.role==='user'?'Tu':'H3 Chat'}</strong><span>${message.meta.model?esc(message.meta.model_identity?.label||message.meta.model):''}</span>${message.meta.canvas?'<span class="badge">Canvas</span>':''}</div><div class="message-content ${message.role==='assistant'?'rich':''}"></div><div class="message-actions"></div>`;
     const content=article.querySelector('.message-content');
-    if(message.role==='user')content.textContent=message.content;
-    else if(message.content)await renderRich(content,message.content,{final:message.status==='done',sources:message.meta.rag_sources||[],onCitation:(source,sources)=>projects.citation(source,sources,message),onExecute:act(executeArtifact)});
+    const textBody=document.createElement('div');textBody.className='message-text';content.append(textBody);
+    const richOptions={sources:message.meta.rag_sources||[],onCitation:(source,sources)=>projects.citation(source,sources,message),onExecute:act(executeArtifact)};
+    if(message.role==='user')textBody.textContent=message.content;
+    else if(smooth)chatStream.bind({chat:current,id:message.id,container:textBody,text:message.content,options:richOptions,live:!!state.chat_live_updates});
+    else if(message.content)await renderRich(textBody,message.content,{...richOptions,final:message.status==='done'});
     if(pending){
-      const title=({create:'Creazione immagine',edit:'Modifica immagine',video:'Generazione video',music:'Generazione musica',slides:'Creazione slide nel canvas',infographic:'Creazione infografica nel canvas',transcribe:'Trascrizione audio',agent:'Agent · strumenti H3',manim:message.meta.narrated_manim?'Animazione Manim con voce':'Animazione Manim',calculate:'Calcolo in corso',chat:message.meta.canvas?'Scrittura nel canvas':'Risposta in corso'})[message.meta.intent]||(job?.status==='queued'?'In attesa':'Preparazione della risposta');
+      const title=({create:'Creazione immagine',edit:'Modifica immagine',video:'Generazione video',music:'Generazione musica',study:'Studio · creazione dalle fonti',slides:'Creazione slide nel canvas',infographic:'Creazione infografica nel canvas',transcribe:'Trascrizione audio',agent:'Agent · strumenti H3',manim:message.meta.narrated_manim?'Animazione Manim con voce':'Animazione Manim',calculate:'Calcolo in corso',chat:message.meta.canvas?'Scrittura nel canvas':'Risposta in corso'})[message.meta.intent]||(job?.status==='queued'?'In attesa':'Preparazione della risposta');
       const activity=document.createElement('div');activity.className='generation-activity';activity.setAttribute('role','status');
       activity.innerHTML=`<div class="thinking" aria-hidden="true"><i></i><i></i><i></i></div><div><strong>${esc(title)}</strong><span class="activity-stage">${esc(job?.stage||'Preparazione del motore…')}</span><small class="activity-elapsed">${esc(timing?.text||'Preparazione del cronometro…')}</small></div>`;
       content.append(activity);
@@ -340,7 +360,7 @@ async function renderChat(){
     if(message.role==='assistant'&&!pending){const reload=document.createElement('button');reload.className='text-button';reload.textContent='Ricarica richiesta';reload.disabled=!state.video_options?.request_draft;reload.onclick=act(()=>reloadRequest(message));actions.append(reload);}
     collapseInput(article,message);
   }
-  clearUnusedVideoProgress();chatScroll.update();
+  chatStream.retain(streamingKeys);clearUnusedVideoProgress();chatScroll.update();
 }
 function renderAttachments(){
  let image=0,audio=0,document=0;
@@ -359,11 +379,11 @@ async function send(event){event.preventDefault();if(userJob())return;const prom
   $('#send').disabled=true;
   try{await chatModels.wait();if(!current){const fresh=await api('/chats',{collection_id:collection,project_id:project});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);manimPresentation?.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
     if($('#lab-tool').value==='agent'||/^\s*(?:agent|agente)\s*:/i.test(prompt)){
-      await persistCanvas();const options=agentUI.read(),controls=visualControls.request();
-      const request={prompt,media:attachments,lab:'agent',agent:options,...projects.read(),web:!!controls.web,...(canvasOpen&&canvas.id?{agent_start_artifact:canvas.id}:{}),
+      await persistCanvas();const options=agentUI.read(),controls=visualControls.request(),ragRequest=projects.read();
+      const request={prompt,media:attachments,lab:'agent',agent:options,...ragRequest,web:!!controls.web,...(canvasOpen&&canvas.id?{agent_start_artifact:canvas.id}:{}),
         think_level:$('#think-level').value,voice_fields:controls.voice_fields||{},music_fields:controls.music_fields||{},loras:loraUI.getSelections()};
       request.agent_request_id=await agentUI.requestId({chat:current,model:state.settings.chat_model,request});
-      await api('/chats/'+current+'/messages',request);agentUI.submitted();canvasFollow=true;canvasEditing=false;await toggleCanvas(true);
+      await api('/chats/'+current+'/messages',request);projects.submitted(ragRequest);agentUI.submitted();canvasFollow=true;canvasEditing=false;await toggleCanvas(true);
       $('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);await refresh();return;
     }
     const backgroundOptions=slideBackgrounds.read();
@@ -378,8 +398,8 @@ async function send(event){event.preventDefault();if(userJob())return;const prom
       const videos=attachments.filter(x=>x.mime?.startsWith('video/'));if(videos.length>1)throw Error('Scegli un solo video da modificare.');
       await editVideo(videos[0],{initialPrompt:prompt,initialReferences:attachments.filter(x=>x.mime?.startsWith('image/')),initialSteps:controls.video_steps,initialAssistant:controls.assistant,initialModel:controls.video_model||undefined,initialParameters:controls.video_parameters||{},onQueued:async()=>{$('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);}});return;
     }
-    const presentation=await manimPresentation.prepare();const sent=await api('/chats/'+current+'/messages',cpuRequest({prompt,media:attachments,canvas:canvasOpen,...presentation,...visualControls.request(),...projects.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='agent'||/^\s*(?:agent|agente)\s*:/i.test(prompt)?{agent:agentUI.read()}:{}),...($('#lab-tool').value==='infographic'?{infographic:infographicsUI.read()}:{}),...($('#lab-tool').value==='slides'?{slides:{llm_timeout:Number($('#slides-timeout').value),duration_minutes:Number($('#slides-duration').value),engine:$('#slides-engine').value,count:$('#slides-count-mode').value==='auto'?'auto':Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value,composition:$('#slides-composition').value,motion:$('#slides-motion').value,vision_scope:$('#slides-vision').value,...slideColors.read(),...slideImages.read(),...slideBackgroundPicker.read()}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()},state));
-    if(['slides','infographic','image_batch','agent'].includes(sent.intent)){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}
+    const presentation=await manimPresentation.prepare(),ragRequest=projects.read();const sent=await api('/chats/'+current+'/messages',cpuRequest({prompt,media:attachments,canvas:canvasOpen,...presentation,...visualControls.request(),...ragRequest,lab:$('#lab-tool').value,...($('#lab-tool').value==='agent'||/^\s*(?:agent|agente)\s*:/i.test(prompt)?{agent:agentUI.read()}:{}),...($('#lab-tool').value==='infographic'?{infographic:infographicsUI.read()}:{}),...($('#lab-tool').value==='poster'?{poster:postersUI.read()}:{}),...($('#lab-tool').value==='study'?{study:studyUI.read()}:{}),...($('#lab-tool').value==='slides'?{slides:{llm_timeout:Number($('#slides-timeout').value),duration_minutes:Number($('#slides-duration').value),engine:$('#slides-engine').value,count:$('#slides-count-mode').value==='auto'?'auto':Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value,composition:$('#slides-composition').value,motion:$('#slides-motion').value,vision_scope:$('#slides-vision').value,...slideColors.read(),...slideImages.read(),...slideBackgroundPicker.read()}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()},state));projects.submitted(ragRequest);
+    if(['study','slides','poster','infographic','image_batch','agent'].includes(sent.intent)){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}
     $('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);await refresh();
   }finally{$('#send').disabled=false;}
 }
@@ -446,9 +466,20 @@ async function renderCanvas(){
   const empty=!canvas.content&&!canvas.media.length;$('#canvas-empty').hidden=!empty||canvasEditing;$('#canvas-preview').hidden=canvasEditing||empty;$('#canvas-source').hidden=!canvasEditing;
   $('#canvas-preview-tab').classList.toggle('active',!canvasEditing);$('#canvas-source-tab').classList.toggle('active',canvasEditing);
   const isDeck=canvas.content.startsWith('```h3-slides\n');$('#canvas-source-tab').textContent=isDeck?'Sorgente slide':'Modifica';$('#canvas-source').ariaLabel=isDeck?'Sorgente della presentazione':'Sorgente canvas';
+  let isPoster=false;if(isDeck)try{isPoster=readDeck(canvas.content)?.document_kind==='poster';}catch{}
+  if(isPoster){$('#canvas-source-tab').textContent='Sorgente locandina';$('#canvas-source').ariaLabel='Sorgente della locandina';}
   for(const kind of ['html','pptx']){const button=document.querySelector('[data-export="'+kind+'"]');if(button)button.hidden=!isDeck;}
   if(!canvasEditing){const chatId=current,value={...canvas,media:[...canvas.media]},entry=canvasHistory.items.find(x=>x.id===value.id),message=(chat?.messages||[]).find(m=>m.id===entry?.message_id)||[...(chat?.messages||[])].reverse().find(m=>m.meta?.artifact?.content===value.content||m.content===value.content);renderQueue=renderQueue.catch(()=>{}).then(async()=>{if(current!==chatId||canvas.id!==value.id||canvas.content!==value.content)return;const options={final:!activeJob()?.canvas||value.id!==canvasHistory.active_id,sources:message?.meta?.rag_sources||[],onCitation:(s,all)=>projects.citation(s,all,message),onExecute:act(executeArtifact)};
-    if(isDeck){try{await renderSlides($('#canvas-preview'),value,{...options,api,chatId:current,editable:!userJob(),busy:!!userJob(),job:canvasFollow&&activeJob()?.canvas?activeJob():null,onResume:async()=>{
+    if(value.content.startsWith(studyPrefix)){
+      try{await renderStudy($('#canvas-preview'),value,{api,chatId,busy:!!userJob(),notify:toast,onExplain:async card_id=>{
+        if(userJob())throw Error('Attendi o interrompi il lavoro in corso.');await chatModels.wait();
+        const result=await api(`/canvas/${chatId}/study/${value.id}/explain`,{card_id});queuedCanvasJob(result,chatId,'Studio · spiegazione in coda');canvasFollow=true;await refresh();
+      },onAudio:async()=>{if(userJob())throw Error('Attendi il lavoro in corso.');const result=await api(`/canvas/${chatId}/study/${value.id}/audio`,{});queuedCanvasJob(result,chatId,'Studio · audio in coda');canvasFollow=true;await refresh();},onResume:async()=>{if(userJob())throw Error('Attendi il lavoro in corso.');await chatModels.wait();const result=await api(`/canvas/${chatId}/study/${value.id}/resume`,{});queuedCanvasJob(result,chatId,'Studio · completamento in coda');canvasFollow=true;await refresh();},onChange:async content=>{if(userJob())throw Error('Attendi la fine della generazione.');await persistCanvas();const saved=await api('/canvas/'+chatId,{...canvas,content},'PUT');canvasFollow=false;canvasSelection++;await loadCanvasHistory(chatId);await setCanvas(saved);}});}catch(e){$('#canvas-preview').textContent=e.message;}
+    }else if(isDeck){try{await renderSlides($('#canvas-preview'),value,{...options,api,chatId:current,editable:!userJob(),busy:!!userJob(),job:canvasFollow&&activeJob()?.canvas?activeJob():null,onTypography:async page=>{
+      if(userJob())throw Error('Attendi o interrompi il lavoro in corso.');await persistCanvas();const chosen=postersUI.read(),typography=Object.fromEntries(['lettering','text_effect','heading_font','body_font'].map(k=>[k,chosen[k]]));
+      if(chosen.typography_engine==='expressive'){await chatModels.wait();const result=await api('/canvas/'+chatId+'/poster-creative',{artifact_id:canvas.id,page,typography});queuedCanvasJob(result,chatId,'Locandina · composizione dei testi in coda');canvasFollow=true;await refresh();return;}
+      const result=await api('/canvas/'+chatId+'/poster-typography',{artifact_id:canvas.id,page,typography});canvasFollow=false;canvasSelection++;await loadCanvasHistory(chatId);await setCanvas(result);toast('Tipografia aggiornata. Immagine e versione precedente conservate.');
+    },onResume:async()=>{
       if(userJob())throw Error('Attendi o interrompi la tua richiesta in corso.');
       const artifact_id=await savedCanvasArtifact(value.id,()=>({artifactId:canvas.id,chatId:current,selection:canvasSelection}),persistCanvas,()=>chatModels.wait());
       const result=await api('/chats/'+chatId+'/slides/resume',{artifact_id});queuedCanvasJob(result,chatId,'Slide · ripresa in coda');
@@ -632,7 +663,7 @@ async function reuseImageRecipe(value){
  $('#prompt').value=imageRecipePrompt(recipe);$('#prompt').dispatchEvent(new Event('input',{bubbles:true}));composerUI?.render();focusPrompt();
  toast('Ricetta recuperata · seed '+parameters.seed+' fissato · Assistant Off. Controlla la bozza e premi Invia.');
 }
-initGallery({api,getAttachments:()=>attachments,setAttachments:items=>{attachments=items;renderAttachments();},notify:toast,
+initGallery({api,getAttachments:()=>attachments,setAttachments:items=>{attachments=items;renderAttachments();},notify:toast,getProjectId:()=>current?chat?.project_id:project,getProjects:()=>state?.projects||[],
  actions:{reuseImage:reuseImageRecipe,edit:async(media,item)=>{if(item.chat_id&&item.chat_id!==current)await openChat(item.chat_id);await editVideo(media);},recreate:recreateVideo,remix:remixVideo,upscale:upscaleVideo}});
 const upscaleOpen=document.createElement('button');upscaleOpen.type='button';upscaleOpen.className='btn small';upscaleOpen.id='upscale-open';upscaleOpen.textContent='↗ Upscale';upscaleOpen.title='Migliora un video dalla galleria o dal PC';$('#gallery-open').after(upscaleOpen);upscaleOpen.onclick=()=>upscaleVideo();
 const recreateOpen=document.createElement('button');recreateOpen.type='button';recreateOpen.className='btn small';recreateOpen.id='video-recreate-open';recreateOpen.textContent='↻ Ricrea video';recreateOpen.title='Recupera prompt, riferimenti e audio di un video MiniMax dalla galleria';upscaleOpen.after(recreateOpen);recreateOpen.onclick=()=>recreateVideo();

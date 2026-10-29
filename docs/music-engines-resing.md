@@ -15,6 +15,17 @@ della chat hanno la priorità; cambiando modello si recupera il suo preset, senz
 trasferire parametri incompatibili dall'altro motore. Alta/Bassa restano disponibili
 quando si usa la scelta musicale predefinita.
 
+## Testo automatico
+
+Con **Assistant On** o **Agente**, il testo del brano è facoltativo: descrivi il
+tema e l'LLM scrive le parole prima di passarle al motore musicale. Non è YuE2
+stesso a improvvisare il testo. Le parole già compilate nelle impostazioni
+vengono conservate. Per una base senza canto scegli **Strumentale**.
+
+Con **Assistant Off**, nella normale creazione Music, si passa direttamente al
+motore: occorre fornire il testo nelle impostazioni o dopo `Testo:` nel messaggio,
+oppure scegliere Strumentale. L'eccezione Re-sing senza testo è descritta sotto.
+
 ## Ricantare sulla base originale
 
 1. Seleziona un **YuE2 locale** nelle impostazioni Music.

@@ -8,6 +8,7 @@ const built=await build({stdin:{contents:`import {presentationHtml} from './ui/s
 const browser=await chromium.launch({channel:'msedge',headless:true,args:['--disable-gpu']});
 try{
  const builder=await browser.newPage();await builder.setContent('<h1>Fixture</h1>');await builder.addScriptTag({content:built.outputFiles[0].text});
+ const largeBytes=await builder.evaluate(()=>makeDeck({width:1280,height:720,styles:[],pages:[{title:'Grande',html:'<p>'+('x'.repeat(65*1024*1024))+'</p>'}]},'Grande').length);assert.ok(largeBytes>64*1024*1024);
  const html=await builder.evaluate(()=>makeDeck({width:1280,height:720,styles:['html,body{margin:0;background:white}#dot{width:80px;height:80px;background:red;animation:move 2s linear infinite alternate}@keyframes move{from{transform:translateX(0)}to{transform:translateX(200px)}}'],pages:[
   {title:'Animazione',html:'<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:; script-src \'none\'"><style data-h3-shared-style="0"></style><h1>Prima pagina</h1><div id="dot"></div><img id="embedded" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="><script>parent.h3Injected=true</script>'},
   {title:'Seconda',html:'<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:; script-src \'none\'"><h1>Seconda pagina</h1>'}]},'Titolo </script><script>window.h3Injected=true</script>'));

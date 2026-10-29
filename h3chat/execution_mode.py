@@ -37,6 +37,8 @@ def guard_job(settings):
            '_video_edit','_video_recreate','_video_extend','_video_remix','_video_resume','_music_resing','_manim_voice')
     if any(settings.get(key) for key in flags):raise ValueError(MEDIA_ERROR)
     if settings.get('_slides',{}).get('generate_images'):raise ValueError(MEDIA_ERROR)
+    if settings.get('_posters',{}).get('images')=='generate':raise ValueError(MEDIA_ERROR)
+    if settings.get('_posters',{}).get('composition')=='moss_layout':raise ValueError(MEDIA_ERROR)
     inf=settings.get('_infographic',{})
     if inf.get('voice') or inf.get('images')=='generate' or inf.get('music') in ('generate','jingle'):
         raise ValueError('Modalità CPU: disattiva voce, musica e illustrazioni AI dell’infografica. Puoi usare grafica HTML/SVG e allegati.')

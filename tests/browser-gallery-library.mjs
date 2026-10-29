@@ -21,14 +21,32 @@ await page.exposeFunction('galleryApi',async(path,body)=>{
  assert(!body,'Browsing/sorting must not submit any changes');calls.push(path);
  const p=new URLSearchParams(path.split('?')[1]),offset=Number(p.get('offset')),sort=p.get('sort');
  let found=items.filter(i=>i.name.toLowerCase().includes((p.get('q')||'').toLowerCase()));
- if(p.get('project_id'))found=found.slice(0,10);
+ if(p.get('project_id'))found=p.get('project_id')==='b'.repeat(32)?found.slice(-10):found.slice(0,10);
  found.sort((a,b)=>sort==='added_asc'?a.created-b.created:sort==='added_desc'?b.created-a.created:sort==='name_desc'?b.name.localeCompare(a.name):sort==='modified_asc'?a.modified-b.modified:b.modified-a.modified);
  if(offset)await new Promise(r=>setTimeout(r,150));
- return {items:found.slice(offset,offset+48),offset:offset+48,more:found.length>offset+48,total:found.length,manage:true,sorting,projects:[{id:'a'.repeat(32),name:'Progetto collaudo'}]};
+ return {items:found.slice(offset,offset+48),offset:offset+48,more:found.length>offset+48,total:found.length,manage:true,sorting,projects:[{id:'a'.repeat(32),name:'Progetto collaudo'},{id:'b'.repeat(32),name:'Altro progetto'}]};
 });
 try{
  await page.goto(fixture.url);await page.route('**/static/gallery-test.js',async route=>route.fulfill({contentType:'application/javascript',body:await readFile(folder+'/harness.js','utf8')}));await page.addScriptTag({url:fixture.url+'/static/gallery-test.js'});
  const open=()=>page.evaluate(()=>window.galleryFixture.openGallery({api:window.galleryApi,browse:true}));
+ // Both gallery entry points and every picker use the current project on
+ // opening; a manual project/All selection must survive subsequent loads.
+ await page.evaluate(()=>{
+  window.galleryProject='a'.repeat(32);
+  window.galleryFixture.initGallery({api:window.galleryApi,getAttachments:()=>[],setAttachments:()=>{},notify:()=>{},
+   getProjectId:()=>window.galleryProject,getProjects:()=>[{id:'a'.repeat(32),name:'Progetto collaudo'},{id:'b'.repeat(32),name:'Altro progetto'}]});
+ });
+ await page.locator('#gallery-open').first().click();let scoped=page.locator('.gallery-dialog');await scoped.locator('.gallery-card').first().waitFor();
+ assert.equal(new URLSearchParams(calls.at(-1).split('?')[1]).get('project_id'),'a'.repeat(32));
+ assert.equal(await scoped.getByLabel('Filtra per progetto').inputValue(),'a'.repeat(32));assert.equal(await scoped.locator('.gallery-card').count(),10);
+ await scoped.getByLabel('Filtra per progetto').selectOption('b'.repeat(32));await page.waitForFunction(()=>document.querySelector('.gallery-pick strong')?.textContent==='Film 56');
+ await scoped.getByLabel('Ordina la galleria').selectOption('added_desc');await page.waitForFunction(()=>document.querySelector('.gallery-pick strong')?.textContent==='Film 65');
+ assert.equal(await scoped.getByLabel('Filtra per progetto').inputValue(),'b'.repeat(32));assert.equal(await scoped.locator('.gallery-card').count(),10);
+ await scoped.getByLabel('Filtra per progetto').selectOption('');await page.waitForFunction(()=>document.querySelectorAll('.gallery-card').length===48);
+ assert.equal(await scoped.getByLabel('Filtra per progetto').inputValue(),'');await scoped.getByLabel('Chiudi galleria').click();
+ await page.evaluate(()=>{window.galleryProject='b'.repeat(32);});await page.locator('#gallery-nav').last().click();scoped=page.locator('.gallery-dialog');await scoped.locator('.gallery-card').first().waitFor();
+ assert.equal(await scoped.getByLabel('Filtra per progetto').inputValue(),'b'.repeat(32));assert.equal(await scoped.locator('.gallery-card').count(),10);await scoped.getByLabel('Chiudi galleria').click();
+ await page.evaluate(()=>{window.galleryProject='';});
  let eagerVideo=0;page.on('request',r=>{if(r.url().includes('/gallery-file/'))eagerVideo++;});
  await open();let gallery=page.locator('.gallery-dialog');await gallery.locator('.gallery-card').first().waitFor();
  assert.equal(await gallery.locator('.gallery-card').count(),48);assert.equal(eagerVideo,0);

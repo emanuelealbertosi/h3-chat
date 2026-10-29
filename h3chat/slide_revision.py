@@ -130,6 +130,9 @@ def build(app,job,payload,settings,model,cancel,stage,log_path,meta,*,prepare_en
     instruction=f'RICHIESTA ATTUALE DELL’UTENTE — applicala SOLO alla pagina {index+1}/{len(deck["pages"])}:\n'+prompt+'\nRestituisci la pagina HTML/CSS completa aggiornata. Non ripetere le vecchie istruzioni editoriali come vincoli che annullano la modifica. Non cambiare le altre pagine.'
     context,revision['input']=revision_context(deck,index,media,meta,settings,system,instruction)
     request=[{'role':'system','content':system},{'role':'user','content':context},{'role':'user','content':instruction}]
+    if deck.get('document_kind')=='poster':
+        from .posters import BRIEF as POSTER_BRIEF
+        request[0]['content']+='\n'+POSTER_BRIEF
     motion=deck.get('infographic')
     if motion:
         from .infographics import options as infographic_options

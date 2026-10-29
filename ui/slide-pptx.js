@@ -6,6 +6,7 @@ import {saveBlob} from './render.js';
 import {chartData} from './pptx-chart-data.js';
 import {parseColor,colorHex,composite} from './color-contrast.js';
 import {contentScale} from './slide-content-fit.js';
+import {posterPaper} from './document-formats.js';
 
 const NS='http://schemas.openxmlformats.org/drawingml/2006/chart';
 function color(raw){
@@ -88,9 +89,18 @@ async function rasterDecoration(element){
 export async function exportPowerPoint(root,deck,title){
   try{
   const pres=new pptxgen(),height=parseFloat(root.firstElementChild.style.getPropertyValue('--slide-height'));
-  pres.defineLayout({name:'H3',width:1280/96,height:height/96});pres.layout='H3';pres.author='H3-Chat';pres.title=title;pres.subject=deck.title;pres.theme={headFontFace:'Cambria',bodyFontFace:'Arial',lang:'it-IT'};
+  const poster=deck.document_kind==='poster',paper=poster&&posterPaper[deck.format],widthIn=paper?paper[0]/25.4:1280/96,heightIn=paper?paper[1]/25.4:height/96;
+  pres.defineLayout({name:'H3',width:widthIn,height:heightIn});pres.layout='H3';pres.author='H3-Chat';pres.title=title;pres.subject=deck.title;pres.theme={headFontFace:'Cambria',bodyFontFace:'Arial',lang:'it-IT'};
+  await document.fonts.ready;
   for(const frame of root.querySelectorAll('.h3-slide-page')){
     const slide=pres.addSlide();slide.background={color:color(getComputedStyle(frame).backgroundColor).color};
+    if(poster){
+      // Poster art uses bundled fonts, gradient ink and effects that PowerPoint
+      // text boxes cannot reproduce faithfully. Preserve the full painted page.
+      slide.addImage({data:await rasterGraphic(frame),x:0,y:0,w:widthIn,h:heightIn});
+      const page=deck.pages[Number(frame.dataset.page)-1];slide.addNotes([page.title,page.editorial?.content||frame.innerText,page.notes||'','Esportazione locandina ad alta risoluzione: grafica e scritte sono un’immagine unica. Modifica testi e layout nel canvas H3, poi riesporta.'].filter(Boolean).join('\n'));
+      continue;
+    }
     const background=frame.querySelector('[data-h3-background-layer]');
     const decoration=background?.querySelector('[data-h3-decoration]');
     if(background&&background.dataset.h3BackgroundLayer!=='auto'){

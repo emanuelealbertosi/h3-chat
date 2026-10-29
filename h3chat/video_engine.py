@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from .downloads import Cancelled, safe_join
 from .video_options import options, validate_plan, resolve_canvas
-from .video_routing import BRIEF, VIDEO_EDIT_BRIEF, SCENE_DIRECTION, PLAN_SCHEMA, direct_plan, attachment_instructions
+from .video_routing import BRIEF, VIDEO_EDIT_BRIEF, SCENE_DIRECTION, PLAN_SCHEMA, direct_plan, attachment_instructions, requested_start_image, bind_start_image
 from .vision_runtime import status
 from .remote_llm import EmptyCompletion, StructuredCompletionError
 
@@ -30,6 +30,7 @@ class VideoEngine:
         opts['duration']=settings.get('_video_duration',opts['duration'])
         source_video=bool(settings.get('_video_source'))
         if not settings.get('_assistant',True):return direct_plan(prompt,refs,opts['duration'],source_video=source_video),None
+        forced_start=None if source_video else requested_start_image(prompt,refs)
         from .video_loras import prompt_context
         prompt+=prompt_context(opts['loras'])
         llm=self.require_model(settings['chat_model'],'chat')
@@ -47,6 +48,8 @@ class VideoEngine:
         content+='\nVisible images supplied to Assistant: '+str(bool(visual))+'. Do not invent unseen visual details.'
         messages=self.chat_messages([{'role':'user','content':content,'media':visual,'status':'done','seq':1}],llm,settings)
         messages[0]={'role':'system','content':(VIDEO_EDIT_BRIEF if source_video else BRIEF)+attachment_instructions(assets['images'],assets['audios'])}
+        if forced_start is not None:
+            messages[0]['content']+=f'\nREQUIRED I2V INITIAL FRAME: Picture {forced_start} is a keyframe at seconds=0, not an identity-only reference. Preserve its initial composition and animate from it. This binding is enforced by the application.'
         if preserved_audio:
             messages[0]['content']+='\nThe original soundtrack will be preserved. Explicit lyric alignment/reference cue sections describe existing vocals, not new dialogue to synthesize. Follow their performance directions without copying every lyric into the visual prompt or inventing vocal timestamps. Preserve exact words of separately requested new speech.'
         tuning=settings|{'think_level':'off','max_tokens':min(settings['video_prompt_max_tokens'],settings['context']//2)}
@@ -55,7 +58,7 @@ class VideoEngine:
         for attempt in range(2):
             raw,finish=self.completion(messages,tuning,cancel,on_text=lambda _:None,schema=PLAN_SCHEMA)
             if finish=='length':raise ValueError(f"Assistant video ha esaurito il limite effettivo di {tuning['max_tokens']} token. Aumenta Max token istruzioni video nelle impostazioni del modello LLM; il limite effettivo è al massimo metà del contesto. Con un provider API vale anche il limite del servizio.")
-            try:plan=validate_plan(json.loads(raw),refs,opts['duration'],source_video=source_video)
+            try:plan=validate_plan(bind_start_image(json.loads(raw),forced_start),refs,opts['duration'],source_video=source_video)
             except (ValueError,TypeError) as exc:
                 if attempt:raise ValueError('Assistant: piano video non valido. '+str(exc)) from exc
                 stage('Assistant · correggo i riferimenti del piano')

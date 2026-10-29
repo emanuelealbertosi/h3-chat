@@ -1,5 +1,23 @@
 # Lotti immagini per Agent H3 — versione 1
 
+## Foto → stile → locandina
+
+Per cambiare lo stile della foto e usarla in una locandina: se serve descriverla,
+usa inspect_image con Vision disponibile; poi edit_image con un modello edit
+già disponibile (ad esempio Qwen Image 2.1). Il ritocco restituisce id artefatto e
+image_id. Passa source_artifact_ids=[id artefatto ritoccato] e hero_asset_id=image_id
+a create_posters, con composition=html, images=existing. Specifica nel prompt
+composizione, contenuti e lettering coerente. Questo percorso usa esattamente
+la foto ritoccata, senza reintrodurre l'originale e senza una seconda sintesi del
+volto con MOSS. Se l'utente vuole rigenerare tutto, il layout MOSS img2img resta
+un'alternativa esplicita, con fedeltà non garantita. Mai dichiarare di avere
+osservato la foto se non è stata analizzata. Non modificare preset globali.
+
+Per la tipografia create_posters accetta lettering, text_effect, heading_font e
+body_font. Il prompt esplicito prevale. Le decorazioni forti sono per titoli e
+brevi etichette; i programmi lunghi restano leggibili. I font sono locali e
+incorporati negli export, senza scaricamenti durante il rendering.
+
 Prima cerca lotti riutilizzabili con list_image_lots/read_image_lot. Senza caption non
 puoi conoscere il soggetto: non inventare l'associazione tra immagine e contenuto.
 

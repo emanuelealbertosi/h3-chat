@@ -9,7 +9,7 @@ from .store import uid
 
 DEFAULTS={'max_steps':16,'max_minutes':30,'max_calls':80,'token_budget':500000,
           'planning_agents':1,'max_images':50,'command_timeout':120,'max_download_megabytes':8192,
-          'confirm_writes':True,'allow_images':False,'allow_audio':False,'allow_video':False,'allow_manim':False,'allow_transcription':True,'allow_projects':False,'scope':'h3','grant_id':''}
+          'confirm_writes':True,'allow_images':False,'allow_audio':False,'allow_video':False,'allow_manim':False,'allow_transcription':True,'allow_projects':False,'allow_browser':False,'web_on_demand':True,'scope':'h3','grant_id':''}
 
 def options(value=None):
     value={} if value is None else value
@@ -18,7 +18,7 @@ def options(value=None):
     if result['scope'] not in ('h3','sandbox','global') or not isinstance(result['grant_id'],str) or result['grant_id'] and not re.fullmatch('[a-f0-9]{32}',result['grant_id']):raise ValueError('Modalità Agent non valida.')
     for key,lo,hi in (('max_steps',1,50),('max_minutes',1,120),('max_calls',1,500),('token_budget',8000,2000000),('planning_agents',1,4),('max_images',1,50),('command_timeout',1,600),('max_download_megabytes',1,32768)):
         if type(result[key]) is not int or not lo<=result[key]<=hi:raise ValueError(f'Agent: {key} deve essere tra {lo} e {hi}.')
-    for key in ('confirm_writes','allow_images','allow_audio','allow_video','allow_manim','allow_transcription','allow_projects'):
+    for key in ('confirm_writes','allow_images','allow_audio','allow_video','allow_manim','allow_transcription','allow_projects','allow_browser','web_on_demand'):
         if type(result[key]) is not bool:raise ValueError('Permessi Agent non validi.')
     return result
 
@@ -65,7 +65,7 @@ def fingerprint(tool,arguments):
 def public(state):
     actions=[]
     for action in state.get('actions',[]):
-        row={k:action[k] for k in ('id','tool','arguments','status','summary','error','connection','admin','question') if k in action}
+        row={k:action[k] for k in ('id','tool','arguments','status','summary','error','connection','admin','question','browser_target','enable_web') if k in action}
         if 'result' in action:
             encoded=json.dumps(action['result'],ensure_ascii=False)
             row['result_preview']=encoded[:1200];row['result_truncated']=len(encoded)>1200
@@ -73,7 +73,7 @@ def public(state):
                 keys=('moss_turbo','steps','cfg','sampler','scheduler','seed','width','height','aspect','megapixels')
                 row['image_parameters']=[{'index':v['index'],'model_id':v['model_id'],'parameters':{k:v['parameters'][k] for k in keys if k in v['parameters']}} for v in action['result']['image_parameters'][:50]]
         actions.append(row)
-    return {k:state[k] for k in ('id','status','plan','step','config','usage','elapsed_seconds','message','artifacts','current_job_id','preparation') if k in state}|{
+    return {k:state[k] for k in ('id','status','plan','step','config','usage','elapsed_seconds','message','artifacts','current_job_id','preparation','web_enabled') if k in state}|{
         'actions':actions,
         'can_resume':state['status'] in ('paused','stopped','failed','interrupted'),
         'budget_note':'Budget prudenziale: input UTF-8 e token massimi prenotati per ogni chiamata; non è un conteggio fatturato dal provider.'}
@@ -150,6 +150,7 @@ def resume(app,chat_id,ident,body):
             pending=pending or connection or admin or question
             if state['status'] not in ('awaiting_approval','awaiting_connection','awaiting_admin','awaiting_input') or not pending or body.get('action_id')!=pending['id']:raise ValueError('Conferma Agent non più valida.')
             pending['status']='rejected';state.update(status='rejected',message='Passaggio rifiutato: sessione fermata.');save(app,state)
+            if hasattr(app,'agent_browsers'):app.agent_browsers.close(ident)
             row=app.store.one('SELECT * FROM jobs WHERE id=? AND chat_id=?',(state['current_job_id'],chat_id))
             if row:
                 message=app.store.one('SELECT meta FROM messages WHERE id=?',(row['message_id'],))
@@ -171,14 +172,21 @@ def resume(app,chat_id,ident,body):
         if pending:
             if body.get('decision')!='approve' or body.get('action_id')!=pending['id']:raise ValueError('Approva il passaggio concreto in attesa oppure rifiutalo.')
             approval=pending['id']
+            if pending.get('enable_web'):
+                from .agent_web_access import check as check_web
+                check_web(state)
         elif body.get('decision') not in ((None,'keep_partial','answer') if question else (None,'keep_partial')):raise ValueError('Nessuna approvazione in attesa.')
         limits=body.get('limits',{})
         if not isinstance(limits,dict):raise ValueError('Limiti Agent non validi.')
         config=options(state['config']|limits)
         # Continuing may change limits, never silently broaden permissions.
-        if any(config[k]!=state['config'].get(k,DEFAULTS[k]) for k in ('confirm_writes','allow_images','allow_audio','allow_video','allow_manim','allow_transcription','allow_projects','scope','grant_id')):raise ValueError('Una ripresa non può cambiare i permessi della sessione.')
+        if any(config[k]!=state['config'].get(k,DEFAULTS[k]) for k in ('confirm_writes','allow_images','allow_audio','allow_video','allow_manim','allow_transcription','allow_projects','allow_browser','web_on_demand','scope','grant_id')):raise ValueError('Una ripresa non può cambiare i permessi della sessione.')
         original=app.store.one('SELECT payload FROM jobs WHERE id=? AND chat_id=?',(ident,chat_id));saved=json.loads(original['payload'])
         settings=saved['settings'];settings['_agent']=settings['_agent']|{'run_id':ident,'options':config,'approval':approval}
+        if pending and pending.get('enable_web'):
+            from .agent_web_access import grant as grant_web
+            grant_web(state,pending,'human_approval')
+        if state.get('web_enabled'):settings['_web']=True
         from .llm_options import KEYS
         live=app.effective_settings(app.store.settings())
         settings.update({key:live[key] for key in ('chat_model','llm_device','vision_enabled','vision_device',*KEYS) if key in live})

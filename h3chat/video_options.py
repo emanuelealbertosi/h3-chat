@@ -106,7 +106,7 @@ def validate(value):
         if type(v) not in (int,float) or not math.isfinite(v) or not lo<=v<=hi:raise ValueError('Parametro video fuori intervallo: '+key)
     if type(result['steps']) is not int:raise ValueError('I passi video devono essere interi.')
     if result['aspect'] not in ASPECTS:raise ValueError('Formato video non valido.')
-    if result['sampler'] not in ('res_multistep','euler','dpmpp_2m') or result['scheduler'] not in ('simple','normal','beta'):raise ValueError('Sampler/scheduler video non supportato.')
+    if result['sampler'] not in ('res_multistep','euler','dpmpp_2m','er_sde') or result['scheduler'] not in ('simple','normal','beta','sgm_uniform'):raise ValueError('Sampler/scheduler video non supportato.')
     if type(result['offload']) is not bool:raise ValueError('Offload video: scegli attivo o disattivo.')
     if result['attention'] not in ('auto','sage','pytorch','veda','comfy_kitchen','vsa'):raise ValueError('Accelerazione video non supportata.')
     for key in ('veda_sparsity','veda_reference_sparsity'):
@@ -127,7 +127,8 @@ def options(model,settings,randomize=True):
     fast=is_fast(model)
     result=apply_quality(validate((PRESET if fast else {})|settings.get('video_overrides',{}).get(model['id'],{})),settings.get('_video_quality','high'),settings.get('_video_steps'))
     if fast:validate_fast(result)
-    elif result['attention']=='vsa':raise ValueError('VSA richiede il profilo FastH3 Omni e i suoi pesi dedicati.')
+    elif result['attention']=='vsa' and model.get('external_config',{}).get('profile')!='minimax-h3':
+        raise ValueError('VSA richiede un profilo MiniMax H3 oppure FastH3 Omni.')
     from .video_pdd import validate as validate_pdd
     validate_pdd(result)
     # Keep older 1.0 MP presets valid without exceeding the native H3 canvas.

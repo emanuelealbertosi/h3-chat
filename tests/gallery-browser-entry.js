@@ -1,2 +1,2 @@
-import {openGallery} from '../ui/gallery.js';
-window.galleryFixture={openGallery};
+import {openGallery,initGallery} from '../ui/gallery.js';
+window.galleryFixture={openGallery,initGallery};

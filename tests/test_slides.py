@@ -171,6 +171,19 @@ class GenerationTests(unittest.TestCase):
         self.assertEqual(start.call_count,1)
         return self.app.store.messages(job['chat_id'])[-1]
 
+    def test_outline_api_cardinality_error_gets_one_targeted_repair(self):
+        job=self.enqueue();self.calls=[];self.job=job;self.progress=0;self.fail_generation=False;self.documents=False
+        attempts=[]
+        def complete(messages,settings,cancel,**kw):
+            if 'slides' in kw['schema']['properties']:
+                attempts.append(messages)
+                if len(attempts)==1:raise ValueError('Il provider non ha rispettato il formato JSON richiesto anche dopo la verifica del formato. Numero di elementi API JSON non valido.')
+            return self.completion(messages,settings,cancel,**kw)
+        with patch.object(self.app.engine,'require_model',return_value=self.model),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=complete):
+            self.app.execute_job(job,self.cancel)
+        self.assertEqual(self.app.store.messages(job['chat_id'])[-1]['status'],'done')
+        self.assertEqual(len(attempts),2);self.assertIn('da 2 a 2',attempts[1][-1]['content'])
+
     def test_incremental_canvas_history_and_no_body_artifact(self):
         job=self.enqueue();self.assertTrue(json.loads(job['payload'])['canvas'])
         answer=self.execute(job);self.assertEqual(answer['status'],'done');self.assertEqual(self.progress,2)

@@ -5,11 +5,13 @@ R=Path(__file__).resolve().parents[1]
 import sys
 sys.path.insert(0,str(R))
 from h3chat import __version__
+from scripts.verify_feature_files import verify_members
 W=R/'dist'
 archive=W/f'H3-Chat-{__version__}-windows-x64.zip'
 with zipfile.ZipFile(archive) as package:
     manifest=json.loads(package.read('H3-Chat/FILES-SHA256.json'))
     names=set(package.namelist())
+    features=verify_members(names)
     assert names=={'H3-Chat/'+name for name in manifest}|{'H3-Chat/FILES-SHA256.json'}
     for name,digest in manifest.items():
         assert hashlib.sha256(package.read('H3-Chat/'+name)).hexdigest()==digest,name
@@ -24,6 +26,7 @@ with zipfile.ZipFile(archive) as package:
 digest=hashlib.sha256(archive.read_bytes()).hexdigest()
 assert archive.with_name(archive.name+'.sha256').read_text().split()[0]==digest
 result={'status':'passed','archive':archive.name,'size':archive.stat().st_size,'sha256':digest,'verified_files':len(manifest),
+        'feature_files':features,
         'api_only_installer_included':True,'private_data_and_generative_model_weights_excluded':True,'bundled_pdd_algorithm_tensors':4,'all_member_sha256_verified':True}
 (W/f'H3-Chat-{__version__}-windows-x64.verification.json').write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
 print(json.dumps(result))
