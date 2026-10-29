@@ -74,6 +74,18 @@ class OverlayTests(unittest.TestCase):
         result=overlay.plan(SimpleNamespace(completion=complete),[],value,options()|{'_settings':{'max_tokens':20000,'context':32000}},*FORMATS['A3'],threading.Event(),lambda _:None,verify)
         self.assertEqual(result,parts);self.assertEqual(checks,[0,1]);self.assertIn('testo tagliato',calls[1][-1]['content'])
         with self.assertRaisesRegex(ValueError,'dopo la correzione'):overlay.plan(SimpleNamespace(completion=lambda *a,**kw:('{}','stop')),[],value,options()|{'_settings':{'max_tokens':8000,'context':16000}},*FORMATS['A3'],threading.Event(),lambda _:None)
+    def test_content_and_measured_fit_have_separate_bounded_repairs(self):
+        value=prepared();parts=fragments(value);calls=[];checks=[]
+        def complete(*args,**kw):
+            calls.append(1)
+            if len(calls)==1:return '{}','stop'
+            return json.dumps(response(parts)),'stop'
+        def verify(data,attempt):
+            checks.append(attempt)
+            if len(checks)==1:raise overlay.TypographyOverflow({'poster_overflow':[{'id':'title','reason':'testo tagliato dal riquadro'}]})
+        result=overlay.plan(SimpleNamespace(completion=complete),[],value,options()|{'_settings':{'max_tokens':8000,'context':16000}},*FORMATS['A3'],threading.Event(),lambda _:None,verify)
+        self.assertEqual(result,parts);self.assertEqual(len(calls),3);self.assertEqual(checks,[1,2])
+
     def test_plan_copy_is_verified_before_images(self):
         value=prepared();value['zones'][1]['text']='Testo perso';opts=options()|{'_settings':{'max_tokens':8000,'context':16000}}
         with tempfile.TemporaryDirectory() as folder,self.assertRaisesRegex(ValueError,'tutti i contenuti'):

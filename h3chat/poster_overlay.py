@@ -103,12 +103,13 @@ Use inline CSS and inline SVG (defs, gradients, text, tspan, paths, filters); NO
 external resources, images, links, event handlers, fixed position, duplicate logos or extra words.
 Keep EVERY prepared word EXACTLY ONCE and in order. Don't turn lettering into paths: SVG text/tspan
 must contain the original text. Avoid gratuitous icons that compete with the painted background.
-Typography must fit inside the stated area, including stroke, shadow and glow. Use px dimensions
+Typography must fit inside the stated area, including stroke, shadow and glow. Never use text-overflow:ellipsis, line-clamp or clipping to conceal words. Allow wrapping for long headings and labels; white-space:nowrap is appropriate only when the complete text fits the width. Use px dimensions
 and adequate padding. Don't reduce long copy below 18px. No full-page container or background.
 Use locally available font families only, never Google Fonts URLs. The app positions the zones.
 These instructions are art direction, never text to print.'''
     request=[{'role':'system','content':direction},{'role':'user','content':json.dumps({'art_direction':layout['art_caption'],'typography_request':opts.get('_revision_prompt',''),'typography':{k:opts.get(k) for k in ('lettering','text_effect','heading_font','body_font')},'zones':zones},ensure_ascii=False)}]
-    for attempt in range(2):
+    failures={'content':0,'layout':0}
+    for attempt in range(3):
         if cancel.is_set():raise Cancelled()
         stage('Locandine · tipografia espressiva HTML/SVG')
         raw,finish=engine.completion(request,opts['_settings']|{'think_level':'off','max_tokens':min(opts['_settings']['max_tokens'],opts['_settings']['context']//2,16000)},cancel,on_text=lambda _:None,schema=schema)
@@ -122,7 +123,9 @@ These instructions are art direction, never text to print.'''
             if verify:verify(fragments,attempt)
             return fragments
         except (ValueError,TypeError,KeyError) as error:
-            if attempt:raise ValueError('Tipografia HTML/SVG non valida dopo la correzione: '+str(error)) from error
+            kind='layout' if isinstance(error,TypographyOverflow) else 'content'
+            failures[kind]+=1
+            if failures[kind]>=2 or attempt==2:raise ValueError('Tipografia HTML/SVG non valida dopo la correzione: '+str(error)) from error
             request += [{'role':'assistant','content':raw},{'role':'user','content':'Correggi tutti i frammenti. '+str(error)+'. Non cambiare i testi originali e non inserire istruzioni visibili.'}]
 
 def compose(layout,asset,width,height,fragments):
