@@ -14,6 +14,14 @@ def layout():
        {'id':'title','role':'title','renderer':'moss','text':'OPEN LAB','bbox':[60,60,940,200],'font_size':110,'weight':800,'color':'#ffffff','align':'left','surface':'dark'},
        {'id':'facts','role':'facts','renderer':'html','text':'12 novembre · ore 17 · Aula Blu','bbox':[60,700,940,820],'font_size':40,'weight':600,'color':'#ffffff','align':'left','surface':'dark'}]}
 
+def referenced(value):
+    """Test-only mock response for the new reference schema, never a runtime fallback."""
+    value=copy.deepcopy(value);index=0
+    for zone in value['zones']:
+        rows=[row for row in zone.pop('text').splitlines() if row.strip()]
+        zone['content_ids']=['B'+str(index+i+1) for i in range(len(rows))];index+=len(rows)
+    return value
+
 
 class SharedLayoutTests(unittest.TestCase):
     def test_contrast_changes_only_html_ink_and_keeps_source_image_and_boxes(self):
@@ -99,7 +107,7 @@ class PosterMossTests(PosterTests):
                 folder=self.app.data/'outputs'/ident;folder.mkdir(parents=True);(folder/'image.png').write_bytes(PNG)
                 return {'id':ident,'name':'image.png','path':f'outputs/{ident}/image.png','mime':'image/png','generation':{'seed':123}}
             typography={'zones':[{'id':z['id'],'html':'<p style="font-family:BebasNeue;margin:0;color:inherit">'+z['text']+'</p>'} for z in value['zones']]}
-            with patch('h3chat.poster_overlay.measure',side_effect=check),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'prepare_tools',side_effect=lambda h,*a,**k:(h,{},[],[])),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'stop'),patch.object(self.app.engine,'completion',side_effect=[(json.dumps(plan()),'stop'),(json.dumps(value),'stop'),(json.dumps(typography),'stop')]),patch.object(self.app.engine,'generate',side_effect=generate):self.app.execute_job(job,threading.Event())
+            with patch('h3chat.poster_overlay.measure',side_effect=check),patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'prepare_tools',side_effect=lambda h,*a,**k:(h,{},[],[])),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'stop'),patch.object(self.app.engine,'completion',side_effect=[(json.dumps(plan()),'stop'),(json.dumps(referenced(value)),'stop'),(json.dumps(typography),'stop')]),patch.object(self.app.engine,'generate',side_effect=generate):self.app.execute_job(job,threading.Event())
         row=self.app.store.one('SELECT status,error FROM jobs WHERE id=?',(job['id'],));self.assertEqual(row['status'],'done',row)
         artifact=self.app.store.canvas_history.get(chat);page=json.loads(artifact['content'][len(PREFIX):-4])['pages'][0]
         self.assertIn('OPEN LAB',page['html']);self.assertEqual(len(page['poster_fragments']),2);self.assertTrue(all(z['renderer']=='html' for z in page['poster_layout']['zones']));self.assertEqual(events,['CPU','image'])
@@ -122,7 +130,7 @@ class PosterMossTests(PosterTests):
                 self.assertEqual(json.loads(prompt)['items'][1]['text'],'OPEN LAB')
                 folder=self.app.data/'outputs'/ident;folder.mkdir(parents=True);(folder/'image.png').write_bytes(PNG)
                 return {'id':ident,'name':'image.png','path':f'outputs/{ident}/image.png','mime':'image/png','generation':{'seed':987}}
-            with patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'prepare_tools',side_effect=lambda h,*a,**k:(h,{},[],[])),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'stop'),patch.object(self.app.engine,'completion',side_effect=[(json.dumps(plan()),'stop'),(json.dumps(layout()),'stop')]) as complete,patch.object(self.app.engine,'generate',side_effect=generate) as inference:
+            with patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'prepare_tools',side_effect=lambda h,*a,**k:(h,{},[],[])),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'stop'),patch.object(self.app.engine,'completion',side_effect=[(json.dumps(plan()),'stop'),(json.dumps(referenced(layout())),'stop')]) as complete,patch.object(self.app.engine,'generate',side_effect=generate) as inference:
                 self.app.execute_job(job,threading.Event())
         row=self.app.store.one('SELECT status,error FROM jobs WHERE id=?',(job['id'],));self.assertEqual(row['status'],'done',row)
         self.assertEqual(complete.call_count,2);self.assertEqual(inference.call_count,1)

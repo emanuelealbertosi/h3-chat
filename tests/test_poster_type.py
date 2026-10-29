@@ -3,7 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 from h3chat import poster_type,poster_visual
 from h3chat.posters import options
-from test_poster_visual import layout
+from test_poster_visual import layout,referenced
 from test_agent_media import AgentMediaTests as _AgentBase
 from test_agent_runtime import decision
 from h3chat.agent_state import load
@@ -27,7 +27,7 @@ class LetteringTests(unittest.TestCase):
         from types import SimpleNamespace
         initial=layout();initial['zones'][0]['role']='body';initial['objects'][0]['bbox']=[650,750,950,850]
         corrected=copy.deepcopy(initial);corrected['objects'][0]['bbox']=[650,250,950,550];calls=[]
-        def complete(messages,*a,**kw):calls.append(copy.deepcopy(messages));return json.dumps(initial if len(calls)==1 else corrected),'stop'
+        def complete(messages,*a,**kw):calls.append(copy.deepcopy(messages));return json.dumps(referenced(initial if len(calls)==1 else corrected)),'stop'
         opts=options(value={'text_renderer':'moss_short','typography_engine':'preset'})|{'_settings':{'max_tokens':8000,'context':32768}}
         with tempfile.TemporaryDirectory() as d:result=poster_visual.plan(SimpleNamespace(completion=complete),[{'role':'system','content':'Poster'}],{'copy':'\n'.join(z['text'] for z in initial['zones']),'visual_plan':'Robot'},opts,1280,2275,Path(__file__).resolve().parents[1],threading.Event(),lambda _:None,Path(d),0)
         self.assertEqual(len(calls),2);self.assertIn('interseca',calls[1][-1]['content']);self.assertEqual(result['zones'][0]['role'],'facts')

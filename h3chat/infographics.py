@@ -165,6 +165,9 @@ def build(app,job,payload,history,settings,model,cancel,stage,log,meta):
     def image_catalog(items):
         return json.dumps([{'asset_id':m['id'],'description':descriptions.get(m['id'],m['name']+' (non analizzata)')[:1200]} for m in items if m['mime'].startswith('image/')],ensure_ascii=False)
     base=app.engine.chat_messages([m|{'media':[]} for m in compact_history(history)],model,settings)
+    from .infographic_animation import LAYOUT_BRIEF
+    if base and base[0].get('role')=='system':base[0]=base[0]|{'content':base[0]['content']+'\n'+LAYOUT_BRIEF}
+    else:base=[{'role':'system','content':LAYOUT_BRIEF}]+base
     text={'type':'string','maxLength':1200}
     scene={'type':'object','properties':{k:text for k in ('title','purpose')}|{'narration':{'type':'string','maxLength':min(12000,max(1200,math.ceil(opts['duration']/opts['scenes'])*22))}},'required':['title','purpose','narration'],'additionalProperties':False}
     schema={'type':'object','properties':{'title':text,'visual_direction':text,'delivery':{'type':'string','enum':['serious','lively','spot','warm']},'music_style':text,'jingle_lyrics':text,'scenes':{'type':'array','minItems':opts['scenes'],'maxItems':opts['scenes'],'items':scene}},'required':['title','visual_direction','delivery','music_style','jingle_lyrics','scenes'],'additionalProperties':False}

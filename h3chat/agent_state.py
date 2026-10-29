@@ -99,6 +99,9 @@ def enqueue(app,chat_id,body):
     if cpu(settings):config.update(allow_images=False,allow_audio=False,allow_video=False,allow_transcription=False)
     rag=body.get('rag',settings['rag_enabled'])
     if type(rag) is not bool:raise ValueError('RAG: scegli On oppure Off.')
+    if 'rag_top_k' in body:
+        if type(body['rag_top_k']) is not int or not 1<=body['rag_top_k']<=12:raise ValueError('Estratti RAG per questa richiesta: scegli un intero da 1 a 12.')
+        settings=settings|{'rag_top_k':body['rag_top_k']}
     sources=body.get('rag_sources')
     if sources is not None:
         valid={s['id'] for s in app.knowledge.project(chat['project_id'])['sources']} if chat.get('project_id') else set()

@@ -146,3 +146,11 @@ i limiti dei singoli campi durante la generazione. Un campo ripetitivo o troppo
 lungo viene fermato e riceve una sola correzione, senza tagliare silenziosamente
 i testi della locandina. I pallini degli elenchi sono formattazione HTML;
 omissioni o modifiche alle parole continuano a essere respinte.
+
+Il piano spaziale ora assegna blocchi di testo identificati: il server inserisce
+le parole originali senza farle ricopiare al modello. Prima di dipingere uno
+sfondo nuovo può traslare il gruppo illustrato o ridurlo uniformemente fino
+al20%, lasciando fermi i testi. La trasformazione è registrata e il piano
+deve comunque superare i normali controlli di collisione e misura. Gli sfondi
+già creati non vengono riposizionati. Contenuti esatti e ingombro misurato
+dispongono di una correzione mirata ciascuno, con massimo3risposte tipografiche.

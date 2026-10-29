@@ -7,7 +7,7 @@ from h3chat import poster_visual as visual,poster_overlay as overlay
 from h3chat.posters import options
 from h3chat.slides import FORMATS
 from test_poster_overlay import prepared,fragments,PROOF
-from test_poster_visual import layout
+from test_poster_visual import layout,referenced
 ROOT=Path(__file__).resolve().parents[1]
 
 class PosterRobustnessTests(unittest.TestCase):
@@ -48,11 +48,11 @@ class PosterRobustnessTests(unittest.TestCase):
     def test_colliding_art_requires_real_geometry_correction_not_identical_retry(self):
         bad=layout();bad['zones'][0].update(renderer='html');bad['objects'][0]['bbox']=[650,60,950,300]
         fixed=copy.deepcopy(bad);fixed['objects'][0]['bbox']=[650,250,950,550];calls=[]
-        def complete(messages,*a,**kw):calls.append(copy.deepcopy(messages));return json.dumps(bad if len(calls)==1 else fixed),'stop'
+        def complete(messages,*a,**kw):calls.append(copy.deepcopy(messages));return json.dumps(referenced(bad if len(calls)==1 else fixed)),'stop'
         opts=options()|{'_settings':{'max_tokens':8000,'context':32768}};row={'copy':'\n'.join(z['text'] for z in bad['zones']),'visual_plan':'Fictional event'}
         with tempfile.TemporaryDirectory() as folder:result=visual.plan(SimpleNamespace(completion=complete),[{'role':'system','content':'Poster'}],row,opts,*FORMATS['9:16'],ROOT,threading.Event(),lambda _:None,Path(folder),0)
         self.assertEqual(len(calls),2);self.assertIn('CONFLITTI DA CORREGGERE',calls[1][-1]['content']);self.assertEqual(result['objects'][0]['bbox'],fixed['objects'][0]['bbox'])
-        with tempfile.TemporaryDirectory() as folder,self.assertRaisesRegex(ValueError,'interseca'):visual.plan(SimpleNamespace(completion=lambda *a,**kw:(json.dumps(bad),'stop')),[{'role':'system','content':'Poster'}],row,opts,*FORMATS['9:16'],ROOT,threading.Event(),lambda _:None,Path(folder),0)
+        with tempfile.TemporaryDirectory() as folder,self.assertRaisesRegex(ValueError,'interseca'):visual.plan(SimpleNamespace(completion=lambda *a,**kw:(json.dumps(referenced(bad)),'stop')),[{'role':'system','content':'Poster'}],row,opts,*FORMATS['9:16'],ROOT,threading.Event(),lambda _:None,Path(folder),0)
     def test_cpu_overflow_only_grows_into_empty_space_then_requires_successful_remeasurement(self):
         value=prepared();before=copy.deepcopy(value);parts=fragments(value);app=SimpleNamespace(root=ROOT);report={'poster_overflow':[{'id':'title','reason':'testo tagliato dal riquadro'}]};overflow=overlay.TypographyOverflow(report)
         with patch.object(overlay,'measure',side_effect=[overflow,PROOF]) as measured:

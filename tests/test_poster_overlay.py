@@ -86,9 +86,9 @@ class OverlayTests(unittest.TestCase):
         result=overlay.plan(SimpleNamespace(completion=complete),[],value,options()|{'_settings':{'max_tokens':8000,'context':16000}},*FORMATS['A3'],threading.Event(),lambda _:None,verify)
         self.assertEqual(result,parts);self.assertEqual(len(calls),3);self.assertEqual(checks,[1,2])
 
-    def test_plan_copy_is_verified_before_images(self):
+    def test_new_plan_refuses_legacy_text_output_before_images(self):
         value=prepared();value['zones'][1]['text']='Testo perso';opts=options()|{'_settings':{'max_tokens':8000,'context':16000}}
-        with tempfile.TemporaryDirectory() as folder,self.assertRaisesRegex(ValueError,'tutti i contenuti'):
+        with tempfile.TemporaryDirectory() as folder,self.assertRaisesRegex(ValueError,'content_ids'):
             visual.plan(SimpleNamespace(completion=lambda *a,**kw:(json.dumps(value),'stop')),[{'role':'system','content':'Poster'}],{'copy':'OPEN LAB\n12 novembre · ore 17 · Aula Blu','visual_plan':'Robot'},opts,*FORMATS['A3'],ROOT,threading.Event(),lambda _:None,Path(folder),0)
 
 class CreativeRevisionTests(PosterTypographyTests):
