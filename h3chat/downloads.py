@@ -12,7 +12,8 @@ import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse,urlsplit,urlunsplit,parse_qsl,urlencode
+from uuid import uuid4
 
 
 class Cancelled(Exception):
@@ -49,7 +50,24 @@ def download(url, target, sha256, size, cancel, progress):
         part.unlink()
         offset = 0
     if offset < size:
-        with request(url, {"Range": f"bytes={offset}-"} if offset else {}) as response:
+        try:
+            response=request(url, {"Range": f"bytes={offset}-"} if offset else {})
+        except urllib.error.HTTPError as exc:
+            if exc.code!=416:raise
+            # A CDN can reject an otherwise valid partial range. Start a fresh
+            # transfer once; never retry the same rejected range indefinitely.
+            exc.close()
+            if cancel.is_set():raise Cancelled()
+            # The public release redirect itself can be cached incorrectly
+            # (e.g. Azure BlockList XML served as a 507-byte runtime ZIP).
+            # Never alter a signed storage URL or accept its reported size.
+            parsed=urlsplit(url);fresh=url
+            if parsed.hostname in ('github.com','huggingface.co'):
+                query=parse_qsl(parsed.query,keep_blank_values=True)+[('h3_download_retry',uuid4().hex)]
+                fresh=urlunsplit((parsed.scheme,parsed.netloc,parsed.path,urlencode(query),parsed.fragment))
+            response=request(fresh,{'Cache-Control':'no-cache'})
+            offset=0
+        with response:
             if offset and response.status == 206:
                 if not response.headers.get("Content-Range", "").startswith(f"bytes {offset}-"):
                     raise ValueError("Il server ha restituito un intervallo errato.")

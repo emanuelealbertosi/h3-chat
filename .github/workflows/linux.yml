@@ -183,7 +183,7 @@ jobs:
         with:
           name: H3-Chat-linux-x64
           path: build/kali-input
-          run-id: ${{ inputs.reuse_final_run }}
+          run-id: ${{ inputs.reuse_final_run || github.run_id }}
           github-token: ${{ github.token }}
       - name: Verify actual packaged components on Kali Rolling
         run: bash scripts/check_kali_rootfs.sh

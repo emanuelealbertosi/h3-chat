@@ -2,12 +2,12 @@
   "cpu": {
     "files": [
       {
-        "path": "runtime/archives/llama-b10809-bin-win-cpu-x64.zip",
-        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b10809/llama-b10809-bin-win-cpu-x64.zip",
-        "size": 18407457,
-        "sha256": "9df3158ed228a641a4b127942d7f459f24c9e13f04682659d05c00c80099b6b5",
+        "path": "runtime/archives/llama-b12024-bin-win-cpu-x64.zip",
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b12024/llama-b12024-bin-win-cpu-x64.zip",
+        "size": 24574821,
+        "sha256": "a8a1bc0167c594c377255e54aab617b288a38e09efb50f39ac5bd087e4398f72",
         "extract_to": "runtime/cpu/llama",
-        "version": "b10809"
+        "version": "b12024"
       },
       {
         "path": "runtime/archives/sd-master-7f410a3-bin-win-cpu-x64.zip",

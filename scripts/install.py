@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 import zipfile
+from uuid import uuid4
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'scripts')]
@@ -36,11 +37,25 @@ def install_bundle(root=ROOT):
             part=target.with_name(target.name+'.installing');part.write_bytes(data);os.replace(part,target)
 
 
+def retire_obsolete(root,previous,installed,destinations,key):
+    """Keep verified old engine binaries as backups, outside the loader's path."""
+    retired=[]
+    for name,digest in previous.get('files',{}).items():
+        if name in installed:continue
+        target=safe_join(root,name)
+        if not target.is_file() or target.suffix.lower() not in ('.exe','.dll','.pdb') or not any(target.is_relative_to(d.resolve()) for d in destinations):continue
+        if file_hash(target)!=digest:raise ValueError('Componente runtime precedente modificato: '+name+'. Spostalo fuori dalla cartella del motore prima di aggiornare.')
+        backup=safe_join(root,'runtime/retired/'+key+'/'+uuid4().hex+'/'+target.name);backup.parent.mkdir(parents=True,exist_ok=True)
+        target.replace(backup);retired.append(name)
+    return retired
+
+
 def install_runtime(key,root=ROOT):
     manifest=json.loads((root/'runtimes.json').read_text(encoding='utf-8'))[key]
     for entry in manifest['files']:
         if entry.get('extract_to'):install_redist(root,safe_join(root,entry['extract_to']))
     marker=root/'runtime'/('installed-'+key+'.json')
+    previous={}
     try:
         previous=json.loads(marker.read_text(encoding='utf-8'))
         if previous['manifest']==manifest and previous['files'] and all(safe_join(root,n).is_file() and file_hash(safe_join(root,n))==h for n,h in previous['files'].items()):
@@ -72,6 +87,7 @@ def install_runtime(key,root=ROOT):
             extract_zip(archive,destination)
             with zipfile.ZipFile(archive) as z: targets=[safe_join(destination,i.filename) for i in z.infolist() if not i.is_dir()]
         installed.update({p.relative_to(root).as_posix():file_hash(p) for p in targets})
+    retire_obsolete(root,previous,installed,[safe_join(root,e['extract_to']) for e in manifest['files']],key)
     marker.write_text(json.dumps({'manifest':manifest,'files':installed},indent=2),encoding='utf-8')
     if key.startswith('tools_'):
         from h3chat.tools_runtime import mark_ready
