@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build-ui.mjs",
-    "test": "node --test tests/rendering.test.mjs tests/chat-activity.test.mjs tests/request-timing.test.mjs tests/infographic-motion.test.mjs tests/llm-acceleration.test.mjs"
+    "test": "node --test tests/rendering.test.mjs tests/chat-activity.test.mjs tests/request-timing.test.mjs tests/infographic-motion.test.mjs tests/infographic-scene.test.mjs tests/llm-acceleration.test.mjs"
   },
   "dependencies": {
     "buffer": "6.0.3",

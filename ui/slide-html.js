@@ -1,3 +1,4 @@
+import '../static/infographic-scene.js';
 import DOMPurify from 'dompurify';
 import renderMath from 'katex/contrib/auto-render';
 import {editHtmlSlide} from './slide-html-editing.js';
@@ -26,7 +27,7 @@ async function localMathCSS(){
 }
 
 async function markup(page,media){
-  const clean=DOMPurify.sanitize(page.html||'',{WHOLE_DOCUMENT:true,ADD_TAGS:['style'],FORBID_TAGS:['script','iframe','object','embed','link','meta','base','form','input','button','video','audio'],FORBID_ATTR:['srcset','action','formaction','autofocus','data-h3-editor','data-h3-trusted','data-h3-video','data-h3-background-content','data-h3-content-canvas','data-h3-background-layer','data-h3-decoration']});
+  const clean=DOMPurify.sanitize(page.html||'',{WHOLE_DOCUMENT:true,ADD_TAGS:['style'],FORBID_TAGS:['script','iframe','object','embed','link','meta','base','form','input','button','video','audio'],FORBID_ATTR:['srcset','action','formaction','autofocus','data-h3-motion-scene','data-h3-motion-root','data-h3-motion-object','data-h3-editor','data-h3-trusted','data-h3-video','data-h3-background-content','data-h3-content-canvas','data-h3-background-layer','data-h3-decoration']});
   const doc=new DOMParser().parseFromString(clean,'text/html');
   doc.querySelectorAll('a').forEach(a=>{a.removeAttribute('href');a.removeAttribute('target');});
   for(const image of doc.querySelectorAll('img')){
@@ -48,7 +49,8 @@ export async function htmlPage(deck,page,index,media,mount){
   const iframe=document.createElement('iframe');iframe.title=page.title;iframe.sandbox='allow-same-origin';iframe.style.cssText='display:block;border:0;width:1280px;height:100%;';
   const content=await markup(page,media);
   const loaded=new Promise((resolve,reject)=>{iframe.onload=resolve;iframe.onerror=()=>reject(Error('Anteprima HTML non disponibile.'));});
-  const fontNames=fontFamilies.filter(name=>content.includes(name));
+  const graphFonts=deck.infographic?.scene_format_version===2?new Set((page.motion_scene?.objects||[]).filter(o=>o.type==='text'||o.type==='counter').map(o=>o.fontFamily||'Manrope')):new Set();
+  const fontNames=fontFamilies.filter(name=>content.includes(name)||graphFonts.has(name));
   const fonts=(await Promise.all(fontNames.map(async name=>`@font-face{font-family:${name};font-weight:100 900;src:url("${await localFont('/static/'+name+'.ttf')}")}`))).join('');
   const background=deck.infographic?.video,clip=background&&media.find(m=>m.id===background.asset_id&&m.mime==='video/mp4'&&/^(uploads|outputs)\/[\w./-]+\.mp4$/i.test(m.path)&&!m.path.split('/').includes('..'));
   if(background&&!clip)throw Error('Video di sfondo non disponibile negli allegati.');
@@ -77,6 +79,11 @@ export async function htmlPage(deck,page,index,media,mount){
   renderMath(doc.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false});
   // Local bundled math CSS is trusted and does not enable generated scripts.
   if(doc.querySelector('.katex')){const style=document.createElement('style');style.dataset.h3Trusted='';style.textContent=await localMathCSS();doc.head.append(style);await doc.fonts.ready;}
+  if(deck.infographic?.scene_format_version===2&&page.motion_scene){
+    const assets={};for(const id of new Set(page.motion_scene.objects.filter(o=>o.type==='image').map(o=>o.assetId))){const rendered=new DOMParser().parseFromString(await markup({html:'<img data-asset-id="'+id+'">'},media),'text/html'),url=rendered.querySelector('img')?.src;if(!url)throw Error('Immagine Motion Graphics non disponibile.');assets[id]=url;}
+    const node=doc.createElement('div'),root=doc.createElement('main');root.dataset.h3MotionRoot='';node.hidden=true;node.dataset.h3MotionAssets='';node.textContent=JSON.stringify(assets);doc.body.replaceChildren(root,node);
+    await H3SceneGraph.prepare(doc,page.motion_scene);sessions.set(frame,{iframe,doc,motionScene:page.motion_scene,posterTime:page.motion_poster_time??page.motion_scene.duration*.5});return frame;
+  }
   doc.documentElement.dataset.h3TextTone=page.text_tone||deck.text_tone||'auto';
   readableText(doc);
   if(deck.infographic)H3Motion.configure(doc,deck.infographic.options||{});
@@ -118,7 +125,7 @@ export function htmlOverflow(frame){
 }
 
 export function flattenHtml(frame){
-  const {doc}=sessions.get(frame);staticSnapshot(doc);
+  const {doc,motionScene,posterTime}=sessions.get(frame);if(motionScene)H3SceneGraph.apply(doc,Number.isFinite(posterTime)?Math.max(0,Math.min(motionScene.duration,posterTime)):motionScene.duration*.5);staticSnapshot(doc);
   // The flattened DOM leaves its iframe. Keep the trusted embedded typefaces
   // available in the parent document before PNG/Word rasterization.
   const faces=[];for(const sheet of doc.querySelectorAll('style[data-h3-trusted]'))for(const rule of sheet.sheet?.cssRules||[])if(rule.type===5&&/data:(?:font\/|application\/(?:octet-stream|x-font-ttf|font-sfnt))/.test(rule.cssText))faces.push(rule.cssText);

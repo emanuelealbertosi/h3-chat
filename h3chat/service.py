@@ -156,6 +156,7 @@ class Service:
                 "agent_options":{"enabled":True,"version":4,"prefix":"agent:","computer":__import__('h3chat.agent_computer',fromlist=['public']).public(self)},"chat_live_updates":True,
                 "slide_options":{"max_count":MAX_SLIDES,"automatic_count":True,"background_batches":True,"background_styles":True,"settings_presets":True,"automatic_decorations":True},
                 "poster_options":{"enabled":True,"max_variants":6,"formats":['A3','A4','A3-landscape','A4-landscape','4:5','9:16','1:1','16:9']},
+                "infographic_options":{"engines":["classic","motion"],"scene_format_version":2,"sprite_library":True,"camera":True,"parallax":True,"experimental_motion":True},
                 "study_options":{"enabled":True,"max_items":50,"kinds":['flashcards','summary','faq','guide','timeline','dialogue']},
                 "video_options":{"defaults":VIDEO_DEFAULTS,"aspects":VIDEO_ASPECTS,"request_controls":True,"segment_controls":True,"format_control":True,"request_draft":True,"seed_control":True,"attention_choices":True,"batch_controls":True}, "veda_runtime":veda_status(self.root),
                 "tools_runtime":tools_status(self.root),"transcription_models":[m|{'ready':all(safe_join(self.root,f['path']).is_file() for f in m['files'])} for m in self.downloads.tool_models.values() if m['id'].startswith('whisper-')],

@@ -94,6 +94,19 @@ def document(root,data,deck,media):
             assignments=[{'background_asset_id':p.get('background_asset_id')}|{k:p[k] for k in ('content_viewport',) if k in p} for p in deck['pages']]
             spec={'deck':{k:deck[k] for k in ('title','format','background_style','background','background_color','palette','text_tone','theme','design') if k in deck}|{'pages':assignments},'page':{'background_asset_id':page.get('background_asset_id')}|{k:page[k] for k in ('content_viewport',) if k in page},'media':static}
             specification='<div hidden data-h3-trusted data-h3-background-spec>'+html.escape(json.dumps(spec,ensure_ascii=False))+'</div>'
+        if deck.get('infographic',{}).get('scene_format_version')==2:
+            from .infographic_scene import validate as validate_scene
+            graph=validate_scene(page.get('motion_scene'))
+            ids={o['assetId'] for o in graph['objects'] if o['type']=='image'};images={};image_bytes=0
+            for ident in ids:
+                item=next((m for m in media if m['id']==ident and m.get('mime') in ('image/png','image/jpeg','image/webp')),None)
+                if not item:raise ValueError('Immagine Motion Graphics non autorizzata.')
+                file=safe_join(data,item['path'])
+                if file.stat().st_size>16*1024**2:raise ValueError('Immagine Motion Graphics oltre16MB.')
+                image_bytes+=file.stat().st_size
+                if image_bytes>64*1024**2:raise ValueError('Immagini Motion Graphics oltre64MB per scena.')
+                images[ident]='data:'+item['mime']+';base64,'+base64.b64encode(file.read_bytes()).decode()
+            cleaner.out=['<main data-h3-motion-root style="width:100%;height:100%"></main><div hidden data-h3-motion-scene>'+html.escape(json.dumps(graph,ensure_ascii=False))+'</div><div hidden data-h3-motion-assets>'+html.escape(json.dumps(images))+'</div>']
         inner='<!doctype html><html lang="it"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="'+html.escape(csp,quote=True)+'"><style>html,body{margin:0;width:'+str(width)+'px;height:'+str(height)+'px;overflow:hidden}*,*:before,*:after{box-sizing:border-box;animation:none!important;transition:none!important}'+fonts+math_css+'</style></head><body>'+''.join(cleaner.out)+backdrop+specification+'</body></html>'
         frames.append('<iframe sandbox="allow-same-origin" data-h3-scene="'+str(i)+'" style="position:absolute;inset:0;width:100%;height:100%;border:0" srcdoc="'+html.escape(inner,quote=True)+'"></iframe>')
     return '<!doctype html><html style="background:'+background+'"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; frame-src \'self\'; style-src \'unsafe-inline\'; img-src data:; font-src data:; script-src \'none\'; connect-src \'none\'"></head><body style="margin:0;width:'+str(width)+'px;height:'+str(height)+'px;overflow:hidden;clip-path:inset(0 round '+str(radius)+'px);background:'+background+'">'+''.join(frames)+'</body></html>'

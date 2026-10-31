@@ -337,6 +337,9 @@ def validate_content(content, media):
     if deck.get('infographic'):
         from .infographics import validate_motion
         validate_motion(deck)
+        if deck.get('infographic',{}).get('scene_format_version')==2:
+            ids={m['id'] for m in media if m.get('mime') in ('image/png','image/jpeg','image/webp')}
+            if any(o['type']=='image' and o['assetId'] not in ids for p in deck['pages'] for o in p.get('motion_scene',{}).get('objects',[])):raise ValueError('Immagine Motion Graphics non autorizzata o non disponibile.')
         video=deck['infographic'].get('video')
         if video:
             for key,mime in (('asset_id','video/mp4'),('poster_id','image/jpeg')):

@@ -46,7 +46,7 @@ def validate_fragments(value,layout):
         from .poster_visual import plain_copy
         def tokens(text):
             text=re.sub(r'(?m)^\s*[-+*•]\s+','',plain_copy(text))
-            return [word for word in text.split() if word!='•']
+            return [word.casefold() for word in text.split() if word not in ('•','—','–')]
         actual=tokens(''.join(parser.text));original=tokens(expected[row['id']]['text'])
         if actual!=original:
             from collections import Counter

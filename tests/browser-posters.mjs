@@ -15,7 +15,9 @@ try{
  await page.goto(fixture.url);await page.click(`[data-chat="${fixture.chat}"]`);
  await page.locator('#prompt-posters').click();await page.locator('[data-mode-settings="posters-options"]').click();
  const modal=page.locator('#prompt-mode-settings');assert.match(await modal.locator('h2').textContent(),/Locandine/);
+ assert.equal(await modal.locator('[data-poster="composition"]').inputValue(),'html');assert.match(await modal.locator('[data-poster="composition"] option:checked').textContent(),/Grafica ricca HTML\/CSS/);assert.equal(await modal.locator('[data-poster="typography_engine"]').isVisible(),false);
  await modal.locator('[data-poster="composition"]').selectOption('moss_layout');
+ assert.equal(await modal.locator('[data-poster="typography_engine"]').isVisible(),true);
  assert.equal(await modal.locator('[data-poster="reference_image"]').isVisible(),true);
  await modal.locator('[data-poster="reference_image"]').fill('1');await modal.locator('[data-poster="reference_image"]').dispatchEvent('change');
  assert.match(await modal.locator('[data-poster-note]').textContent(),/compositore espressivo/);

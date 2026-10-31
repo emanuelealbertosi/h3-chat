@@ -1,3 +1,4 @@
+import '../static/infographic-scene.js';
 import '../static/infographic-motion.js';
 import renderMath from 'katex/contrib/auto-render';
 import {readableText} from './slide-html-contrast.js';
@@ -8,6 +9,7 @@ import {fitHtmlBackground} from './slide-content-fit.js';
 
 // The offline renderer uses the same trusted repairs as the editable canvas.
 globalThis.H3Infographic={measure:portraitLayout,async prepare(doc,height,options={},duration=30){
+ const graph=doc.querySelector('[data-h3-motion-scene]');if(graph){await H3SceneGraph.prepare(doc,JSON.parse(graph.textContent));return;}
  H3Motion.screen(doc,options,duration);
  const specification=doc.querySelector('[data-h3-background-spec]');
  if(specification){const spec=JSON.parse(specification.textContent);specification.remove();await applyHtmlBackground(doc,spec.deck,spec.page,spec.media,height);H3Motion.screen(doc,options,duration);await Promise.all([...doc.images].map(image=>image.decode().catch(()=>{})));}

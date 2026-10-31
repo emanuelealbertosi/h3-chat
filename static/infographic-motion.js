@@ -125,6 +125,7 @@
   });states.set(doc,entries);return entries;
  }
  function apply(doc,time,duration,options){
+  if(globalThis.H3SceneGraph?.hasScene(doc))return globalThis.H3SceneGraph.apply(doc,time);
   if(options)configure(doc,options);
   const entries=prepare(doc);
   const tuning=settings.get(doc)?.options||{};

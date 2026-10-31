@@ -86,7 +86,7 @@ async function rasterDecoration(element){
   const host=document.createElement('div');host.style.cssText='position:fixed;left:-30000px;top:0';host.append(paint);document.body.append(host);
   try{return await toPng(paint,{width:bounds.width,height:bounds.height,pixelRatio:2,backgroundColor:'transparent'});}finally{host.remove();}
 }
-export async function exportPowerPoint(root,deck,title){
+export async function exportPowerPoint(root,deck,title,{editable=false}={}){
   try{
   const pres=new pptxgen(),height=parseFloat(root.firstElementChild.style.getPropertyValue('--slide-height'));
   const poster=deck.document_kind==='poster',paper=poster&&posterPaper[deck.format],widthIn=paper?paper[0]/25.4:1280/96,heightIn=paper?paper[1]/25.4:height/96;
@@ -94,11 +94,11 @@ export async function exportPowerPoint(root,deck,title){
   await document.fonts.ready;
   for(const frame of root.querySelectorAll('.h3-slide-page')){
     const slide=pres.addSlide();slide.background={color:color(getComputedStyle(frame).backgroundColor).color};
-    if(poster){
+    if(poster||deck.engine==='llm'&&!editable){
       // Poster art uses bundled fonts, gradient ink and effects that PowerPoint
       // text boxes cannot reproduce faithfully. Preserve the full painted page.
       slide.addImage({data:await rasterGraphic(frame),x:0,y:0,w:widthIn,h:heightIn});
-      const page=deck.pages[Number(frame.dataset.page)-1];slide.addNotes([page.title,page.editorial?.content||frame.innerText,page.notes||'','Esportazione locandina ad alta risoluzione: grafica e scritte sono un’immagine unica. Modifica testi e layout nel canvas H3, poi riesporta.'].filter(Boolean).join('\n'));
+      const page=deck.pages[Number(frame.dataset.page)-1];slide.addNotes([page.title,page.editorial?.content||frame.innerText,page.notes||'','Esportazione fedele ad alta risoluzione: grafica e scritte sono un’immagine unica. Modifica testi e layout nel canvas H3, poi riesporta. Per le slide è disponibile anche PowerPoint modificabile, con possibili differenze di font e impaginazione.'].filter(Boolean).join('\n'));
       continue;
     }
     const background=frame.querySelector('[data-h3-background-layer]');

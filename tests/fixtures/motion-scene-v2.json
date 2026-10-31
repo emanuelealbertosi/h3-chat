@@ -1,0 +1,55 @@
+{
+  "version": 2,
+  "id": "motion-p0",
+  "width": 1920,
+  "height": 1080,
+  "duration": 10,
+  "background": "#151E33",
+  "objects": [
+    {
+      "id": "rack",
+      "type": "rect",
+      "layer": 1,
+      "width": 280,
+      "height": 420,
+      "anchor": {"x": 0.5, "y": 0.5},
+      "transform": {"x": 440, "y": 610},
+      "fill": "#24C4D8",
+      "stroke": "#FFFFFF",
+      "strokeWidth": 5,
+      "tracks": [
+        {"property": "x", "keyframes": [{"t": 0, "value": -300}, {"t": 1.2, "value": 440, "ease": "easeOut"}]},
+        {"property": "opacity", "keyframes": [{"t": 0, "value": 0}, {"t": 0.7, "value": 1}]}
+      ]
+    },
+    {
+      "id": "energy",
+      "type": "ellipse",
+      "layer": 2,
+      "width": 330,
+      "height": 230,
+      "anchor": {"x": 0.5, "y": 0.5},
+      "transform": {"x": 1320, "y": 610},
+      "fill": "#FFB547",
+      "tracks": [
+        {"property": "scaleX", "keyframes": [{"t": 0, "value": 0}, {"t": 1.8, "value": 1, "ease": "easeOut"}]},
+        {"property": "scaleY", "keyframes": [{"t": 0, "value": 0}, {"t": 1.8, "value": 1, "ease": "easeOut"}]},
+        {"property": "rotation", "keyframes": [{"t": 0, "value": 0}, {"t": 10, "value": 180}]}
+      ]
+    },
+    {
+      "id": "title",
+      "type": "text",
+      "layer": 3,
+      "width": 1500,
+      "height": 170,
+      "transform": {"x": 180, "y": 145},
+      "fill": "#FFFFFF",
+      "fontFamily": "Manrope",
+      "fontSize": 68,
+      "text": "Motion Graphics · dimostrazione",
+      "tracks": [{"property": "opacity", "keyframes": [{"t": 0, "value": 0}, {"t": 1, "value": 1}]}]
+    }
+  ],
+  "camera": {"keyframes": [{"t": 0, "x": 960, "y": 540, "zoom": 1}, {"t": 9, "x": 1050, "y": 540, "zoom": 1.05}]}
+}

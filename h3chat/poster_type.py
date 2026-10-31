@@ -29,7 +29,7 @@ def options(prompt,value):
 
 def brief(opts):
     return f'''LETTERING DIRECTION: {opts.get('lettering','auto')}; short-text effect: {opts.get('text_effect','auto')}.
-Coordinate raster MOSS lettering and editable HTML type as one art direction.
+Coordinate editable HTML/SVG type and illustration as one art direction.
 Available locally embedded HTML families: {', '.join(FONTS)}. Heading font {opts.get('heading_font','auto')}, body font {opts.get('body_font','auto')}.
 Choose character, tracking, italics and effects to match the illustration: serious editorial, playful, cinematic, handwritten, comic, retro or neon.
 Keep long body copy clear and composed; strong outlines, glow and extrusion belong to headings and short labels.

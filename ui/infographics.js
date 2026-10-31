@@ -1,4 +1,6 @@
 import {initSlideBackgroundPicker} from './slide-background-picker.js';
+import {chooseSprites} from './motion-sprites.js';
+import {mountMotionEditor} from './motion-editor.js';
 import {labImageDefault} from './lab-image-model.js';
 import '../static/infographic-motion.js';
 import {textControls,effectLabels} from './infographic-text-controls.js';
@@ -13,6 +15,10 @@ export function initInfographics({api,getState,getAttachments=()=>[],uploadVideo
   for(const [id,label] of items){const button=document.createElement('button');button.type='button';button.className='prompt-choice';button.textContent=label;button.dataset.value=id;button.setAttribute('aria-pressed',String(id===value));button.onclick=()=>{value=id;for(const b of group.children)b.setAttribute('aria-pressed',String(b===button));if(['layout','panel_appearance','panel_order'].includes(key))renderScreen();};group.append(button);}field.append(group);panel.append(field);return ()=>value;
  };
  const reads={format:select('format',[['9:16','9:16'],['16:9','16:9'],['1:1','1:1'],['4:3','4:3'],['16:10','16:10']])};for(const key of ['layout','panel_appearance','panel_order','style','images','output','corners'])reads[key]=select(key,choices[key]);
+ labels.background='Fondale delle scene';reads.background=select('background',[['auto','Automatico · dal prompt'],['light','Chiaro'],['dark','Scuro'],['custom','Colore scelto']]);
+ labels.animation_engine='Motore animazione';reads.animation_engine=select('animation_engine',[['classic','Classico · HTML/SVG'],['motion','Motion Graphics · sperimentale multilivello']]);
+ let spriteIds=[];const sprites=document.createElement('button');sprites.type='button';sprites.className='btn';sprites.textContent='Raccolta sprite · nessuno selezionato';sprites.onclick=async()=>{try{const ids=await chooseSprites(api,spriteIds);if(ids!==null){spriteIds=ids;sprites.textContent='Raccolta sprite · '+ids.length+' selezionati';}}catch(e){notify(e.message);}};panel.append(sprites);reads.sprite_ids=()=>spriteIds;
+ panel.insertAdjacentHTML('beforeend','<label class="field"><span>Colore del fondale · usato con Colore scelto</span><input data-info="background_color" type="color" value="#f7f3e8"></label><p class="small-note">Il fondale è indipendente dalla palette e dallo sfondo degli angoli. Tech e colori vivaci non impongono un fondo scuro. Il prompt prevale.</p>');
  panel.insertAdjacentHTML('beforeend','<label class="field" data-panel-interval><span>Intervallo fra ingressi · secondi</span><input data-info="panel_interval" type="number" min="0.2" max="30" step="0.1" value="0.8"></label><p class="small-note">Riquadri numerati da sinistra a destra, oppure dall’alto in basso. Con Principale + riquadro: 1 principale, 2 sovraimpressione. L’LLM compone contenuti ed effetti; l’ordine scelto viene rispettato anche nelle scene brevi.</p>');
  panel.insertAdjacentHTML('beforeend','<label class="field" data-panel-order-field hidden><span>Ordine personalizzato</span><input data-panel-order type="text" inputmode="numeric" maxlength="6" value="1234" aria-label="Ordine personalizzato dei pannelli"><small data-panel-order-hint>Usa ogni numero una sola volta.</small></label>');
  const orderChoice=reads.panel_order,customOrder=panel.querySelector('[data-panel-order]');let previousPanelCount=1;reads.panel_order=()=>orderChoice()==='custom'?customOrder.value.trim():orderChoice();
@@ -42,6 +48,7 @@ export function initInfographics({api,getState,getAttachments=()=>[],uploadVideo
 
 const players=new WeakMap();
 export function mountInfographic(target,deck,index,frame,options,value){
+ if(deck.infographic.scene_format_version===2)return mountMotionEditor(target,deck,index,frame,options,value);
  const old=players.get(target);if(old)old();
  const doc=frame.querySelector('iframe')?.contentDocument;if(!doc)return;
  const radius={square:0,soft:48,round:110}[deck.infographic.options?.corners||'square'];frame.style.borderRadius=radius+'px';frame.style.overflow='hidden';

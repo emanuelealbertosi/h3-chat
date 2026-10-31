@@ -113,6 +113,7 @@ export async function renderSlides(target,value,options={}){
     resume.onclick=async()=>{resume.disabled=true;try{selected.follow=true;await options.onResume();}catch(error){const message=document.createElement('p');message.className='message-error';message.textContent=error.message;resume.after(message);}finally{resume.disabled=!!options.busy;}};target.append(resume);
   }
   const edit=document.createElement('button');edit.id='slide-edit';edit.textContent=selected.editing?'Termina modifica':'Modifica grafica';edit.disabled=!options.editable||!options.onChange||pageNotReady(deck.pages[selected.index]);
+  if(deck.infographic?.scene_format_version===2){edit.disabled=true;edit.title='Usa l’editor di oggetti, livelli e camera sotto l’anteprima.';}
   edit.onclick=()=>{selected.editing=!selected.editing;again();};controls.append(edit);
   if(deck.document_kind==='poster'&&deck.pages[selected.index]?.poster_layout&&options.onTypography){
     const type=document.createElement('button');type.type='button';type.className='btn small';type.textContent='Applica font ed effetti';type.title='Crea una revisione usando lo stile scelto in Impostazioni Locandine. Conserva l’immagine e la versione precedente.';type.disabled=!!options.busy;
@@ -191,7 +192,7 @@ export async function exportSlides(value,kind,token){
       root.lastElementChild.style.breakAfter='auto';
     }
     if(kind==='html'){const html=await (await import('./exports.js')).printableHtml(root);const response=await fetch('/api/export/html',{method:'POST',headers:{'Content-Type':'application/json','X-H3-Token':token},body:JSON.stringify({title:value.title,html,slide_format:deck.format})});const result=await response.json();if(!response.ok)throw Error(result.error);const blob=await fetch(result.url).then(r=>r.blob());saveBlob(blob,value.title+'.html');return;}
-    if(kind==='pptx')return await (await import('./slide-pptx.js')).exportPowerPoint(root,deck,value.title);
+    if(kind==='pptx'||kind==='pptx-editable')return await (await import('./slide-pptx.js')).exportPowerPoint(root,deck,value.title,{editable:kind==='pptx-editable'});
     if(kind==='pdf')return await exportPdf(root,value.title,token,{slide_format:deck.format,...(paper?{page_size_mm:paper}:{})});
     if(kind==='source-pdf'){const url=await exportPdf(root,value.title,token,{slide_format:deck.format,...(paper?{page_size_mm:paper}:{}),download:false});const response=await fetch(url);if(!response.ok)throw Error('PDF della presentazione non disponibile.');return await response.blob();}
     if(kind==='docx')return await exportDocx(root,value.title);

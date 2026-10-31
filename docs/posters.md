@@ -15,6 +15,14 @@ in Basic; Advanced mostra modello immagini e margine di sicurezza.
 - Le impostazioni della modale restano salvate nel browser. Formato, quantità
   e richieste esplicite di immagini nel prompt prevalgono sui valori salvati.
 
+La composizione predefinita è **Grafica ricca HTML/CSS · come nelle slide**.
+Il modello scrive liberamente HTML/CSS/SVG per tutta la pagina: sfondi,
+decorazioni, forme, gradienti, tipografia espressiva e livelli sopra le immagini.
+Non dipende dai riquadri di un piano MOSS. Lo stile esplicito del prompt
+prevale, quindi sono consentite anche composizioni sobrie o minimaliste.
+Le immagini possono occupare tutta la pagina; velature e pannelli locali
+servono alla leggibilità senza coprire volti o dettagli importanti.
+
 Il testo viene composto in HTML/SVG separatamente dalle immagini. Usa
 **Modifica grafica** per intervenire su testi, colori e posizioni; **Ricrea
 questa locandina con AI** applica una modifica alla sola variante selezionata.
@@ -28,7 +36,8 @@ autonomo e sfogliabile. PowerPoint conserva ogni variante pronta come immagine
 a pagina intera, a risoluzione tripla: mantiene effetti, font, sfondo e formato
 A3/A4, ma non rende le singole scritte modificabili in PowerPoint. Il testo
 originale compare anche nelle note. Per cambiare il poster usa l'editor H3.
-Le presentazioni normali continuano a esportare elementi modificabili.
+Per le presentazioni HTML è disponibile lo stesso export fedele; l'alternativa
+**PowerPoint modificabile** ricostruisce gli elementi e può differire nella resa.
 Non vengono aggiunti abbondanze, crocini o conversione
 CMYK: per una stampa tipografica controllare le richieste dello stampatore.
 La risoluzione delle illustrazioni resta quella del modello o degli allegati.
@@ -43,7 +52,7 @@ e CPU usano dati sintetici; una prova con un modello reale va verificata anche
 visivamente, senza confonderla con il collaudo automatico.
 # Composizione completa con MOSS
 
-Nelle impostazioni Locandine, **Composizione → Grafica completa con MOSS + testi HTML**
+Nelle impostazioni Locandine, **Composizione → Avanzata · piano MOSS con aree riservate**
 usa un unico piano spaziale per sfondo, soggetti e aree tipografiche.
 L'Assistant prepara prima tutti i testi e poi le aree nel formato finale. Di
 default MOSS crea una sola immagine a tutta pagina **senza scritte**. Il

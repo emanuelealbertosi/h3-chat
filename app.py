@@ -147,6 +147,10 @@ class Handler(BaseHTTPRequestHandler):
                 if path=='/api/slide-backgrounds':
                     from h3chat.slide_backgrounds import listing
                     return self.json(listing(self.app))
+                if path=='/api/motion-sprites':
+                    from h3chat.motion_sprites import listing
+                    query=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                    return self.json({'items':listing(self.app,query.get('q',[''])[0])})
                 if path=='/api/image-collections':
                     from h3chat.image_collections import listing
                     return self.json(listing(self.app))
@@ -268,6 +272,12 @@ class Handler(BaseHTTPRequestHandler):
                 if len(raw)!=length:raise ValueError('Blocco documento incompleto.')
                 return self.json(self.app.knowledge.uploads.append(parts[2],parts[4],offset,raw))
             body = self.read_body()
+            if path=='/api/motion-sprites' and method=='POST':
+                from h3chat.motion_sprites import save
+                return self.json(save(self.app,body),201)
+            if len(parts)==3 and parts[:2]==['api','motion-sprites'] and method=='DELETE':
+                from h3chat.motion_sprites import remove
+                return self.json(remove(self.app,parts[2],body))
             if path=='/api/presentation-preferences' and method=='POST':
                 from h3chat.presentation_preferences import update
                 return self.json(update(self.app,body))

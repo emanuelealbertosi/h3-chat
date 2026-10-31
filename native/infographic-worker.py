@@ -168,14 +168,17 @@ def run(request):
         port=int(portfile.read_text().splitlines()[0])
         with urllib.request.urlopen('http://127.0.0.1:'+str(port)+'/json/list',timeout=10) as r:tabs=json.load(r)
         cdp=CDP(next(t['webSocketDebuggerUrl'] for t in tabs if t['type']=='page'))
-        cdp.call('Page.enable');cdp.call('Emulation.setDeviceMetricsOverride',{'width':width,'height':height,'deviceScaleFactor':1,'mobile':False})
+        cdp.call('Page.enable');cdp.call('Emulation.setDeviceMetricsOverride',{'width':width,'height':height,'deviceScaleFactor':size[0]/width if deck['infographic'].get('scene_format_version')==2 else 1,'mobile':False})
         cdp.call('Page.navigate',{'url':source.as_uri()})
         while cdp.evaluate("document.readyState==='complete' && document.querySelectorAll('[data-h3-scene]').length==="+str(len(deck['pages']))) is not True:
             if time.monotonic()>deadline:raise RuntimeError('Caricamento scene non riuscito.')
             time.sleep(.1)
         cdp.evaluate("Promise.all([...document.querySelectorAll('iframe')].map(async f=>{await f.contentDocument.fonts.ready;await Promise.all([...f.contentDocument.images].map(i=>i.decode().catch(()=>{})));}))",True)
         cdp.evaluate((ROOT/'static/vendor/infographic-renderer.js').read_text(encoding='utf-8'))
-        cdp.evaluate('Promise.all(Array.from(document.querySelectorAll("iframe"),(f,i)=>H3Infographic.prepare(f.contentDocument,'+str(height)+','+json.dumps(deck['infographic'].get('options',{}))+','+json.dumps(deck['infographic']['durations'])+'[i])))',True)
+        prepare='H3Infographic.prepare(f.contentDocument,'+str(height)+','+json.dumps(deck['infographic'].get('options',{}))+','+json.dumps(deck['infographic']['durations'])+'[i])'
+        if request.get('mode')=='motion-check':
+            return {'pages':cdp.evaluate('Promise.all(Array.from(document.querySelectorAll("iframe"),async(f,i)=>{try{await '+prepare+';const graph=JSON.parse(f.contentDocument.querySelector("[data-h3-motion-scene]").textContent),times=new Set([0,graph.duration]);for(const o of graph.objects)for(const tr of o.tracks||[])if(tr.property==="text"||tr.property==="barValue")for(const k of tr.keyframes)times.add(k.t);for(const t of times)H3SceneGraph.apply(f.contentDocument,t);const checks=new Set([graph.duration*.5,graph.duration]);for(const k of graph.camera?.keyframes||[])if(k.t>=graph.duration*.25)checks.add(k.t);for(const t of checks)H3SceneGraph.checkTextBounds(f.contentDocument,t);return {error:null};}catch(e){return {error:e.message};}}))',True)}
+        cdp.evaluate('Promise.all(Array.from(document.querySelectorAll("iframe"),(f,i)=>'+prepare+'))',True)
         cdp.evaluate("Promise.all([...document.querySelectorAll('iframe')].map(f=>f.contentDocument.fonts.ready))",True)
         if request.get('mode')=='layout':
             return {'pages':cdp.evaluate('Array.from(document.querySelectorAll("iframe"),f=>H3Infographic.measure(f.contentDocument,'+str(height)+','+json.dumps(deck['infographic'].get('options',{}))+'))')}

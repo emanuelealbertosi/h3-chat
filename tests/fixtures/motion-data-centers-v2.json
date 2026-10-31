@@ -1,0 +1,1856 @@
+{
+  "version": 1,
+  "engine": "llm",
+  "format": "16:9",
+  "title": "Data center · Motion Graphics originale",
+  "theme": "lagoon",
+  "typography": "modern",
+  "design": "professional",
+  "detail": "concise",
+  "references": [],
+  "active": 0,
+  "pages": [
+    {
+      "title": "Infrastrutture",
+      "status": "ready",
+      "html": "<main><p>Motion Graphics</p></main>",
+      "notes": "Demo originale scritta a mano. Nessuna voce o inferenza. I numeri sono illustrativi.",
+      "sources": [],
+      "motion_scene": {
+        "version": 2,
+        "id": "infrastructure",
+        "width": 1280,
+        "height": 720,
+        "duration": 10,
+        "background": "#F2F7F8",
+        "objects": [
+          {
+            "id": "orb",
+            "type": "ellipse",
+            "width": 420,
+            "height": 420,
+            "fill": "#D3E9EC",
+            "transform": {
+              "x": 900,
+              "y": 200
+            },
+            "layer": -1,
+            "parallax": 0.3
+          },
+          {
+            "id": "title",
+            "type": "text",
+            "width": 1100,
+            "height": 78.0,
+            "fill": "#163E50",
+            "transform": {
+              "x": 64,
+              "y": 55
+            },
+            "text": "Più dati, più infrastrutture",
+            "fontSize": 52,
+            "parallax": 0
+          },
+          {
+            "id": "subtitle",
+            "type": "text",
+            "width": 1100,
+            "height": 37.5,
+            "fill": "#163E50",
+            "transform": {
+              "x": 64,
+              "y": 130
+            },
+            "text": "Dalle applicazioni ai server: ogni servizio ha una base fisica.",
+            "fontSize": 25,
+            "parallax": 0
+          },
+          {
+            "id": "rack1",
+            "type": "group",
+            "width": 190,
+            "height": 310,
+            "fill": "none",
+            "transform": {
+              "x": 260,
+              "y": 270
+            },
+            "layer": 2,
+            "tracks": [
+              {
+                "property": "y",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 670,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 0.8,
+                    "value": 270,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3,
+                    "value": 270,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 4,
+                    "value": 262,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 5,
+                    "value": 270,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 6,
+                    "value": 262,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 270,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "rack1_body",
+            "type": "rect",
+            "width": 190,
+            "height": 310,
+            "fill": "#185268",
+            "transform": {
+              "x": 0,
+              "y": 0
+            },
+            "parentId": "rack1"
+          },
+          {
+            "id": "rack1_slot0",
+            "type": "rect",
+            "width": 150,
+            "height": 50,
+            "fill": "#296E82",
+            "transform": {
+              "x": 18,
+              "y": 20
+            },
+            "parentId": "rack1"
+          },
+          {
+            "id": "rack1_led0",
+            "type": "ellipse",
+            "width": 14,
+            "height": 14,
+            "fill": "#F7BD52",
+            "transform": {
+              "x": 142,
+              "y": 35
+            },
+            "parentId": "rack1",
+            "tracks": [
+              {
+                "property": "opacity",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 2.0,
+                    "value": 0.2,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3.0,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 6,
+                    "value": 0.3,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "rack1_slot1",
+            "type": "rect",
+            "width": 150,
+            "height": 50,
+            "fill": "#296E82",
+            "transform": {
+              "x": 18,
+              "y": 90
+            },
+            "parentId": "rack1"
+          },
+          {
+            "id": "rack1_led1",
+            "type": "ellipse",
+            "width": 14,
+            "height": 14,
+            "fill": "#F7BD52",
+            "transform": {
+              "x": 142,
+              "y": 105
+            },
+            "parentId": "rack1",
+            "tracks": [
+              {
+                "property": "opacity",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 2.2,
+                    "value": 0.2,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3.2,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 6,
+                    "value": 0.3,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "rack1_slot2",
+            "type": "rect",
+            "width": 150,
+            "height": 50,
+            "fill": "#296E82",
+            "transform": {
+              "x": 18,
+              "y": 160
+            },
+            "parentId": "rack1"
+          },
+          {
+            "id": "rack1_led2",
+            "type": "ellipse",
+            "width": 14,
+            "height": 14,
+            "fill": "#F7BD52",
+            "transform": {
+              "x": 142,
+              "y": 175
+            },
+            "parentId": "rack1",
+            "tracks": [
+              {
+                "property": "opacity",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 2.4,
+                    "value": 0.2,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3.4,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 6,
+                    "value": 0.3,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "rack1_slot3",
+            "type": "rect",
+            "width": 150,
+            "height": 50,
+            "fill": "#296E82",
+            "transform": {
+              "x": 18,
+              "y": 230
+            },
+            "parentId": "rack1"
+          },
+          {
+            "id": "rack1_led3",
+            "type": "ellipse",
+            "width": 14,
+            "height": 14,
+            "fill": "#F7BD52",
+            "transform": {
+              "x": 142,
+              "y": 245
+            },
+            "parentId": "rack1",
+            "tracks": [
+              {
+                "property": "opacity",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 2.6,
+                    "value": 0.2,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3.6,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 6,
+                    "value": 0.3,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "rack2",
+            "type": "group",
+            "width": 190,
+            "height": 310,
+            "fill": "none",
+            "transform": {
+              "x": 550,
+              "y": 270
+            },
+            "layer": 2,
+            "tracks": [
+              {
+                "property": "y",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 670,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 0.8,
+                    "value": 270,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3,
+                    "value": 270,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 4,
+                    "value": 262,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 5,
+                    "value": 270,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 6,
+                    "value": 262,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 270,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "rack2_body",
+            "type": "rect",
+            "width": 190,
+            "height": 310,
+            "fill": "#185268",
+            "transform": {
+              "x": 0,
+              "y": 0
+            },
+            "parentId": "rack2"
+          },
+          {
+            "id": "rack2_slot0",
+            "type": "rect",
+            "width": 150,
+            "height": 50,
+            "fill": "#296E82",
+            "transform": {
+              "x": 18,
+              "y": 20
+            },
+            "parentId": "rack2"
+          },
+          {
+            "id": "rack2_led0",
+            "type": "ellipse",
+            "width": 14,
+            "height": 14,
+            "fill": "#F7BD52",
+            "transform": {
+              "x": 142,
+              "y": 35
+            },
+            "parentId": "rack2",
+            "tracks": [
+              {
+                "property": "opacity",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 2.0,
+                    "value": 0.2,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3.0,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 6,
+                    "value": 0.3,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "rack2_slot1",
+            "type": "rect",
+            "width": 150,
+            "height": 50,
+            "fill": "#296E82",
+            "transform": {
+              "x": 18,
+              "y": 90
+            },
+            "parentId": "rack2"
+          },
+          {
+            "id": "rack2_led1",
+            "type": "ellipse",
+            "width": 14,
+            "height": 14,
+            "fill": "#F7BD52",
+            "transform": {
+              "x": 142,
+              "y": 105
+            },
+            "parentId": "rack2",
+            "tracks": [
+              {
+                "property": "opacity",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 2.2,
+                    "value": 0.2,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3.2,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 6,
+                    "value": 0.3,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "rack2_slot2",
+            "type": "rect",
+            "width": 150,
+            "height": 50,
+            "fill": "#296E82",
+            "transform": {
+              "x": 18,
+              "y": 160
+            },
+            "parentId": "rack2"
+          },
+          {
+            "id": "rack2_led2",
+            "type": "ellipse",
+            "width": 14,
+            "height": 14,
+            "fill": "#F7BD52",
+            "transform": {
+              "x": 142,
+              "y": 175
+            },
+            "parentId": "rack2",
+            "tracks": [
+              {
+                "property": "opacity",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 2.4,
+                    "value": 0.2,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3.4,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 6,
+                    "value": 0.3,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "rack2_slot3",
+            "type": "rect",
+            "width": 150,
+            "height": 50,
+            "fill": "#296E82",
+            "transform": {
+              "x": 18,
+              "y": 230
+            },
+            "parentId": "rack2"
+          },
+          {
+            "id": "rack2_led3",
+            "type": "ellipse",
+            "width": 14,
+            "height": 14,
+            "fill": "#F7BD52",
+            "transform": {
+              "x": 142,
+              "y": 245
+            },
+            "parentId": "rack2",
+            "tracks": [
+              {
+                "property": "opacity",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 2.6,
+                    "value": 0.2,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3.6,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 6,
+                    "value": 0.3,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "rack3",
+            "type": "group",
+            "width": 190,
+            "height": 310,
+            "fill": "none",
+            "transform": {
+              "x": 840,
+              "y": 270
+            },
+            "layer": 2,
+            "tracks": [
+              {
+                "property": "y",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 670,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 0.8,
+                    "value": 270,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3,
+                    "value": 270,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 4,
+                    "value": 262,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 5,
+                    "value": 270,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 6,
+                    "value": 262,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 270,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "rack3_body",
+            "type": "rect",
+            "width": 190,
+            "height": 310,
+            "fill": "#185268",
+            "transform": {
+              "x": 0,
+              "y": 0
+            },
+            "parentId": "rack3"
+          },
+          {
+            "id": "rack3_slot0",
+            "type": "rect",
+            "width": 150,
+            "height": 50,
+            "fill": "#296E82",
+            "transform": {
+              "x": 18,
+              "y": 20
+            },
+            "parentId": "rack3"
+          },
+          {
+            "id": "rack3_led0",
+            "type": "ellipse",
+            "width": 14,
+            "height": 14,
+            "fill": "#F7BD52",
+            "transform": {
+              "x": 142,
+              "y": 35
+            },
+            "parentId": "rack3",
+            "tracks": [
+              {
+                "property": "opacity",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 2.0,
+                    "value": 0.2,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3.0,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 6,
+                    "value": 0.3,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "rack3_slot1",
+            "type": "rect",
+            "width": 150,
+            "height": 50,
+            "fill": "#296E82",
+            "transform": {
+              "x": 18,
+              "y": 90
+            },
+            "parentId": "rack3"
+          },
+          {
+            "id": "rack3_led1",
+            "type": "ellipse",
+            "width": 14,
+            "height": 14,
+            "fill": "#F7BD52",
+            "transform": {
+              "x": 142,
+              "y": 105
+            },
+            "parentId": "rack3",
+            "tracks": [
+              {
+                "property": "opacity",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 2.2,
+                    "value": 0.2,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3.2,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 6,
+                    "value": 0.3,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "rack3_slot2",
+            "type": "rect",
+            "width": 150,
+            "height": 50,
+            "fill": "#296E82",
+            "transform": {
+              "x": 18,
+              "y": 160
+            },
+            "parentId": "rack3"
+          },
+          {
+            "id": "rack3_led2",
+            "type": "ellipse",
+            "width": 14,
+            "height": 14,
+            "fill": "#F7BD52",
+            "transform": {
+              "x": 142,
+              "y": 175
+            },
+            "parentId": "rack3",
+            "tracks": [
+              {
+                "property": "opacity",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 2.4,
+                    "value": 0.2,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3.4,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 6,
+                    "value": 0.3,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "rack3_slot3",
+            "type": "rect",
+            "width": 150,
+            "height": 50,
+            "fill": "#296E82",
+            "transform": {
+              "x": 18,
+              "y": 230
+            },
+            "parentId": "rack3"
+          },
+          {
+            "id": "rack3_led3",
+            "type": "ellipse",
+            "width": 14,
+            "height": 14,
+            "fill": "#F7BD52",
+            "transform": {
+              "x": 142,
+              "y": 245
+            },
+            "parentId": "rack3",
+            "tracks": [
+              {
+                "property": "opacity",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 2.6,
+                    "value": 0.2,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3.6,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 6,
+                    "value": 0.3,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "camera": {
+          "keyframes": [
+            {
+              "t": 0,
+              "x": 640,
+              "y": 360,
+              "zoom": 1
+            },
+            {
+              "t": 9.5,
+              "x": 680,
+              "y": 355,
+              "zoom": 1.08,
+              "ease": "easeInOut"
+            }
+          ]
+        }
+      },
+      "timing": {
+        "kind": "manual-duration",
+        "duration": 10,
+        "word_alignment": false
+      }
+    },
+    {
+      "title": "Energia",
+      "status": "ready",
+      "html": "<main><p>Motion Graphics</p></main>",
+      "notes": "Demo originale scritta a mano. Nessuna voce o inferenza. I numeri sono illustrativi.",
+      "sources": [],
+      "motion_scene": {
+        "version": 2,
+        "id": "energy",
+        "width": 1280,
+        "height": 720,
+        "duration": 10,
+        "background": "#FFF7E8",
+        "objects": [
+          {
+            "id": "title",
+            "type": "text",
+            "width": 1100,
+            "height": 78.0,
+            "fill": "#163E50",
+            "transform": {
+              "x": 64,
+              "y": 55
+            },
+            "text": "La crescita richiede energia",
+            "fontSize": 52,
+            "parallax": 0
+          },
+          {
+            "id": "note",
+            "type": "text",
+            "width": 1100,
+            "height": 36.0,
+            "fill": "#76572F",
+            "transform": {
+              "x": 65,
+              "y": 130
+            },
+            "text": "Esempio illustrativo · valori non statistici",
+            "fontSize": 24,
+            "parallax": 0
+          },
+          {
+            "id": "axis",
+            "type": "line",
+            "width": 870,
+            "height": 1,
+            "fill": "none",
+            "transform": {
+              "x": 180,
+              "y": 585
+            },
+            "stroke": "#946B38",
+            "strokeWidth": 3
+          },
+          {
+            "id": "year1",
+            "type": "text",
+            "width": 1100,
+            "height": 39.0,
+            "fill": "#163E50",
+            "transform": {
+              "x": 220,
+              "y": 610
+            },
+            "text": "Oggi",
+            "fontSize": 26
+          },
+          {
+            "id": "year2",
+            "type": "text",
+            "width": 1100,
+            "height": 39.0,
+            "fill": "#163E50",
+            "transform": {
+              "x": 520,
+              "y": 610
+            },
+            "text": "Scenario A",
+            "fontSize": 26
+          },
+          {
+            "id": "year3",
+            "type": "text",
+            "width": 1100,
+            "height": 39.0,
+            "fill": "#163E50",
+            "transform": {
+              "x": 820,
+              "y": 610
+            },
+            "text": "Scenario B",
+            "fontSize": 26
+          },
+          {
+            "id": "bar0",
+            "type": "bar",
+            "width": 150,
+            "height": 320,
+            "fill": "#2E8797",
+            "transform": {
+              "x": 215,
+              "y": 260
+            },
+            "value": 0,
+            "maxValue": 100,
+            "tracks": [
+              {
+                "property": "barValue",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 0,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 1.0,
+                    "value": 0,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 4.0,
+                    "value": 35,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "count0",
+            "type": "counter",
+            "width": 180,
+            "height": 70,
+            "fill": "#2E8797",
+            "transform": {
+              "x": 225,
+              "y": 205
+            },
+            "value": 0,
+            "fontSize": 42,
+            "unit": " unità",
+            "tracks": [
+              {
+                "property": "barValue",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 0,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 1.0,
+                    "value": 0,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 4.0,
+                    "value": 35,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "bar1",
+            "type": "bar",
+            "width": 150,
+            "height": 320,
+            "fill": "#D89B42",
+            "transform": {
+              "x": 515,
+              "y": 260
+            },
+            "value": 0,
+            "maxValue": 100,
+            "tracks": [
+              {
+                "property": "barValue",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 0,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 1.8,
+                    "value": 0,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 4.8,
+                    "value": 60,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "count1",
+            "type": "counter",
+            "width": 180,
+            "height": 70,
+            "fill": "#D89B42",
+            "transform": {
+              "x": 525,
+              "y": 205
+            },
+            "value": 0,
+            "fontSize": 42,
+            "unit": " unità",
+            "tracks": [
+              {
+                "property": "barValue",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 0,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 1.8,
+                    "value": 0,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 4.8,
+                    "value": 60,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "bar2",
+            "type": "bar",
+            "width": 150,
+            "height": 320,
+            "fill": "#D27453",
+            "transform": {
+              "x": 815,
+              "y": 260
+            },
+            "value": 0,
+            "maxValue": 100,
+            "tracks": [
+              {
+                "property": "barValue",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 0,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 2.6,
+                    "value": 0,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 5.6,
+                    "value": 85,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "count2",
+            "type": "counter",
+            "width": 180,
+            "height": 70,
+            "fill": "#D27453",
+            "transform": {
+              "x": 825,
+              "y": 205
+            },
+            "value": 0,
+            "fontSize": 42,
+            "unit": " unità",
+            "tracks": [
+              {
+                "property": "barValue",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 0,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 2.6,
+                    "value": 0,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 5.6,
+                    "value": 85,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "camera": {
+          "keyframes": [
+            {
+              "t": 0,
+              "x": 640,
+              "y": 360,
+              "zoom": 1
+            },
+            {
+              "t": 9.5,
+              "x": 680,
+              "y": 355,
+              "zoom": 1.08,
+              "ease": "easeInOut"
+            }
+          ]
+        }
+      },
+      "timing": {
+        "kind": "manual-duration",
+        "duration": 10,
+        "word_alignment": false
+      }
+    },
+    {
+      "title": "Efficienza",
+      "status": "ready",
+      "html": "<main><p>Motion Graphics</p></main>",
+      "notes": "Demo originale scritta a mano. Nessuna voce o inferenza. I numeri sono illustrativi.",
+      "sources": [],
+      "motion_scene": {
+        "version": 2,
+        "id": "efficiency",
+        "width": 1280,
+        "height": 720,
+        "duration": 10,
+        "background": "#EDF6EE",
+        "objects": [
+          {
+            "id": "title",
+            "type": "text",
+            "width": 1100,
+            "height": 72.0,
+            "fill": "#163E50",
+            "transform": {
+              "x": 64,
+              "y": 55
+            },
+            "text": "L’obiettivo: fare di più con meno",
+            "fontSize": 48,
+            "parallax": 0
+          },
+          {
+            "id": "core",
+            "type": "group",
+            "width": 190,
+            "height": 310,
+            "fill": "none",
+            "transform": {
+              "x": 170,
+              "y": 270
+            },
+            "layer": 2,
+            "tracks": [
+              {
+                "property": "y",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 670,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 0.8,
+                    "value": 270,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3,
+                    "value": 270,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 4,
+                    "value": 262,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 5,
+                    "value": 270,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 6,
+                    "value": 262,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 270,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "core_body",
+            "type": "rect",
+            "width": 190,
+            "height": 310,
+            "fill": "#185268",
+            "transform": {
+              "x": 0,
+              "y": 0
+            },
+            "parentId": "core"
+          },
+          {
+            "id": "core_slot0",
+            "type": "rect",
+            "width": 150,
+            "height": 50,
+            "fill": "#296E82",
+            "transform": {
+              "x": 18,
+              "y": 20
+            },
+            "parentId": "core"
+          },
+          {
+            "id": "core_led0",
+            "type": "ellipse",
+            "width": 14,
+            "height": 14,
+            "fill": "#F7BD52",
+            "transform": {
+              "x": 142,
+              "y": 35
+            },
+            "parentId": "core",
+            "tracks": [
+              {
+                "property": "opacity",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 2.0,
+                    "value": 0.2,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3.0,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 6,
+                    "value": 0.3,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "core_slot1",
+            "type": "rect",
+            "width": 150,
+            "height": 50,
+            "fill": "#296E82",
+            "transform": {
+              "x": 18,
+              "y": 90
+            },
+            "parentId": "core"
+          },
+          {
+            "id": "core_led1",
+            "type": "ellipse",
+            "width": 14,
+            "height": 14,
+            "fill": "#F7BD52",
+            "transform": {
+              "x": 142,
+              "y": 105
+            },
+            "parentId": "core",
+            "tracks": [
+              {
+                "property": "opacity",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 2.2,
+                    "value": 0.2,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3.2,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 6,
+                    "value": 0.3,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "core_slot2",
+            "type": "rect",
+            "width": 150,
+            "height": 50,
+            "fill": "#296E82",
+            "transform": {
+              "x": 18,
+              "y": 160
+            },
+            "parentId": "core"
+          },
+          {
+            "id": "core_led2",
+            "type": "ellipse",
+            "width": 14,
+            "height": 14,
+            "fill": "#F7BD52",
+            "transform": {
+              "x": 142,
+              "y": 175
+            },
+            "parentId": "core",
+            "tracks": [
+              {
+                "property": "opacity",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 2.4,
+                    "value": 0.2,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3.4,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 6,
+                    "value": 0.3,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "core_slot3",
+            "type": "rect",
+            "width": 150,
+            "height": 50,
+            "fill": "#296E82",
+            "transform": {
+              "x": 18,
+              "y": 230
+            },
+            "parentId": "core"
+          },
+          {
+            "id": "core_led3",
+            "type": "ellipse",
+            "width": 14,
+            "height": 14,
+            "fill": "#F7BD52",
+            "transform": {
+              "x": 142,
+              "y": 245
+            },
+            "parentId": "core",
+            "tracks": [
+              {
+                "property": "opacity",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 2.6,
+                    "value": 0.2,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3.6,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 6,
+                    "value": 0.3,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "fan",
+            "type": "group",
+            "width": 150,
+            "height": 150,
+            "fill": "none",
+            "transform": {
+              "x": 590,
+              "y": 430
+            },
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tracks": [
+              {
+                "property": "rotation",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 0,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 10,
+                    "value": 720,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "hub",
+            "type": "ellipse",
+            "width": 40,
+            "height": 40,
+            "fill": "#2E8797",
+            "transform": {
+              "x": 55,
+              "y": 55
+            },
+            "parentId": "fan"
+          },
+          {
+            "id": "label1",
+            "type": "text",
+            "width": 1100,
+            "height": 42.0,
+            "fill": "#163E50",
+            "transform": {
+              "x": 490,
+              "y": 610
+            },
+            "text": "Raffreddamento",
+            "fontSize": 28
+          },
+          {
+            "id": "label2",
+            "type": "text",
+            "width": 1100,
+            "height": 42.0,
+            "fill": "#163E50",
+            "transform": {
+              "x": 860,
+              "y": 610
+            },
+            "text": "Energia efficiente",
+            "fontSize": 28
+          },
+          {
+            "id": "blade0",
+            "type": "rect",
+            "width": 20,
+            "height": 70,
+            "fill": "#73B2A8",
+            "transform": {
+              "x": 75,
+              "y": 75,
+              "rotation": 0
+            },
+            "parentId": "fan",
+            "anchor": {
+              "x": 0.5,
+              "y": 1
+            }
+          },
+          {
+            "id": "blade1",
+            "type": "rect",
+            "width": 20,
+            "height": 70,
+            "fill": "#73B2A8",
+            "transform": {
+              "x": 75,
+              "y": 75,
+              "rotation": 120
+            },
+            "parentId": "fan",
+            "anchor": {
+              "x": 0.5,
+              "y": 1
+            }
+          },
+          {
+            "id": "blade2",
+            "type": "rect",
+            "width": 20,
+            "height": 70,
+            "fill": "#73B2A8",
+            "transform": {
+              "x": 75,
+              "y": 75,
+              "rotation": 240
+            },
+            "parentId": "fan",
+            "anchor": {
+              "x": 0.5,
+              "y": 1
+            }
+          },
+          {
+            "id": "sun",
+            "type": "ellipse",
+            "width": 130,
+            "height": 130,
+            "fill": "#E8BC59",
+            "transform": {
+              "x": 940,
+              "y": 300
+            },
+            "tracks": [
+              {
+                "property": "scaleX",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 0.7,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 0.9,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 10,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  }
+                ]
+              },
+              {
+                "property": "scaleY",
+                "keyframes": [
+                  {
+                    "t": 0,
+                    "value": 0.7,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 3,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 7,
+                    "value": 0.9,
+                    "ease": "easeInOut"
+                  },
+                  {
+                    "t": 10,
+                    "value": 1,
+                    "ease": "easeInOut"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "close",
+            "type": "text",
+            "width": 1100,
+            "height": 45.0,
+            "fill": "#163E50",
+            "transform": {
+              "x": 65,
+              "y": 175
+            },
+            "text": "Progettare, misurare, migliorare.",
+            "fontSize": 30
+          }
+        ],
+        "camera": {
+          "keyframes": [
+            {
+              "t": 0,
+              "x": 640,
+              "y": 360,
+              "zoom": 1.05
+            },
+            {
+              "t": 9,
+              "x": 640,
+              "y": 360,
+              "zoom": 1,
+              "ease": "easeInOut"
+            }
+          ]
+        }
+      },
+      "timing": {
+        "kind": "manual-duration",
+        "duration": 10,
+        "word_alignment": false
+      }
+    }
+  ],
+  "infographic": {
+    "version": 1,
+    "scene_format_version": 2,
+    "durations": [
+      10,
+      10,
+      10
+    ],
+    "transition": "fade",
+    "sfx": "none",
+    "options": {
+      "format": "16:9",
+      "duration": 30,
+      "scenes": 3,
+      "voice": false,
+      "music": "none",
+      "images": "provided",
+      "animation_engine": "motion"
+    }
+  }
+}
