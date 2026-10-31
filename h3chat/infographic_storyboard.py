@@ -22,6 +22,7 @@ I gruppi principali possono avere parallax0..2:0 sfondo fisso/HUD,1 movimento no
 anchor x,y da0a1. Colori solo #RRGGBB oppure none. Testo tramite text, fontFamily Manrope,Cormorant,BebasNeue,Baloo2,Caveat,Bangers, fontSize8..400.
 Tracce: property x,y,scaleX,scaleY,rotation,opacity,fill,stroke,strokeWidth,visible,text,barValue,pathDraw.
 keyframes ordinati con t in secondi entro duration, value, ease linear/easeIn/easeOut/easeInOut/step.
+Una traccia mantiene il suo primo valore anche prima del primo keyframe e l'ultimo dopo la fine. Una proprietà senza traccia usa il valore base. Per entrate ritardate metti opacity0 nel primo keyframe e opacity1 alla fine dell'entrata: niente duplicati o lampi prima dell'inizio.
 bar/counter: value,maxValue,unit. path: tracciato SVG statico. Nessun testo dentro un path.
 counter.text è un prefisso oppure contiene il segnaposto {value}, sostituito dal numero; unit è il suffisso. Anima barValue con keyframe per barre/contatori richiesti animati: non lasciare contatori sempre a0. I titoli possono essere HUD con parallax0; riserva comunque coordinate locali corrette e spazio ai testi.
 camera.keyframes: t,x,y,zoom,ease. Camera centrata sul viewport, zoom1 iniziale, movimenti morbidi senza tagliare testi.

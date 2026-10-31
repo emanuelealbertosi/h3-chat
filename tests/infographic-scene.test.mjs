@@ -26,6 +26,12 @@ test('bad IDs, active properties, nonfinite values and invalid timestamps are re
  }
  assert.throws(()=>evaluateSceneAt(fixture(),Infinity),/time/);
 });
+
+test('delayed entrances hold the first key value without a visible flash',()=>{
+ const scene=fixture(),object=scene.objects[0];object.transform.opacity=1;object.tracks=object.tracks.filter(t=>t.property!=='opacity');object.tracks.push({property:'opacity',keyframes:[{t:7.4,value:0},{t:8.2,value:1}]});
+ assert.equal(evaluateSceneAt(scene,0).objects[0].opacity,0);assert.equal(evaluateSceneAt(scene,5).objects[0].opacity,0);assert.ok(Math.abs(evaluateSceneAt(scene,7.8).objects[0].opacity-.5)<1e-6);assert.equal(evaluateSceneAt(scene,10).objects[0].opacity,1);
+ assert.equal(evaluateSceneAt(scene,5).objects[0].y,object.transform.y);
+});
 test('new scenes preserve all 200 objects beyond the legacy animation node cap',()=>{
  const scene=fixture(),object=scene.objects[0];scene.objects=Array.from({length:200},(_,i)=>({...structuredClone(object),id:'rack_'+i}));
  assert.equal(evaluateSceneAt(scene,4.5).objects.length,200);

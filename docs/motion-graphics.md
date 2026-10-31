@@ -9,6 +9,9 @@ del prompt prevalgono; allegati e fonti RAG selezionati restano nel contesto.
 Il modello produce esclusivamente dati JSON validati. Nessun JavaScript generato
 viene eseguito. Lo stesso valutatore temporale produce anteprima, seek e MP4:
 i keyframe della versione2 non vengono compressi o troncati come nodi legacy.
+Le tracce mantengono il primo valore prima del primo keyframe e l'ultimo dopo
+l'ultimo; le proprietà senza tracce usano il valore base. Così un ingresso
+ritardato da opacità0 non mostra l'oggetto prima del suo avvio.
 La camera supporta pan/zoom; `parallax` dei gruppi principali varia da0 a2.
 I grafici numerici restano deterministici; dati inventati per una dimostrazione
 devono essere esplicitamente indicati come illustrativi.

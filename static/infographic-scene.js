@@ -61,7 +61,7 @@
   if(typeof a==='string'&&typeof b==='string'&&/^#[0-9a-f]{6}$/i.test(a)&&/^#[0-9a-f]{6}$/i.test(b))return '#'+[1,3,5].map(i=>Math.round(parseInt(a.slice(i,i+2),16)+(parseInt(b.slice(i,i+2),16)-parseInt(a.slice(i,i+2),16))*p).toString(16).padStart(2,'0')).join('');
   return p<1?a:b;
  }
- function at(keys,t,base){if(!keys.length||t<keys[0].t)return base;let left=keys[0];for(let i=1;i<keys.length;i++){const right=keys[i];if(t<right.t)return interpolate(left.value,right.value,ease((t-left.t)/(right.t-left.t),right.ease??'linear'));left=right;}return left.value;}
+ function at(keys,t,base){if(!keys.length)return base;if(t<keys[0].t)return keys[0].value;let left=keys[0];for(let i=1;i<keys.length;i++){const right=keys[i];if(t<right.t)return interpolate(left.value,right.value,ease((t-left.t)/(right.t-left.t),right.ease??'linear'));left=right;}return left.value;}
  function evaluateValidated(scene,seconds){
   const t=Math.min(scene.duration,Math.max(0,seconds));
   const objects=scene.objects.map(o=>{const state={...defaults,...o.transform,id:o.id,visible:o.visible??true,fill:o.fill??'#24C4D8',stroke:o.stroke??'none',strokeWidth:o.strokeWidth??0,text:o.text??'',barValue:o.value??0,pathDraw:1};for(const track of o.tracks??[])state[track.property]=at(track.keyframes,t,state[track.property]);return state;});
@@ -109,7 +109,7 @@
   const state=apply(doc,seconds),cache=ensure(doc),byId=new Map(state.objects.map(o=>[o.id,o])),viewport=cache.svg.getBoundingClientRect(),errors=[],texts=[];
   for(const [id,node] of cache.nodes){if(!['text','counter'].includes(node.object.type))continue;let opacity=1,visible=true,current=node;
    while(current){const s=byId.get(current.object.id);opacity*=s.opacity;visible&&=s.visible;current=current.object.parentId?cache.nodes.get(current.object.parentId):null;}
-   if(!visible||opacity<.05)continue;const rect=node.shape.getBoundingClientRect();if(rect.width<.1||rect.height<.1)continue;
+   if(!visible||opacity<.95)continue;const rect=node.shape.getBoundingClientRect();if(rect.width<.1||rect.height<.1)continue;
    const x=(rect.left-viewport.left)*cache.scene.width/viewport.width,y=(rect.top-viewport.top)*cache.scene.height/viewport.height,w=rect.width*cache.scene.width/viewport.width,h=rect.height*cache.scene.height/viewport.height;
    if(x< -2||y< -2||x+w>cache.scene.width+2||y+h>cache.scene.height+2)errors.push(id+': testo fuori dal viewport a '+seconds.toFixed(2)+'s (x='+Math.round(x)+', y='+Math.round(y)+', larghezza='+Math.round(w)+', altezza='+Math.round(h)+'). Correggi coordinate locali e anchor del testo/gruppo o riserva spazio alla camera; non tagliare il testo.');
    for(const other of texts){const area=Math.max(0,Math.min(rect.right,other.rect.right)-Math.max(rect.left,other.rect.left))*Math.max(0,Math.min(rect.bottom,other.rect.bottom)-Math.max(rect.top,other.rect.top));if(area>Math.min(rect.width*rect.height,other.rect.width*other.rect.height)*.35)errors.push(id+' e '+other.id+': testi sovrapposti a '+seconds.toFixed(2)+'s. Sposta gli oggetti o unisci le tracce nello stesso oggetto, senza duplicare contatori o etichette.');}

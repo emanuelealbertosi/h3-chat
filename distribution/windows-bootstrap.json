@@ -1,7 +1,7 @@
 {
   "archive": "windows-bootstrap.zip",
-  "size": 3851076,
-  "sha256": "af2c522130da1e92dc97f7fe6e088f255a3c249606fd9e1ff8e128df8f92ed19",
+  "size": 3851101,
+  "sha256": "d5c249933e2ab4cfb5426c40be088148f1670c7a0f48a058b9bc2622378fbb52",
   "sources": {
     "ui/account-session.js": "7c93a887736f45621c9349d5fc78b4629c45aaf487a0a1b660241eeabbbb19e0",
     "ui/agent-computer.js": "2f768c398634288d28830ab8eb583b9a99d3b776fcef143e45c25f5eef761f0f",
@@ -138,7 +138,7 @@
     "scripts/Launcher.cs": "806ae2fed5c690ba6d2680883ab103ed22b99dff9a74ab46ef5970b8238bca87",
     "native/sd-worker.cpp": "6e22512ed110010243b9b31ee423e3c0adcf26476ab358383e842d584f9bb40e",
     "static/infographic-motion.js": "2c43f0bd8652d51fb57a107c7f690670264f7c92837fe437f0f9fc7f9a1cd41b",
-    "static/infographic-scene.js": "0fd3bd87c8782187dfc9acafe9c6552df7e8374891b64ef1898920355ab5b515",
+    "static/infographic-scene.js": "f30e5955ae0a2100106433a4c5e8814cde6be87ab17c225131534b309e3dd689",
     "native/vendor/json.hpp": "665fa14b8af3837966949e8eb0052d583e2ac105d3438baba9951785512cf921",
     "native/vendor/SOURCES.json": "c3f694efebaeee97f6e0be07919787151f414408509bc985742ba5237a4fb9ff",
     "native/vendor/srt.py": "26c30c92f3b6624d6f135a2cef0f3065a969a6ccd6eb49b3ff42f20d1319dd3c",
@@ -149,7 +149,7 @@
   "files": {
     "H3-Chat.exe": "58e4ddd79a0433b6b70d39b4afadee85f41cd183a2c9aedf1197ee5fb062d2ea",
     "native/h3-sd-worker.exe": "66fccd074b6334335d37b3d051f17c36d403e67ad69ebd45d2f920bc9868ebca",
-    "static/app.js": "eb9aedb2e47311cf9254145ecef314a5021ac2a39824243ab919c901cfae370b",
+    "static/app.js": "b06801cbb14641fcaeed4e686b30abba0a212ebac73b796cbd2d8a6cba55c5b4",
     "static/vendor/fonts/KaTeX_AMS-Regular.ttf": "68534840bcfdd2bffb6f0e8deb48684dd01e7f04ea2813267577afb906de1d13",
     "static/vendor/fonts/KaTeX_AMS-Regular.woff": "30da91e84c893f875e252689faebdc590b2871145e8adc7f9a9d4dbd8ce0b251",
     "static/vendor/fonts/KaTeX_AMS-Regular.woff2": "0cdd387c9590a1a9f9794560022dbb59654a7d86f187aa0c81495ad42d3a7308",
@@ -211,7 +211,7 @@
     "static/vendor/fonts/KaTeX_Typewriter-Regular.woff": "e14fed02b1aba7ce9f5afd5844b5d0321b22351febc720e0de8b8723527609f7",
     "static/vendor/fonts/KaTeX_Typewriter-Regular.woff2": "71d517d67827787cfabdf186914cc3358eda539e37931941f2b2fd4a21f68c0b",
     "static/vendor/highlight.css": "4164771f545d87f697360d9b1fa176ce8759a9acf83f1c47212aa1c2d2e0d619",
-    "static/vendor/infographic-renderer.js": "bae94e271b23f8976ac33026bbbfcf2e6876d56c72503c4568e9b4c749862e1d",
+    "static/vendor/infographic-renderer.js": "502e0a9122e3cf70dbe0c8e5b7f95dbdaf1820afdfcb80b41ecaa603f92e2714",
     "static/vendor/katex.min.css": "19095127357ed6d29fe0a63a6b000c913a89f7f1963b765dd3715e97c9852e75",
     "native/redist/concrt140.dll": "2405355f0a58067b258f8df33c327e3a3d716eaac5a3a5aebb757842d85bd376",
     "native/redist/msvcp140.dll": "0f885b509a685d2bbfa652fed26b5fb31d88fbdab0a978c641d1c7b8aa460aa9",
