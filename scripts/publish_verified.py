@@ -11,26 +11,20 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-VERSION = '0.19.0'
+VERSION = '0.19.1'
 REPO = 'emanuelealbertosi/h3-chat'
-BASE = 'ea5904026fcc719c10ac36bd5d78d4079adfe1c7'
-JOBS = {40419214432: {121909149948: 'windows', 121909150425: 'macos / macos',
-                      121911260988: 'linux / cpu'},
-        40424369315: {121926356785: 'package'},
-        40428646083: {121940647407: 'kali'}}
+BASE = 'fc7c44e10b3bfe014e722b91dcd0ebc0187b150a'
+JOBS = {41249728720: {124680527649: 'windows', 124680527919: 'macos / macos',
+                      124682254233: 'linux / cpu', 124685992833: 'linux / package',
+                      124687152191: 'linux / kali'}}
 PACKAGES = {
-    'windows': ('zip', 131914859, '29359a36b7a60308c345df9dc395d081b32d3a713ae028fee4083f448bbae067'),
-    'macos': ('zip', 679408105, '5697a2bf648dc216b15b9f943e2cdcdf165afd67cbfd5213e23872e8c35e2276'),
-    'linux': ('tar.gz', 1833508858, 'a4bdfe44b0e2cd65f42250a42e1b0c0b255b36bdf40e6baab03d68f71df04b8c'),
+    'windows': ('zip', 135648962, '651e9da9cafae13e3d77c964fad4b4a2097aefde323c159a39e0429a1d5bbb3d'),
+    'macos': ('zip', 680699482, 'b71e51ad5593b7fe14c0a6fa743083ab62259585aac6912f27ff7536b91a2635'),
+    'linux': ('tar.gz', 1834340874, '33d30caef64cad7f73fa19555cd7f759ab4136e1e916911271aaf66206183a04'),
 }
 ALLOWED_CHANGES = {
-    '.github/workflows/linux.yml', '.github/workflows/publish-verified.yml',
-    '.github/workflows/release.yml',
-    'scripts/check_kali_rootfs.sh', 'scripts/compact_linux_runtime.py',
-    'scripts/install-linux-system.sh', 'scripts/verify_linux_cpu_reuse.py',
-    'scripts/verify_linux_package_reuse.py', 'scripts/publish_verified.py',
-    'tests/test_linux_package.py', 'tests/test_publish_verified.py',
-    'docs/agent.md', 'docs/release-0.19.0-notes.md',
+    '.github/workflows/publish-verified.yml', '.github/workflows/release.yml',
+    'scripts/publish_verified.py',
 }
 
 
@@ -64,21 +58,14 @@ def provenance():
         run = api(f'actions/runs/{run_id}')
         require(run['head_repository']['full_name'] == REPO and run['status'] == 'completed',
                 f'Run {run_id} is incomplete or belongs to another repository.')
-        # The final Linux package job passed; its original Kali environment test
-        # failed and was superseded by the separately pinned successful Kali run.
-        if run_id != 40424369315:
-            require(run['conclusion'] == 'success', f'Run {run_id} did not pass.')
+        require(run['conclusion'] == 'success' and run['head_sha'] == BASE,
+                f'Run {run_id} did not pass on the verified application revision.')
         jobs = {j['id']: j for j in api(f'actions/runs/{run_id}/jobs?per_page=100')['jobs']}
         for job_id, name in expected.items():
             job = jobs.get(job_id, {})
-            require(job.get('name') == name and job.get('conclusion') == 'success',
+            require(job.get('name') == name and job.get('conclusion') == 'success'
+                    and job.get('head_sha') == BASE,
                     f'Required job {job_id} ({name}) did not pass.')
-        if run_id == 40419214432:
-            require(run['head_sha'] == BASE, 'Unexpected application build revision.')
-        elif run_id == 40424369315:
-            require(run['head_sha'] == '7371d69a3689766d60d309733fdadaab4e8e6b7c', 'Unexpected Linux package revision.')
-        else:
-            require(run['head_sha'].startswith('1c7e59f'), 'Unexpected Kali test revision.')
     print('Pinned Windows, Mac, Ubuntu, package and Kali jobs passed; application sources unchanged.', flush=True)
 
 
@@ -102,7 +89,12 @@ def verify_zip(path):
             with archive.open('H3-Chat/' + name) as stream:
                 require(hashlib.file_digest(stream, 'sha256').hexdigest() == digest,
                         'Invalid ZIP member hash: ' + name)
-        for name in ('app.py', 'h3chat/agent_runtime.py', 'h3chat/agent_planning.py', 'h3chat/image_options.py'):
+        for name in ('app.py', 'h3chat/__init__.py', 'h3chat/agent_runtime.py',
+                     'h3chat/agent_planning.py', 'h3chat/image_options.py',
+                     'h3chat/infographic_scene.py', 'h3chat/infographic_storyboard.py',
+                     'h3chat/motion_sprites.py', 'h3chat/posters.py', 'h3chat/downloads.py',
+                     'static/infographic-scene.js', 'static/infographic-motion.js',
+                     'native/infographic-worker.py', 'ui/posters.js', 'runtimes.json'):
             require(archive.read('H3-Chat/' + name).replace(b'\r\n', b'\n') ==
                     (ROOT / name).read_bytes().replace(b'\r\n', b'\n'), 'Packaged source differs: ' + name)
     return len(manifest)
@@ -166,7 +158,7 @@ def publish(folder):
     subprocess.run(['git', 'push', 'origin', sha + ':refs/heads/main'], cwd=ROOT, check=True)
     require(api('git/ref/heads/main')['object']['sha'] == sha, 'Main was not updated to the verified revision.')
     release = api('releases', 'POST', {'tag_name': tag, 'target_commitish': sha,
-        'name': 'H3-Chat ' + VERSION, 'body': (ROOT / 'docs/release-0.19.0-notes.md').read_text(),
+        'name': 'H3-Chat ' + VERSION, 'body': (ROOT / 'docs/release-0.19.1.md').read_text(),
         'draft': True, 'prerelease': False})
     print('Created draft release', release['id'], 'at', sha, flush=True)
     for path in files:
