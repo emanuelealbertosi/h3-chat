@@ -58,6 +58,7 @@ import {openUpscale,renderUpscaleSettings} from './upscale.js';
 import {openVideoRemix,renderRemixSettings} from './video-remix.js';
 
 import {initRequestSettings} from './request-settings.js';
+import {initGenerationPresets} from './generation-presets.js';
 import {initRequestExtras} from './request-extras.js';
 const $=s=>document.querySelector(s);
 const chatScroll=initChatScroll($('#scroll-area'),$('#messages'));
@@ -128,7 +129,7 @@ const studyUI=initStudy({getState:()=>state,getAttachments:()=>attachments,onImp
   if(!current){if(!project)throw Error('Seleziona prima un progetto.');const fresh=await api('/chats',{project_id:project});current=fresh.id;chat=fresh;}
   const result=await api('/chats/'+current+'/study-import',body);queuedCanvasJob(result,current,'Studio · importazione fonte in coda');await refresh();
 }});
-const slideImages=initSlideImages({api});
+const slideImages=initSlideImages({api,getChatId:()=>current});
 const slideBackgrounds=initSlideBackgrounds({api,getState:()=>state,notify:toast,onRecipe:prompt=>{$('#prompt').value=prompt;$('#prompt').dispatchEvent(new Event('input',{bubbles:true}));}});
 const slideImageLots=initSlideImageLots({api,getState:()=>state,getProjectId:()=>current?chat?.project_id:project,onConfigureVision:async()=>{const id=state.settings.chat_model;await openSettings('providers');document.querySelector('[data-provider-vision="'+id+'"]')?.click();},onGenerate:async body=>{
  requireMediaMode();await chatModels.wait();if(userJob())throw Error('Attendi o interrompi il lavoro corrente.');if(!current)await newChat();await persistCanvas();
@@ -137,6 +138,7 @@ const slideImageLots=initSlideImageLots({api,getState:()=>state,getProjectId:()=
 const slideColors=initSlideColors();
 const slideBackgroundPicker=initSlideBackgroundPicker({api,getState:()=>state});
 const presentationPreferences=initPresentationPreferences({api,getState:()=>state,notify:toast,adapters:{slides:slidePreferencesAdapter(slideBackgroundPicker,()=>composerUI?.render(),slideImages),backgrounds:slideBackgrounds.preferences}});
+const generationPresets=initGenerationPresets({api,getChatId:()=>current,notify:toast,apply:async draft=>{await applyRequestDraft(draft,{preset:true});for(const id of ['settings','prompt-mode-settings','prompt-options'])if($('#'+id)?.open)$('#'+id).close();}});
 async function executeArtifact(lang,source){if(activeJob())throw Error('Attendi o interrompi il lavoro corrente.');if(!current)await newChat();const ragRequest=projects.read();await api('/chats/'+current+'/messages',{prompt:lang.startsWith('manim')?'Renderizza questa scena Manim':'Esegui questo calcolo con l’interprete',lab:lang.startsWith('manim')?'manim':'calculate',lab_source:source,canvas:canvasOpen,...ragRequest});projects.submitted(ragRequest);await refresh();}
 function localCard(model){
   const m=model;
@@ -283,7 +285,11 @@ async function reloadRequest(message){
     await openVideoEdit({api,chatId:current,source:draft.video_edit.source,busy:()=>!!activeJob(),onQueued:async()=>{await refresh();},pickFile:(path,callback)=>localModels.pickFile(path,callback),initialEdit:draft.video_edit,initialReferences:draft.media.filter(m=>m.mime?.startsWith('image/')),initialModel:draft.controls.video_model,initialParameters:draft.controls.video_parameters,initialSteps:draft.controls.video_steps,initialAssistant:draft.controls.assistant,segmentSeconds:draft.video_edit.segment_seconds});
     toast('Modifica originale recuperata: clip, riferimenti e impostazioni sono pronti.');return;
   }
-  $('#prompt').value=draft.prompt;attachments=[...(draft.media||[])];
+  await applyRequestDraft(draft);
+}
+async function applyRequestDraft(draft,{preset=false}={}){
+  requestSettings.apply(draft.parameters);state=requestSettings.current(state);
+  if(!preset){$('#prompt').value=draft.prompt;attachments=[...(draft.media||[])];}
   if(draft.agent)agentUI.apply(draft.agent);
   $('#lab-tool').value=draft.background_batch?'slides':draft.lab||'auto';
   visualControls.set(draft.controls||{});loraUI.setSelections(draft.loras||[]);
@@ -295,16 +301,17 @@ async function reloadRequest(message){
     if(slides.count==='auto')delete slides.count;
     presentationPreferences.apply('slides',slides);
   }
+  slideImages.applyReuse(preset?null:draft.slide_image_reuse);
   if(draft.infographic)infographicsUI?.set(draft.infographic);
   slideBackgrounds.set(draft.background_batch||null);
   requestExtras.set(draft);
-  if(draft.rag)projects.set(draft.rag);
+  if(draft.rag)projects.set(preset?{...projects.read({validate:false}),...draft.rag}:draft.rag);
   if(draft.think_level!=null)$('#think-level').value=draft.think_level;
   $('#lab-tool').dispatchEvent(new Event('change',{bubbles:true}));
-  if(!!draft.canvas!==canvasOpen)await toggleCanvas(!!draft.canvas);
+  if(!preset&&!!draft.canvas!==canvasOpen)await toggleCanvas(!!draft.canvas);
   renderStatus();
   renderAttachments();composerUI?.render();focusPrompt();
-  toast((draft.warnings?.length?draft.warnings.join(' ')+' ':'')+'Richiesta caricata. Modificala e premi Invia.');
+  if(!preset)toast((draft.warnings?.length?draft.warnings.join(' ')+' ':'')+'Richiesta caricata. Modificala e premi Invia.');
 }
 
 async function renderChat(){
@@ -383,6 +390,7 @@ async function renderChat(){
     renderAgentRun(content,{message,latest:!message.meta.agent||latestAgents.get(message.meta.agent.id)===message.id,api,chatId:current,busy:()=>!!userJob(),onChanged:()=>refresh(),notify:toast,readLimits:()=>agentUI.read(),openArtifact:async id=>{try{await selectCanvasArtifact(id);await toggleCanvas(true);}catch(error){toast(error.message,true);}}});
     appendVideoResume(actions,{api,message,chatId:current,busy:()=>!!userJob(),onQueued:()=>refresh(),notify:toast});
     if(message.role==='user'){const repeat=document.createElement('button');repeat.className='text-button';repeat.textContent='Riutilizza';repeat.onclick=act(()=>reloadRequest(message));actions.append(repeat);}
+    if(message.role==='assistant'&&!pending&&state.video_options?.request_draft){const save=document.createElement('button');save.className='text-button';save.textContent='Salva preset';save.onclick=act(()=>generationPresets.save(message));actions.append(save);}
     if(message.role==='assistant'&&!pending&&!['failed','interrupted','cancelled'].includes(message.status)){const reload=document.createElement('button');reload.className='text-button';reload.textContent='Ricarica richiesta';reload.disabled=!state.video_options?.request_draft;reload.onclick=act(()=>reloadRequest(message));actions.append(reload);}
     collapseInput(article,message);
   }
@@ -403,7 +411,7 @@ async function uploadFiles(files){
 }
 async function send(event){event.preventDefault();if(userJob())return;const prompt=$('#prompt').value.trim();if(!prompt)return;
   $('#send').disabled=true;
-  try{await chatModels.wait();if(!current){const fresh=await api('/chats',{collection_id:collection,project_id:project});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);manimPresentation?.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
+  try{await chatModels.wait();if(!current){const fresh=await api('/chats',{collection_id:collection,project_id:project});requestSettings.migrateNew(fresh.id);requestExtras.migrateNew(fresh.id);loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);manimPresentation?.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
     if($('#lab-tool').value==='agent'||/^\s*(?:agent|agente)\s*:/i.test(prompt)){
       await persistCanvas();const options=agentUI.read(),controls=visualControls.request(),ragRequest=projects.read();
       const request={prompt,media:attachments,lab:'agent',agent:options,...ragRequest,web:!!controls.web,...(canvasOpen&&canvas.id?{agent_start_artifact:canvas.id}:{}),...requestExtras.read(),
@@ -525,7 +533,7 @@ async function renderCanvas(){
 }
 async function persistCanvas(){clearTimeout(canvasSaveTimer);if(canvasSaving){await canvasSaving;if(canvasDirty)return persistCanvas();return;}if(!canvasDirty)return;
   canvasSaving=(async()=>{
-    if(!current){const fresh=await api('/chats',{project_id:project});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);manimPresentation?.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
+    if(!current){const fresh=await api('/chats',{project_id:project});requestSettings.migrateNew(fresh.id);requestExtras.migrateNew(fresh.id);loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);manimPresentation?.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
     const id=current,value=structuredClone(canvas),saved=await api('/canvas/'+id,value,'PUT');
     if(current===id){const unchanged=JSON.stringify(canvas)===JSON.stringify(value);transferSlideView(canvas.id,saved.id);canvas.id=saved.id;if(unchanged)canvasDirty=false;await loadCanvasHistory(id);$('#canvas-save-status').textContent=canvasDirty?'Modifiche da salvare':'Salvato sul computer';}
   })();try{await canvasSaving;}finally{canvasSaving=null;}
@@ -759,6 +767,8 @@ composerUI=initComposerPanel({getState:()=>state,visualControls,getAttachments:(
  saveImagePresets:async presets=>{const settings=await api('/settings',{moss_presets:presets});state.settings=settings;if(settingsDraft)settingsDraft.moss_presets=structuredClone(settings.moss_presets);}});
 infographicsUI=initInfographics({api,getState:()=>state,getAttachments:()=>attachments,uploadVideo:uploadFiles,notify:toast});
 manimPresentation=initManimPresentation({getAttachments:()=>attachments,getCanvas:()=>canvas,getState:()=>state,getChatId:()=>current,api,notify:toast});
+for(const host of [$('#prompt-mode-settings header'),$('#prompt-options header'),$('#settings header')])if(host){const button=document.createElement('button');button.type='button';button.className='btn small';button.textContent='Preset richieste';button.onclick=act(()=>generationPresets.open());host.insertBefore(button,host.lastElementChild);}
+const presetsOpen=document.createElement('button');presetsOpen.type='button';presetsOpen.className='text-button';presetsOpen.textContent='Preset richieste';presetsOpen.onclick=act(()=>generationPresets.open());$('#prompt-options-open').after(presetsOpen);
 document.querySelector('#composer').addEventListener('change',()=>manimPresentation.render());
 const accountActions=document.createElement('div');accountActions.className='account-actions';accountActions.innerHTML='<a class="settings-button" href="/access">♙ <span>Account e accessi</span></a><button type="button" id="account-logout" class="settings-button">↪ <span>Esci dall’account</span></button>';$('#settings-open').after(accountActions);
 $('#account-logout').onclick=act(async()=>{const button=$('#account-logout');button.disabled=true;try{await logoutAccount({before:async()=>{await presentationPreferences.flush();await persistCanvas();},clear:()=>{clearTimeout(pollTimer);drafts.clear();attachments=[];state=null;chat=null;}});}finally{button.disabled=false;}});

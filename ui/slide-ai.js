@@ -3,15 +3,18 @@ import {labImageDefault} from './lab-image-model.js';
 import {revisionDraft} from './slide-generation-state.js';
 import {initSlideLotPicker} from './slide-image-lots.js';
 
-export function initSlideImages({api}={}){
+export function initSlideImages({api,getChatId=()=>null}={}){
  const holder=document.querySelector('#slides-options');
  holder.insertAdjacentHTML('beforeend',' <label><input type="checkbox" id="slides-generate-images"> Immagini AI · tutte insieme</label> <label id="slides-image-model-label" hidden>Modello immagini <select id="slides-image-model" aria-label="Modello immagini della presentazione"></select></label>');
  const enabled=document.querySelector('#slides-generate-images'),select=document.querySelector('#slides-image-model');
+ const reuse=document.createElement('label');reuse.className='check';reuse.hidden=true;reuse.innerHTML='<input type="checkbox" id="slides-reuse-images"> <span></span>';holder.append(reuse);
+ let source=null;
  enabled.title='Opzionale: prepara il piano, genera tutte le illustrazioni con un solo modello, poi compone le slide. Se disattivato, il flusso attuale resta invariato.';
  enabled.onchange=()=>document.querySelector('#slides-image-model-label').hidden=!enabled.checked;
  const lots=initSlideLotPicker(api);
  let signature='';
- return {lots,read:()=>({...lots.read(),generate_images:enabled.checked,image_model:enabled.checked?select.value:''}),render(state){
+ return {lots,applyReuse(value){source=value?{...value,chat_id:getChatId()}:null;reuse.hidden=!value;reuse.querySelector('input').checked=!!value;reuse.querySelector('span').textContent=value?`Riusa immagini già create (${value.count}) · genera quelle nuove necessarie`:'';},read:()=>({...lots.read(),generate_images:enabled.checked,image_model:enabled.checked?select.value:'',...(enabled.checked&&source&&source.chat_id===getChatId()&&reuse.querySelector('input').checked?{reuse_images_from:source.job_id}:{})}),render(state){
+  reuse.hidden=!source||source.chat_id!==getChatId();reuse.querySelector('input').disabled=!enabled.checked;
   lots.render(state);
   const models=state.models.filter(m=>m.ready&&m.capabilities.includes('create'));
   const next=JSON.stringify(models.map(m=>[m.id,m.name]));if(next===signature)return;signature=next;

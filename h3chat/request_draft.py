@@ -8,9 +8,9 @@ def load(app,chat_id,message_id):
     message=app.store.one('SELECT rowid AS input_rowid,id,role FROM messages WHERE chat_id=? AND id=?',(chat_id,message_id))
     if not message:raise ValueError('Messaggio non trovato in questa chat.')
     if message['role']=='assistant':
-        row=app.store.one('SELECT payload FROM jobs WHERE chat_id=? AND message_id=? ORDER BY created DESC LIMIT 1',(chat_id,message_id))
+        row=app.store.one('SELECT id,payload FROM jobs WHERE chat_id=? AND message_id=? ORDER BY created DESC LIMIT 1',(chat_id,message_id))
     else:
-        row=app.store.one("SELECT payload FROM jobs WHERE chat_id=? AND json_extract(payload,'$.until')=? ORDER BY created DESC LIMIT 1",(chat_id,message['input_rowid']))
+        row=app.store.one("SELECT id,payload FROM jobs WHERE chat_id=? AND json_extract(payload,'$.until')=? ORDER BY created DESC LIMIT 1",(chat_id,message['input_rowid']))
     if not row:raise ValueError('La richiesta originale non è disponibile.')
     payload=json.loads(row['payload']);settings=payload['settings']
     controls={name:settings.get(key,default) for name,key,default in (
@@ -59,9 +59,13 @@ def load(app,chat_id,message_id):
     if settings.get('_video_remix'):
         remix=settings['_video_remix'];operation={'kind':'remix','options':{k:v for k,v in remix.items() if k not in ('runtime','video')}}
     if settings.get('_video_recreate'):operation={'kind':'recreate',**settings['_video_recreate']}
+    reuse=None
+    if settings.get('_slides'):
+        from .slide_image_reuse import offer
+        reuse=offer(app,chat_id,row['id'])
     return {'prompt':backgrounds['prompt'] if backgrounds else payload['prompt'],'media':media,'canvas':bool(payload.get('canvas')),**extra,
             'operation':operation,
-            'parameters':parameters,'warnings':warnings,'think_level':settings.get('think_level','off'),
+            'parameters':parameters,'warnings':warnings,'think_level':settings.get('think_level','off'),'slide_image_reuse':reuse,
             'rag':{'rag':settings.get('_rag',settings.get('rag_enabled',True)),'rag_sources':settings.get('_rag_sources'),'rag_top_k':settings.get('rag_top_k',6)},
             'background_batch':backgrounds.get('options') if backgrounds else None,'image_lot':settings.get('_image_lot'),
             'voice_parts':[{'text':p['text'],'voice_fields':p.get('voice_fields',{})} for p in settings.get('_voice_parts',[])],

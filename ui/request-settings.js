@@ -11,7 +11,7 @@ export function initRequestSettings({getChatId,onClear}){
  function render(){note.hidden=!read();label.textContent='Impostazioni recuperate dalla richiesta · modificabili · predefiniti invariati.';}
  clear.onclick=()=>{save(null);render();onClear?.();};
  return {
-  read,apply(value){save(value);render();},render,
+  read,apply(value){save(value);render();},render,migrateNew(id){const value=read();if(value)localStorage.setItem('h3.request-settings.'+id,JSON.stringify(value));localStorage.removeItem(key());},
   state(value){base=structuredClone(value.settings);render();return {...value,settings:overlay(base)};},
   current(value){render();return base?{...value,settings:overlay(base)}:value;},
   request(path,body){return body&&getChatId()&&path.startsWith('/chats/'+getChatId()+'/')&&/\/(messages|slide-backgrounds|image-lots|video-edit|upscale|video-remix)$/.test(path)&&read()?{...body,request_settings:structuredClone(read())}:body;},

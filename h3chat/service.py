@@ -591,6 +591,9 @@ class Service:
             slide_defaults=slides_edit_options(prompt,current_canvas['content']) if editing_slides and lab=='auto' else body.get('slides')
             lab='slides'
             settings['_slides']=slide_defaults if editing_slides and slide_defaults and body.get('lab','auto')=='auto' else slides_options(prompt,slide_defaults)
+            if settings['_slides'].get('reuse_images_from') and settings['_slides'].get('generate_images'):
+                from .slide_image_reuse import resolve as resolve_reuse_images
+                resolve_reuse_images(self,chat_id,settings['_slides']['reuse_images_from'])
             from .slide_background_style import resolve as resolve_backgrounds
             settings['_slide_background_assets']=resolve_backgrounds(self,settings['_slides'].get('background_style'),current_canvas.get('media',[]) if editing_slides else [])
             if settings['_slides'].get('image_source')=='lots':

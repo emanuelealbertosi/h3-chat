@@ -53,6 +53,19 @@ try{
  await page.locator('#composer').evaluate(e=>e.requestSubmit());const batch=(await backgroundSending).postDataJSON();await page.waitForFunction(()=>!document.querySelector('#send').disabled);
  assert.equal(batch.options.name,'Cornici recuperate');assert.equal(batch.options.margin,6);assert.equal(batch.options.variants,4);assert.equal(batch.options.seed,41);
  draft={...common,lab:'auto'};await clickReload();sent=await send();assert.equal(sent.lab,'auto');assert.equal(sent.image_lot,undefined);
+ // Reuse is explicit for a reloaded request and absent after clearing it.
+ draft={...common,lab:'slides',slides:{count:3,format:'16:9',generate_images:true},slide_image_reuse:{job_id:'a'.repeat(32),count:2}};
+ await clickReload();sent=await send();assert.equal(sent.slides.reuse_images_from,'a'.repeat(32));
+ await page.locator('[data-mode-settings="slides-options"]').click();await page.locator('#slides-reuse-images').uncheck();await page.locator('#prompt-mode-settings').getByRole('button',{name:'Fatto',exact:true}).click();
+ await page.locator('#prompt').fill('Richiesta originale');sent=await send();assert.equal(sent.slides.reuse_images_from,undefined);await page.locator('#prompt').fill('Richiesta originale');
+ // Named recipes do not replace the current prompt, files or global defaults.
+ const recipe={lab:'slides',parameters:{context:16000},controls:{assistant:false,image_model:'',video:false,music:false,voice:false,transcribe:false},slides:{count:5,format:'9:16',generate_images:false}};
+ const library={version:1,items:[{id:'c'.repeat(32),name:'Le mie slide',kind:'slides',label:'Slide',recipe}]};let saveBody;
+ await page.route('**/api/generation-presets',async route=>{if(route.request().method()==='POST')saveBody=route.request().postDataJSON();await route.fulfill({json:library});});
+ await page.locator('#msg-2').getByRole('button',{name:'Salva preset',exact:true}).click();await page.getByLabel('Nome del preset di generazione').fill('Le mie slide');await page.getByRole('button',{name:'Salva i parametri della richiesta',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#generation-presets [data-save]').hidden);
+ assert.equal(saveBody.action,'save');assert.equal(saveBody.message_id,'2');assert.equal(saveBody.config,undefined);
+ await page.getByLabel('Preset di generazione',{exact:true}).selectOption('c'.repeat(32));await page.getByRole('button',{name:'Usa preset',exact:true}).click();
+ assert.equal(await page.locator('#prompt').inputValue(),'Richiesta originale');sent=await send();assert.equal(sent.slides.count,5);assert.equal(sent.slides.format,'9:16');assert.equal(sent.request_settings.context,16000);assert.equal(sent.slides.reuse_images_from,undefined);
  const after=await page.evaluate(async()=> (await(await fetch('/api/state')).json()).settings);
  assert.equal(after.chat_model,original.chat_model);assert.equal(after.context,original.context);assert.equal(settingsWrites,0);
  await page.locator('#request-settings-note').getByRole('button').click();assert.equal(await page.locator('#chat-model').inputValue(),original.chat_model);

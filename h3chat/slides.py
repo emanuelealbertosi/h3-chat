@@ -124,6 +124,9 @@ def options(prompt, body=None):
     if 'image_model' in body:
         if not isinstance(body['image_model'],str) or len(body['image_model'])>150:raise ValueError('Modello immagini slide non valido.')
         result['image_model']=body['image_model']
+    if body.get('reuse_images_from'):
+        if not isinstance(body['reuse_images_from'],str) or not re.fullmatch('[a-f0-9]{32}',body['reuse_images_from']):raise ValueError('Richiesta di origine delle immagini non valida.')
+        result['reuse_images_from']=body['reuse_images_from']
     if 'image_source' in body:
         if body['image_source'] not in ('auto','generate','lots'):raise ValueError('Origine immagini slide non valida.')
         result['image_source']=body['image_source']

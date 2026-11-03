@@ -14,6 +14,7 @@ STUDIO_FILES=frozenset((
     'static/dialogs.css',
 ))
 NEW_FEATURE_FILES=frozenset((
+    'h3chat/generation_presets.py','h3chat/slide_image_reuse.py','ui/generation-presets.js',
     'ui/work-center.js','ui/request-review.js','ui/slide-editor-actions.js','ui/editor-history-keys.js','static/workflows.css',
     'h3chat/poster_reference.py','h3chat/poster_reference_check.py','native/poster-reference-worker.py',
     'h3chat/video_sequence.py','ui/moss-layout-editor.js','h3chat/request_settings.py','ui/request-settings.js',

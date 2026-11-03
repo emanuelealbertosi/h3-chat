@@ -138,6 +138,9 @@ class Handler(BaseHTTPRequestHandler):
             if access and path.startswith('/api/auth/'):
                 return self.auth_request(path,method)
             if method == "GET":
+                if path=='/api/generation-presets':
+                    from h3chat.generation_presets import load
+                    return self.json(load(self.app))
                 if len(parts)==5 and parts[:2]==['api','chats'] and parts[3]=='agent-runs':
                     from h3chat.agent_state import load,public
                     return self.json(public(load(self.app,parts[2],parts[4])))
@@ -275,6 +278,9 @@ class Handler(BaseHTTPRequestHandler):
                 if len(raw)!=length:raise ValueError('Blocco documento incompleto.')
                 return self.json(self.app.knowledge.uploads.append(parts[2],parts[4],offset,raw))
             body = self.read_body()
+            if path=='/api/generation-presets' and method=='POST':
+                from h3chat.generation_presets import update
+                return self.json(update(self.app,body))
             if path=='/api/motion-sprites' and method=='POST':
                 from h3chat.motion_sprites import save
                 return self.json(save(self.app,body),201)
