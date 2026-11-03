@@ -252,7 +252,7 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                 warm = self.warm_image
                 if kind == 'image' and model.get('engine') == 'vision' and warm:
                     self.warm_image = None
-                    if warm.alive() and warm.worker_backend == ('cpu' if settings['profile']=='cpu' else settings['backend']):
+                    if warm.alive() and (warm.model.get('architecture')=='ph3')==(model.get('architecture')=='ph3') and warm.worker_backend == ('cpu' if settings['profile']=='cpu' else settings['backend']):
                         session = warm
                         session.key, session.kind, session.model = key, kind, model
                         session.files, session.settings = self.model_files(model, settings), dict(settings)
@@ -617,6 +617,10 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
             raise ValueError('Ming, Qwen Image 2.1 e Krea 2 usano CPU oppure CUDA NVIDIA. Scegli il motore adatto nel Setup.')
         python = python_executable(self.root)
         worker = self.root / 'native/vision-worker.py'
+        if model.get('architecture')=='ph3':
+            from .ph3_image import ready
+            if not ready(self.root):raise ValueError('Installa il runtime opzionale P-H3-Image prima di usarlo.')
+            worker=self.root/'native/ph3-worker.py'
         started = time.monotonic()
         with self.process_lock:
             if cancel.is_set():raise Cancelled()

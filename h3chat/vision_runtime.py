@@ -5,7 +5,7 @@ from pathlib import Path
 
 REVISION = '3b4c0b0e457cf0a51cf3038e0a6750d8f96ce251'
 SAMPLERS = ('auto', 'euler', 'euler_ancestral', 'heun', 'dpm_2', 'dpmpp_2m', 'dpmpp_2m_sde', 'dpmpp_sde', 'res_multistep', 'lcm')
-SCHEDULERS = ('auto', 'simple', 'normal', 'karras', 'exponential', 'sgm_uniform', 'ddim_uniform', 'beta', 'linear_quadratic', 'kl_optimal', 'qwen21_turbo')
+SCHEDULERS = ('auto', 'simple', 'normal', 'karras', 'exponential', 'sgm_uniform', 'ddim_uniform', 'beta', 'linear_quadratic', 'kl_optimal', 'qwen21_turbo','ph3_image')
 
 
 def status(root):
@@ -30,6 +30,8 @@ def validate_options(model, options):
         raise ValueError('Sampler o scheduler non supportato da Ming / Qwen Image 2.1 / Krea 2. Usa Euler e Simple oppure i valori disponibili per questo modello.')
     from .qwen_image21 import validate_schedule
     validate_schedule(model.get('architecture'),options)
+    from .ph3_image import validate as validate_ph3
+    validate_ph3(model,options)
     # MOSS uses actual img2img latent blending. Other native Edit models use
     # reference-conditioned generation and retain their full denoise schedule.
     if model.get('architecture')=='moss':

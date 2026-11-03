@@ -11,6 +11,8 @@ from .models import metadata
 from .image_options import SAMPLERS, SCHEDULERS
 
 PROFILES = {
+    'ph3-image': {'label':'P-H3-Image · Pruna, immagini ed editing in 8 passi','main':'diffusion','required':['diffusion','llm','vae'],'optional':['upsampler'],
+        'architecture':'ph3','engine':'vision','capabilities':['create','edit'],'max_refs':8,'steps':8,'cfg':1,'width':2048,'height':2048,'sampler':'euler','scheduler':'ph3_image','strength':1},
     'fasth3-omni': {'label':'FastH3 Omni · riferimenti, video e audio in 8 passi','main':'diffusion','required':['diffusion','llm','vae','audio_vae'],'optional':[],
                    'default_files':{'diffusion':'fasth3_omniref_8step_pruned_int8_convrot.safetensors','llm':'qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors','vae':'minimax_h3_video_vae_int8_convrot.safetensors','audio_vae':'minimax_h3_audio_vae_fp32.safetensors'},
                    'architecture':'minimax-h3','engine':'video','capabilities':['video'],'max_refs':9,'checkpoint_family':'fasth3-omni'},
@@ -49,7 +51,7 @@ PROFILES = {
     'qwen-edit': {'label':'Qwen Image Edit · diffusore + componenti','main':'diffusion','required':['diffusion','llm','llm_vision','vae'],'optional':[],
                   'architecture':'qwen-edit','capabilities':['create','edit'],'max_refs':3,'cfg':2.5},
 }
-ROLE_LABELS = {'model':'Pesi del modello','diffusion':'Diffusore','mmproj':'Proiettore vision (mmproj)',
+ROLE_LABELS = {'upsampler':'Espansore prompt P-H3 (opzionale)','model':'Pesi del modello','diffusion':'Diffusore','mmproj':'Proiettore vision (mmproj)',
                'tokenizer':'Tokenizer musicale','model_config':'Configurazione YuE2','generation_config':'Preset YuE2','vae_config':'Configurazione VAE audio',
                'vae':'VAE immagini / video','audio_vae':'VAE audio MiniMax H3','llm':'Encoder testo / immagini del modello','llm_vision':'Encoder vision'}
 EXTENSIONS = {'.gguf','.safetensors'}

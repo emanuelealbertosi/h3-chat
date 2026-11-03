@@ -29,7 +29,7 @@ def image_brief(model):
         schema = {'type':'object','properties':{'tags':{'type':'array','items':{'type':'string'},'minItems':1}},
                   'required':['tags'],'additionalProperties':False}
         return f'Target image model family: {family}.\n' + TAG_BRIEF, schema
-    target = {'ming':'Ming Image','qwen21':'Qwen Image 2.1','krea2':'Krea 2','qwen-edit':'Qwen Image Edit','flux2':'FLUX.2','moss':'MOSS-Image'}.get(model.get('architecture'),'the selected image model')
+    target = {'ph3':'P-H3-Image','ming':'Ming Image','qwen21':'Qwen Image 2.1','krea2':'Krea 2','qwen-edit':'Qwen Image Edit','flux2':'FLUX.2','moss':'MOSS-Image'}.get(model.get('architecture'),'the selected image model')
     schema = {'type':'object','properties':{'prompt':{'type':'string'}},'required':['prompt'],'additionalProperties':False}
     return VISUAL_BRIEF.replace('Ming Image or Qwen Image 2.1', target), schema
 

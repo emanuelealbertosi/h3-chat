@@ -1,6 +1,6 @@
 import {generationRows} from './video-generation-details.js';
 
-const keys=['width','height','steps','cfg','sampler','scheduler','seed','negative_prompt','strength','aspect','megapixels','moss_turbo','moss_turbo_previous'];
+const keys=['width','height','steps','cfg','sampler','scheduler','seed','negative_prompt','strength','aspect','megapixels','moss_turbo','moss_turbo_previous','ph3_upsample'];
 export function imageRecipeParameters(recipe){
  if(!recipe?.reusable||recipe.kind!=='image')throw Error(recipe?.warnings?.join(' ')||'Ricetta originale incompleta.');
  const p=recipe.parameters;

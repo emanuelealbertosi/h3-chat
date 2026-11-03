@@ -17,7 +17,7 @@ SCHEDULERS = tuple(dict.fromkeys(SCHEDULERS + VISION_SCHEDULERS))
 
 ASPECTS=('auto','1:1','16:9','9:16','4:3','3:4','3:2','2:3')
 IMAGE_DEFAULT_KEYS=('width','height','steps','image_cfg','image_sampler','image_scheduler','seed','negative_prompt','strength','image_aspect')
-OVERRIDE_KEYS=('width','height','steps','cfg','sampler','scheduler','seed','negative_prompt','strength','aspect','megapixels','moss_turbo','moss_turbo_previous')
+OVERRIDE_KEYS=('width','height','steps','cfg','sampler','scheduler','seed','negative_prompt','strength','aspect','megapixels','moss_turbo','moss_turbo_previous','ph3_upsample')
 MOSS_NEGATIVE_PROMPT = 'low quality, blurry, jpeg artifacts, bad anatomy, malformed hands, extra fingers, missing fingers, extra limbs, distorted face'
 
 
@@ -32,6 +32,7 @@ def configured(model, settings):
             'strength':model.get('strength',settings['strength']),'aspect':settings.get('image_aspect','auto')}
     if model.get('architecture')=='qwen-edit':result['flow_shift']=3
     result.update(settings.get('image_overrides',{}).get(model.get('id',''),{}))
+    if model.get('architecture')=='ph3':result.setdefault('ph3_upsample',True)
     return result
 
 
@@ -50,13 +51,15 @@ def capture_request(model,settings,value):
 
 def apply_aspect(result,prompt='',model=None):
     moss=(model or {}).get('architecture')=='moss'
-    limit=4096 if moss else 1536
-    grid=1 if moss else 64
+    ph3=(model or {}).get('architecture')=='ph3'
+    limit=8192 if ph3 else 4096 if moss else 1536
+    grid=32 if ph3 else 1 if moss else 64
     # Explicit canvas dimensions also override an editing reference's shape.
     dimensions=re.findall(r'(?<!\d)(\d{3,4})\s*[x×*]\s*(\d{3,4})(?!\d)',prompt,re.I)
     if dimensions:
         width,height=map(int,dimensions[-1])
-        if any(n<256 or n>limit or n%grid for n in (width,height)) or (moss and width*height>4_194_304):
+        if any(n<256 or n>limit or n%grid for n in (width,height)) or (moss and width*height>4_194_304) or (ph3 and width*height>16_777_216):
+            if ph3:raise ValueError('P-H3: dimensioni tra 256 e 8192 pixel, multipli di 32 e massimo circa 16 MP.')
             if moss:raise ValueError('MOSS: dimensioni tra 256 e 4096 pixel e massimo circa 4,2 MP. La richiesta non viene ridotta automaticamente.')
             raise ValueError('Dimensioni immagine: scegli da 256 a 1536 pixel, in multipli di 64 (es. 1024x576).')
         divisor=math.gcd(width,height);aspect=f'{width//divisor}:{height//divisor}'
@@ -73,15 +76,15 @@ def apply_aspect(result,prompt='',model=None):
     result['aspect']=aspect;result['preserve_reference_aspect']=aspect=='auto'
     mp=re.findall(r'(?<![\d.])(\d+(?:[.,]\d+)?)\s*(?:MP|megapixel(?:s)?)\b',prompt,re.I)
     target=float(mp[-1].replace(',','.')) if mp else result.get('megapixels')
-    if target is not None and (not isinstance(target,(int,float)) or not math.isfinite(target) or not .25<=target<=4):raise ValueError('Megapixel immagine: scegli da 0,25 a 4 MP.')
-    if moss or target is not None:
+    if target is not None and (not isinstance(target,(int,float)) or not math.isfinite(target) or not .25<=target<=(16 if ph3 else 4)):raise ValueError('Megapixel immagine: fuori intervallo per questo modello.')
+    if moss or ph3 or target is not None:
         area=target*1_000_000 if target is not None else result['width']*result['height']
         a,b=map(int,aspect.split(':')) if aspect!='auto' else (result['width'],result['height'])
         ratio=a/b
         width=math.ceil(math.sqrt(area*ratio)/grid)*grid;height=math.ceil(area/width/grid)*grid
         if moss and aspect!='auto':
             k=math.ceil(math.sqrt(area/(a*b)));width,height=a*k,b*k
-        if max(width,height)>4096:raise ValueError('Formato troppo estremo per i megapixel scelti.')
+        if max(width,height)>(8192 if ph3 else 4096):raise ValueError('Formato troppo estremo per i megapixel scelti.')
         result.update(width=width,height=height,megapixels=area/1_000_000)
         return result
     if aspect!='auto':
@@ -137,14 +140,16 @@ def validate_overrides(value,models=None):
     for ident,settings in value.items():
         if not isinstance(ident,str) or not 1<=len(ident)<=100 or not isinstance(settings,dict) or set(settings)-set(OVERRIDE_KEYS):raise ValueError('Personalizzazione immagine non valida.')
         moss=(models or {}).get(ident,{}).get('architecture')=='moss'
+        ph3=(models or {}).get(ident,{}).get('architecture')=='ph3'
+        if 'ph3_upsample' in settings and type(settings['ph3_upsample']) is not bool:raise ValueError('Espansore P-H3: scegli attivo o disattivo.')
         from .moss_dmd2 import validate as validate_turbo
         validate_turbo(settings,moss if models is not None else None)
-        limit=4096 if moss else 1536
+        limit=8192 if ph3 else 4096 if moss else 1536
         for key,lo,hi in (('width',256,limit),('height',256,limit),('steps',1,100),('seed',-1,2147483647)):
             if key in settings and (type(settings[key]) is not int or not lo<=settings[key]<=hi):raise ValueError(f'{key}: intero tra {lo} e {hi}.')
         for key in ('width','height'):
-            if key in settings and not moss and settings[key]%64:raise ValueError('Le dimensioni devono essere multipli di '+'64.')
-        for key,lo,hi in (('cfg',0,30),('strength',.05,1),('megapixels',.25,4)):
+            if key in settings and not moss and settings[key]%(32 if ph3 else 64):raise ValueError('Le dimensioni non rispettano la griglia del modello.')
+        for key,lo,hi in (('cfg',0,30),('strength',.05,1),('megapixels',.25,16 if ph3 else 4)):
             if key in settings and (type(settings[key]) not in (int,float) or not math.isfinite(settings[key]) or not lo<=settings[key]<=hi):raise ValueError(key+' fuori intervallo.')
         if settings.get('sampler','auto') not in SAMPLERS or settings.get('scheduler','auto') not in SCHEDULERS:raise ValueError('Sampler o scheduler non supportato.')
         if settings.get('aspect','auto') not in ASPECTS:raise ValueError('Formato immagine non valido.')
