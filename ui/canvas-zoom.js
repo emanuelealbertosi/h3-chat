@@ -7,7 +7,12 @@ export function initCanvasZoom(){
  document.querySelector('.canvas-toolbar').append(controls);
  const select=controls.querySelector('select'),expand=controls.querySelector('[data-expand]');let factor=1,expanded=false;
  function layout(){
-  preview.style.width=viewport.clientWidth+'px';preview.style.zoom=String(factor);preview.style.minHeight=viewport.clientHeight/factor+'px';
+  // One scrolling surface owns both axes. Avoid a second inner gutter and
+  // repeated identical writes while polling changes only the hidden attribute.
+  const width=viewport.clientWidth+'px',height=viewport.clientHeight/factor+'px';
+  if(preview.style.width!==width)preview.style.width=width;
+  if(preview.style.zoom!==String(factor))preview.style.zoom=String(factor);
+  if(preview.style.minHeight!==height)preview.style.minHeight=height;
   select.value=String(Math.round(factor*100));controls.querySelector('[data-out]').disabled=factor<=.5;controls.querySelector('[data-in]').disabled=factor>=3;
  }
  function zoom(value){factor=Math.max(.5,Math.min(3,value));layout();}

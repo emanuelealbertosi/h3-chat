@@ -54,3 +54,22 @@ print(json.dumps({'sinc_matches':True,'stereo_average':True,'limits_checked':Tru
             result=subprocess.run([str(ROOT/'runtime/python/python.exe'),'-X','utf8','-c',code,str(ROOT),tmp],capture_output=True,text=True,encoding='utf-8',timeout=120)
             self.assertEqual(result.returncode,0,result.stderr)
             self.assertTrue(json.loads(result.stdout)['sinc_matches'])
+
+
+from h3chat.voice_reference import reference
+
+class ReferenceMigrationTests(unittest.TestCase):
+    def test_italian_stock_replacement_is_explicit_and_never_replaces_custom_audio(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);folder=root/'data/voices';folder.mkdir(parents=True)
+            old=folder/'Spanish_Male.wav';old.write_bytes(b'stock');new=folder/'Italian_Male.wav';new.write_bytes(b'italian')
+            row={'gender':'male','language':'it','from':str(old),'to':str(new),'from_sha256':hashlib.sha256(b'stock').hexdigest(),'reason':'Riferimento italiano corretto'}
+            (folder/'reference-migrations.json').write_text(json.dumps([row]))
+            original={'path':str(old),'transcript':'Spanish'};settings={'voice_references':{'male':original}}
+            self.assertEqual(reference(root,settings,'male'),(original,None))
+            migrated,reason=reference(root,settings|{'_infographic':{'voice':True}},'male')
+            self.assertEqual(migrated['path'],str(new));self.assertTrue(reason)
+            old.write_bytes(b'custom audio')
+            self.assertEqual(reference(root,settings|{'_infographic':{'voice':True}},'male'),(original,None))
+
+if __name__=='__main__':unittest.main()

@@ -1,6 +1,6 @@
 import json,threading,unittest
 from unittest.mock import Mock,patch
-from h3chat.remote_llm import Client,StructuredCompletionError,structured_text
+from h3chat.remote_llm import Client,StructuredCompletionError,structured_text,check_schema
 from h3chat.downloads import Cancelled
 
 SCHEMA={'type':'object','properties':{'content':{'type':'string'},'sources':{'type':'array','items':{'type':'string','enum':['R1']}}},'required':['content','sources'],'additionalProperties':False}
@@ -10,6 +10,10 @@ SETTINGS={'max_tokens':3500,'temperature':.2,'think_level':'off'}
 def reply(text,finish='stop'):return {'choices':[{'message':{'content':text},'finish_reason':finish}]}
 
 class StructuredTests(unittest.TestCase):
+    def test_array_error_identifies_nested_field_count_and_bounds_without_content(self):
+        schema={'type':'object','properties':{'regions':{'type':'array','minItems':1,'maxItems':2}}}
+        with self.assertRaises(ValueError) as error:check_schema({'regions':['private1','private2','private3']},schema)
+        self.assertIn('$.regions',str(error.exception));self.assertIn('ricevuti 3',str(error.exception));self.assertIn('1–2',str(error.exception));self.assertNotIn('private',str(error.exception))
     def test_configured_timeout_also_reaches_transport_socket(self):
         response=Mock();response.read.return_value=b'{}'
         opener=Mock();opener.open.return_value=response

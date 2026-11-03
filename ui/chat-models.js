@@ -23,6 +23,7 @@ export function initChatModels({api,getState,onChange,notify}){
         return group.length?`<optgroup label="${remote?'Provider API':'Sul tuo computer'}">${group.map(model=>`<option value="${esc(model.id)}" ${model.ready===false?'disabled':''}>${esc(modelLabel(model))}${model.ready===false?' · non disponibile':''}</option>`).join('')}</optgroup>`:'';
       }).join('');
     }
+    if(selected&&![...select.options].some(o=>o.value===selected)){const missing=document.createElement('option');missing.value=selected;missing.textContent='Modello della richiesta non disponibile · scegli un altro';missing.disabled=true;select.append(missing);}
     select.value=selected||'';
     select.disabled=!!pending||!models.some(model=>model.ready!==false);
     select.setAttribute('aria-busy',String(!!pending));

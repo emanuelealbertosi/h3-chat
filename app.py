@@ -201,6 +201,9 @@ class Handler(BaseHTTPRequestHandler):
                     return self.json(self.app.hardware())
                 if len(parts) == 3 and parts[:2] == ["api", "chats"]:
                     return self.json(self.app.store.chat(parts[2]))
+                if len(parts)==4 and parts[:2]==['api','chats'] and parts[3]=='study-library':
+                    from h3chat.study_library import listing
+                    return self.json(listing(self.app,parts[2]))
                 if len(parts)==5 and parts[:2]==['api','chats'] and parts[3]=='video-resume':
                     from h3chat.video_job_resume import describe
                     return self.json(describe(self.app,parts[2],message_id=parts[4]))
@@ -344,7 +347,7 @@ class Handler(BaseHTTPRequestHandler):
                 if parts[5]=='resume' and method=='POST':return self.json(resume(self.app,parts[2],parts[4]),202)
                 if parts[5]=='audio' and method=='POST':
                     from h3chat.study_audio import enqueue
-                    return self.json(enqueue(self.app,parts[2],parts[4]),202)
+                    return self.json(enqueue(self.app,parts[2],parts[4],body),202)
             if len(parts)==5 and parts[:2]==['api','chats'] and parts[3:]==['slides','resume'] and method=='POST':
                 from h3chat.slide_resume import enqueue
                 return self.json(enqueue(self.app,parts[2],body),202)

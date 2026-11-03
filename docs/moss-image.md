@@ -1,5 +1,36 @@
 # MOSS-Image opzionale
 
+## Editor visuale del layout
+
+Seleziona un modello **MOSS** in Immagini e premi **Layout immagine**, accanto a
+**Impostazioni Immagini**. La modale ampia consente di disegnare, spostare e
+ridimensionare riquadri; per ciascuno scrivi un **sottoprompt**. I riquadri testo
+hanno due campi: parole esatte da disegnare e descrizione del loro aspetto.
+La descrizione generale definisce sfondo, stile e luce dell'intera immagine.
+Sono disponibili anche annulla/ripeti, ordinamento dei riquadri, un'immagine
+guida sotto la tela e salvataggio/importazione/esportazione dei layout JSON.
+
+**Applica alla chat** prepara il prompt; non genera immagini. Premi poi **Invia**,
+con Assistant acceso o spento. La bozza rimane in questa chat. Riaprendo un prompt
+JSON MOSS già presente puoi modificarne i riquadri. Per gli altri modelli il
+pulsante è disabilitato: non viene promesso un controllo spaziale che il motore
+non supporta. La guida sotto la tela serve per tracciare; non viene allegata
+automaticamente alla generazione. Per img2img allegala anche alla chat.
+
+Il prompt applicato usa la bozza ufficiale `width`, `height`, `abs`/`xyxy`:
+dimensioni e posizioni rimangono accoppiate. Il backend la converte nel formato
+centrato `yxyx` del modello, senza LLM aggiuntivo e senza interpretare seed,
+formati o dimensioni scritti nei sottoprompt come impostazioni tecniche.
+Le dimensioni dichiarate nel layout prevalgono sulla modale; cambia la tela
+dall'editor per ricomporre il layout. Gli elementi fuori tela o senza descrizione
+vengono segnalati prima dell'invio. Le posizioni guidano MOSS e non costituiscono
+una garanzia di fedeltà al pixel. Preferisci non più di 12 elementi principali.
+
+L'editor riusa il core locale di [SwarmUI-LayoutEditor](https://github.com/jambavant/SwarmUI-LayoutEditor),
+licenza MIT, revisione `acdedf42dfb72b2b69914ca6639ecc42d49ad28b`.
+Licenza e impronte dei file sono incluse in `static/vendor/moss-layout`.
+L'adattatore H3 è separato: nessuna dipendenza da SwarmUI o servizi remoti.
+
 MOSS-Image crea immagini da testo e offre **img2img sperimentale con una sola immagine di partenza**. Si seleziona nel menu dei modelli immagini della chat; non sostituisce automaticamente i modelli già scelti. Il modello SFT non è addestrato come un modello Edit: questa modalità ricodifica la foto con il VAE e parte dal suo latente, senza promettere conservazione dell'identità o modifiche semantiche precise.
 
 Per usarlo seleziona MOSS in **Immagini**, allega una foto e scrivi il risultato desiderato. In **Impostazioni Immagini** trovi **Intensità img2img**: 0,65 iniziale, da 0,05 a 1. Valori bassi conservano maggiormente la composizione; 1 riparte dal rumore e può ridisegnare tutto. Il controllo si salva con gli altri parametri della chat e nei preset personali; Undo e Ricarica richiesta lo recuperano. Il prompt prevale, per esempio «intensità 0,35» o «denoise 0.5». Senza allegati il campionamento resta interamente da testo, indipendentemente dall'intensità salvata.

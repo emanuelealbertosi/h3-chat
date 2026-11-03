@@ -3,7 +3,7 @@ import {videoSeed} from './video-seed.js';
 import {bindAttention} from './video-attention.js';
 
 // Request-local model/size/acceleration controls; saved presets stay unchanged.
-export function videoModalOptions(form,data,{parameters={},pickFile,onModel,initialLoras=[],originalSeeds=false}={}){
+export function videoModalOptions(form,data,{parameters={},pickFile,onModel,initialLoras=[],originalSeeds=false,seedChoice}={}){
  const explicitSeed=parameters.seed;
  const models=data.models||[],original=data.model_id||models[0]?.id||'';
  const originalPreset=models.find(m=>m.id===original)?.parameters||{};
@@ -27,7 +27,7 @@ export function videoModalOptions(form,data,{parameters={},pickFile,onModel,init
   const valid=v=>Number.isInteger(v?.seed)&&v.seed>=0&&v.seed<=2147483647;
   return (valid(chosen)?chosen:versions.find(valid))?.seed;
  };
- const seed=videoSeed(host,{label:originalSeeds?'Seed ricreazione':'Seed clip',initial:originalSeeds?undefined:explicitSeed,preset:parameters.seed??-1,original:originalSeeds,referenceSeed});
+ const seed=videoSeed(host,{label:originalSeeds?'Seed ricreazione':'Seed clip',initial:originalSeeds?seedChoice:explicitSeed,preset:parameters.seed??-1,original:originalSeeds,referenceSeed});
  const modelField=q('[name="model"]')?.closest('label');if(modelField)modelField.after(seed.element);else host.prepend(seed.element);
  const library=[...(data.loras||[])];let selected=[...(parameters.loras||[])];
  for(const item of initialLoras){const found=library.find(x=>x.id===item.id);if(found&&item.model_id===original&&!selected.some(x=>x.path===found.path))selected.push({path:found.path,weight:item.weight});}

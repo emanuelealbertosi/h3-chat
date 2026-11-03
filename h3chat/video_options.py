@@ -30,6 +30,8 @@ def capture_request(settings,body,require_model):
     changes=body.get('video_parameters',{})
     if isinstance(changes,dict):changes={k:v for k,v in changes.items() if k!='longtake_enabled'}
     segment_seconds=validate_segment_seconds(body.get('video_segment_seconds'))
+    from .video_sequence import controls as sequence_controls
+    sequence=sequence_controls(body)
     if not isinstance(changes,dict) or set(changes)-set(REQUEST_KEYS):
         raise ValueError('Parametri della richiesta video non validi.')
     if body.get('video') and isinstance(body.get('prompt'),str) and 'attention' not in changes:
@@ -38,13 +40,13 @@ def capture_request(settings,body,require_model):
     if body.get('video') and isinstance(body.get('prompt'),str):
         from .video_batch import prompt_options
         changes=changes|prompt_options(body['prompt'])
-    if not selection and not changes and segment_seconds is None:return settings
+    if not selection and not changes and segment_seconds is None and not sequence:return settings
     if not body.get('video',False):raise ValueError('Seleziona Video per usare le impostazioni video della richiesta.')
     model_id=selection or settings['video_model']
     model=require_model(model_id,'video')
-    if model.get('remote_media') and (set(changes)-{'duration','megapixels','aspect'} or segment_seconds is not None):
+    if model.get('remote_media') and (set(changes)-{'duration','megapixels','aspect'} or segment_seconds is not None or sequence):
         raise ValueError('PDD e accelerazione locale richiedono MiniMax H3 standalone.')
-    result=settings|{'video_model':model_id,'_video_segment_seconds':segment_seconds,
+    result=settings|sequence|{'video_model':model_id,'_video_segment_seconds':segment_seconds,
                      '_video_request':{'model':selection,'parameters':dict(changes)}}
     if 'aspect' in changes:result['_video_aspect']=changes['aspect']
     if changes or segment_seconds is not None:

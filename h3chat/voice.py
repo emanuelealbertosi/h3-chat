@@ -20,9 +20,11 @@ FIELDS={'gender':('female','male'),'pitch':('normal','low','high'),'speed':('nor
 DELIVERIES={'serious':{'emotion':'determination','expressiveness':'low','speed':'normal','temperature':.65},
  'lively':{'emotion':'enthusiasm','expressiveness':'high','speed':'normal','temperature':.75},
  'spot':{'emotion':'enthusiasm','expressiveness':'high','speed':'fast','temperature':.8},
- 'warm':{'emotion':'affection','expressiveness':'high','speed':'normal','temperature':.7},
+ 'warm':{'emotion':'affection','expressiveness':'high','speed':'slow','pitch':'low','temperature':.7},
  'radio':{'emotion':'enthusiasm','expressiveness':'high','speed':'normal','temperature':.7}}
 DEFAULTS.update(voice_engines.DEFAULTS)
+DEFAULTS['voice_profile']='configured'
+FIELDS['profile']=('configured','limpida','aurora')
 FIELDS['engine']=tuple(voice_engines.ENGINES)
 
 def reference_identity(path,gender):
@@ -44,6 +46,9 @@ def resolve_model(folder,kind='tts'):
     raise ValueError('Voice: scegli la cartella Higgs Audio v3 Transformers con adattatore Python.' if kind=='tts' else 'Voice: scegli la cartella del codec Higgs Audio v2.')
 
 def runtime_ready(root,engine='higgs'):
+    if engine=='moss':
+        from .moss_tts import ready
+        return ready(root)
     if engine!='higgs':return False
     root=Path(root)
     try:
@@ -61,6 +66,10 @@ def mark_ready(root):
     part=folder/'ready.writing';part.write_text(json.dumps({'manifest':hashlib.sha256(json.dumps(manifest,sort_keys=True).encode()).hexdigest()}),encoding='utf-8');part.replace(folder/'ready.json')
 
 def memory_assessment(settings,hardware):
+    if voice_engines.selected(settings)=='moss':
+        if not settings.get('voice_moss_model_path'):return None
+        gpu=settings.get('voice_device')=='gpu';ram=hardware.get('ram',{}).get('free_mb',0)/1024;devices=[g for g in hardware.get('gpu',[]) if g.get('vendor')=='NVIDIA'];free=(devices[0].get('free_mb') or 0)/1024 if devices else 0
+        return {'status':'ok' if ram>=24 and (not gpu or free>=11) else 'oom','title':'Stima · MOSS-TTS Local v1.5','ram_gb':24,'vram_gb':11 if gpu else 0,'advice':'BF16 con TTS e codec trasferiti sulla GPU in fasi separate. Stima prudenziale da verificare sulla macchina.'}
     if not settings.get('voice_model_path'):return None
     gpu=settings.get('voice_device')=='gpu';vram={'4bit':5.5,'8bit':7,'bf16':12}[settings['voice_precision']] if gpu else 0
     ram=8 if gpu else 20
@@ -115,9 +124,9 @@ def route(history,settings):
     return {'intent':'voice','prompt':text,'selection':'auto'} if re.search(pattern,text,re.I) else None
 
 def controls(settings,prompt):
-    value={k:settings['voice_'+k] for k in FIELDS if k!='mode'}|{k:v for k,v in settings.get('_voice_fields',{}).items() if k!='params'}
+    value={k:settings.get('voice_'+k,DEFAULTS.get('voice_'+k)) for k in FIELDS if k!='mode'}|{k:v for k,v in settings.get('_voice_fields',{}).items() if k!='params'}
     delivery=DELIVERIES.get(value.get('delivery'),{})
-    for key in ('emotion','expressiveness','speed'):
+    for key in ('emotion','expressiveness','speed','pitch'):
         if key in delivery and key not in settings.get('_voice_fields',{}):value[key]=delivery[key]
     # In verbatim reading, the supplied speech is data, not acting instructions.
     prompt=re.split(r'\b(?:testo|text)\s*:',prompt,maxsplit=1,flags=re.I)[0]
@@ -143,28 +152,60 @@ def controls(settings,prompt):
 
 def configuration(root,settings,prompt):
     """Resolve the same portable voice engine for speech and narrated animation."""
+    selected=settings.get('_voice_fields',{}).get('profile',settings.get('voice_profile','configured'))
+    header=re.split(r'\b(?:testo|text)\s*:',prompt,maxsplit=1,flags=re.I)[0]
+    named=list(re.finditer(r'\b(?:voce|timbro|narratrice)\s+(limpida|aurora)\b',header,re.I))
+    if named:selected=named[-1][1].lower()
+    if selected not in FIELDS['profile']:raise ValueError('Timbro Voice non valido.')
+    if selected!='configured' and settings.get('_voice_profile_applied')!=selected:
+        from .infographic_voices import configure
+        settings,_=configure(root,settings,{'voice_profile':selected,'voice_gender':'female','voice_style':'auto'},'custom')
+        settings=settings|{'_voice_fields':settings['_voice_fields']|{'profile':selected,'gender':'female'}}
     settings=voice_engines.normalize(settings)
+    if voice_engines.selected(settings)=='moss':
+        if not runtime_ready(root,'moss'):raise ValueError('Il motore locale MOSS-TTS non è installato.')
+        from .moss_tts import configuration as moss_config,instruction
+        choice,_=controls(settings,prompt);cfg,voice=moss_config(root,settings,choice)
+        return cfg,choice,{'prefix':'','tags':[],'instruction':instruction(choice,cfg.get('instruction',''))},voice
     if not runtime_ready(root):raise ValueError('Installa il motore Voice dal Setup (base Vision e componenti voce).')
     model_path=resolve_model(settings['voice_model_path']);codec=resolve_model(settings['voice_codec_path'],'codec')
-    choice,acting=controls(settings,prompt);ref=settings['voice_references'][choice['gender']]
+    choice,acting=controls(settings,prompt)
+    from .voice_reference import reference
+    ref,migration=reference(root,settings,choice['gender'])
     if not ref['path'] or not Path(ref['path']).is_file():raise ValueError('Configura un campione per questa voce nel Setup → Voice.')
     cfg={'engine':'higgs','model_path':model_path,'codec_path':codec,'device':'cuda' if settings['voice_device']=='gpu' else 'cpu','precision':settings['voice_precision'],'temperature':settings['voice_temperature'],'pause_ms':settings['voice_pause_ms'],'seed':settings['voice_seed'],'speed_factor':settings['voice_speed_factor']}
     if choice.get('delivery') in DELIVERIES:cfg['temperature']=DELIVERIES[choice['delivery']]['temperature']
     if choice.get('delivery')=='radio':cfg.update(seed=734,pause_ms=150,speed_factor=1.08)
-    return cfg,choice,acting,{'id':reference_identity(ref['path'],choice['gender']),'reference':ref['path'],'transcript':ref['transcript']}
+    return cfg,choice,acting,{'id':reference_identity(ref['path'],choice['gender']),'reference':ref['path'],'transcript':ref['transcript'],**({'reference_update':migration} if migration else {})}
 
 def synthesize(app,folder,parts,settings,prompt,cancel,stage,log,meta):
-    cfg,choice,acting,voice=configuration(app.root,settings,prompt)
-    segments=[]
+    if not parts:raise ValueError('Scrivi il testo da pronunciare.')
+    first_fields=validate_fields(parts[0].get('voice_fields',{}))
+    cfg,choice,acting,voice=configuration(app.root,settings|{'_voice_fields':settings.get('_voice_fields',{})|first_fields},prompt)
+    segments=[];part_voices=[];profiles={}
     for part in parts:
+        fields=validate_fields(part.get('voice_fields',{}))
+        if fields:
+            key=json.dumps(fields,sort_keys=True)
+            if key not in profiles:profiles[key]=configuration(app.root,settings|{'_voice_fields':settings.get('_voice_fields',{})|fields},prompt)
+            part_cfg,part_choice,part_acting,part_voice=profiles[key]
+        else:part_cfg,part_choice,part_acting,part_voice=cfg,choice,acting,voice
+        if part_cfg['engine']!=cfg['engine']:raise ValueError('Scegli un solo motore vocale per richiesta.')
+        part_voices.append({'scene_id':part.get('scene_id'),'identity':part_voice['id'],
+            'reference':Path(part_voice['reference']).name,'controls':dict(part_choice),'tags':list(part_acting['tags'])})
         phrases=[part['text']]
-        if part.get('sentence_cues') or (cfg['engine']=='higgs' and choice.get('delivery')=='radio'):
+        if part.get('sentence_cues') or (cfg['engine']=='higgs' and part_choice.get('delivery')=='radio'):
             ends=[m.end() for m in re.finditer(r'[.!?][”"\']?\s+(?=\S)',part['text'])]
             points=[0,*ends,len(part['text'])];phrases=[part['text'][a:b] for a,b in zip(points,points[1:])]
         for text in [chunk for phrase in phrases for chunk in split_text(phrase,cfg.get('chunk_chars',settings['voice_chunk_chars']))]:
             if text.strip():
-                segment={'text':text,'spoken':apply_direction(text,acting['prefix']) if cfg['engine']=='higgs' else text,'voice':voice,'scene_id':part.get('scene_id')}
-                if cfg['engine']=='higgs' and choice.get('delivery')=='radio':
+                segment={'text':text,'spoken':apply_direction(text,part_acting['prefix']) if cfg['engine']=='higgs' else text,'voice':part_voice,'scene_id':part.get('scene_id'),
+                    'gender':part_choice.get('gender'),'tags':list(part_acting['tags']),
+                    **{k:part_cfg[k] for k in ('temperature','seed','speed_factor') if k in part_cfg}}
+                if cfg['engine']=='moss':
+                    from .moss_tts import spoken
+                    segment.update(instruction=part_acting.get('instruction',''),spoken=spoken(text))
+                if cfg['engine']=='higgs' and part_choice.get('delivery')=='radio':
                     index=len(segments);mood=('enthusiasm','affection','pride','determination')[index%4]
                     segment.update(spoken=apply_direction(text,'<|emotion:'+mood+'|><|prosody:expressive_high|>'),speed_factor=(1.08,1.12)[index%2],seed=734,temperature=.7)
                 segments.append(segment)
@@ -175,12 +216,22 @@ def synthesize(app,folder,parts,settings,prompt,cancel,stage,log,meta):
     meta.update(voice_engine=cfg['engine'],voice_model=Path(cfg['model_path']).name,voice_identity=voice['id'],voice_reference=Path(voice['reference']).name,voice_controls=choice,voice_tags=acting['tags'] if cfg['engine']=='higgs' else [],voice_duration=result['duration'],voice_device=cfg['device'],assistant_on=settings.get('_assistant',True))
     meta['voice_parameters']={k:cfg[k] for k in ('temperature','seed','speed_factor','pause_ms')}
     meta['voice_parameters']['precision']=cfg.get('precision',settings['voice_precision'])
+    if cfg['engine']=='moss':meta['voice_parameters'].update({k:cfg[k] for k in ('language','top_p','top_k','repetition_penalty','max_new_tokens','instruction','reference_mode','target_seconds','codec_quality')});meta['voice_parameters']['n_vq']=12
+    meta['voice_parts']=part_voices
+    identities=list(dict.fromkeys(p['identity'] for p in part_voices))
+    meta['voice_identities']=identities
+    if len(identities)>1:meta.update(voice_identity='mixed',voice_reference='multiple')
     if result.get('performance'):meta['voice_performance']=result['performance']
     if cfg['engine']=='higgs' and choice.get('delivery')=='radio':meta['voice_parameters']['segment_speed_factors']=[s['speed_factor'] for s in segments]
     if cfg['device']=='cpu':meta['device_warning']='La sintesi vocale sulla CPU può richiedere molto tempo e molta RAM.'
     return result,[{'id':uid(),'name':name,'mime':mime,'path':(folder/name).resolve().relative_to(app.data.resolve()).as_posix()} for name,mime in [('voce.wav','audio/wav'),('testo-voce.txt','text/plain'),('voce.srt','application/x-subrip')]]
 
 def build(app,job,payload,history,settings,model,cancel,stage,log,meta):
+    if settings.get('_voice_parts'):
+        folder=app.data/'outputs'/job['id'];folder.mkdir(parents=True,exist_ok=True)
+        _,media=synthesize(app,folder,settings['_voice_parts'],settings,'',cancel,stage,log,meta)
+        meta.update(model=meta['voice_model'],execution_mode='Standalone · '+('GPU · CUDA' if meta['voice_device']=='cuda' else 'CPU')+' · '+voice_engines.ENGINES[meta['voice_engine']])
+        return media
     _,choice,_,_=configuration(app.root,settings,payload['prompt'])
     text=payload['prompt'];compose=choice.get('mode')=='compose' or (choice.get('mode')!='read' and bool(re.search(r'\b(?:lezione|riassunto|spiega|racconta|summary|lesson|explain)\b',text,re.I)))
     if compose and settings.get('_assistant',True):

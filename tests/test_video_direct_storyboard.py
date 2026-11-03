@@ -86,7 +86,7 @@ class DirectStoryboardServiceTests(unittest.TestCase):
     def test_direct_request_captures_assistant_off_and_rejects_on_before_queue(self):
         chat=self.app.store.create_chat();value={'style':'Warm light.','shots':[]}
         body={'prompt':document(value),'video':True,'assistant':False,'video_editing':'continuous'}
-        with patch.object(self.app.engine,'require_model'):
+        with patch.object(self.app.engine,'require_model',return_value=self.model):
             job=self.app.send(chat['id'],body)['job_id']
         payload=json.loads(self.app.store.one('SELECT payload FROM jobs WHERE id=?',(job,))['payload'])
         self.assertFalse(payload['settings']['_assistant']);self.assertEqual(payload['settings']['_video_editing'],'storyboard')

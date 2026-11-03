@@ -37,6 +37,8 @@ class Model:
  def audio_head(self,hidden):return torch.zeros(1,2,5)
  def audio_embedding(self,row):return torch.zeros(1,4)
  def _decode_codes(self,rows):self.decoded=rows.clone();return torch.zeros(240)
+ def named_parameters(self):return [('weight',torch.zeros(1))]
+ def get_audio_codec(self):return types.SimpleNamespace(parameters=lambda:[torch.zeros(1)])
 def engine():
  e=backend.Engine.__new__(backend.Engine);e.torch=torch;e.model=Model();e.seed=734;e.temperature=.7;e.sample_rate=24000;e.precision='8bit';e.progress=lambda **kw:None;e.tokenizer=None;e.reference=lambda voice:torch.ones(2,2,dtype=torch.long)
  return e

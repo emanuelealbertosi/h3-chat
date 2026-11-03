@@ -1,0 +1,27 @@
+{
+  "repository": "https://github.com/jambavant/SwarmUI-LayoutEditor",
+  "commit": "acdedf42dfb72b2b69914ca6639ecc42d49ad28b",
+  "files": [
+    {
+      "file": "le-model.js",
+      "sha256": "6c7a258538a1073ad4a5a68c6271be3e58990c7e319dd6d9740e4d14b404e6ef"
+    },
+    {
+      "file": "le-formats.js",
+      "sha256": "5582a95ace9abb2e0383c36871657fbeec2e65cd6590745ee9dd0e501ffe4fde"
+    },
+    {
+      "file": "le-validate.js",
+      "sha256": "5e5e9f7effe592ca217a9bbe8b8fc163824ffa05ac5a84152ec12835857e49cd"
+    },
+    {
+      "file": "le-editor.js",
+      "sha256": "b1044c7b0daef47c5b1be4154edcd5fd6b584904d8189720b3931b103c9a4223"
+    },
+    {
+      "file": "le-editor.css",
+      "sha256": "dd4c68442ff1b5e6bc4dd4bc71b81c7872769fce684cbc360b7b6e35d68507e7"
+    }
+  ],
+  "local_changes": "Unmodified upstream core; H3 host adapter is separate."
+}

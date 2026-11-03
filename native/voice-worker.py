@@ -16,17 +16,17 @@ def stamp(t):
 
 def run(request):
     family=request['config'].get('engine','higgs')
-    if family!='higgs':raise ValueError('Voice usa Higgs Audio v3. Rigenera la richiesta con la versione aggiornata.')
+    if family not in ('higgs','moss'):raise ValueError('Motore Voice non valido.')
     os.environ.update(HF_HUB_OFFLINE='1',TRANSFORMERS_OFFLINE='1')
     import numpy as np
-    spec=importlib.util.spec_from_file_location('h3_voice_backend',ROOT/'native/voice-backend.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    spec=importlib.util.spec_from_file_location('h3_voice_backend',ROOT/'native'/('moss-voice-backend.py' if family=='moss' else 'voice-backend.py'));module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     count=len(request['segments']);index=0
     def progress(**kw):emit('stage',message=f"Voice · segmento {index+1}/{count} · "+kw.get('message',f"sintesi · {kw.get('frames',0)} fotogrammi audio"))
-    started=time.monotonic();engine=module.Engine(request['config'],progress);rate=engine.sample_rate
+    started=time.monotonic();engine=module.Engine(request['config'],progress);rate=engine.sample_rate;channels=getattr(engine,'channels',1)
     folder=Path(request['output']);partial=folder/'voce.partial.wav';cursor=0;srt=[];timeline=[];timings=[]
     try:
         with wave.open(str(partial),'wb') as out:
-            out.setnchannels(1);out.setsampwidth(2);out.setframerate(rate)
+            out.setnchannels(channels);out.setsampwidth(2);out.setframerate(rate)
             for index,segment in enumerate(request['segments']):
                 if family=='higgs' and 'temperature' in segment:
                     temperature=segment['temperature']
@@ -36,20 +36,25 @@ def run(request):
                     seed=segment['seed']
                     if type(seed) is not int or not -1<=seed<=2147483647:raise ValueError('Seed del segmento non valido.')
                     engine.seed=seed
+                if family=='moss':
+                    engine.temperature=segment.get('temperature',request['config']['temperature']);engine.seed=segment.get('seed',request['config']['seed']);engine.instruction=segment.get('instruction','')
                 progress(message='sintesi vocale');wav=engine.generate(segment['spoken'],segment['voice'])
                 timings.append(engine.last_timings)
                 from h3_voice_tempo import adjust
                 wav=adjust(wav,rate,segment.get('speed_factor',request['config'].get('speed_factor',1)))
                 if not len(wav) or not np.isfinite(wav).all():raise ValueError('Il modello ha prodotto audio vuoto o non valido.')
+                if channels==2 and (wav.ndim!=2 or wav.shape[1]!=2):raise ValueError('Il modello non ha restituito i due canali audio previsti.')
                 peak=float(np.max(np.abs(wav)))
                 if peak>.98:wav*=.98/peak
                 start=cursor/rate;out.writeframes((wav*32767).astype('<i2').tobytes());cursor+=len(wav)
                 srt.append(f'{index+1}\n{stamp(start)} --> {stamp(cursor/rate)}\n{segment["text"].strip()}')
-                timeline.append({'scene_id':segment.get('scene_id'),'text':segment['text'],'start':start,'end':cursor/rate,'start_sample':round(start*rate),'end_sample':cursor})
+                timeline.append({'scene_id':segment.get('scene_id'),'text':segment['text'],'start':start,'end':cursor/rate,'start_sample':round(start*rate),'end_sample':cursor,
+                    'voice_identity':segment['voice']['id'],'voice_reference':Path(segment['voice']['reference']).name,
+                    'gender':segment.get('gender'),'tags':segment.get('tags',[])})
                 if index<count-1:
-                    pause=round(rate*request['config']['pause_ms']/1000);out.writeframes(bytes(pause*2));cursor+=pause
+                    pause=round(rate*request['config']['pause_ms']/1000);out.writeframes(bytes(pause*2*channels));cursor+=pause
         partial.replace(folder/'voce.wav');(folder/'voce.srt').write_text('\n\n'.join(srt),encoding='utf-8')
-        result={'duration':cursor/rate,'sample_rate':rate,'segments':count,'timeline':timeline,
+        result={'duration':cursor/rate,'sample_rate':rate,'channels':channels,'segments':count,'timeline':timeline,
                 'performance':{'load_seconds':round(engine.load_seconds,3),'total_seconds':round(time.monotonic()-started,3),
                     'precision':engine.precision,'segments':timings}}
         (folder/'voce-timeline.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')

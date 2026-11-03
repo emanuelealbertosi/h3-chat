@@ -66,6 +66,10 @@ class Engine:
         model_path = resolve_model(config['model_path'])
         codec_path = resolve_model(config['codec_path'], 'codec')
         use_cuda = config['device'] == 'cuda'
+        if use_cuda and config['precision']=='bf16':
+            torch.set_float32_matmul_precision('highest')
+            torch.backends.cuda.matmul.allow_tf32=False
+            torch.backends.cudnn.allow_tf32=False
         if use_cuda and not torch.cuda.is_available():
             raise RuntimeError('GPU NVIDIA non disponibile. Scegli CPU nelle Preferenze oppure controlla il driver.')
         if use_cuda:
@@ -190,5 +194,9 @@ class Engine:
         self.last_timings = {'reference_seconds':round(referenced-started,3),
             'prefill_seconds':round(sampling_started-referenced,3),'synthesis_seconds':round(sampled-sampling_started,3),
             'decode_seconds':round(finished-sampled,3),'total_seconds':round(finished-started,3),
-            'frames':len(rows),'audio_seconds':round(len(waveform)/self.sample_rate,3),'precision':self.precision}
+            'frames':len(rows),'audio_seconds':round(len(waveform)/self.sample_rate,3),'precision':self.precision,
+            'tts_weight_dtypes':sorted({str(p.dtype) for n,p in m.named_parameters() if not n.startswith('_audio_codec.')}),
+            'codec_weight_dtypes':sorted({str(p.dtype) for p in m.get_audio_codec().parameters()}),
+            'tf32_matmul':torch.backends.cuda.matmul.allow_tf32 if m.device.type=='cuda' else False,
+            'tf32_cudnn':torch.backends.cudnn.allow_tf32 if m.device.type=='cuda' else False}
         return waveform.numpy().astype('float32')

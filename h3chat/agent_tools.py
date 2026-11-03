@@ -80,6 +80,9 @@ TOOLS['read_skill'][1]['properties']['name']['enum']=list(SKILLS)
 TOOLS['revise_slide'][1]['properties']['page']['description']='Numero della slide da 1: 1 è la prima, 2 è la seconda. Non usare indici da zero.'
 TOOLS['create_image_lot'][1]['properties']['moss_turbo']={'type':'boolean','description':'Turbo DMD2 per MOSS INT8/BF16/Kromoss: applica la ricetta dedicata. Se richiesto va impostato, non soltanto citato nel prompt.'}
 TOOLS['create_posters'][1]['properties'].update({
+ 'reference_mode':{'type':'string','enum':['none','reproduce','improve'],'description':'reproduce ricostruisce il layout di una locandina, improve lo migliora. Richiede Vision; composizione html. Non è la foto protagonista.'},
+ 'reference_asset_id':{'type':'string','pattern':'^[0-9a-f]{32}$','description':'ID del riferimento grafico esatto fra allegati o source_artifact_ids, immagine o PDF. Con più candidati scegli esplicitamente.'},
+ 'reference_page':{'type':'integer','minimum':1,'maximum':1000,'description':'Pagina del PDF da riprodurre; una pagina per locandina. Le brochure multipagina non sono incluse.'},
  'composition':{'type':'string','enum':['html','moss_layout'],'description':'moss_layout: piano condiviso, MOSS dipinge lo sfondo e HTML/SVG compone i testi negli spazi riservati. Richiede immagini autorizzate e modello MOSS.'},
  'typography_engine':{'type':'string','enum':['expressive','preset'],'description':'expressive predefinito: composizione libera HTML/SVG con colori, gradienti, contorni e caratteri coerenti con il poster. preset: effetti tipografici deterministici.'},
  'text_renderer':{'type':'string','enum':['html','moss_short'],'description':'html predefinito: tutti i testi esatti in HTML/SVG modificabile. moss_short: consente al modello immagini brevi scritte decorative; programma e dettagli restano HTML.'},
@@ -337,7 +340,7 @@ def execute(ctx,name,args):
         return ctx.artifact_result(result)
     if name=='create_posters':
         from .posters import options,build
-        opts=options(args['prompt'],{k:args[k] for k in ('count','format','style','images','image_model','composition','reference_image','visual_megapixels','visual_strength','lettering','text_effect','heading_font','body_font','hero_asset_id','typography_engine','text_renderer') if k in args})
+        opts=options(args['prompt'],{k:args[k] for k in ('count','format','style','images','image_model','composition','reference_mode','reference_asset_id','reference_page','reference_image','visual_megapixels','visual_strength','lettering','text_effect','heading_font','body_font','hero_asset_id','typography_engine','text_renderer') if k in args})
         if not state['config'].get('allow_images'):
             if opts['images']=='generate' or opts['composition']=='moss_layout':raise PermissionError('Nuove illustrazioni non autorizzate per Agent. Consenti immagini oppure usa allegati e grafica.')
             if opts['images']=='auto':opts['images']='attached' if any(m.get('mime','').startswith('image/') for m in payload['media']) else 'none'

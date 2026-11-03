@@ -1,6 +1,6 @@
 /* Trusted timeline interpreter. Generated HTML never supplies JavaScript. */
 (()=>{
- const states=new WeakMap(),settings=new WeakMap(),effects=['fade','slide','zoom','pan','blur','wipe','strobe','typewriter','appear','bump','drop','wave','flip'];
+ const states=new WeakMap(),settings=new WeakMap(),screens=new WeakMap(),effects=['fade','slide','zoom','pan','blur','wipe','strobe','typewriter','appear','bump','drop','wave','flip'];
  const clamp=v=>Math.max(0,Math.min(1,v));
  const layouts={full:[1,1],columns2:[2,1],rows2:[1,2],columns3:[3,1],rows3:[1,3],pip:[2,1],grid2x2:[2,2],grid3x2:[3,2],grid2x3:[2,3]};
  const panelCount=layout=>{const [columns,rows]=layouts[layout]||layouts.full;return columns*rows;};
@@ -23,7 +23,7 @@
  function videoTracks(documents,motion){
   const options=motion.options||{},delayed=options.video_start==='panel'&&options.layout&&options.layout!=='full',allowed=new Set((motion.videos||(motion.video?[motion.video]:[])).map(v=>v.asset_id)),tracks=new Map(),targets=[];let offset=0;
   documents.forEach((doc,index)=>{
-    const duration=motion.durations[index],area=doc.querySelector?.('[data-h3-content-canvas]')||doc.querySelector?.('[data-h3-background-content]')||doc.body;if(delayed)for(const panel of panelTimes(doc,options,duration))area.append(panel);
+    const duration=motion.durations[index];if(delayed)panelTimes(doc,options,duration);
    const scale=timingScale(animationNodes(doc),duration);
    for(const slot of doc.querySelectorAll('div[data-video-asset-id],[data-h3-video]')){
     const id=slot.dataset.videoAssetId||slot.dataset.h3Video;if(!allowed.has(id))continue;const panel=slot.closest('[data-panel]');if(delayed&&!panel)continue;
@@ -40,23 +40,40 @@
   const layout=options.layout||'full',count=panelCount(layout);if(count===1)return;
   const area=doc.querySelector?.('[data-h3-content-canvas]')||doc.querySelector?.('[data-h3-background-content]')||doc.body,width=area===doc.body?doc.defaultView.innerWidth:area.clientWidth,height=area===doc.body?doc.defaultView.innerHeight:area.clientHeight;
   const overlays=screenOverlays(doc),panels=panelTimes(doc,options,duration);
+  // Keep the authored content frame, padding and gutters. Reparenting the
+  // panels to body discarded these and stretched small flex header overlays
+  // to the full scene height, centring their text over panel contents.
+  let saved=screens.get(doc);
+  if(!saved||saved.area!==area||saved.panels.length!==panels.length||!panels.every((p,i)=>saved.panels[i]===p)||saved.host.isConnected===false){
+   const parent=panels[0]?.parentElement,common=parent&&panels.every(p=>p.parentElement===parent),r=parent?.getBoundingClientRect?.();
+   const host=common&&r?.width>width*.5&&r.height>height*.5?parent:area,css=doc.defaultView.getComputedStyle(host),num=v=>Number.parseFloat(v)||0;
+   const inset={left:num(css.paddingLeft),top:num(css.paddingTop),right:num(css.paddingRight),bottom:num(css.paddingBottom)},hostRect=host.getBoundingClientRect?.();
+   const overlayBoxes=new Map();for(const overlay of overlays){const b=overlay.getBoundingClientRect?.();if(b?.width>0&&b.height>0&&hostRect)overlayBoxes.set(overlay,{left:b.left-hostRect.left,top:b.top-hostRect.top,width:b.width,height:b.height});}
+   saved={area,host,panels:[...panels],inset,gapX:num(css.columnGap||css.gap),gapY:num(css.rowGap||css.gap),overlayBoxes};screens.set(doc,saved);
+  }
+  const host=saved.host,space=host===area?{width,height}:{width:host.clientWidth||width,height:host.clientHeight||height};
+  if(host!==area&&doc.defaultView.getComputedStyle(host).position==='static')host.style.setProperty('position','relative','important');
+  const inset=saved.inset,usableW=Math.max(1,space.width-inset.left-inset.right),usableH=Math.max(1,space.height-inset.top-inset.bottom);
   doc.body.style.setProperty('position','relative','important');doc.body.style.setProperty('overflow','hidden','important');
   for(const panel of panels){
-   const index=Number(panel.dataset.panel)-1;area.append(panel);
-   let x=0,y=0,w=width,h=height;
-   if(layout!=='pip'){const [columns,rows]=layouts[layout];w=width/columns;h=height/rows;x=(index%columns)*w;y=Math.floor(index/columns)*h;}
+   const index=Number(panel.dataset.panel)-1;if(panel.parentElement!==host)host.append(panel);
+   let x=inset.left,y=inset.top,w=usableW,h=usableH;
+   if(layout!=='pip'){const [columns,rows]=layouts[layout],gx=Math.min(saved.gapX,usableW/Math.max(1,columns*4)),gy=Math.min(saved.gapY,usableH/Math.max(1,rows*4));w=(usableW-gx*(columns-1))/columns;h=(usableH-gy*(rows-1))/rows;x+=(index%columns)*(w+gx);y+=Math.floor(index/columns)*(h+gy);}
    if(layout==='pip'&&index===1){w=width*.32;h=height*.32;x=width-w-width*.03;y=height-h-height*.03;}
    const styles={position:'absolute',left:x+'px',top:y+'px',right:'auto',bottom:'auto',width:w+'px',height:h+'px','min-width':'0','min-height':'0','max-width':'none','max-height':'none',margin:'0','box-sizing':'border-box',overflow:'hidden',transform:'none',translate:'none',rotate:'none',scale:'none',opacity:'1','z-index':String(index+1)};
    for(const [key,value] of Object.entries(styles))panel.style.setProperty(key,value,'important');
   }
   for(const [index,overlay] of overlays.entries()){
-   area.append(overlay);overlay.dataset.overlay='global';
-   const styles={position:'absolute',left:'0px',top:'0px',right:'auto',bottom:'auto',width:width+'px',height:height+'px','min-width':'0','min-height':'0','max-width':'none','max-height':'none',margin:'0','box-sizing':'border-box',overflow:'hidden','z-index':String(count+1+index)};
+   if(overlay.parentElement!==host)host.append(overlay);overlay.dataset.overlay='global';
+   const b=saved.overlayBoxes.get(overlay)||{left:0,top:0,width:space.width,height:space.height};
+   const currentHeight=overlay.clientHeight||b.height,neededHeight=(overlay.scrollHeight||0)>currentHeight+1?overlay.scrollHeight:currentHeight;
+   const overlayHeight=b.height<space.height*.35?Math.max(b.height,Math.min(space.height*.35,neededHeight)):b.height;
+   const styles={position:'absolute',left:b.left+'px',top:b.top+'px',right:'auto',bottom:'auto',width:b.width+'px',height:overlayHeight+'px','min-width':'0','min-height':'0','max-width':'none','max-height':'none',margin:'0','box-sizing':'border-box',overflow:'hidden','z-index':String(count+1+index)};
    // A shared title is transparent over the clips. An opaque closing card is explicit.
    if(overlay.dataset.overlayBackground!=='opaque')styles.background='transparent';
    for(const [key,value] of Object.entries(styles))overlay.style.setProperty(key,value,'important');
   }
-  for(const child of [...area.children])if(!panels.includes(child)&&!overlays.includes(child)&&child.tagName!=='STYLE'&&!child.hasAttribute?.('data-h3-trusted'))child.style.setProperty('display','none','important');
+  for(const child of [...area.children])if(!panels.includes(child)&&!overlays.includes(child)&&!panels.some(p=>child.contains?.(p))&&!overlays.some(p=>child.contains?.(p))&&child.tagName!=='STYLE'&&!child.hasAttribute?.('data-h3-trusted'))child.style.setProperty('display','none','important');
   states.delete(doc);
  }
  function ease(t,kind){t=clamp(t);return kind==='linear'?t:kind==='snap'?1-Math.pow(1-t,4):t*t*(3-2*t);}
@@ -82,9 +99,9 @@
    element.style.setProperty('text-shadow','none','important');element.style.setProperty('-webkit-text-stroke','0','important');
   }
  }
- function configure(doc,options={}){
+ function configure(doc,options={},force=false){
   const signature=JSON.stringify(options),previous=settings.get(doc);
-  if(previous?.signature===signature)return;
+  if(!force&&previous?.signature===signature)return;
   // Options are immutable during one preview. A canvas change remounts clean HTML.
   const targets=textTargets(doc,options);settings.set(doc,{signature,options,targets});
   for(const element of targets)paint(element,options);
@@ -157,13 +174,18 @@
   }
  }
  function render(doc,motion,time){
+  if(motion.options?.visual_mode==='sequence'&&globalThis.H3Cinema)return globalThis.H3Cinema.render(doc,motion,time);
+  globalThis.H3Cinema?.reset(doc);
   const frames=[...doc.querySelectorAll('[data-h3-scene]')],durations=motion.durations;let start=0,index=durations.length-1;
   for(let i=0;i<durations.length;i++){if(time<start+durations[i]||i===durations.length-1){index=i;break;}start+=durations[i];}
-  const local=Math.max(0,time-start),span=Math.min(.45,durations[index]/3),progress=ease(local/span,'smooth');
+  const requested=motion.options?.transition_seconds??.45,flow=motion.options?.pace==='explainer';
+  const local=Math.max(0,time-start),span=Math.min(Math.max(.15,Math.min(2,Number(requested)||.45)),durations[index]/3,index?durations[index-1]/3:Infinity),progress=ease(local/span,'smooth');
   frames.forEach((frame,i)=>{
    const current=i===index,previous=i===index-1&&local<span&&motion.transition!=='cut';
    frame.style.visibility=current||previous?'visible':'hidden';frame.style.zIndex=String(i);frame.style.opacity=current?(index&&motion.transition!=='cut'?String(progress):'1'):previous?String(1-progress):'0';frame.style.transform='none';frame.style.clipPath='none';
-   if(current&&index){if(motion.transition==='slide')frame.style.transform=`translateX(${(1-progress)*100}%)`;if(motion.transition==='zoom')frame.style.transform=`scale(${1.12-.12*progress})`;if(motion.transition==='wipe'){frame.style.opacity='1';frame.style.clipPath=`inset(0 ${(1-progress)*100}% 0 0)`;}}
+   if(current&&index){if(motion.transition==='slide'){frame.style.opacity='1';frame.style.transform=`translateX(${(1-progress)*100}%)`;}if(motion.transition==='zoom')frame.style.transform=`scale(${flow ? .96+.04*progress : 1.08-.08*progress})`;if(motion.transition==='wipe'){frame.style.opacity='1';frame.style.clipPath=`inset(0 ${(1-progress)*100}% 0 0)`;}}
+   if(previous&&motion.transition==='slide'){frame.style.opacity='1';frame.style.transform=`translateX(${-progress*100}%)`;}
+   if(previous&&motion.transition==='zoom')frame.style.transform=`scale(${1+(flow ? .06 : .08)*progress})`;
    if(current&&frame.contentDocument)apply(frame.contentDocument,local,durations[i],motion.options||{});
    if(previous&&frame.contentDocument)apply(frame.contentDocument,durations[i]-.001,durations[i],motion.options||{});
   });return {index,time:local};

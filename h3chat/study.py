@@ -55,7 +55,9 @@ def validate(value):
     for item in items:
         if not isinstance(item,dict) or not isinstance(item.get('id'),str) or not re.fullmatch('[0-9a-f]{32}',item['id']) or item['id'] in seen:raise ValueError('ID scheda non valido.')
         seen.add(item['id']);validate_item(item,sources)
-        if 'explanation' in item:validate_item(item['explanation'],sources)
+        if 'explanation' in item:
+            validate_item(item['explanation'],sources)
+            if 'followup' in item['explanation'] and type(item['explanation']['followup']) is not bool:raise ValueError('Metadati chiarimento Studio non validi.')
     return value
 
 def decode(content):
@@ -105,6 +107,7 @@ citazione testuale ESATTA copiata dalla fonte, senza parafrasare quote. Le citaz
 aggiunte dall'interfaccia; non inventare ID, pagine o date. Non inserire una domanda che la fonte
 non permette di risolvere. Non promettere di aver letto interi libri: stai usando estratti selezionati.
 Risposta nella lingua richiesta, altrimenti italiano. Nessun HTML, nessun codice eseguibile.
+Puoi usare Markdown semplice per elenchi, tabelle e grassetti, e formule LaTeX tra $ o $$ quando utili.
 Flashcards: domanda sul fronte, risposta concisa sul retro. Summary: sezioni di sintesi.
 FAQ: domande e risposte. Guide: concetti, ragionamenti ed esercizi risolvibili dalle fonti.
 Timeline: eventi in ordine cronologico, data nel titolo SOLO se presente negli estratti;
@@ -177,22 +180,39 @@ def fingerprint(item):return hashlib.sha256(json.dumps({k:item[k] for k in ('que
 def progress(app,chat_id,artifact_id,body=None):
     _,deck=loaded(app,chat_id,artifact_id)
     app.store.execute('CREATE TABLE IF NOT EXISTS study_reviews_v2 (chat_id TEXT,set_id TEXT,card_id TEXT,content_hash TEXT,remembered INTEGER,attempts INTEGER,last REAL,PRIMARY KEY(chat_id,set_id,card_id,content_hash))')
+    app.store.execute('CREATE TABLE IF NOT EXISTS study_schedule_v1 (chat_id TEXT,set_id TEXT,card_id TEXT,content_hash TEXT,streak INTEGER,due REAL,PRIMARY KEY(chat_id,set_id,card_id,content_hash))')
     if body is not None:
         item=next((i for i in deck['items'] if i['id']==body.get('card_id')),None)
         if not item or type(body.get('remembered')) is not bool:raise ValueError('Esito di ripasso non valido.')
-        old=app.store.one('SELECT attempts,content_hash FROM study_reviews_v2 WHERE chat_id=? AND set_id=? AND card_id=? AND content_hash=?',(chat_id,deck['id'],item['id'],fingerprint(item)))
-        attempts=old['attempts']+1 if old and old['content_hash']==fingerprint(item) else 1
-        app.store.execute('INSERT OR REPLACE INTO study_reviews_v2 VALUES (?,?,?,?,?,?,?)',(chat_id,deck['id'],item['id'],fingerprint(item),int(body['remembered']),attempts,time.time()))
+        key=(chat_id,deck['id'],item['id'],fingerprint(item));now=time.time()
+        # Commit review and its schedule together. Existing reviews and older
+        # content revisions remain available and need no schema migration.
+        with app.store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            old=db.execute('SELECT attempts FROM study_reviews_v2 WHERE chat_id=? AND set_id=? AND card_id=? AND content_hash=?',key).fetchone()
+            schedule=db.execute('SELECT streak FROM study_schedule_v1 WHERE chat_id=? AND set_id=? AND card_id=? AND content_hash=?',key).fetchone()
+            attempts=old['attempts']+1 if old else 1
+            streak=(schedule['streak'] if schedule else 0)+1 if body['remembered'] else 0
+            interval=(1,3,7,14,30)[min(streak-1,4)]*86400 if streak else 600
+            db.execute('INSERT OR REPLACE INTO study_reviews_v2 VALUES (?,?,?,?,?,?,?)',(*key,int(body['remembered']),attempts,now))
+            db.execute('INSERT OR REPLACE INTO study_schedule_v1 VALUES (?,?,?,?,?,?)',(*key,streak,now+interval))
     result={}
     for item in deck['items']:
         row=app.store.one('SELECT remembered,attempts,last,content_hash FROM study_reviews_v2 WHERE chat_id=? AND set_id=? AND card_id=? AND content_hash=?',(chat_id,deck['id'],item['id'],fingerprint(item)))
-        if row and row['content_hash']==fingerprint(item):result[item['id']]={k:row[k] for k in ('remembered','attempts','last')}
+        if row and row['content_hash']==fingerprint(item):
+            schedule=app.store.one('SELECT streak,due FROM study_schedule_v1 WHERE chat_id=? AND set_id=? AND card_id=? AND content_hash=?',(chat_id,deck['id'],item['id'],fingerprint(item)))
+            result[item['id']]={k:row[k] for k in ('remembered','attempts','last')}|{'next_review':schedule['due'] if schedule else None,'streak':schedule['streak'] if schedule else 0,'due_now':not schedule or schedule['due']<=time.time()}
     return {'items':result}
 
 def explain(app,chat_id,body):
+    question=body.get('question','')
+    if not isinstance(question,str) or len(question)>1200:raise ValueError('Domanda di approfondimento oltre 1.200 caratteri.')
+    question=question.strip()
     value,deck=loaded(app,chat_id,body.get('artifact_id'));item=next((i for i in deck['items'] if i['id']==body.get('card_id')),None)
     if not item:raise ValueError('Scheda non trovata.')
-    return app.send(chat_id,{'prompt':'Spiega questa scheda usando soltanto le sue fonti, con un ragionamento chiaro.','lab':'study','study':DEFAULTS|{'count':1},'rag':False,'canvas':True,'study_explain':{'artifact_id':value['id'],'card_id':item['id']}})
+    spec={'artifact_id':value['id'],'card_id':item['id']}
+    if question:spec['question']=question
+    return app.send(chat_id,{'prompt':'Spiega questa scheda usando soltanto le sue fonti, con un ragionamento chiaro.'+(' Domanda: '+question if question else ''),'lab':'study','study':DEFAULTS|{'count':1},'rag':False,'canvas':True,'study_explain':spec})
 
 def resume(app,chat_id,artifact_id):
     value,deck=loaded(app,chat_id,artifact_id)
@@ -203,8 +223,12 @@ def build_explanation(app,job,payload,settings,model,cancel,stage,log_path,meta)
     value,deck=loaded(app,job['chat_id'],settings['_study_explain']['artifact_id']);deck=copy.deepcopy(deck)
     item=next(i for i in deck['items'] if i['id']==settings['_study_explain']['card_id']);ids={c['source'] for c in item['citations']};sources=[s for s in deck['sources'] if s['id'] in ids]
     app.engine.start_llama(model,settings,log_path,cancel,stage=stage)
-    result=generate(app,settings,model,cancel,stage,sources,'Spiega in dettaglio questa scheda senza introdurre fatti esterni: '+json.dumps(item,ensure_ascii=False),1)
+    question=settings['_study_explain'].get('question','')
+    request='Spiega in dettaglio questa scheda senza introdurre fatti esterni. Se gli estratti non permettono di rispondere dichiaralo. Scheda e precedente chiarimento: '+json.dumps(item,ensure_ascii=False)
+    if question:request+='\nDomanda di approfondimento dell’utente: '+question
+    result=generate(app,settings,model,cancel,stage,sources,request,1)
     item['explanation']=result['items'][0]
+    if question:item['explanation'].update(question=question,followup=True)
     media=copy.deepcopy(value.get('media',[]));artifact={'title':deck['title'],'content':encode(deck),'media':media};app.save_artifact(job['chat_id'],deck['title'],artifact['content'],media);return artifact
 
 def csv_export(deck):

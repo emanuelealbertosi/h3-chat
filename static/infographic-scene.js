@@ -20,10 +20,14 @@
   if(!Array.isArray(input.objects)||input.objects.length<1||input.objects.length>256)fail('objects','da 1 a 256 oggetti, senza troncamento');
   const seen=new Map();
   for(const [i,o] of input.objects.entries()){
-   const p='objects['+i+']';fields(o,['id','type','parentId','layer','width','height','anchor','transform','fill','stroke','strokeWidth','text','fontSize','fontFamily','path','value','maxValue','unit','tracks','visible','parallax','assetId','imageFit'],p);id(o.id,p+'.id');
+   const p='objects['+i+']';fields(o,['id','type','parentId','layer','width','height','anchor','transform','fill','stroke','strokeWidth','text','fontSize','fontFamily','path','value','maxValue','unit','tracks','visible','parallax','assetId','imageFit','crop','flipX'],p);id(o.id,p+'.id');
    if(seen.has(o.id))fail(p+'.id','identificativo duplicato');seen.set(o.id,o);
    if(!kinds.includes(o.type))fail(p+'.type','primitiva non supportata');if(o.parentId!=null)id(o.parentId,p+'.parentId');
    if(o.type==='image'&&(!/^[0-9a-f]{32}$/.test(o.assetId||'')||!['contain','cover'].includes(o.imageFit??'contain')))fail(p+'.assetId','immagine autorizzata richiesta');
+   if(o.type==='image'){
+    if(typeof (o.flipX??false)!=='boolean')fail(p+'.flipX','booleano richiesto');
+    if(o.crop){const c=o.crop;fields(c,['x','y','width','height','sourceWidth','sourceHeight'],p+'.crop');for(const k of ['sourceWidth','sourceHeight','width','height'])num(c[k],1,16384,p+'.crop.'+k);for(const k of ['x','y'])num(c[k],0,16384,p+'.crop.'+k);if(c.x+c.width>c.sourceWidth||c.y+c.height>c.sourceHeight)fail(p+'.crop','ritaglio fuori dall’immagine');}
+   }else if(Object.hasOwn(o,'crop')||Object.hasOwn(o,'flipX'))fail(p,'ritaglio e specchio disponibili solo per immagini');
    num(o.layer??0,-1000,1000,p+'.layer');for(const a of ['width','height'])num(o[a],1,16384,p+'.'+a);
    num(o.parallax??1,0,2,p+'.parallax');if(o.parentId&&(o.parallax??1)!==1)fail(p+'.parallax','la parallasse si applica al gruppo principale');
    fields(o.anchor??{},['x','y'],p+'.anchor');for(const a of ['x','y'])num(o.anchor?.[a]??0,0,1,p+'.anchor.'+a);
@@ -82,7 +86,13 @@
   const scene=validate(input),host=doc.querySelector('[data-h3-motion-root]')||doc.body;doc.documentElement.style.height='100%';doc.body.style.cssText+=';margin:0;height:100%;overflow:hidden';host.style.height='100%';host.replaceChildren();const svg=element(doc,'svg',{viewBox:'0 0 '+scene.width+' '+scene.height,width:'100%',height:'100%','aria-label':'Motion Graphics'});svg.style.display='block';
   svg.append(element(doc,'rect',{width:scene.width,height:scene.height,fill:scene.background}));const camera=element(doc,'g');svg.append(camera);const nodes=new Map();
   for(const o of scene.objects){const wrap=element(doc,'g',{'data-h3-motion-object':o.id});let shape;
-   if(o.type==='image'){const assets=JSON.parse(doc.querySelector('[data-h3-motion-assets]')?.textContent||'{}'),url=assets[o.assetId];if(typeof url!=='string'||!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(url))fail(o.id,'immagine incorporata non disponibile');shape=element(doc,'image',{width:o.width,height:o.height,href:url,preserveAspectRatio:o.imageFit==='cover'?'xMidYMid slice':'xMidYMid meet'});}
+   if(o.type==='image'){
+    const assets=JSON.parse(doc.querySelector('[data-h3-motion-assets]')?.textContent||'{}'),url=assets[o.assetId];if(typeof url!=='string'||!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(url))fail(o.id,'immagine incorporata non disponibile');
+    const fit=o.imageFit==='cover'?'xMidYMid slice':'xMidYMid meet';
+    if(o.crop){const c=o.crop;shape=element(doc,'svg',{width:o.width,height:o.height,viewBox:[c.x,c.y,c.width,c.height].join(' '),preserveAspectRatio:fit,overflow:'hidden'});shape.append(element(doc,'image',{width:c.sourceWidth,height:c.sourceHeight,href:url,preserveAspectRatio:'none'}));}
+    else shape=element(doc,'image',{width:o.width,height:o.height,href:url,preserveAspectRatio:fit});
+    if(o.flipX){const mirror=element(doc,'g',{transform:'translate('+o.width+' 0) scale(-1 1)'});mirror.append(shape);shape=mirror;}
+   }
    else if(o.type==='rect'||o.type==='bar')shape=element(doc,'rect',{width:o.width,height:o.height});else if(o.type==='ellipse')shape=element(doc,'ellipse',{cx:o.width/2,cy:o.height/2,rx:o.width/2,ry:o.height/2});
    else if(o.type==='line')shape=element(doc,'line',{x1:0,y1:0,x2:o.width,y2:o.height});else if(o.type==='path')shape=element(doc,'path',{d:o.path});
    else if(o.type==='text'||o.type==='counter'){shape=element(doc,'text',{x:0,y:o.fontSize??32,'font-family':o.fontFamily??'Manrope','font-size':o.fontSize??32});shape.textContent=o.text??'';}

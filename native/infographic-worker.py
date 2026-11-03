@@ -70,6 +70,19 @@ class CDP:
         if result.get('exceptionDetails'):raise RuntimeError('Errore nella timeline del renderer.')
         return result.get('result',{}).get('value')
 
+def capture_frame(cdp):
+    """Reduce PNG compression cost without changing any decoded pixels."""
+    options={'format':'png','captureBeyondViewport':False,'fromSurface':True}
+    if getattr(cdp,'_png_optimize',True):options['optimizeForSpeed']=True
+    try:return cdp.call('Page.captureScreenshot',options)
+    except RuntimeError as exc:
+        # Compatibility with older installed renderers. Do not hide disconnects,
+        # browser crashes or other capture failures behind a retry.
+        if 'optimizeForSpeed' not in options or 'Invalid parameters' not in str(exc):raise
+        cdp._png_optimize=False;options.pop('optimizeForSpeed')
+        return cdp.call('Page.captureScreenshot',options)
+
+
 def audio(path,duration,rate,loop=None):
     import av,numpy as np
     result=np.zeros((2,math.ceil(duration*rate)),dtype=np.float32)
@@ -200,7 +213,7 @@ def run(request):
                     buffer=io.BytesIO();decoder.image(max(0,index/fps-start)).save(buffer,'JPEG',quality=90)
                     uri='data:image/jpeg;base64,'+base64.b64encode(buffer.getvalue()).decode()
                     cdp.evaluate('Promise.all([...document.querySelectorAll("iframe")].flatMap(f=>[...f.contentDocument.querySelectorAll("[data-h3-video]")]).filter(i=>i.dataset.h3VideoChannel==='+json.dumps(channel)+').map(async i=>{i.src='+json.dumps(uri)+';await i.decode();}))',True)
-                shot=cdp.call('Page.captureScreenshot',{'format':'png','captureBeyondViewport':False,'fromSurface':True})['data']
+                shot=capture_frame(cdp)['data']
                 with Image.open(io.BytesIO(base64.b64decode(shot))) as image:frame=av.VideoFrame.from_image(image.convert('RGB').resize(size,Image.Resampling.LANCZOS))
                 frame.pts=index;frame.time_base=Fraction(1,fps)
                 for packet in video.encode(frame):out.mux(packet)

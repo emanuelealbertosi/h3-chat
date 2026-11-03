@@ -163,3 +163,83 @@ al20%, lasciando fermi i testi. La trasformazione è registrata e il piano
 deve comunque superare i normali controlli di collisione e misura. Gli sfondi
 già creati non vengono riposizionati. Contenuti esatti e ingombro misurato
 dispongono di una correzione mirata ciascuno, con massimo3risposte tipografiche.
+
+
+## Riprodurre o migliorare una locandina allegata
+Nelle Impostazioni Locandine scegli Da un riferimento grafico → Riproduci il
+layout allegato oppure Migliora il layout allegato. Allega un’immagine o PDF,
+selezionalo separatamente dalle fotografie e scegli la pagina PDF. Se esiste
+un solo candidato può essere selezionato automaticamente; con più candidati
+serve un ID esplicito. Mantieni il formato dell’originale per le stesse proporzioni.
+Il modello LLM deve avere Vision abilitata. Esempio: «Riproduci questa locandina,
+conserva disposizione e palette; sostituisci il titolo con NOTTE JAZZ». Oppure:
+«Migliora questa locandina: stessi contenuti, più gerarchia e contrasto».
+Il motore estrae una pagina su CPU; per PDF conserva anche i rettangoli testuali
+originali. Vision descrive regioni, colori, testi leggibili e incertezze. Le
+immagini individuate vengono ritagliate e riutilizzate, mentre i testi leggibili
+sono HTML/SVG modificabili. L’app identifica anche la funzione di figura
+principale, logo e QR: una scritta sovrapposta non deve far sparire la figura.
+I testi piccoli ricevono una lettura ravvicinata automatica (massimo 24 ritagli,
+rispettando il limite Vision configurato); i dati incerti rimangono ritagli
+originali, senza una trascrizione inventata. Questo non aumenta la risoluzione
+della sorgente. L’originale resta intatto. L’analisi è salvata
+con l’artefatto e come layout.json; ambiguità e sostituzioni font vanno nelle note.
+La ricostruzione non garantisce identità dei pixel, font proprietari o separazione
+perfetta di testi e figure inseparabili. Nuove illustrazioni non sono avviate
+implicitamente in queste modalità. Per la brochure multipagina serve ancora un
+percorso distinto: il selettore qui tratta una pagina alla volta. L’Agente usa
+create_posters con reference_mode, reference_asset_id e reference_page.
+
+Una richiesta breve come «Rifai e migliora questa locandina» usa questo flusso
+senza dover preparare ritagli o descrivere manualmente la composizione. Migliora
+conserva la struttura semantica; una riprogettazione radicale richiede istruzioni
+esplicite. Prima di segnare la pagina pronta, l’app misura su CPU immagini,
+contenuti e testi coperti/tagliati, con al massimo due correzioni HTML automatiche.
+Se il controllo fallisce conserva la bozza e segnala il limite, senza dichiararla
+pronta. La verifica geometrica non certifica la qualità estetica o l’esattezza
+dell’OCR. Un logo o una figura con testo inseparabile conserva il testo raster;
+non viene presentato come elemento interamente vettoriale o modificabile.
+
+L’analisi usa una copia con assi di coordinate, senza alterare l’originale o i
+ritagli riutilizzati. Su Windows l’OCR già presente nel sistema fornisce ulteriori
+ancore geometriche; non viene scaricato alcun modello. Se il servizio o la lingua
+non sono disponibili, si continua con Vision e la griglia. Le lettere dell’OCR
+non sono considerate automaticamente corrette. Una lettura ravvicinata estranea
+al testo atteso viene rifiutata, invece di sostituire un calendario con una lista.
+Le illustrazioni significative restano risorse anche quando Vision le chiama
+decorazioni. Il controllo respinge anche i titoli ristampati sopra scritte raster.
+
+Una miniatura densa con molti testi minuscoli e letture incerte non viene
+presentata come una locandina migliorata pronta. H3 chiede il PDF originale o
+un’immagine realmente più nitida (un ingrandimento artificiale non recupera le
+lettere). Lo stesso avviene se, dopo i dettagli, almeno un quarto dei blocchi
+rimane incerto, con almeno quattro blocchi. Riproduci rimane disponibile per
+conservare i ritagli raster. I recapiti non verificati non diventano testo nuovo.
+
+Il riferimento appartiene agli allegati della richiesta corrente. Se ricarichi
+una richiesta e sostituisci l’immagine, un solo nuovo allegato viene selezionato
+automaticamente e la pagina precedente viene azzerata. Con più candidati non
+viene scelto arbitrariamente il primo: il selettore richiede una scelta. Le altre
+impostazioni restano conservate; un vecchio ID non allegato non viene recuperato
+dalla cronologia. Il server applica la stessa regola anche ai client già aperti.
+
+La verifica dei testi raster considera le aree effettivamente mostrate, con
+ritaglio, adattamento e mascheratura. Una dicitura ripetuta in un’altra parte
+del poster è ammessa; una sovrapposizione vicina alle parole della foto riceve
+una correzione automatica e, se persiste da sola, un avviso visivo non bloccante.
+Il riconoscimento delle singole lettere raster non è una certificazione ottica.
+Testi mancanti, tagliati, coperti e immagini obbligatorie assenti rimangono
+problemi bloccanti dopo i tentativi limitati di correzione.
+# Esportazione PowerPoint: fedele o modificabile
+
+**PowerPoint fedele** conserva la pagina completa come immagine ad alta
+risoluzione. **PowerPoint modificabile** esporta invece i testi HTML come caselle
+di testo, i riquadri come forme e le illustrazioni come immagini separate, anche
+per locandine già salvate: basta riesportare, senza rigenerarle. Le coordinate
+e i corpi dei testi sono rapportati al formato fisico A3/A4 della locandina.
+
+Le immagini restano oggetti grafici: le scritte già dipinte nei pixel e gli SVG
+complessi non vengono ricostruiti come testo. Font, gradienti dei titoli e altri
+effetti CSS possono essere semplificati nel formato modificabile. Usa il formato
+fedele per mantenere l'aspetto esatto. I due pulsanti indicano scelte diverse;
+la modalità modificabile non viene più ignorata per i documenti locandina.

@@ -94,7 +94,8 @@ def enqueue(app,chat_id,body):
     if config['scope']!='h3':
         from .agent_computer import grant
         grant(app,config)
-    settings=app.effective_settings(app.validate_settings({'think_level':body.get('think_level',app.store.settings()['think_level'])}))
+    from .request_settings import resolve as resolve_request_settings
+    settings=resolve_request_settings(app,body)
     guard_job(settings);app.engine.require_model(settings['chat_model'],'chat')
     if cpu(settings):config.update(allow_images=False,allow_audio=False,allow_video=False,allow_transcription=False)
     rag=body.get('rag',settings['rag_enabled'])
@@ -110,6 +111,14 @@ def enqueue(app,chat_id,body):
     slides=preferences(app)['slides']['last'] or {}
     previous=app.store.one("SELECT json_extract(payload,'$.settings._infographic') AS config FROM jobs WHERE json_type(payload,'$.settings._infographic')='object' ORDER BY created DESC LIMIT 1")
     infographic=json.loads(previous['config']) if previous else {}
+    context=body.get('agent_context',{})
+    if not isinstance(context,dict) or set(context)-{'slides','infographic'}:raise ValueError('Impostazioni degli strumenti Agent non valide.')
+    if 'slides' in context:
+        from .slides import options as slide_options
+        slides=slide_options('',context['slides'])
+    if 'infographic' in context:
+        from .infographics import options as infographic_options
+        infographic=infographic_options(value=context['infographic'])
     from .voice import validate_fields as voice_fields
     from .music_options import validate_fields as music_fields
     from .agent_inputs import info

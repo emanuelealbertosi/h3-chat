@@ -1,5 +1,53 @@
 # Voice e video con traccia audio
 
+## MOSS-TTS Local v1.5 · prova alternativa
+
+Higgs rimane il motore predefinito. In chat seleziona **Voice**, apri
+**Voce e interpretazione** e scegli **MOSS-TTS Local v1.5 · sperimentale**.
+I controlli dedicati comprendono lingua (italiano esplicito), temperatura,
+Top P, Top K, penalità ripetizioni, limite dei token audio e seed.
+Le impostazioni MOSS restano separate da quelle Higgs e vengono recuperate
+ricaricando la richiesta. Con **Leggi il testo** il contenuto non viene riscritto.
+
+**Timbro della voce** permette di conservare il campione configurato oppure
+generare una **nuova voce** senza riferimento. In **Direzione vocale** descrivi
+timbro, accento, interpretazione ed evoluzione delle emozioni: questa istruzione
+esplicita ha priorità sulla recitazione generica. Le parole restano nel prompt,
+dopo `Testo:`. `[pausa]` nel parlato viene convertito in `[pause 0.8s]`, formato
+nativo MOSS; sono accettati anche marcatori espliciti come `[pause 1.2s]`.
+Testo originale, direzione, seed e scelta del riferimento restano nella ricetta.
+**Durata indicativa per segmento** usa il controllo nativo MOSS a 12,5 frame
+audio al secondo; zero conserva la durata automatica. È un suggerimento al
+modello, senza tagliare, allungare o accelerare l'audio dopo la sintesi.
+
+**Precisione del codec audio** distingue BF16 per pesi e calcolo (memoria
+ridotta), il profilo del demo ufficiale con pesi FP32 e calcolo BF16, e FP32
+per entrambi (precisione piena, senza TF32). Il TTS conserva il formato BF16
+nativo dei suoi pesi e non usa INT8. La precisione effettiva del codec viene
+registrata nei tempi di ogni segmento. FP32 richiede più memoria; una maggiore
+precisione numerica non garantisce un timbro più naturale né elimina da sola
+eventuali ripetizioni generate dal modello.
+
+Nelle preferenze Voice si configurano le cartelle locali
+`OpenMOSS-Team/MOSS-TTS-Local-Transformer-v1.5` e
+`OpenMOSS-Team/MOSS-Audio-Tokenizer-v2`. Servono tutti i pesi, i tokenizer,
+i file di configurazione e gli adattatori Python delle due distribuzioni.
+Questa integrazione usa BF16, 12 codebook e uscita stereo a 48 kHz.
+Non effettua download durante la sintesi.
+
+Usa il campione femminile o maschile configurato in Voice; senza campione
+può generare una voce nuova. Timbro e accento dipendono anche dal riferimento.
+Le scelte di recitazione diventano istruzioni naturali per MOSS, senza tag Higgs;
+non garantiscono una trasformazione esatta della voce.
+
+Per contenere la VRAM il worker trasferisce separatamente codec e TTS:
+codifica del riferimento, generazione, poi decodifica. La prima stima prudenziale
+è 11 GiB di VRAM libera e 24 GiB di RAM libera; la CPU è supportata ma può
+essere molto lenta. Il worker viene rilasciato a fine sintesi o all'interruzione.
+Un segmento che esaurisce il limite dei token audio produce un errore esplicito
+anziché pubblicare una frase troncata. Le impostazioni BF16 MOSS non cambiano
+la precisione scelta per Higgs.
+
 ## Higgs Audio v3
 
 Voice usa Higgs Audio v3 in chat, Voice + Manim e infografiche. Voce,
@@ -168,3 +216,36 @@ chat** puoi impostare il tempo massimo di risposta LLM per ciascun modello
 ogni tentativo riceve il budget configurato nelle opzioni Manim.
 Un codice interrotto al limite di output viene indicato come tale: il
 massimo effettivo, inclusi i token di thinking, dipende anche dal provider.
+
+
+### Timbri dedicati alle infografiche
+Nelle impostazioni Infografica → Regia e audio, Timbro della narrazione offre
+Predefinita, Limpida (campione 5), Aurora (campione 2) e Dalle impostazioni Voice.
+La scelta resta salvata nel browser ed è riportata nel riepilogo e nella richiesta.
+I due preset usano Higgs BF16, codec FP32, temperatura 0.8, seed 734, velocità 1,
+pausa 220 ms ed espressività alta; una recitazione esplicita prevale.
+I campioni sono locali all’installazione e non sono distribuiti con il codice.
+Il registro data/voices/infographic-profiles.json sceglie il default: senza
+registro si rispettano le impostazioni Voice, senza scaricare campioni.
+Un riferimento inglese può produrre accento trasferito anche con testo italiano:
+qui si provano estratti italiani delle due letture approvate, conservando gli
+originali. Il riconoscimento automatico della lingua non certifica l’accento.
+Maschile/Mista con timbro automatico conserva le voci Voice; un profilo femminile
+esplicito non sostituisce il campione maschile configurato.
+L’Agente dispone degli stessi tre visual_mode (normal/decorative/sequence),
+dei profili voce e di list_sprites/read_sprite per riusare la raccolta confermata.
+# Timbri italiani condivisi: Voice, Studio e infografiche
+
+In **Voice → Impostazioni → Timbro vocale** sono disponibili **Limpida** e
+**Aurora**, oltre al campione configurato. Sono gli stessi campioni italiani
+delle infografiche: Higgs BF16, seed 734 e recitazione espressiva. La scelta
+rimane nella chat; non sostituisce i campioni personali. Il timbro predefinito
+si può scegliere anche nelle preferenze Voice. Sono necessari i campioni locali
+in `data/voices/infographic-profiles.json`; non vengono scaricati automaticamente.
+
+Nello **Studio**, le impostazioni e il canvas dei dialoghi mostrano **Voce A** e
+**Voce B**. Scegli due timbri distinti e premi **Crea audio a due voci** anche
+per uno script già creato. Le scelte vengono salvate e congelate nel lavoro
+audio. Se almeno una voce usa questi preset, entrambe vengono sintetizzate da
+Higgs con la ricetta BF16 condivisa. I due campioni originali maschile/femminile
+restano disponibili. Il testo approvato e le fonti del dialogo non cambiano.

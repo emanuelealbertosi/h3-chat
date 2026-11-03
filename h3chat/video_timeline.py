@@ -14,7 +14,7 @@ def validate_audio_interval(duration,start,seconds,*,tail=False):
     if start>=duration or start+seconds>duration+tolerance:raise ValueError(f'Audio troppo corto: servono {seconds:g} secondi dalla posizione {start:g}.')
 
 def timeline(duration,segment_seconds=15):
-    if not math.isfinite(duration) or not 0<duration<=600:raise ValueError('Video con audio: durata massima 10 minuti.')
+    if not math.isfinite(duration) or not 0<duration<=600:raise ValueError('Video: durata massima 10 minuti.')
     from .video_options import validate_segment_seconds
     validate_segment_seconds(segment_seconds)
     if segment_seconds is None:segment_seconds=15
@@ -38,4 +38,5 @@ def scene_plan(plan,scene,soundtrack_index,prompt=None,*,audio_start=0,shared=Fa
             entry['start']=audio_start+start
             if entry['role']=='reference':entry['role']='reuse'
     result['prompt']+=f'\nAll narrative clocks above are LOCAL to this clip: 0–{scene["duration"]:g} seconds. The source audio offset is handled separately. This is clip {scene["index"]+1}, covering global film seconds {start:g} to {end:g}. Use supplied visual memory to preserve subject identities, clothing and visual style while advancing the requested action. Follow the intended location/scene changes; keep environment and lighting coherent within each setting. Do not restart the opening.'
+    if 'logical_scene' in scene:result['prompt']+=f'\nThis is narrative scene {scene["logical_scene"]}, lasting {scene["logical_duration"]:g} seconds in total. Render only its interval {scene["logical_offset"]:g}–{scene["logical_offset"]+scene["duration"]:g} seconds; continue the action across internal segments without replaying its beginning.'
     return result

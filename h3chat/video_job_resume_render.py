@@ -9,7 +9,8 @@ from .video_resume import checkpoint
 
 CONTEXT_KEYS = ('_video_soundtrack', '_video_duration', '_video_audio_start',
                 '_video_audio_source_duration', '_video_segment_seconds',
-                '_video_editing', '_video_aspect', '_video_loras','video_overrides','_video_quality','_video_steps','_video_batch_id')
+                '_video_editing', '_video_aspect', '_video_loras','video_overrides','_video_quality','_video_steps','_video_batch_id',
+                '_video_sequence','_video_scene_count','_video_scene_seconds')
 
 
 def render(app, job, payload, settings, cancel, stage, log_path):
@@ -39,9 +40,9 @@ def render(app, job, payload, settings, cancel, stage, log_path):
                      for m in reversed(history[:-1]) if any(x['mime'].startswith(('image/', 'audio/')) for x in m['media'])), [])
     previous = history[:-1] if re.search(r'\b(?:precedente|previous|già generat\w*)\b', payload['prompt'], re.I) else ()
     soundtrack = settings.get('_video_soundtrack') or select(payload['prompt'], refs, previous)
-    if not soundtrack:
+    if not soundtrack and not settings.get('_video_sequence'):
         raise ValueError('La traccia originale del video da riprendere non è più disponibile. Le clip salvate sono conservate.')
-    if not any(x['id'] == soundtrack['id'] for x in refs):refs.append(soundtrack)
+    if soundtrack and not any(x['id'] == soundtrack['id'] for x in refs):refs.append(soundtrack)
     for item in refs:
         if not safe_join(app.data, item['path']).is_file():raise ValueError('Un riferimento originale non è più disponibile. Le clip salvate sono conservate.')
     chosen_loras = for_model(payload.get('loras', []), model)
@@ -49,7 +50,7 @@ def render(app, job, payload, settings, cancel, stage, log_path):
                     _video_audio_start=saved.get('audio_start', 0), _video_soundtrack=soundtrack)
     if '_video_loras' not in settings:
         settings['_video_loras'] = [{'path':x['path'], 'weight':x['weight']} for x in chosen_loras]
-    if '_video_audio_source_duration' not in settings:
+    if soundtrack and '_video_audio_source_duration' not in settings:
         settings['_video_audio_source_duration'] = probe(app.engine, app.data, soundtrack, cancel, stage, log_path)['duration']
     meta = {'intent':'video', 'canvas':bool(payload.get('canvas')), 'model':model['name'],
             'execution_mode':'Standalone · GPU · ripresa dalle clip mancanti', 'references':refs,

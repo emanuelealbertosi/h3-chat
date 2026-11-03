@@ -10,13 +10,26 @@ STUDIO_FILES=frozenset((
     'h3chat/study.py','h3chat/study_import.py','h3chat/study_audio.py',
     'h3chat/web_media_runtime.py','native/study-captions-worker.py',
     'ui/study.js','ui/project-media-import.js','ui/source-origin.js','docs/studio.md',
+    'h3chat/study_library.py','ui/study-view.js','ui/study-style.js','ui/study-text.js','ui/study-export.js',
+    'static/dialogs.css',
+))
+NEW_FEATURE_FILES=frozenset((
+    'h3chat/poster_reference.py','h3chat/poster_reference_check.py','native/poster-reference-worker.py',
+    'h3chat/video_sequence.py','ui/moss-layout-editor.js','h3chat/request_settings.py','ui/request-settings.js',
+    'h3chat/infographic_voices.py','ui/voice-profiles.js',
+    'static/voice-profiles/profiles.json','static/voice-profiles/limpida.wav','static/voice-profiles/aurora.wav',
+    'static/vendor/moss-layout/le-editor.js','static/vendor/moss-layout/le-editor.css',
+    'static/vendor/moss-layout/le-model.js','static/vendor/moss-layout/le-formats.js','static/vendor/moss-layout/le-validate.js',
+    'static/vendor/moss-layout/LICENSE.txt','static/vendor/moss-layout/provenance.json',
+    'static/infographic-cinema.js','h3chat/infographic_cinema.py',
+    'h3chat/moss_tts.py','native/moss-voice-backend.py','native/h3_moss_audio.py',
 ))
 FONT_FILES=frozenset('static/'+name+'.ttf' for name in ('Manrope','Cormorant','BebasNeue','Baloo2','Caveat','Bangers'))|frozenset((
     'licenses/Manrope-OFL.txt','licenses/Cormorant-OFL.txt',
     'static/font-licenses/bebasneue/OFL.txt','static/font-licenses/baloo2/OFL.txt',
     'static/font-licenses/caveat/OFL.txt','static/font-licenses/bangers/OFL.txt',
 ))
-REQUIRED=POSTER_FILES|STUDIO_FILES|FONT_FILES
+REQUIRED=POSTER_FILES|STUDIO_FILES|FONT_FILES|NEW_FEATURE_FILES
 
 def verify_members(names):
     """Validate actual archive members, not merely files on the build host."""

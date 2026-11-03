@@ -24,6 +24,64 @@ Il lavoro viene salvato per piccoli gruppi di schede. Stop conserva i gruppi
 già completati; **Completa schede mancanti** riprende senza rifare quelli pronti.
 Il ripasso è separato per chat, lotto, scheda e contenuto.
 
+## Viste e navigazione
+
+Il canvas presenta una vista adatta al contenuto: flashcard con risposta nascosta,
+sintesi e guide a sezioni, FAQ espandibili, cronologie su una linea del tempo e
+dialoghi con le battute dei due conduttori distinte. **Leggi tutto** mostra il lotto
+intero; **Studia / Ripassa** mostra una scheda alla volta. Le risposte possono
+contenere elenchi, grassetti, tabelle Markdown e formule LaTeX. HTML e immagini
+esterne nel testo non vengono eseguiti o caricati.
+
+**Indice** consente di scegliere direttamente la scheda e cercare nel titolo o
+nella risposta. La ricerca e il filtro di ripasso si combinano. **Mescola** cambia
+l’ordine soltanto durante il ripasso; **Ordine originale** lo ripristina. La lettura
+integrale mantiene sempre l’ordine del documento, anche per le cronologie.
+Con il riquadro Studio selezionato, le frecce cambiano scheda e Spazio rivela la
+risposta. Il canvas mantiene il contenuto e il lettore audio durante i sondaggi
+di avanzamento che non cambiano il lotto.
+
+**Prova a rispondere** permette di scrivere prima di vedere la soluzione.
+**Confronta con la fonte** mostra risposta e citazioni, poi l’utente sceglie
+Ricordata o Da ripassare. È un’autovalutazione, non una correzione automatica
+dell’LLM. La bozza scritta resta disponibile spostandosi tra le schede nella
+sessione del browser; non viene salvata nel documento né sincronizzata.
+
+## Ripasso programmato
+
+Il filtro **Da fare ora** include schede nuove, vecchi ripassi senza una scadenza
+e schede la cui scadenza è arrivata. Una sequenza di risposte Ricordata propone
+intervalli di 1, 3, 7, 14 e poi 30 giorni; Da ripassare azzera la sequenza e propone
+un nuovo tentativo dopo 10 minuti. È una programmazione semplice di H3, non un
+algoritmo FSRS/SM-2. Si può comunque ripassare una scheda prima della scadenza.
+I vecchi progressi restano disponibili. Una modifica al contenuto ha un proprio
+ripasso e una propria programmazione; riaprendo una revisione precedente si
+ritrova la sua situazione.
+
+## Tutor e fonti
+
+**Fonti** mostra gli estratti conservati nel lotto e segnala quelli abbreviati.
+Non è una misura percentuale di copertura dell’intero libro.
+**Chiedi un chiarimento** consente una domanda sulla scheda e sulla spiegazione
+precedente. Il tutor riceve soltanto le fonti citate da quella scheda; deve
+dichiarare quando gli estratti non bastano. L’ultimo chiarimento citato viene
+salvato nella scheda. Le risposte precedenti restano nelle revisioni del canvas,
+non in una conversazione illimitata allegata alla scheda.
+
+## Lotti ed esportazioni complete
+
+In **Strumenti → Lotti del progetto** si aprono gli ultimi lotti salvati nelle
+chat dello stesso progetto. Senza progetto, la lista riguarda la chat corrente.
+La lista raggruppa le revisioni dello stesso lotto nella stessa chat e mostra
+la più recente (massimo 50 lotti tra le ultime 500 revisioni); la cronologia del
+canvas conserva anche le altre. Aprire un lotto non avvia generazioni.
+
+**PDF completo**, **Word completo** e **HTML completo** in Strumenti esportano
+tutte le schede, risposte, chiarimenti ed estratti fonte, anche se nel canvas è
+visibile solo una domanda o è attivo un filtro. Anche i pulsanti PDF, Word e .md
+in fondo al canvas usano l’intero Studio. PNG fotografa la vista corrente.
+CSV e JSON rimangono disponibili nello stesso menu.
+
 **Esporta CSV · Anki** produce fronte, retro e fonti. **Esporta lotto JSON**
 conserva il documento con i suoi estratti. Il JSON può essere reimportato nello
 Studio: riceve nuovi identificativi e inizia senza progressi di ripasso.
@@ -81,3 +139,11 @@ di Whisper, della sintesi vocale o dei sottotitoli YouTube dal vivo.
 Il 29 ottobre una prova reale con Qwen locale ha completato un dialogo avanzato
 di 10 battute con citazioni tratte esattamente dalle fonti. La prova non misura
 la qualità delle due voci: la sintesi TTS rimane verificata con un motore simulato.
+
+Il 3 novembre il collaudo della nuova interfaccia copre le sei viste, indice e
+ricerca, tastiera, bozza della risposta, ordine casuale, programmazione del
+ripasso, chiarimenti e libreria del progetto. Il browser verifica anche il
+salvataggio e le esportazioni complete con fonti e modello simulati. Word e HTML
+sono esportati realmente; un PDF reale su Edge CPU include tutte le schede e le
+fonti, con testo ricercabile. Il controllo non misura una nuova generazione LLM
+o la qualità di una nuova sintesi vocale.

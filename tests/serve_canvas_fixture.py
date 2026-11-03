@@ -130,6 +130,30 @@ def main():
                         app.store.update_answer(job,'Solo codice.', 'failed',[],{'intent':'manim','canvas':True,'artifact':value,'error':'Durata errata: il video dura 28.00 s; richiesti 20 s. Correggi i tempi.'})
                         app.store.execute("UPDATE jobs SET status='failed' WHERE id=?",(ident,))
                         return self.json({'message_id':job['message_id']})
+                    if self.path=='/fixture/motion-rig':
+                        from h3chat.motion_rigs import template,PARTS
+                        from h3chat.motion_sprites import expand
+                        from h3chat.slides import encode
+                        atlas=Image.new('RGBA',(200,300),(0,0,0,0));draw=ImageDraw.Draw(atlas)
+                        for i,color in enumerate(['#e3ac83','#347d79','#347d79','#e3ac83','#173d48','#f7f2e7']):draw.rectangle(((i%2)*100+15,(i//2)*100+5,(i%2)*100+85,(i//2)*100+95),fill=color)
+                        atlas.save(outputs/'rig-parts.png');asset={'id':'c'*32,'name':'Parti sintetiche','mime':'image/png','path':'outputs/rig-parts.png'}
+                        parts={name:{'x':(i%2)*100,'y':(i//2)*100,'width':100,'height':100,'sourceWidth':200,'sourceHeight':300} for i,name in enumerate(PARTS)}
+                        rig=template(asset,parts,'Personaggio sintetico','Solo collaudo delle articolazioni','Colori sintetici')
+                        scene={'version':2,'id':'test','width':1280,'height':720,'duration':8,'background':'#f7f3e8','objects':[{'id':'student','type':'group','spriteId':rig['id'],'width':420,'height':560,'transform':{'x':650,'y':100},'gesture':'wave','actionStart':1,'actionEnd':7}],'camera':{'keyframes':[]}}
+                        graph=expand(scene,[rig]);deck={'version':1,'engine':'llm','format':'16:9','title':'Personaggio articolato','references':[],'active':0,'pages':[{'title':'Saluto','status':'ready','html':'<main>Motion Graphics</main>','sources':[],'motion_scene':graph}],
+                            'infographic':{'version':1,'scene_format_version':2,'durations':[8],'transition':'zoom','sfx':'none','rigs':[rig],'options':{'animation_engine':'motion','character_animation':'articulated','pace':'explainer'}}}
+                        app.save_artifact(chat,deck['title'],encode(deck),[asset]);return self.json({'upper':'student_rig_13','lower':'student_rig_15'})
+                    if self.path=='/fixture/motion-continuous':
+                        import copy
+                        from h3chat.slides import encode
+                        from h3chat.infographic_storyboard import EXAMPLE
+                        graphs=[copy.deepcopy(EXAMPLE),copy.deepcopy(EXAMPLE)]
+                        graphs[1]['objects'][-1]['text']='Seconda scena'
+                        deck={'version':1,'engine':'llm','format':'16:9','title':'Regia continua','references':[],'active':0,
+                            'pages':[{'title':'Scena '+str(i+1),'status':'ready','html':'<main>Motion Graphics</main>','sources':[],'motion_scene':g} for i,g in enumerate(graphs)],
+                            'infographic':{'version':1,'scene_format_version':2,'durations':[10,10],'transition':'zoom','sfx':'none','options':{'animation_engine':'motion','transition_seconds':1}}}
+                        app.save_artifact(chat,deck['title'],encode(deck),[])
+                        return self.json({'ok':True})
                     if self.path=='/fixture/audio':
                         import io,math,wave
                         stream=io.BytesIO()

@@ -17,3 +17,5 @@ class TempoTests(unittest.TestCase):
         freq=np.fft.rfftfreq(len(changed),1/rate)[np.argmax(np.abs(np.fft.rfft(changed*np.hanning(len(changed)))))]
         self.assertLess(abs(freq-220),1)
         with self.assertRaises(ValueError):tempo.adjust(original,rate,2)
+        stereo=np.stack((original,original*.4),axis=1);changed=tempo.adjust(stereo,rate,1.08)
+        self.assertEqual(changed.shape[1],2);self.assertLess(abs(len(changed)/len(original)-1/1.08),.02);self.assertGreater(float(np.abs(changed[:,0]-changed[:,1]).mean()),.1)

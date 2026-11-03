@@ -5,7 +5,7 @@ const selected=selector=>$(selector)?.selectedOptions?.[0]?.textContent?.trim()|
 const chosen=selector=>$(selector)?.querySelector('[aria-pressed="true"]')?.textContent?.trim()||'';
 
 // Keep the original controls, values and handlers inside a dedicated dialog.
-export function initComposerSettings({context,getState,onChange,visualControls}){
+export function initComposerSettings({context,getState,onChange,visualControls,onMossLayout}){
  const dialog=document.createElement('dialog');dialog.id='prompt-mode-settings';dialog.className='prompt-options-dialog prompt-mode-dialog';dialog.setAttribute('aria-labelledby','prompt-mode-title');
  dialog.innerHTML='<header><div><span class="eyebrow">DAL PROSSIMO MESSAGGIO</span><h2 id="prompt-mode-title">Impostazioni</h2></div><button type="button" class="icon-button" aria-label="Chiudi impostazioni della modalità">×</button></header><nav class="prompt-mode-tabs" aria-label="Impostazioni delle modalità attive"></nav><div class="prompt-options-body"></div><footer><span class="small-note">Le scelte restano impostate anche chiudendo la finestra.</span><button type="button" class="btn primary">Fatto</button></footer>';
  document.body.append(dialog);
@@ -20,7 +20,7 @@ export function initComposerSettings({context,getState,onChange,visualControls})
   ['music-inputs','Music',()=>[chosen('#music-inputs [data-music-quality]'),$('#music-inputs [data-duration-enable="chat"]')?.checked?'Max '+$('#music-inputs [data-duration-seconds="chat"]')?.value+' s':'',$('#music-inputs [data-music-field="instrumental"]')?.checked?'Strumentale':'Con voce',$('#music-inputs [data-music-field="title"]')?.value,$('#music-inputs [data-music-field="style"]')?.value?.slice(0,100)].filter(Boolean).join(' · ')],
   ['voice-inputs','Voice',()=>['gender','delivery','emotion','expressiveness'].map(key=>selected('#voice-inputs [data-voice-field="'+key+'"]').replace('Auto · segue l’interpretazione','Auto')).filter(Boolean).join(' · ')],
   ['video-hint','Video',()=>[selected('#video-quality'),selected('#video-steps'),selected('#video-editing'),videoRequestSummary(visualControls.read(),getState())].filter(Boolean).join(' · ')],
-  ['infographic-options','Infografica',()=>['format','layout','panel_order','style','output','voice_style'].filter(key=>key!=='panel_order'||!$('[data-infographic-field="panel_order"]')?.hidden).map(key=>chosen('[data-infographic-field="'+key+'"]')).filter(Boolean).join(' · ')],
+  ['infographic-options','Infografica',()=>['format','layout','panel_order','style','output','voice_profile','voice_style'].filter(key=>key!=='panel_order'||!$('[data-infographic-field="panel_order"]')?.hidden).map(key=>chosen('[data-infographic-field="'+key+'"]')).filter(Boolean).join(' · ')],
   ['manim-presentation-options','Manim',()=>$('#manim-presentation-enable')?.getAttribute('aria-pressed')==='true'?[...$('#manim-presentation-options').querySelectorAll('[data-manim-source][aria-pressed="true"],[data-manim-mode][aria-pressed="true"]')].map(e=>e.textContent.trim()).join(' · '):'Python libero · '+(getState()?.settings.manim_duration||8)+' s dal preset']
  ];
  function register(){
@@ -30,6 +30,9 @@ export function initComposerSettings({context,getState,onChange,visualControls})
    const row=document.createElement('div');row.className='prompt-settings-row';
    const button=document.createElement('button');button.type='button';button.className='prompt-choice';button.textContent='⚙ Impostazioni '+title;button.dataset.modeSettings=id;button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-controls',dialog.id);
    const text=document.createElement('span');text.className='prompt-settings-summary';row.append(button,text);context.append(row);
+   if(id==='prompt-image-panel'){
+    const layout=document.createElement('button');layout.type='button';layout.className='prompt-choice';layout.textContent='▧ Layout immagine';layout.dataset.mossLayoutOpen='';layout.setAttribute('aria-haspopup','dialog');layout.onclick=()=>onMossLayout?.();button.after(layout);
+   }
    if(id==='agent-options'){button.textContent='⚙ Preferenze Agente · budget e limiti';button.setAttribute('aria-controls','agent-preferences');const auto=panel.querySelector('[data-agent-auto]');if(auto)row.insertBefore(auto,text);}
    if(id==='music-inputs'){
     const resing=document.createElement('button');resing.type='button';resing.className='prompt-choice';resing.dataset.musicResing='';resing.textContent='Re-sing';button.after(resing);
@@ -46,6 +49,7 @@ export function initComposerSettings({context,getState,onChange,visualControls})
   for(const entry of entries){
    const enabled=active.includes(entry);entry.row.hidden=!enabled;entry.tab.hidden=!enabled;entry.wrapper.hidden=!enabled||current!==entry.id;
    entry.tab.setAttribute('aria-pressed',String(current===entry.id));entry.text.textContent=entry.describe();entry.text.title=entry.text.textContent;
+   const layout=entry.row.querySelector('[data-moss-layout-open]');if(layout){const model=getState()?.models.find(m=>m.id===visualControls.read().image_model);layout.disabled=model?.architecture!=='moss';layout.title=layout.disabled?'Seleziona MOSS per disegnare riquadri e sottoprompt.':'Apri l’editor di riquadri, testi e sottoprompt MOSS.';}
    const resing=entry.row.querySelector('[data-music-resing]');if(resing){const model=chosenMusicModel(getState(),visualControls.read());resing.disabled=!getState()?.music_options?.resing||model?.architecture==='minimax-music'||!!model?.remote_media;resing.title=!getState()?.music_options?.resing?'Novità pronta: riavvia il server quando i lavori in corso sono terminati.':resing.disabled?'Re-sing sulla melodia originale richiede YuE2 locale. Sceglilo nelle impostazioni Music.':'Usa una canzone allegata come base originale e canta il nuovo testo. Da 3 secondi a 5 minuti. Se Testo è vuoto, Assistant lo inventa dal prompt.';resing.setAttribute('aria-pressed',String(!!visualControls.read().music_resing));}
   }
   const entry=entries.find(e=>e.id===current);dialog.querySelector('h2').textContent='Impostazioni '+(entry?.title||'della modalità');tabs.hidden=active.length<2;

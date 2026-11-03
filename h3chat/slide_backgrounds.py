@@ -89,7 +89,8 @@ def enqueue(app,chat_id,body):
     prompt=body.get('prompt','')
     if not isinstance(prompt,str) or not 1<=len(prompt.strip())<=4000:raise ValueError('Descrivi nel prompt il tema degli sfondi (massimo 4.000 caratteri).')
     config=options(body.get('options',{}))
-    settings=app.effective_settings(app.store.settings())
+    from .request_settings import resolve as resolve_request_settings
+    settings=resolve_request_settings(app,body)
     guard_intent(settings,'create')
     ident=select(app.engine,settings,config['model'])
     model=app.engine.require_model(ident,'create');config['model']=ident

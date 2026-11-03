@@ -50,7 +50,9 @@ def check_schema(value,schema,path='$'):
         for key,item in value.items():
             if key in props:check_schema(item,props[key],path+'.'+key)
     if isinstance(value,list):
-        if len(value)<schema.get('minItems',0) or len(value)>schema.get('maxItems',1000000):raise ValueError('Numero di elementi API JSON non valido.')
+        if len(value)<schema.get('minItems',0) or len(value)>schema.get('maxItems',1000000):
+            lower=schema.get('minItems',0);upper=schema.get('maxItems','nessun massimo')
+            raise ValueError(f'Numero di elementi API JSON non valido: campo {path}, ricevuti {len(value)}, intervallo consentito {lower}–{upper}.')
         for index,item in enumerate(value):check_schema(item,schema.get('items',{}),path+'['+str(index)+']')
     if type(value) in (int,float) and not schema.get('minimum',float('-inf'))<=value<=schema.get('maximum',float('inf')):
         lower=schema.get('minimum','nessun minimo');upper=schema.get('maximum','nessun massimo')

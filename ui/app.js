@@ -1,3 +1,4 @@
+import {exportStudy} from './study-export.js';
 import {initPosters} from './posters.js';
 import {initStudy,renderStudy,studyPrefix} from './study.js';
 import {initAgentControls,renderAgentRun} from './agent-ui.js';
@@ -52,6 +53,8 @@ import {openVideoRecreate} from './video-recreate.js';
 import {openUpscale,renderUpscaleSettings} from './upscale.js';
 import {openVideoRemix,renderRemixSettings} from './video-remix.js';
 
+import {initRequestSettings} from './request-settings.js';
+import {initRequestExtras} from './request-extras.js';
 const $=s=>document.querySelector(s);
 const chatScroll=initChatScroll($('#scroll-area'),$('#messages'));
 let composerUI=null,manimPresentation=null,infographicsUI=null;
@@ -62,10 +65,12 @@ let loading=false,pollTimer,lastSidebar='',lastCanvas='',renderQueue=Promise.res
 const drafts=new Map();
 let assessmentTimer,assessmentRequest=0,lastAssessment=0,thinkSaving=false;
 let chatModels;
+const requestSettings=initRequestSettings({getChatId:()=>current,onClear:()=>{state=requestSettings.current(state);renderStatus();}});
 const api=async(path,body,method='POST')=>{
   const modelRevision=chatModels?.revision();
+  body=requestSettings.request(path,body);
   const response=await fetch('/api'+path,{cache:'no-store',method:body===undefined?'GET':method,headers:body===undefined?{}:{'Content-Type':'application/json','X-H3-Token':state?.token||''},body:body===undefined?undefined:JSON.stringify(body)});
-  const data=await response.json();if(!response.ok)throw Error(data.error||'Operazione non riuscita.');return path==='/state'&&chatModels?chatModels.reconcile(data,modelRevision):data;
+  let data=await response.json();if(!response.ok)throw Error(data.error||'Operazione non riuscita.');if(path==='/settings'&&body)data=requestSettings.settingsChanged(data,body);if(path==='/state'){data=chatModels?chatModels.reconcile(data,modelRevision):data;return requestSettings.state(data);}return data;
 };
 const chatStream=createChatStream({read:(chatId,messageId)=>api('/chats/'+chatId+'/messages/'+messageId+'/live'),render:(target,text,options)=>renderRich(target,text,{...options,final:false}),onProgress:()=>chatScroll.update()});
 function toast(text,error=false){
@@ -85,6 +90,7 @@ function settingsError(message=''){
 const act=fn=>(...args)=>{try{return Promise.resolve(fn(...args)).catch(e=>toast(e.message,true));}catch(e){toast(e.message,true);}};
 initModelIdentity({getModel:()=>state?.models.find(m=>m.id===state.settings.chat_model),act,notify:toast});
 const gb=n=>(n/1e9).toLocaleString('it-IT',{maximumFractionDigits:2})+' GB';
+const requestExtras=initRequestExtras({getChatId:()=>current,getLab:()=>$('#lab-tool')?.value||'auto',getState:()=>state,getImageModel:()=>visualControls.read().image_model,getRag:()=>projects.read().rag});
 const visualControls=initVisualControls({getState:()=>state,getChatId:()=>current,pickFile:(path,callback)=>localModels.pickFile(path,callback)});
 const localModels=initLocalModels({api,getState:()=>state,notify:toast,onChange:async(model,removed)=>{
   collectSettings();state=await api('/state');
@@ -101,7 +107,7 @@ const projects=initProjects({api,getState:()=>state,getChat:()=>chat,refresh,not
 chatModels=initChatModels({api,getState:()=>state,notify:toast,onChange:settings=>{if(settings)state.settings=settings;renderStatus();}});
 $('#rag-enabled').closest('label').insertAdjacentHTML('afterend','<label class="think-control">Strumenti <select id="lab-tool" aria-label="Strumenti della chat"><option value="auto">Automatico · dal prompt</option><option value="calculate">Interprete numerico</option><option value="manim">Animazione Manim</option><option value="slides">Slide · HTML in tempo reale</option><option value="poster">Locandine</option><option value="infographic">Infografica animata</option></select></label><span id="slides-options" hidden><label>Quantità <select id="slides-count-mode" aria-label="Come scegliere il numero di slide"><option value="fixed">Numero fisso</option><option value="auto">Automatico · dai contenuti</option></select></label><label>Slide <input id="slides-count" aria-label="Numero di slide" type="number" min="1" max="100" value="8" style="width:65px"></label><p class="small-note prompt-slide-count-note">Da 1 a 100 slide. In automatico il modello sceglie in base ai contenuti e alle fonti. Il numero o la scelta automatica richiesti nel prompt hanno la precedenza.</p> <label>Formato <select id="slides-format" aria-label="Formato slide"><option>16:9</option><option>9:16</option><option>4:3</option><option>16:10</option><option>1:1</option></select></label></span>');
 const agentUI=initAgentControls({getState:()=>state,api,notify:toast,pickDirectory:(path,callback)=>localModels.pickDirectory(path,callback),onPreferencesSaved:value=>{if(settingsDraft)settingsDraft.agent_defaults=value;if(state?.settings)state.settings.agent_defaults=value;}});
-$('#lab-tool').onchange=()=>{manimPresentation?.render();infographicsUI?.render();$('#slides-options').hidden=$('#lab-tool').value!=='slides';$('#agent-options').hidden=$('#lab-tool').value!=='agent';visualControls.render();};
+$('#lab-tool').onchange=()=>{requestExtras.render();manimPresentation?.render();infographicsUI?.render();$('#slides-options').hidden=$('#lab-tool').value!=='slides';$('#agent-options').hidden=$('#lab-tool').value!=='agent';visualControls.render();};
 $('#slides-options').insertAdjacentHTML('beforeend',' <label>Durata indicativa (min)<input id="slides-duration" aria-label="Durata indicativa della presentazione in minuti" type="number" min="0" max="20" step="0.5" value="0"></label><p class="small-note">0 = Automatico. Fino a 20 minuti di esposizione, incluse pause e attività. La durata scritta nel prompt prevale.</p> <label>Motore <select id="slides-engine" aria-label="Motore slide"><option value="llm">LLM · HTML libero</option><option value="deterministic">Deterministico</option></select></label> <label>Stile <select id="slides-design"><option value="professional">Serio / professionale</option><option value="playful">Giocoso / colorato</option><option value="comic">Fumettoso</option></select></label> <label>Contenuto <select id="slides-detail"><option value="concise">Sintesi</option><option value="full">Testi completi</option></select></label>');
 $('#slides-options').insertAdjacentHTML('beforeend','<label>Movimento <select id="slides-motion" aria-label="Animazioni slide"><option value="auto">Automatico · dal prompt</option><option value="static">Statiche</option><option value="animated">Animate · transizioni e animazioni</option></select></label><p class="small-note">Animate usa HTML libero. Le animazioni sono visibili nel canvas e in HTML; PDF e PowerPoint conservano una vista statica. Il prompt prevale.</p>');
 $('#slides-options').insertAdjacentHTML('beforeend','<label class="field"><span>Tempo massimo per fase LLM (secondi)</span><input id="slides-timeout" aria-label="Tempo massimo per fase LLM delle slide in secondi" type="number" min="0" max="14400" step="1" value="0"><small>0 = timeout del modello nelle Preferenze. Da 60 a 14.400 secondi per ciascuna risposta: scaletta, contenuti e singole slide, inclusa la lettura iniziale delle fonti. Non è la durata della presentazione.</small></label>');
@@ -111,7 +117,7 @@ $('#slides-composition').addEventListener('change',()=>{if($('#slides-compositio
 $('#slides-engine').addEventListener('change',()=>{if($('#slides-engine').value==='deterministic'&&$('#slides-composition').value==='rich'){$('#slides-composition').value='standard';$('#slides-composition').dispatchEvent(new Event('change',{bubbles:true}));}});
 $('#slides-motion').addEventListener('change',()=>{if($('#slides-motion').value==='animated'&&$('#slides-engine').value!=='llm'){$('#slides-engine').value='llm';$('#slides-engine').dispatchEvent(new Event('change',{bubbles:true}));}});
 $('#slides-engine').addEventListener('change',()=>{if($('#slides-engine').value==='deterministic'&&$('#slides-motion').value==='animated'){$('#slides-motion').value='static';$('#slides-motion').dispatchEvent(new Event('change',{bubbles:true}));}});
-const postersUI=initPosters({getState:()=>state});
+const postersUI=initPosters({getState:()=>state,getAttachments:()=>attachments});
 $('#lab-tool').append(new Option('Studio · flashcard e fonti','study'));
 const studyUI=initStudy({getState:()=>state,getAttachments:()=>attachments,onImport:async body=>{
   if(userJob())throw Error('Attendi o interrompi il lavoro in corso.');
@@ -183,7 +189,7 @@ const executionUI=initExecutionMode({api,getState:()=>state,onChange:refresh,not
 function renderStatus(){
   agentUI.render();
   if(!state)return;
-  chatModels.render();
+  requestSettings.render();requestExtras.render();chatModels.render();
   projects.controls();
   let mode=document.getElementById('execution-hint');if(!mode){mode=document.createElement('p');mode.id='execution-hint';mode.className='mode-hint';$('#composer').after(mode);}const activeModels=[['LLM','chat_model','llm_device'],['Immagini','create_model','image_device'],['Musica','music_model','music_backend'],['Video','video_model','video_device']];let slow=false;mode.textContent=activeModels.map(([label,key,deviceKey])=>{const m=state.models.find(m=>m.id===state.settings[key]);if(!m)return null;if(m.api||m.remote_media){const p=state.media_providers?.find(p=>p.id===m.id);if(p?.device==='cpu'&&p.adapter==='h3'&&label!=='LLM')slow=true;return label+': server esterno';}const choice=state.settings[deviceKey];const cpu=label==='Video'?false:choice==='cpu'||(choice==='inherit'||choice==='auto')&&(state.settings.profile==='cpu'||state.settings.backend==='cpu'||label==='Musica'&&state.settings.backend!=='cuda');if(cpu&&['Immagini','Musica'].includes(label))slow=true;return label+': '+(cpu?'CPU':'GPU');}).filter(Boolean).join(' · ')+(slow?' · Su CPU immagini e musica possono richiedere molto tempo.':'');
   loraUI.render();visualControls.render();
@@ -236,7 +242,7 @@ async function newChat(){if(current)await persistCanvas();const fresh=await api(
 async function openChat(id){
   chatStream.clear();
   if(current){drafts.set(current,{prompt:$('#prompt').value,attachments:[...attachments]});await persistCanvas();}
-  current=id;chat=await api('/chats/'+id);chatScroll.begin();$('#messages').innerHTML='';
+  current=id;state=requestSettings.current(state);chat=await api('/chats/'+id);chatScroll.begin();$('#messages').innerHTML='';
   clearUnusedVideoProgress();
   const draft=drafts.get(id)||{prompt:'',attachments:[]};$('#prompt').value=draft.prompt;attachments=draft.attachments;renderAttachments();
   canvasSelection++;canvasHistory={items:[],active_id:null};canvasFollow=true;canvasDirty=false;lastCanvas='';canvasEditing=false;
@@ -260,29 +266,40 @@ async function reloadRequest(message){
         video_editing:meta.video_editing||'continuous',web:meta.web||false,transcribe:meta.transcribe||false,
         music:meta.music||false,music_fields:meta.music_fields||{},music_quality:meta.music_quality||'',music_max_duration:meta.music_max_duration??null}};
   }
+  requestSettings.apply(draft.parameters);state=requestSettings.current(state);
+  if(draft.operation){
+    const common={api,chatId:current,busy:()=>!!activeJob(),onQueued:async()=>{await refresh();}},video=draft.media?.find(m=>m.mime?.startsWith('video/'));
+    if(draft.operation.kind==='upscale')await openUpscale({...common,media:video,initial:draft.operation.options});
+    if(draft.operation.kind==='remix')await openVideoRemix({...common,media:video,initial:draft.operation.options});
+    if(draft.operation.kind==='recreate')await openVideoRecreate({...common,source:draft.operation.source,initial:draft.operation.parameters,initialModel:draft.controls.video_model,pickFile:(path,callback)=>localModels.pickFile(path,callback)});
+    renderStatus();toast('Operazione originale recuperata: controlla le impostazioni e premi Crea.');return;
+  }
   if(draft.video_edit){
     await openVideoEdit({api,chatId:current,source:draft.video_edit.source,busy:()=>!!activeJob(),onQueued:async()=>{await refresh();},pickFile:(path,callback)=>localModels.pickFile(path,callback),initialEdit:draft.video_edit,initialReferences:draft.media.filter(m=>m.mime?.startsWith('image/')),initialModel:draft.controls.video_model,initialParameters:draft.controls.video_parameters,initialSteps:draft.controls.video_steps,initialAssistant:draft.controls.assistant,segmentSeconds:draft.video_edit.segment_seconds});
     toast('Modifica originale recuperata: clip, riferimenti e impostazioni sono pronti.');return;
   }
-  $('#prompt').value=draft.prompt;attachments=[...draft.media];
+  $('#prompt').value=draft.prompt;attachments=[...(draft.media||[])];
   if(draft.agent)agentUI.apply(draft.agent);
-  $('#lab-tool').value=draft.lab||'auto';$('#lab-tool').dispatchEvent(new Event('change',{bubbles:true}));
+  $('#lab-tool').value=draft.background_batch?'slides':draft.lab||'auto';
+  visualControls.set(draft.controls||{});loraUI.setSelections(draft.loras||[]);
   manimPresentation?.set(draft.manim_presentation?{enabled:true,...draft.manim_presentation}:null);
-  loraUI.setSelections(draft.loras||[]);visualControls.set(draft.controls);
   if(draft.poster)postersUI.set(draft.poster);
   if(draft.study)studyUI.set(draft.study);
-  if(draft.slides?.count!=null){
-    $('#slides-duration').value=String(draft.slides.duration_minutes||0);
-    $('#slides-timeout').value=String(draft.slides.llm_timeout||0);
-    $('#slides-count-mode').value=draft.slides.count==='auto'?'auto':'fixed';
-    if(draft.slides.count!=='auto')$('#slides-count').value=String(draft.slides.count);
-    $('#slides-count-mode').dispatchEvent(new Event('change',{bubbles:true}));
+  if(draft.slides){
+    const slides={...draft.slides,count_mode:draft.slides.count==='auto'?'auto':'fixed'};
+    if(slides.count==='auto')delete slides.count;
+    presentationPreferences.apply('slides',slides);
   }
-  if(draft.slides)for(const [key,id] of Object.entries({format:'slides-format',engine:'slides-engine',design:'slides-design',detail:'slides-detail',composition:'slides-composition',motion:'slides-motion',vision_scope:'slides-vision'})){
-    const input=$('#'+id);if(input&&draft.slides[key]!=null){input.value=String(draft.slides[key]);input.dispatchEvent(new Event('change',{bubbles:true}));}
-  }
+  if(draft.infographic)infographicsUI?.set(draft.infographic);
+  slideBackgrounds.set(draft.background_batch||null);
+  requestExtras.set(draft);
+  if(draft.rag)projects.set(draft.rag);
+  if(draft.think_level!=null)$('#think-level').value=draft.think_level;
+  $('#lab-tool').dispatchEvent(new Event('change',{bubbles:true}));
+  if(!!draft.canvas!==canvasOpen)await toggleCanvas(!!draft.canvas);
+  renderStatus();
   renderAttachments();composerUI?.render();focusPrompt();
-  toast('Richiesta caricata. Modificala e premi Invia.');
+  toast((draft.warnings?.length?draft.warnings.join(' ')+' ':'')+'Richiesta caricata. Modificala e premi Invia.');
 }
 
 async function renderChat(){
@@ -365,7 +382,7 @@ async function renderChat(){
 function renderAttachments(){
  let image=0,audio=0,document=0;
  $('#attachments').innerHTML=attachments.map((m,i)=>{const sound=m.mime?.startsWith('audio/'),video=m.mime?.startsWith('video/'),doc=!sound&&!video&&!m.mime?.startsWith('image/'),label=video?'Video':doc?'Documento '+(++document):sound?'Audio '+(++audio):'Immagine '+(++image);return `<div class="attachment" title="${esc(m.name)}">${doc?'<span class="audio-attachment">▤</span>':sound?'<span class="audio-attachment">♫</span>':video?'<span class="audio-attachment">▷</span>':`<img src="/media/${esc(m.path)}" alt="${esc(m.name)}">`}<small>${label}</small><button data-remove-attachment="${i}" aria-label="Rimuovi ${label}">×</button></div>`;}).join('');
- manimPresentation?.render();infographicsUI?.render();
+ manimPresentation?.render();infographicsUI?.render();postersUI?.render();
 }
 async function uploadFiles(files){
  if(attachments.length+files.length>12)throw Error('Massimo 12 allegati per messaggio.');
@@ -380,7 +397,7 @@ async function send(event){event.preventDefault();if(userJob())return;const prom
   try{await chatModels.wait();if(!current){const fresh=await api('/chats',{collection_id:collection,project_id:project});loraUI.migrateNew(fresh.id);visualControls.migrateNew(fresh.id);manimPresentation?.migrateNew(fresh.id);current=fresh.id;chat=fresh;}
     if($('#lab-tool').value==='agent'||/^\s*(?:agent|agente)\s*:/i.test(prompt)){
       await persistCanvas();const options=agentUI.read(),controls=visualControls.request(),ragRequest=projects.read();
-      const request={prompt,media:attachments,lab:'agent',agent:options,...ragRequest,web:!!controls.web,...(canvasOpen&&canvas.id?{agent_start_artifact:canvas.id}:{}),
+      const request={prompt,media:attachments,lab:'agent',agent:options,...ragRequest,web:!!controls.web,...(canvasOpen&&canvas.id?{agent_start_artifact:canvas.id}:{}),...requestExtras.read(),
         think_level:$('#think-level').value,voice_fields:controls.voice_fields||{},music_fields:controls.music_fields||{},loras:loraUI.getSelections()};
       request.agent_request_id=await agentUI.requestId({chat:current,model:state.settings.chat_model,request});
       await api('/chats/'+current+'/messages',request);projects.submitted(ragRequest);agentUI.submitted();canvasFollow=true;canvasEditing=false;await toggleCanvas(true);
@@ -398,7 +415,7 @@ async function send(event){event.preventDefault();if(userJob())return;const prom
       const videos=attachments.filter(x=>x.mime?.startsWith('video/'));if(videos.length>1)throw Error('Scegli un solo video da modificare.');
       await editVideo(videos[0],{initialPrompt:prompt,initialReferences:attachments.filter(x=>x.mime?.startsWith('image/')),initialSteps:controls.video_steps,initialAssistant:controls.assistant,initialModel:controls.video_model||undefined,initialParameters:controls.video_parameters||{},onQueued:async()=>{$('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);}});return;
     }
-    const presentation=await manimPresentation.prepare(),ragRequest=projects.read();const sent=await api('/chats/'+current+'/messages',cpuRequest({prompt,media:attachments,canvas:canvasOpen,...presentation,...visualControls.request(),...ragRequest,lab:$('#lab-tool').value,...($('#lab-tool').value==='agent'||/^\s*(?:agent|agente)\s*:/i.test(prompt)?{agent:agentUI.read()}:{}),...($('#lab-tool').value==='infographic'?{infographic:infographicsUI.read()}:{}),...($('#lab-tool').value==='poster'?{poster:postersUI.read()}:{}),...($('#lab-tool').value==='study'?{study:studyUI.read()}:{}),...($('#lab-tool').value==='slides'?{slides:{llm_timeout:Number($('#slides-timeout').value),duration_minutes:Number($('#slides-duration').value),engine:$('#slides-engine').value,count:$('#slides-count-mode').value==='auto'?'auto':Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value,composition:$('#slides-composition').value,motion:$('#slides-motion').value,vision_scope:$('#slides-vision').value,...slideColors.read(),...slideImages.read(),...slideBackgroundPicker.read()}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()},state));projects.submitted(ragRequest);
+    const presentation=await manimPresentation.prepare(),ragRequest=projects.read();const sent=await api('/chats/'+current+'/messages',cpuRequest({prompt,media:attachments,canvas:canvasOpen,...presentation,...visualControls.request(),...ragRequest,...requestExtras.read(),lab:$('#lab-tool').value,...($('#lab-tool').value==='agent'||/^\s*(?:agent|agente)\s*:/i.test(prompt)?{agent:agentUI.read()}:{}),...($('#lab-tool').value==='infographic'?{infographic:infographicsUI.read()}:{}),...($('#lab-tool').value==='poster'?{poster:postersUI.read()}:{}),...($('#lab-tool').value==='study'?{study:studyUI.read()}:{}),...($('#lab-tool').value==='slides'?{slides:{llm_timeout:Number($('#slides-timeout').value),duration_minutes:Number($('#slides-duration').value),engine:$('#slides-engine').value,count:$('#slides-count-mode').value==='auto'?'auto':Number($('#slides-count').value),format:$('#slides-format').value,design:$('#slides-design').value,detail:$('#slides-detail').value,composition:$('#slides-composition').value,motion:$('#slides-motion').value,vision_scope:$('#slides-vision').value,...slideColors.read(),...slideImages.read(),...slideBackgroundPicker.read()}}:{}),think_level:$('#think-level').value,loras:loraUI.getSelections()},state));projects.submitted(ragRequest);
     if(['study','slides','poster','infographic','image_batch','agent'].includes(sent.intent)){canvasFollow=true;canvasEditing=false;await toggleCanvas(true);}
     $('#prompt').value='';attachments=[];renderAttachments();drafts.delete(current);await refresh();
   }finally{$('#send').disabled=false;}
@@ -471,10 +488,10 @@ async function renderCanvas(){
   for(const kind of ['html','pptx','pptx-editable']){const button=document.querySelector('[data-export="'+kind+'"]');if(button)button.hidden=!isDeck;}
   if(!canvasEditing){const chatId=current,value={...canvas,media:[...canvas.media]},entry=canvasHistory.items.find(x=>x.id===value.id),message=(chat?.messages||[]).find(m=>m.id===entry?.message_id)||[...(chat?.messages||[])].reverse().find(m=>m.meta?.artifact?.content===value.content||m.content===value.content);renderQueue=renderQueue.catch(()=>{}).then(async()=>{if(current!==chatId||canvas.id!==value.id||canvas.content!==value.content)return;const options={final:!activeJob()?.canvas||value.id!==canvasHistory.active_id,sources:message?.meta?.rag_sources||[],onCitation:(s,all)=>projects.citation(s,all,message),onExecute:act(executeArtifact)};
     if(value.content.startsWith(studyPrefix)){
-      try{await renderStudy($('#canvas-preview'),value,{api,chatId,busy:!!userJob(),notify:toast,onExplain:async card_id=>{
+      try{await renderStudy($('#canvas-preview'),value,{api,chatId,busy:!!userJob(),notify:toast,onOpenStudy:async item=>{await persistCanvas();if(item.chat_id!==current)await openChat(item.chat_id);if(!canvasOpen)await toggleCanvas(true);await selectCanvasArtifact(item.id);},onExplain:async (card_id,question='')=>{
         if(userJob())throw Error('Attendi o interrompi il lavoro in corso.');await chatModels.wait();
-        const result=await api(`/canvas/${chatId}/study/${value.id}/explain`,{card_id});queuedCanvasJob(result,chatId,'Studio · spiegazione in coda');canvasFollow=true;await refresh();
-      },onAudio:async()=>{if(userJob())throw Error('Attendi il lavoro in corso.');const result=await api(`/canvas/${chatId}/study/${value.id}/audio`,{});queuedCanvasJob(result,chatId,'Studio · audio in coda');canvasFollow=true;await refresh();},onResume:async()=>{if(userJob())throw Error('Attendi il lavoro in corso.');await chatModels.wait();const result=await api(`/canvas/${chatId}/study/${value.id}/resume`,{});queuedCanvasJob(result,chatId,'Studio · completamento in coda');canvasFollow=true;await refresh();},onChange:async content=>{if(userJob())throw Error('Attendi la fine della generazione.');await persistCanvas();const saved=await api('/canvas/'+chatId,{...canvas,content},'PUT');canvasFollow=false;canvasSelection++;await loadCanvasHistory(chatId);await setCanvas(saved);}});}catch(e){$('#canvas-preview').textContent=e.message;}
+        const result=await api(`/canvas/${chatId}/study/${value.id}/explain`,{card_id,...(question?{question}:{})});queuedCanvasJob(result,chatId,'Studio · spiegazione in coda');canvasFollow=true;await refresh();
+      },onAudio:async voices=>{if(userJob())throw Error('Attendi il lavoro in corso.');const result=await api(`/canvas/${chatId}/study/${value.id}/audio`,voices||{});queuedCanvasJob(result,chatId,'Studio · audio in coda');canvasFollow=true;await refresh();},onResume:async()=>{if(userJob())throw Error('Attendi il lavoro in corso.');await chatModels.wait();const result=await api(`/canvas/${chatId}/study/${value.id}/resume`,{});queuedCanvasJob(result,chatId,'Studio · completamento in coda');canvasFollow=true;await refresh();},onChange:async content=>{if(userJob())throw Error('Attendi la fine della generazione.');await persistCanvas();const saved=await api('/canvas/'+chatId,{...canvas,content},'PUT');canvasFollow=false;canvasSelection++;await loadCanvasHistory(chatId);await setCanvas(saved);}});}catch(e){$('#canvas-preview').textContent=e.message;}
     }else if(isDeck){try{await renderSlides($('#canvas-preview'),value,{...options,api,chatId:current,editable:!userJob(),busy:!!userJob(),job:canvasFollow&&activeJob()?.canvas?activeJob():null,onTypography:async page=>{
       if(userJob())throw Error('Attendi o interrompi il lavoro in corso.');await persistCanvas();const chosen=postersUI.read(),typography=Object.fromEntries(['lettering','text_effect','heading_font','body_font'].map(k=>[k,chosen[k]]));
       if(chosen.typography_engine==='expressive'){await chatModels.wait();const result=await api('/canvas/'+chatId+'/poster-creative',{artifact_id:canvas.id,page,typography});queuedCanvasJob(result,chatId,'Locandina · composizione dei testi in coda');canvasFollow=true;await refresh();return;}
@@ -701,8 +718,8 @@ $('#canvas-preview-tab').onclick=act(async()=>{canvasEditing=false;await persist
 $('#canvas-source-tab').onclick=act(async()=>{if(activeJob()?.canvas)throw Error('Attendi la scrittura del motore prima di modificare.');canvasEditing=true;await renderCanvas();$('#canvas-source').focus();});
 $('#canvas-write').onclick=$('#canvas-source-tab').onclick;
 $('#canvas-title').oninput=canvasChanged;$('#canvas-source').oninput=canvasChanged;$('#canvas-save').onclick=act(async()=>{await persistCanvas();toast('Canvas salvato.');});
-document.querySelector('[data-export="md"]').insertAdjacentHTML('afterend','<button class="btn small" data-export="html" hidden>HTML</button><button class="btn small" data-export="pptx" hidden title="Conserva grafica e impaginazione; testo nelle note">PowerPoint fedele</button><button class="btn small" data-export="pptx-editable" hidden title="Testi e riquadri modificabili; font e layout possono differire">PowerPoint modificabile</button>');
-document.querySelectorAll('[data-export]').forEach(b=>b.onclick=act(async()=>{if(activeJob()?.canvas&&canvas.id===canvasHistory.active_id)throw Error('Attendi che il documento sia completo prima di esportare.');await persistCanvas();if(!canvas.content&&!canvas.media.length)throw Error('Il canvas è vuoto.');canvasEditing=false;await renderCanvas();const root=$('#canvas-preview');$('#canvas-panel').classList.add('exporting');const restoreZoom=canvasZoom.suspend();try{if(b.dataset.export==='md')saveBlob(new Blob([canvas.content],{type:'text/markdown;charset=utf-8'}),canvas.title+'.md');else if(readDeck(canvas.content))await exportSlides(canvas,b.dataset.export,state.token);else{if(b.dataset.export==='pdf')await exportPdf(root,canvas.title,state.token);if(b.dataset.export==='docx')await exportDocx(root,canvas.title);if(b.dataset.export==='png')await exportPng(root,canvas.title);}toast('Esportazione pronta.');}finally{restoreZoom();$('#canvas-panel').classList.remove('exporting');}}));
+document.querySelector('[data-export="md"]').insertAdjacentHTML('afterend','<button class="btn small" data-export="html" hidden>HTML</button><button class="btn small" data-export="pptx" hidden title="Conserva grafica e impaginazione; testo nelle note">PowerPoint fedele</button><button class="btn small" data-export="pptx-editable" hidden title="Testi HTML, riquadri e immagini separati, anche nelle locandine; font ed effetti possono differire">PowerPoint modificabile</button>');
+document.querySelectorAll('[data-export]').forEach(b=>b.onclick=act(async()=>{if(activeJob()?.canvas&&canvas.id===canvasHistory.active_id)throw Error('Attendi che il documento sia completo prima di esportare.');await persistCanvas();if(!canvas.content&&!canvas.media.length)throw Error('Il canvas è vuoto.');canvasEditing=false;await renderCanvas();const root=$('#canvas-preview');$('#canvas-panel').classList.add('exporting');const restoreZoom=canvasZoom.suspend();try{if(canvas.content.startsWith(studyPrefix)&&['pdf','docx','md'].includes(b.dataset.export))await exportStudy(JSON.parse(canvas.content.slice(studyPrefix.length,-4)),b.dataset.export,api);else if(b.dataset.export==='md')saveBlob(new Blob([canvas.content],{type:'text/markdown;charset=utf-8'}),canvas.title+'.md');else if(readDeck(canvas.content))await exportSlides(canvas,b.dataset.export,state.token);else{if(b.dataset.export==='pdf')await exportPdf(root,canvas.title,state.token);if(b.dataset.export==='docx')await exportDocx(root,canvas.title);if(b.dataset.export==='png')await exportPng(root,canvas.title);}toast('Esportazione pronta.');}finally{restoreZoom();$('#canvas-panel').classList.remove('exporting');}}));
 composerUI=initComposerPanel({getState:()=>state,visualControls,getAttachments:()=>attachments,notify:toast,
  getLastImageSeed:model=>api('/images/last-seed?model='+encodeURIComponent(model)),
  saveImagePresets:async presets=>{const settings=await api('/settings',{moss_presets:presets});state.settings=settings;if(settingsDraft)settingsDraft.moss_presets=structuredClone(settings.moss_presets);}});

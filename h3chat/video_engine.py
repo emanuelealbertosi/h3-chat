@@ -160,10 +160,11 @@ class VideoEngine:
                 if cancel.is_set():raise Cancelled()
                 first,last=group[0]['index']+1,group[-1]['index']+1
                 stage(f'Assistant · sceneggiatura · scene {first}–{last}/{len(scenes)}'+(' · nuovo tentativo conciso' if attempt else ''))
-                context={'request':prompt,'plan':plan,'total_scenes':len(scenes),'film_duration':scenes[-1]['start']+scenes[-1]['duration'],'audio_source_start':settings.get('_video_audio_start',0),'clips':group,'opening':scripts[0] if scripts else None,'previous':scripts[-2:]}
+                context={'request':prompt,'plan':plan,'total_scenes':len(scenes),'narrative_scenes':settings.get('_video_sequence'),'film_duration':scenes[-1]['start']+scenes[-1]['duration'],'audio_source_start':settings.get('_video_audio_start',0),'clips':group,'opening':scripts[0] if scripts else None,'previous':scripts[-2:]}
                 if rejected:context['rejected_scenes']=rejected
                 instructions=brief+f'\nOutput budget: {budget} tokens for {len(group)} clip(s). Aim for at most {max(40,min(220,budget//(3*len(group))))} words per clip.'
                 instructions+='\nEach scenes item is {"prompt":English MiniMax prompt,"time_basis":"local"}. All action/cut/vocal timestamps must run from 00:00 to this clip duration. Subtract clips.start from global FILM times; subtract audio_source_start + clips.start from SOURCE audio times. Preserve the exact order, timing intervals and words of the original request. Do not move actions to different times. time_basis="video" or "source" is allowed only when clocks deliberately use that coordinate system; never mix bases within a prompt. Previous prompts use their own clip-local clocks, not the clocks for this clip.'
+                instructions+='\nWhen narrative_scenes is supplied, its count and scene_seconds define the user scenes. Each requested clips item is only a native generation segment: logical_scene identifies its narrative scene, logical_offset the interval within that longer scene. Keep advancing the same scene across its segments without replaying the beginning or inserting a cut merely because a segment ended. Narrative scene descriptions/timings in the request belong to those logical scenes.'
                 if attempt and not correction:instructions+=' Previous output was empty or incomplete. Return short, complete JSON immediately.'
                 if correction:instructions+='\nPrevious output failed scene validation: '+correction+'. Rewrite this batch following the original request, correcting the invalid parts. Use only allowed labels and preserve the original soundtrack; do not request or invent an image. Do not replay an earlier action unless the user explicitly asked for that repetition.'
                 try:
@@ -212,9 +213,10 @@ class VideoEngine:
         from .video_timeline import timeline,scene_plan,validate_audio_interval
         from .video_resume import checkpoint,save as save_checkpoint
         from .soundtrack import compose,probe
-        scenes=timeline(settings['_video_duration'],settings.get('_video_segment_seconds') or 15);soundtrack=settings['_video_soundtrack'];audio_start=settings.get('_video_audio_start',0)
+        from .video_sequence import scenes as sequence_scenes
+        scenes=sequence_scenes(settings);soundtrack=settings.get('_video_soundtrack');audio_start=settings.get('_video_audio_start',0)
         if model.get('remote_media') and len(scenes)>1:raise ValueError('Video a più scene con memoria: seleziona il motore MiniMax H3 standalone. Il server esterno deve supportare esplicitamente questa funzione.')
-        index=next(i for i,m in enumerate([r for r in refs if r['mime'].startswith('audio/')],1) if m['id']==soundtrack['id'])
+        index=next((i for i,m in enumerate([r for r in refs if r['mime'].startswith('audio/')],1) if soundtrack and m['id']==soundtrack['id']),None)
         scripts=[plan['prompt']]*len(scenes)
         folder=self.data/'outputs'/job_id;folder.mkdir(parents=True,exist_ok=True)
         resumed=checkpoint(self.data,settings['_video_resume']) if settings.get('_video_resume') else None
@@ -290,14 +292,20 @@ class VideoEngine:
                 scoped['resume_memory']={'opening':str(outputs[anchor]),'recent':[str(p) for p in outputs[anchor:][-2:]]}
             if storyboard:local,local_refs=local_plan(storyboard,scene,plan,refs,index,audio_start)
             else:local=scene_plan(plan,scoped,index,scripts[position],audio_start=audio_start,shared=not settings.get('_assistant',True));local_refs=refs
-            def report(label):stage(f'{"Clip" if storyboard else "Scena"} {position+1}/{len(scenes)} · '+label)
+            def report(label):stage((f'Scena {scene["logical_scene"]}/{settings["_video_sequence"]["count"]} · segmento {position+1}/{len(scenes)}' if 'logical_scene' in scene else f'{"Clip" if storyboard else "Scena"} {position+1}/{len(scenes)}')+' · '+label)
             item=self.generate_video(model,settings,local,local_refs,job_id+f'/scene-{position+1:03d}',cancel,report,prompt=prompt,scene=scoped)
             outputs.append(safe_join(self.data,item['path']));p=item['generation'];parameters.append(p)
             if not canvas and 'canvas_width' in p:canvas=saved_canvas(p)
             record.update(completed=position+1,outputs=[relative_output(p) for p in outputs])
             from .video_batch import register
             register(record,position,item,refs);save_checkpoint(folder,record)
-        result=compose(self,outputs,safe_join(self.data,soundtrack['path']),folder/'video.mp4',cancel,stage,folder/'engine.log',audio_start=audio_start,audio_duration=settings['_video_duration'])
+        result=compose(self,outputs,safe_join(self.data,soundtrack['path']) if soundtrack else None,folder/'video.mp4',cancel,stage,folder/'engine.log',**({'audio_start':audio_start,'audio_duration':settings['_video_duration']} if soundtrack else {'clip_audio':True}))
         from .video_batch import compose_branches
         compose_branches(self,record,folder,soundtrack,cancel,stage,folder/'engine.log',audio_start,settings['_video_duration'])
-        return {'id':job_id,'name':'Video MiniMax H3.mp4','mime':'video/mp4','path':(folder/'video.mp4').relative_to(self.data).as_posix(),'generation':parameters[0]|{'duration':result['duration'],'audio_start':audio_start,'scenes':len(scenes),'scene_parameters':parameters,'audio_preserved':True,'visual_memory':len(scenes)>1,'recovered_scenes':completed,'editing':'storyboard' if storyboard else 'continuous',**({'batch_movies':record['batch_movies']} if record.get('batch_movies') else {}),**({'storyboard':storyboard} if storyboard else {})}}
+        if not soundtrack:
+            from .store import uid
+            audio=folder/'native-audio.wav'
+            self.tool_call('video-batch-audio-worker.py',{'source':str(folder/'video.mp4'),'output':str(audio),'duration':settings['_video_duration']},cancel,stage,folder/'engine.log',timeout=300)
+            record['generated_soundtrack']={'id':uid(),'name':'Audio generato del video.wav','mime':'audio/wav','path':audio.relative_to(self.data).as_posix()}
+            save_checkpoint(folder,record)
+        return {'id':job_id,'name':'Video MiniMax H3.mp4','mime':'video/mp4','path':(folder/'video.mp4').relative_to(self.data).as_posix(),'generation':parameters[0]|{'duration':result['duration'],'audio_start':audio_start,'scenes':settings.get('_video_sequence',{}).get('count',len(scenes)),'segments':len(scenes),'scene_sequence':settings.get('_video_sequence'),'scene_parameters':parameters,'audio_preserved':bool(soundtrack),'generated_audio':bool(result.get('clip_audio')),'visual_memory':len(scenes)>1,'recovered_scenes':completed,'editing':'storyboard' if storyboard else 'continuous',**({'batch_movies':record['batch_movies']} if record.get('batch_movies') else {}),**({'storyboard':storyboard} if storyboard else {})}}

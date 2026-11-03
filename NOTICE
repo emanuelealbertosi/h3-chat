@@ -1,5 +1,12 @@
 H3-Chat includes open-source components with their own licenses.
 
+The optional MOSS image layout editor uses the unmodified MIT-licensed core
+of jambavant/SwarmUI-LayoutEditor at acdedf42dfb72b2b69914ca6639ecc42d49ad28b.
+Its license and file provenance are retained in static/vendor/moss-layout;
+the H3 host adapter is maintained separately. The optional Limpida and Aurora
+voice presets include short AI-generated Italian audio examples, not model
+weights or a user's voice settings. An owner-local registry takes precedence.
+
 The optional local Qwen27B accelerator is a separate llama.cpp build at commit
 555d1ec9daa4564cb06adb39c469acfdcd1d1e93, with a bounded MTP drafter cache patch
 in llama-common. It is installed from the verified local Qwen27B engine, not

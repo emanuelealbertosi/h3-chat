@@ -1,5 +1,13 @@
 # MiniMax H3 standalone
 
+Logical scene duration is independent of the native 15-second model window.
+`video_sequence.py` resolves request controls/prompt precedence, lays out frame-exact
+scene windows, then splits each scene without crossing narrative boundaries.
+The normal continuous/storyboard generator, durable checkpoint and visual memory
+also run without `_video_soundtrack`. Native audio is concatenated on CPU and a
+derived WAV is retained for later timeline editing. Resume restores the same
+logical windows and skips completed native clips. No LongTakeNoCuts dependency.
+
 Prompt-based source-video editing is documented in [Modifica video](video-source-edit.md).
 It passes the actual selected clip as a video reference; ordinary reference-image
 regeneration and I2V remain separate modes.

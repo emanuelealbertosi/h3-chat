@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 const require=createRequire(import.meta.url),{chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
 const browser=await chromium.launch({channel:'msedge',headless:true,args:['--disable-gpu']}),page=await browser.newPage({viewport:{width:1280,height:2276}});
-const code=(await readFile('ui/infographic-layout.js','utf8')).replace('export function portraitLayout','globalThis.portraitLayout=function');
+const code=(await readFile('ui/infographic-layout.js','utf8')).replace('export function portraitLayout','globalThis.portraitLayout=function').replace('export function fitPanelText','globalThis.fitPanelText=function');
 async function measure(html,height=2276,options={}){await page.setContent('<style>html,body{margin:0;width:1280px;height:'+height+'px;box-sizing:border-box}*{box-sizing:border-box}</style>'+html);await page.evaluate(code);return page.evaluate(({height,options})=>portraitLayout(document,height,options),{height,options});}
 try{
  const top='<h1 style="position:absolute;top:90px;font-size:80px">Titolo</h1><div style="position:absolute;top:300px;font-size:40px">Contenuti</div><footer style="position:absolute;top:2150px">Fonte</footer>';

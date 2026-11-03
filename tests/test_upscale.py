@@ -145,7 +145,7 @@ class UpscaleTests(unittest.TestCase):
         from types import SimpleNamespace
         calls=[];media={'id':'a'*32,'mime':'video/mp4','path':'outputs/v.mp4','name':'v.mp4'}
         store=SimpleNamespace(settings=lambda:{'chat_model':'unused'},chat=lambda ident:calls.append(('chat',ident)),enqueue=lambda *args:calls.append(('enqueue',args)) or 'job')
-        app=SimpleNamespace(root=self.root,store=store,wake=threading.Event(),validate_media=lambda items,canvas:media and [media],validate_settings=lambda value:{'chat_model':'unused'})
+        app=SimpleNamespace(root=self.root,store=store,wake=threading.Event(),validate_media=lambda items,canvas:media and [media],validate_settings=lambda value:{'chat_model':'unused'},effective_settings=lambda value:value)
         with patch.object(upscale_runtime,'ready',return_value=True),patch.object(upscale_runtime,'describe',return_value={'ready':{'base':True}}):result=upscale.request(app,'chat',{'media':[{'id':media['id']}]})
         settings=calls[-1][1][3];self.assertFalse(settings['_assistant']);self.assertFalse(settings['_rag']);self.assertEqual(result['job_id'],'job');self.assertTrue(app.wake.is_set())
         self.assertEqual(calls[-1][1][2],[media])

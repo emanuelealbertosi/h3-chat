@@ -174,5 +174,5 @@ def compose_branches(engine,record,folder,audio,cancel,stage,log,start,duration)
             paths.append(safe_join(engine.data,alternative['output'] if alternative else path))
         target=folder/f'version-{n:03d}.mp4'
         stage(f'Montaggio · versione completa {n}/{record["batch_requested"]}')
-        compose(engine,paths,safe_join(engine.data,audio['path']),target,cancel,stage,log,audio_start=start,audio_duration=duration)
+        compose(engine,paths,safe_join(engine.data,audio['path']) if audio else None,target,cancel,stage,log,**({'audio_start':start,'audio_duration':duration} if audio else {'clip_audio':True}))
         record['batch_movies'].append({'variant_index':n,'path':target.relative_to(engine.data).as_posix()});save(folder,record)

@@ -19,14 +19,17 @@ def load(app,chat_id,message_id):
         ('music_fields','_music_fields',{}),('voice_fields','_voice_fields',{}),('music_quality','music_quality','model'),
         ('music_max_duration','_music_max_duration',None),('video_quality','_video_quality','high'),
         ('video_steps','_video_steps',None),('video_editing','_video_editing','continuous'),
-        ('video_segment_seconds','_video_segment_seconds',None))}
+        ('video_segment_seconds','_video_segment_seconds',None),
+        ('video_scene_count','_video_scene_count',None),('video_scene_seconds','_video_scene_seconds',None))}
+    if settings.get('_video_sequence'):
+        controls.update(video_scene_count=settings['_video_sequence']['count'],video_scene_seconds=settings['_video_sequence']['scene_seconds'])
     if controls['music']:
         controls['music_model']=settings['music_model']
         controls['music_resing']=bool(settings.get('_music_resing'))
         controls['music_presets']={settings['music_model']:settings.get('_music_request_parameters',settings.get('music_overrides',{}).get(settings['music_model'],{}))}
     if controls['image_model'] and settings.get('_image_request_parameters'):
         controls['image_presets']={controls['image_model']:settings['_image_request_parameters']}
-    if controls['video']:
+    if controls['video'] or settings.get('_video_edit'):
         controls['video_model']=settings['video_model']
         preset=DEFAULTS|settings.get('video_overrides',{}).get(settings['video_model'],{})
         controls['video_parameters']={k:preset[k] for k in REQUEST_KEYS if k!='aspect'}
@@ -43,8 +46,29 @@ def load(app,chat_id,message_id):
             if source['mime'].startswith('video/'):
                 media=[{k:source[k] for k in ('id','name','path','mime')}]+media
         except ValueError:pass
-    return {'prompt':payload['prompt'],'media':media,'canvas':bool(payload.get('canvas')),**extra,
-            'agent':settings.get('_agent',{}).get('options'),'controls':controls,'lab':settings.get('_lab','auto'),'lab_source':settings.get('_lab_source',''),
+    from .request_settings import snapshot
+    parameters=snapshot(settings);warnings=[]
+    if settings.get('_infographic',{}).get('voice'):
+        from .voice_reference import reference
+        for gender in ('female','male'):
+            ref,reason=reference(app.root,settings,gender)
+            if reason:parameters['voice_references'][gender]=ref;warnings.append(reason)
+    backgrounds=settings.get('_slide_backgrounds')
+    operation=None
+    if settings.get('_upscale'):operation={'kind':'upscale','options':settings['_upscale']}
+    if settings.get('_video_remix'):
+        remix=settings['_video_remix'];operation={'kind':'remix','options':{k:v for k,v in remix.items() if k not in ('runtime','video')}}
+    if settings.get('_video_recreate'):operation={'kind':'recreate',**settings['_video_recreate']}
+    return {'prompt':backgrounds['prompt'] if backgrounds else payload['prompt'],'media':media,'canvas':bool(payload.get('canvas')),**extra,
+            'operation':operation,
+            'parameters':parameters,'warnings':warnings,'think_level':settings.get('think_level','off'),
+            'rag':{'rag':settings.get('_rag',settings.get('rag_enabled',True)),'rag_sources':settings.get('_rag_sources'),'rag_top_k':settings.get('rag_top_k',6)},
+            'background_batch':backgrounds.get('options') if backgrounds else None,'image_lot':settings.get('_image_lot'),
+            'voice_parts':[{'text':p['text'],'voice_fields':p.get('voice_fields',{})} for p in settings.get('_voice_parts',[])],
+            'agent':settings.get('_agent',{}).get('options'),
+            'agent_context':{k:settings['_agent'][key] for k,key in (('slides','slide_defaults'),('infographic','infographic_defaults')) if key in settings.get('_agent',{})},
+            'agent_start_artifact':(settings.get('_agent',{}).get('start_artifact') or {}).get('id'),
+            'controls':controls,'lab':settings.get('_lab','auto'),'lab_source':settings.get('_lab_source',''),
             'slides':settings.get('_slides'),'infographic':settings.get('_infographic'),'poster':settings.get('_posters'),'study':settings.get('_study'),
             'manim_presentation':settings.get('_manim_presentation'),
             'loras':[{k:x[k] for k in ('id','name','weight','model_id','model_name') if k in x} for x in payload.get('loras',[])]}

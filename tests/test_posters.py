@@ -21,6 +21,15 @@ class PosterTests(unittest.TestCase):
     setUp=fixture.VisualModelsTests.setUp
     tearDown=fixture.VisualModelsTests.tearDown
 
+    def test_send_uses_new_single_attachment_after_reloading_old_poster_request(self):
+        import base64
+        media=self.app.upload({'name':'New reference.png','data':base64.b64encode(PNG).decode()})
+        chat=self.app.store.create_chat()['id']
+        ticket=self.app.send(chat,{'prompt':'Rifai e migliora questa locandina','media':[media],'lab':'poster','rag':False,'poster':{'reference_mode':'improve','reference_asset_id':'a'*32,'reference_page':7}})
+        saved=json.loads(self.app.store.one('SELECT payload FROM jobs WHERE id=?',(ticket['job_id'],))['payload'])
+        self.assertEqual(saved['settings']['_posters']['reference_asset_id'],media['id'])
+        self.assertEqual(saved['settings']['_posters']['reference_page'],1)
+
     def launch(self,prompt='Crea una locandina',**opts):
         chat=self.app.store.create_chat()['id'];ticket=self.app.send(chat,{'prompt':prompt,'lab':'poster','poster':{'images':'none',**opts},'rag':False})
         return chat,self.app.store.one('SELECT * FROM jobs WHERE id=?',(ticket['job_id'],))
@@ -58,6 +67,46 @@ class PosterTests(unittest.TestCase):
             with self.assertRaises(ValueError):options(value=v)
         self.assertTrue(requested('Creami una locandina per il laboratorio'));self.assertFalse(requested('Come creo un poster?'))
 
+    def test_reference_evidence_reaches_plan_layout_and_saved_artifact_without_whole_page_image(self):
+        import base64
+        from test_poster_reference import PLAN
+        source=self.app.upload({'name':'Riferimento.png','data':base64.b64encode(PNG).decode()})
+        chat=self.app.store.create_chat()['id'];ticket=self.app.send(chat,{'prompt':'Riproduci il layout, titolo OPEN LAB','lab':'poster','rag':False,'media':[source],'poster':{'reference_mode':'reproduce','reference_asset_id':source['id'],'images':'existing'}})
+        job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(ticket['job_id'],))
+        info={'mode':'reproduce','source_asset_id':source['id'],'source_name':source['name'],'page':1,'plan':PLAN}
+        with patch('h3chat.poster_reference.prepare',return_value=(info,[])),patch('h3chat.poster_reference_check.verify',side_effect=lambda *a,**kw:a[6]) as check:
+            answer,calls,images=self.complete(job)
+        self.assertEqual(answer['status'],'done',answer['meta']);images.assert_not_called()
+        check.assert_called_once()
+        artifact=self.app.store.canvas_history.get(chat);deck=json.loads(artifact['content'][len(PREFIX):-4])
+        self.assertEqual(deck['poster_reference'],info);self.assertIn('Font originale',deck['pages'][0]['notes'])
+        self.assertNotIn(source['id'],[m['id'] for m in artifact['media']])
+        self.assertIn('RIPRODUCI',calls[0][0]['content']);self.assertIn('RIPRODUCI',calls[-1][0]['content'])
+        validate_content(artifact['content'],artifact['media'])
+
+    def test_reference_only_format_annotation_does_not_restrict_the_poster(self):
+        from h3chat.posters import validate_plan
+        value=plan();value['variants'][0]['image_aspect']='4:5'
+        self.assertEqual(validate_plan(value,options(value={'format':'4:5'}),None)[0]['image_aspect'],'4:5')
+        with self.assertRaisesRegex(ValueError,'image_aspect'):validate_plan(value,options(),{'id':'image-engine'})
+        chat,job=self.launch(format='4:5')
+        def completion(messages,settings,event,**kw):
+            if kw.get('schema'):
+                self.assertNotIn('enum',kw['schema']['properties']['variants']['items']['properties']['image_aspect'])
+                return json.dumps(value),'stop'
+            return HTML,'stop'
+        with patch.object(self.app.engine,'prepare'),patch.object(self.app.engine,'prepare_tools',side_effect=lambda h,*a,**k:(h,{},[],[])),patch.object(self.app.engine,'start_llama'),patch.object(self.app.engine,'completion',side_effect=completion),patch.object(self.app.engine,'generate') as images:
+            self.app.execute_job(job,threading.Event())
+        self.assertEqual(self.app.store.one('SELECT status FROM jobs WHERE id=?',(job['id'],))['status'],'done');images.assert_not_called()
+
+    def test_reference_redesign_can_describe_a_dense_poster_with_a_bounded_plan(self):
+        from h3chat.posters import validate_plan
+        value=plan();value['variants'][0]['visual_plan']='a'*3500
+        self.assertEqual(len(validate_plan(value,options(value={'reference_mode':'improve'}),None)[0]['visual_plan']),3500)
+        with self.assertRaisesRegex(ValueError,'visual_plan'):validate_plan(value,options(),None)
+        value['variants'][0]['visual_plan']='a'*6001
+        with self.assertRaisesRegex(ValueError,'visual_plan'):validate_plan(value,options(value={'reference_mode':'improve'}),None)
+
     def test_auto_router_and_reload_draft_keep_poster_fields(self):
         from h3chat.request_draft import load
         chat=self.app.store.create_chat()['id'];ticket=self.app.send(chat,{'prompt':'Crea una locandina 4:5 senza immagini','rag':False})
@@ -72,7 +121,7 @@ class PosterTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'Allega'):image_model(self.app,self.settings,opts|{'images':'attached'},[])
 
     def test_negative_generation_instruction_never_loads_image_model(self):
-        for prompt in ('Non generare nuove immagini. Riusa i quattro allegati.','Non creare nuove immagini: solo quelle allegate.','Do not generate new images.','Senza generare nuove immagini.'):
+        for prompt in ('Non generare nuove immagini. Riusa i quattro allegati.','Non creare nuove immagini: solo quelle allegate.','Do not generate new images.','Senza generare nuove immagini.','Nessuna nuova generazione immagini.','Senza generazione di immagini.','Niente generazioni immagini.'):
             with self.subTest(prompt=prompt):
                 opts=options(prompt,{'images':'generate'});self.assertEqual(opts['images'],'existing')
                 with patch.object(self.app.engine,'require_model') as require:self.assertIsNone(image_model(self.app,self.settings,opts,[]))

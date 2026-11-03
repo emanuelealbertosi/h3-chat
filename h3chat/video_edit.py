@@ -36,12 +36,17 @@ def source(app, chat_id, ident,segment_seconds=None,*,import_layout_version=2):
     refs=meta.get('references',payload['media'])
     images=[r for r in refs if r['mime'].startswith('image/')]
     audios=[r for r in refs if r['mime'].startswith('audio/')]
+    if record.get('generated_soundtrack'):
+        native=record['generated_soundtrack']
+        if not any(a['id']==native['id'] for a in audios):refs=[*refs,native];audios=[*audios,native]
+        record=copy.deepcopy(record)
+        record['plan']['audios']=[a|{'role':'reference'} for a in record['plan']['audios'] if a['index']!=len(audios)]+[{'index':len(audios),'role':'reuse','start':0}]
     track=next((a for a in record['plan']['audios'] if a['role'] in ('reuse','lipsync')),None)
     if not track:
         # Older storyboard jobs preserved an exact master during composition
         # but left the preliminary plan's audio role at "reference". Recover
         # only the explicitly saved soundtrack identity, never a guessed file.
-        master=record.get('request_context',{}).get('settings',{}).get('_video_soundtrack',{})
+        master=record.get('request_context',{}).get('settings',{}).get('_video_soundtrack') or {}
         ordinal=next((i for i,a in enumerate(audios,1) if a['id']==master.get('id')),None)
         if ordinal is not None:
             track=next((a for a in record['plan']['audios'] if a['index']==ordinal),None)
@@ -298,7 +303,8 @@ def request(app,chat_id,body):
     plans=supplied_plans(value,patches,body.get('plans',{}))
     canvas=body.get('canvas',value['payload'].get('canvas',False))
     if type(canvas) is not bool:raise ValueError('Destinazione canvas non valida.')
-    settings=app.validate_settings({})
+    from .request_settings import resolve as resolve_request_settings
+    settings=resolve_request_settings(app,body)
     selected=body.get('model') or value['record']['model']
     if not isinstance(selected,str):raise ValueError('Selezione modello video non valida.')
     settings['video_model']=selected

@@ -148,7 +148,7 @@ class Service:
         return {"token": self.token, "version": __version__, "platform":platform_info(), "server_time":time.time(), "settings": self.store.settings(), "profiles": PROFILES,"project_limits":RAG_LIMITS,
                 "execution":public(saved,self.catalog),
                 "api_providers":self.providers.list(),"api_presets":API_PRESETS,"voice_runtime":{"ready":voice_ready(self.root)},
-                "voice_engines":{"higgs":{"name":"Higgs Audio v3","ready":voice_ready(self.root)}},
+                "voice_engines":{key:{"name":name,"ready":voice_ready(self.root,key)} for key,name in voice_engines.ENGINES.items()},
                 "media_providers":self.media_providers.list(),
                 "media_server":self.media_server.status(),
                 "llm_options":{"keys":LLM_KEYS,"defaults":{profile:llm_defaults(profile) for profile in PROFILES},"max_context":MAX_CONTEXT,"max_output_tokens":MAX_OUTPUT_TOKENS},
@@ -158,7 +158,7 @@ class Service:
                 "poster_options":{"enabled":True,"max_variants":6,"formats":['A3','A4','A3-landscape','A4-landscape','4:5','9:16','1:1','16:9']},
                 "infographic_options":{"engines":["classic","motion"],"scene_format_version":2,"sprite_library":True,"camera":True,"parallax":True,"experimental_motion":True},
                 "study_options":{"enabled":True,"max_items":50,"kinds":['flashcards','summary','faq','guide','timeline','dialogue']},
-                "video_options":{"defaults":VIDEO_DEFAULTS,"aspects":VIDEO_ASPECTS,"request_controls":True,"segment_controls":True,"format_control":True,"request_draft":True,"seed_control":True,"attention_choices":True,"batch_controls":True}, "veda_runtime":veda_status(self.root),
+                "video_options":{"defaults":VIDEO_DEFAULTS,"aspects":VIDEO_ASPECTS,"request_controls":True,"segment_controls":True,"sequence_controls":True,"format_control":True,"request_draft":True,"seed_control":True,"attention_choices":True,"batch_controls":True}, "veda_runtime":veda_status(self.root),
                 "tools_runtime":tools_status(self.root),"transcription_models":[m|{'ready':all(safe_join(self.root,f['path']).is_file() for f in m['files'])} for m in self.downloads.tool_models.values() if m['id'].startswith('whisper-')],
                 "embeddinggemma2_runtime":{"ready":gemma2_runtime_ready(self.root)}, "vision_runtime":vision_status(self.root), "models": models,"image_options":{"request_controls":True,"last_seed":True,"moss_presets":MOSS_RECIPES,"moss_dmd2":moss_dmd2_status(self.root),"moss_negative_prompt":MOSS_NEGATIVE_PROMPT,"samplers":NATIVE_SAMPLERS,"schedulers":NATIVE_SCHEDULERS,"vision_samplers":VISION_SAMPLERS,"vision_schedulers":VISION_SCHEDULERS,"defaults":{k:DEFAULTS[k] for k in IMAGE_DEFAULT_KEYS}},"external_profiles":EXTERNAL_PROFILES,"model_role_labels":ROLE_LABELS,
                 "runtimes": {key: {"ready": mac_runtime_ready(self.root,key) if is_macos() else remix_ready(self.root,key) if key.startswith('remix_') else upscale_ready(self.root,key) if key.startswith('upscale_') else tools_status(self.root).get(key.removeprefix('tools_'),{}).get('ready',False) if key.startswith('tools_') else veda_status(self.root)["ready"] if key=="veda" else gemma2_runtime_ready(self.root) if key=="embeddinggemma2" else voice_ready(self.root,key.removeprefix("voice_")) if key.startswith("voice_") else voice_ready(self.root) if key=="voice" else vision_status(self.root)["ready"] if key=="vision" else music_status(self.root).get(key.removeprefix("music_"),{}).get("ready",False) if key.startswith("music_") else all(runtime_executable(self.root, key, e) for e in ("llama", "sd")),
@@ -466,7 +466,8 @@ class Service:
         if image_batch:
             from .image_batch_loras import uploaded
             attached_image_loras=uploaded(self,media)
-        settings = self.effective_settings(self.validate_settings({"think_level":body.get("think_level", self.store.settings()["think_level"])}))
+        from .request_settings import resolve as resolve_request_settings
+        settings = resolve_request_settings(self,body)
         from .execution_mode import cpu,guard_intent,API_ERROR
         if cpu(settings):
             if any(body.get(k) for k in ('image_model','music','video','voice','transcribe')) or image_batch:guard_intent(settings,'create')
@@ -523,6 +524,14 @@ class Service:
         settings = settings | {'_image_model':selection,'_assistant':assistant,'_music':music,'_music_fields':fields,'_video':video,'_web':web,'_transcribe':transcribe,'_image_batch':image_batch}
         if image_lot:settings['_image_lot']=image_lot
         settings.update(_voice=voice,_voice_fields=validate_voice_fields(body.get('voice_fields',{})))
+        if body.get('voice_parts') is not None:
+            parts=body['voice_parts']
+            if not voice or body.get('lab','auto')!='auto' or not isinstance(parts,list) or not 1<=len(parts)<=16:raise ValueError('Sequenza Voice: da 1 a 16 parti nella modalità Voice.')
+            prepared=[]
+            for i,part in enumerate(parts):
+                if not isinstance(part,dict) or set(part)-{'text','voice_fields'} or not isinstance(part.get('text'),str) or not 1<=len(part['text'].strip())<=2000:raise ValueError('Parte Voice non valida: testo da 1 a 2000 caratteri.')
+                prepared.append({'text':part['text'].strip(),'scene_id':i,'voice_fields':validate_voice_fields(part.get('voice_fields',{}))})
+            settings['_voice_parts']=prepared
         rag=body.get('rag',settings['rag_enabled'])
         if type(rag) is not bool:raise ValueError('RAG: scegli On oppure Off.')
         if 'rag_top_k' in body:
@@ -544,7 +553,8 @@ class Service:
             self.engine.require_model(settings['chat_model'],'chat')
             if body.get('study_explain') is not None:
                 spec=body['study_explain']
-                if not isinstance(spec,dict) or set(spec)!={'artifact_id','card_id'}:raise ValueError('Richiesta Spiega non valida.')
+                if not isinstance(spec,dict) or set(spec)-{'artifact_id','card_id','question'} or not {'artifact_id','card_id'}<=set(spec):raise ValueError('Richiesta Spiega non valida.')
+                if 'question' in spec and (not isinstance(spec['question'],str) or len(spec['question'])>1200):raise ValueError('Domanda di approfondimento non valida.')
                 _,deck=study_loaded(self,chat_id,spec['artifact_id'])
                 if not any(i['id']==spec['card_id'] for i in deck['items']):raise ValueError('Scheda non trovata.')
                 settings['_study_explain']=spec
@@ -557,6 +567,8 @@ class Service:
         if poster_request:
             if source:raise ValueError('Modifica il sorgente della locandina nel canvas.')
             lab='poster';settings['_posters']=poster_options(prompt,body.get('poster'))
+            from .poster_reference import resolve_reference
+            settings['_posters']=resolve_reference(settings['_posters'],media)
             self.engine.require_model(settings['chat_model'],'chat')
             poster_image_model(self,settings,settings['_posters'],media)
         from .infographics import requested as infographic_requested,options as infographic_options
@@ -602,8 +614,10 @@ class Service:
         guard_platform(settings)
         if settings['_manim_voice'] and not source:self.engine.require_model(settings['chat_model'],'chat')
         if lab not in ('manim','calculate','slides','infographic') and not (lab=='auto' and settings.get('lab_auto',True) and lab_route(prompt)=='manim') and video_route([{'content':prompt}],settings):
-            from .video_options import prompt_duration
-            prompt_duration(prompt,has_audio=any(x['mime'].startswith('audio/') for x in media))
+            from .video_sequence import apply as apply_sequence,scenes as sequence_scenes
+            if not any(x['mime'].startswith('audio/') for x in media):
+                settings=apply_sequence(settings,prompt,remote=bool(self.engine.require_model(settings['video_model'],'video').get('remote_media')))
+                if settings.get('_video_sequence'):sequence_scenes(settings)
             from .video_batch import prompt_options
             batch=prompt_options(prompt)
             if batch:
@@ -1057,7 +1071,6 @@ class Service:
                 self.store.update_answer(job, text, "done", [] if payload.get('canvas') else transcript_media,meta=meta)
                 stage("Risposta completata" if finish != "length" else "Limite di risposta raggiunto: puoi chiedere di continuare")
             elif intent == "video":
-                from .video_options import with_prompt_duration
                 video_model=self.engine.require_model(settings['video_model'],'video')
                 selected_video_loras=loras_for_model(payload.get('loras',[]),video_model)
                 settings=settings|{'_video_loras':[{'path':x['path'],'weight':x['weight']} for x in selected_video_loras]}
@@ -1082,8 +1095,10 @@ class Service:
                         '_video_audio_source_duration':window['source_duration'],'_video_soundtrack':soundtrack}
                     stage(f'Video · segmento audio {window["start"]:g}–{window["start"]+window["duration"]:g} s')
                 else:
-                    if settings.get('_video_editing')=='storyboard':raise ValueError('Allega o richiama una traccia audio per creare lo storyboard musicale.')
-                    settings=with_prompt_duration(settings,payload['prompt'])
+                    from .video_sequence import apply as apply_sequence
+                    settings=apply_sequence(settings,payload['prompt'],remote=bool(video_model.get('remote_media')))
+                    if settings.get('_video_sequence'):
+                        spec=settings['_video_sequence'];stage(f'Video · {spec["count"]} scene × {spec["scene_seconds"]:g} s · {spec["duration"]:g} s totali')
                 meta['model']=video_model['name'];self.store.update_answer(job,text,meta=meta)
                 if settings.get('_video_resume'):
                     from .video_resume import checkpoint
@@ -1096,7 +1111,7 @@ class Service:
                     from .video_direct_storyboard import attachment_plan
                     plan,assistant_info=attachment_plan(refs,soundtrack,settings['_video_duration']),None
                 else:plan,assistant_info=self.engine.refine_video(history,payload['prompt'],refs,video_model,settings,cancel,log_path,stage)
-                media=self.engine.generate_long_video(video_model,settings,plan,refs,job['id'],cancel,stage,prompt=payload['prompt']) if soundtrack else self.engine.generate_video(video_model,settings,plan,refs,job['id'],cancel,stage,prompt=payload['prompt'])
+                media=self.engine.generate_long_video(video_model,settings,plan,refs,job['id'],cancel,stage,prompt=payload['prompt']) if soundtrack or settings.get('_video_sequence') else self.engine.generate_video(video_model,settings,plan,refs,job['id'],cancel,stage,prompt=payload['prompt'])
                 from .video_batch import finish_standalone
                 plan,refs=finish_standalone(self,media,plan,refs,job,cancel,stage,log_path)
                 meta.update(assistant_on=settings.get('_assistant',True),assistant=assistant_info,video_plan=plan,video_parameters=media['generation'],references=refs,video_selection=route.get('selection','auto'))

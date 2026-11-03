@@ -26,7 +26,8 @@ def request(app,chat_id,body):
     if not runtime.ready(app.root,'upscale_rtx'):raise ValueError('Installa il motore RTX VSR nelle impostazioni.')
     canvas=body.get('canvas',False)
     if type(canvas) is not bool:raise ValueError('Destinazione canvas non valida.')
-    settings=app.store.settings()|{'_upscale':config,'_assistant':False,'_rag':False}
+    from .request_settings import resolve as resolve_request_settings
+    settings=resolve_request_settings(app,body)|{'_upscale':config,'_assistant':False,'_rag':False}
     name='RTX VSR'
     prompt=f"Upscale video · {name} · {config['target']}"+(' · prova di 10 secondi' if config['preview'] else '')+'\n'+media[0]['name']
     job=app.store.enqueue(chat_id,prompt,media,settings,canvas);app.wake.set()

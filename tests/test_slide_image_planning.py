@@ -24,6 +24,13 @@ class ImagePlanningTests(unittest.TestCase):
             'description':f'Figura {n}'} for n in numbers]}),'stop'
     def run_plan(self):
         return plan_images(self.engine,self.outline,self.history,self.settings,self.image,self.cancel,self.stage)
+    def test_audio_pipeline_can_defer_the_intermediate_llm_reload(self):
+        self.outline['slides']=self.outline['slides'][:1]
+        self.engine.completion.return_value=self.response([1])
+        self.engine.generate.return_value={'id':'generated','mime':'image/png','path':'synthetic.png'}
+        assets,_=create(SimpleNamespace(engine=self.engine,store=Mock()),{'payload':'{}'},self.outline,
+            self.history,self.settings,{'name':'LLM'},self.cancel,self.stage,Path('synthetic.log'),{},restore_llm=False)
+        self.assertEqual(len(assets),1);self.assertEqual(self.engine.stop.call_count,2);self.engine.start_llama.assert_not_called()
     def test_fifteen_pages_with_2200_tokens_finish_before_one_model_switch_and_batch(self):
         events=[];before=copy.deepcopy(self.settings)
         def complete(messages,tuning,cancel,**kwargs):

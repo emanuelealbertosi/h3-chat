@@ -2,6 +2,33 @@
 
 In chat scegli **Video → Impostazioni Video → Impostazioni avanzate**.
 
+## Un video con N scene, anche senza audio allegato
+
+Nella parte principale di **Impostazioni Video** trovi **Numero di scene** e
+**Secondi per scena**, con il totale prima dell'invio. Valgono per T2V, I2V e
+reference-to-video locali, con Assistant acceso o spento. Puoi chiedere anche
+«Crea un video unico di 3 scene da 20 secondi» oppure «Video di 90 secondi in
+3 scene»: il prompt prevale sui controlli. Il limite complessivo è 10 minuti,
+con un massimo di 100 scene narrative e 160 segmenti nativi.
+
+Ogni generazione nativa resta entro 15 secondi. Una scena da 20 secondi usa
+15 + 5 secondi collegati dalla memoria H3, poi viene montata con le altre scene
+in un solo MP4. Il controllo **Durata segmenti** limita questi segmenti interni,
+non accorcia la durata richiesta. Con 15 secondi richiesti vengono pianificati
+360 fotogrammi a 24 fps, senza ricadere nel vecchio default di 12 secondi.
+Le durate sono arrotondate al fotogramma a 24 fps.
+
+**Continuazione** prosegue con memoria; **Storyboard** usa Assistant per regia e
+stacchi anche senza canzone. L'immagine I2V rimane il primo fotogramma iniziale;
+i riferimenti restano gli allegati selezionati. L'audio generato delle clip viene
+conservato nel montaggio. Una traccia allegata continua invece a guidare la
+durata come prima: questi nuovi campi non la tagliano implicitamente.
+
+Le scelte restano salvate nella chat e si recuperano con **Ricarica richiesta**.
+I segmenti completati restano nel checkpoint per **Riprendi clip mancanti**.
+L'Agente può passare `scene_count` e `scene_seconds` a `create_video`, insieme a
+`input_mode`, riferimenti e parametri usuali. Non servono nuovi LoRA o motori.
+
 ## Animare una foto: I2V con Assistant o Agente
 
 Allega l'immagine, scegli **Video** e scrivi per esempio:

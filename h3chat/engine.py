@@ -688,10 +688,14 @@ class Engine(MusicEngine, VideoEngine, ToolsEngine):
                                 'prompt_format':prompt_format,'image_model':image_model['name']}
 
     def image_request(self, model, settings, prompt, refs, output):
+        source_prompt=prompt
+        if model.get('architecture')=='moss':
+            from .moss_layout import explicit
+            prompt=explicit(prompt) or prompt
         if len(refs)>model.get('max_refs',1):
             raise ValueError(f"{model_label(model)} accetta al massimo {model.get('max_refs',1)} riferimenti; ne hai forniti {len(refs)}.")
         architecture = model.get('architecture')
-        params=settings.get('_image_options') or image_options(model,settings)
+        params=settings.get('_image_options') or image_options(model,settings,source_prompt if model.get('architecture')=='moss' else '')
         if params.get('moss_turbo'):
             if architecture!='moss':raise ValueError('Turbo DMD2 richiede MOSS o Kromoss.')
             from .moss_dmd2 import adapter_path

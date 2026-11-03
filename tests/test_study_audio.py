@@ -8,6 +8,13 @@ class StudyAudioTests(unittest.TestCase):
     tearDown=_Study.tearDown
     launch=_Study.launch
     execute=_Study.execute
+    def test_profile_choices_are_frozen_in_the_audio_job(self):
+        chat,job=self.launch(kind='dialogue',count=2);self.execute(job);artifact=self.app.store.canvas_history.get(chat)
+        selected={'voice_a':'limpida','voice_b':'aurora'}
+        with patch('h3chat.study_audio.voices',return_value=[]):ticket=study_audio.enqueue(self.app,chat,artifact['id'],selected)
+        settings=json.loads(self.app.store.one('SELECT payload FROM jobs WHERE id=?',(ticket['job_id'],))['payload'])['settings']
+        self.assertEqual(settings['_study_audio_voices'],selected)
+        with self.assertRaises(ValueError):study_audio.enqueue(self.app,chat,artifact['id'],{'voice_a':'unknown'})
     def test_two_voices_use_saved_script_without_another_llm_call(self):
         chat,job=self.launch(kind='dialogue',count=3);self.execute(job);artifact=self.app.store.canvas_history.get(chat)
         deck=study.decode(artifact['content'])

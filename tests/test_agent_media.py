@@ -78,6 +78,32 @@ class AgentMediaTests(unittest.TestCase):
             state=self.drive(job,'create_manim',{'prompt':'Mostra una parabola','duration':10})
         self.assertEqual(builder.call_count,1);self.assertEqual(len(state['artifacts']),1)
 
+    def test_infographic_agent_routes_modes_voice_and_reuse_to_real_builder(self):
+        for mode,engine,characters in [('normal','motion','articulated'),('decorative','classic','illustrated'),('sequence','classic','illustrated')]:
+            with self.subTest(mode=mode):
+                chat,job=self.ticket('agent: Infografica animata',allow_audio=True,confirm_writes=False)
+                def build(app,child,payload,history,settings,*args):
+                    opts=settings['_infographic']
+                    for key,value in {'visual_mode':mode,'animation_engine':engine,'character_animation':characters,'voice_profile':'aurora','voice_gender':'female','pace':'explainer','output':'video','duration':30}.items():self.assertEqual(opts[key],value)
+                    self.assertTrue(opts['voice']);self.assertEqual(opts['sprite_ids'],['a'*32])
+                    value={'title':'Grafica','content':encode({'version':1,'engine':'llm','format':'16:9','pages':[{'title':'Scena','html':'<h1>Test</h1>','status':'ready'}]}),'media':[]}
+                    app.save_artifact(chat,value['title'],value['content'],[]);return value
+                with patch('h3chat.infographics.build',side_effect=build):
+                    self.drive(job,'create_infographic',{'prompt':'Storia rapida','visual_mode':mode,'animation_engine':engine,'character_animation':characters,'animated':True,'voice':True,'voice_profile':'aurora','voice_gender':'female','pace':'explainer','duration':30,'sprite_ids':['a'*32]})
+
+    def test_agent_copied_poster_routes_exact_reference_from_linked_artifact(self):
+        chat,job=self.ticket('agent: Riproduci questa locandina',confirm_writes=False)
+        source=self.media('reference.png','image/png')
+        saved=self.app.store.canvas_history.save(chat,{'title':'Riferimento','content':'','media':[source]})
+        def build(app,child,payload,history,settings,*args):
+            opts=settings['_posters'];self.assertEqual(opts['reference_mode'],'reproduce');self.assertEqual(opts['reference_asset_id'],source['id']);self.assertEqual(opts['images'],'existing')
+            self.assertIn(source['id'],[m['id'] for m in payload['media']])
+            value={'title':'Ricostruita','content':encode({'version':1,'engine':'llm','format':'4:5','pages':[{'title':'Test','status':'ready','html':'<h1>Test</h1>'}]}),'media':[]}
+            app.save_artifact(chat,value['title'],value['content'],[]);return value
+        with patch('h3chat.posters.build',side_effect=build) as builder:
+            self.drive(job,'create_posters',{'prompt':'Riproduci questa locandina','reference_mode':'reproduce','reference_asset_id':source['id'],'source_artifact_ids':[saved['id']],'composition':'html','images':'existing','format':'4:5'})
+        self.assertEqual(builder.call_count,1)
+
     def test_transcription_reads_only_chosen_chat_asset(self):
         chat,job=self.ticket('agent: Trascrivi audio',confirm_writes=False)
         media=self.media();source=self.app.store.canvas_history.save(chat,{'title':'Brano','content':'','media':[media]})

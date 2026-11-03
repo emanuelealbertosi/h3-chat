@@ -90,7 +90,8 @@ def image_prompt(prompt, design, form):
     # Keep the subject/medium authored by the LLM, but do not lose the selected
     # style when an image planner returns a generic prompt. No extra model call.
     cues = IMAGE_CUES.get(design, IMAGE_CUES['professional'])
-    no_text='Illustration only, no text, no letters, no words, no numbers, no captions, no labels, no typography, no logos, no watermarks. Leave signs, screens and speech bubbles blank; all slide text will be added separately.'
+    # Text exclusion must not override an explicitly photographic medium.
+    no_text='Image only, no text, no letters, no words, no numbers, no captions, no labels, no typography, no logos, no watermarks. Leave signs, screens and speech bubbles blank; all slide text will be added separately. Preserve the requested photographic or illustrative medium.'
     if form == 'tags':
-        return prompt.rstrip(' ,.') + ', ' + cues + ', text-free illustration, blank signs, no text, no letters, no words, no numbers, no labels, no logos, no watermarks'
+        return prompt.rstrip(' ,.') + ', ' + cues + ', text-free image, blank signs, no text, no letters, no words, no numbers, no labels, no logos, no watermarks'
     return prompt.rstrip() + '\nVisual direction: ' + cues + '.\n' + no_text

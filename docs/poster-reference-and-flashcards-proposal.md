@@ -69,11 +69,11 @@ ripasso a intervalli programmati, sessioni HTML offline e sincronizzazione tra
 dispositivi restano estensioni future. Con un provider API, gli estratti
 necessari vengono inviati al provider: RAG locale non implica inferenza locale.
 
-## Riproduzione di un riferimento grafico ancora da completare
+## Locandine da riferimento attive; brochure multipagina rinviate
 
 Per i riferimenti grafici: un'opzione Riproduci / Migliora deve selezionare un
 singolo riferimento visivo distinto dalla foto protagonista. Vision restituisce
 una descrizione strutturata di box, colori, testi leggibili e incertezze; il
 piano viene conservato con l'artefatto. Per PDF digitali si estraggono coordinate
 e risorse originali prima della Vision. La brochure resta multipagina con
-ordine delle facciate esplicito. Questi percorsi non sono ancora attivati.
+ordine delle facciate esplicito. Il percorso per una locandina è attivo localmente dal 2 novembre: Riproduci/Migliora con immagine o singola pagina PDF, piano Vision salvato e ritagli riutilizzati. Collaudi reali e limiti in work/poster-reference-2026-11-02/verification.json. La brochure multipagina resta rinviata.

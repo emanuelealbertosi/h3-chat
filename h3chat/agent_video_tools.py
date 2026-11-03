@@ -27,6 +27,8 @@ def definitions():
       'create_video':('Genera un video corto, lungo, musicale o con riferimenti usando il motore H3 e le impostazioni salvate. reference_numbers sceglie esplicitamente gli allegati numerati (anche da source_artifact_ids). Assistant è spento di default. La coda esegue il video, poi Agent riprende con lo stesso budget; nessun rilancio automatico in caso di errore o Stop.',obj({
         'prompt':string(24000),'model_id':string(150),'reference_numbers':{'type':'array','items':{'type':'integer','minimum':1,'maximum':128},'maxItems':13},
         'parameters':parameters,'segment_seconds':segment,'assistant':{'type':'boolean'},
+        'scene_count':{'type':'integer','minimum':1,'maximum':100,'description':'Numero di scene narrative, anche senza audio allegato; un unico video montato.'},
+        'scene_seconds':{'type':'number','minimum':1,'maximum':600,'description':'Secondi per scena. Oltre 15 s usa segmenti nativi con memoria. Massimo totale 600 s.'},
         'editing':{'type':'string','enum':['continuous','storyboard']},
         'input_mode':{'type':'string','enum':['auto','i2v'],'description':'Per animare una foto usa i2v: la prima immagine scelta è il fotogramma iniziale vincolante anche con Assistant On. auto conserva le istruzioni del prompt, inclusi i normali riferimenti di identità/stile.'}},['prompt'])),
       'edit_video':('Rigenera clip intere con il normale editor H3, salvando versioni e memoria. source deve essere un lavoro o un video allegato della stessa chat. Gli indici immagini seguono inspect_video_timeline; end_frame usa il raccordo finale esistente. Non inventare l’identità o la voce osservata.',obj(common|{'patches':{'type':'array','items':patch,'minItems':1,'maxItems':100},'model_id':string(150),'assistant':{'type':'boolean'},'remount':{'type':'boolean'}},['source','patches'])),
@@ -78,6 +80,11 @@ def execute(ctx,name,args):
         body['loras']=[{k:l[k] for k in ('id','weight','model_id')} for l in ctx.payload.get('loras',[]) if 'video' in ctx.app.catalog.get(l['model_id'],{}).get('capabilities',[])]
         if args.get('model_id'):body['video_model']=args['model_id']
         if args.get('parameters'):body['video_parameters']=args['parameters']
+        if args.get('scene_count') is not None:body['video_scene_count']=args['scene_count']
+        if args.get('scene_seconds') is not None:body['video_scene_seconds']=args['scene_seconds']
+        if body.get('video_parameters',{}).get('duration',0)>15:
+            body['video_parameters']=dict(body['video_parameters'])
+            body.setdefault('video_scene_seconds',body['video_parameters'].pop('duration'))
         if args.get('segment_seconds'):body['video_segment_seconds']=args['segment_seconds']
     elif name=='edit_video':
         body={'source':args['source'],'patches':copy.deepcopy(args['patches']),'canvas':True,'assistant':args.get('assistant',False),'remount':args.get('remount',True)}

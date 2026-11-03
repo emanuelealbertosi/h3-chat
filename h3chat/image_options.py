@@ -93,6 +93,11 @@ def apply_aspect(result,prompt='',model=None):
 
 def options(model, settings,prompt=''):
     result=configured(model,settings)
+    canvas=None
+    if model.get('architecture')=='moss':
+        from .moss_layout import editor_draft,explicit
+        canvas=editor_draft(prompt)
+        if canvas or explicit(prompt):prompt=''
     from .moss_dmd2 import effective,requested as requested_turbo
     turbo=requested_turbo(prompt,moss=model.get('architecture')=='moss')
     if turbo is not None:
@@ -122,6 +127,7 @@ def options(model, settings,prompt=''):
     if model.get('engine')!='vision' and (result['sampler'] not in NATIVE_SAMPLERS or result['scheduler'] not in NATIVE_SCHEDULERS):
         raise ValueError('Sampler o scheduler non supportato dal motore immagini selezionato.')
     if result['seed']<0:result['seed']=secrets.randbits(31)
+    if canvas:return result|{'width':canvas['width'],'height':canvas['height'],'aspect':'auto','megapixels':canvas['width']*canvas['height']/1e6,'preserve_reference_aspect':False}
     return apply_aspect(result,prompt,model)
 
 

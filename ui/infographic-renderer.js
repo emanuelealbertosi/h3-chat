@@ -1,9 +1,10 @@
 import '../static/infographic-scene.js';
+import '../static/infographic-cinema.js';
 import '../static/infographic-motion.js';
 import renderMath from 'katex/contrib/auto-render';
 import {readableText} from './slide-html-contrast.js';
 import {fitMediaBounds} from './slide-html-bounds.js';
-import {portraitLayout} from './infographic-layout.js';
+import {portraitLayout,fitPanelText} from './infographic-layout.js';
 import {applyHtmlBackground} from './slide-background-style.js';
 import {fitHtmlBackground} from './slide-content-fit.js';
 
@@ -17,5 +18,5 @@ globalThis.H3Infographic={measure:portraitLayout,async prepare(doc,height,option
  renderMath(doc.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false});
  readableText(doc);fitMediaBounds(doc,height);
  fitHtmlBackground(doc);
- H3Motion.configure(doc,options);
+ fitPanelText(doc,options);H3Motion.configure(doc,options);
 }};

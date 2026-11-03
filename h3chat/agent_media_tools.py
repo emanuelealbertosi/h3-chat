@@ -7,7 +7,9 @@ def definitions():
     def text(n=12000):return {'type':'string','maxLength':n}
     def obj(properties,required):return {'type':'object','properties':properties,'required':required,'additionalProperties':False}
     number={'type':'integer','minimum':1,'maximum':128}
-    return {
+    result={
+      'list_sprites':('Cerca nella raccolta sprite salvata e confermata dall’utente. Restituisce ID, descrizione, stile e tag da passare a create_infographic.sprite_ids. Non crea né salva sprite.',obj({'query':text(200)},[])),
+      'read_sprite':('Leggi un solo sprite salvato prima di riusarlo; scena, rig e media restano quelli della raccolta locale.',obj({'sprite_id':{'type':'string','pattern':'^[0-9a-f]{32}$'}},['sprite_id'])),
       'inspect_image':('Descrivi un’immagine scelta con il modello chat Vision configurato, oppure un model_id Vision già disponibile. Richiede Vision attiva, non scarica modelli. Conserva una fonte testuale riutilizzabile; non certifica qualità o fedeltà.',obj({'number':number,'artifact_id':text(32),'model_id':text(150),'prompt':text(4000)},['number','prompt'])),
       'resing_music':('Ricanta un audio con nuovo testo sulla melodia originale usando Re-sing YuE2 locale già configurato. Conserva originale, separazione e sincronizzazione H3. Richiede permesso audio e runtime pronti, non installa nulla.',obj({'number':number,'artifact_id':text(32),'prompt':text(),'lyrics':text(16000),'style':text(4000),'model_id':text(150)},['number','prompt'])),
       'edit_image':('Ritocca un’immagine allegata o di un artefatto della chat con Qwen o un altro modello edit disponibile. Usa edit_model delle impostazioni se model_id è omesso; conserva originale e parametri.',obj({'prompt':text(),'artifact_id':text(32),'number':number,'model_id':text(150)},['prompt'])),
@@ -19,6 +21,15 @@ def definitions():
       'create_manim':('Crea un’animazione Manim con il renderer e l’isolamento di H3, entro il budget configurato. Non accetta codice o percorsi manuali; usa solo gli allegati della richiesta.',obj({'prompt':text(),'duration':{'type':'integer','minimum':1,'maximum':300}},['prompt'])),
       'render_infographic':('Aggiorna il filmato procedurale di una infografica già pronta dopo modifiche alle scene. Non usa il motore generativo video.',obj({'artifact_id':text(32)},['artifact_id'])),
     }
+    from .infographics import CHOICES
+    description,schema=result['create_infographic']
+    schema['properties'].update({key:{'type':'string','enum':list(CHOICES[key])} for key in (
+        'visual_mode','animation_engine','character_animation','voice_profile','voice_gender',
+        'voice_style','pace','transition','sfx','style','palette','background')})
+    schema['properties'].update(image_model=text(150),sprite_ids={'type':'array','maxItems':12,'uniqueItems':True,
+        'items':{'type':'string','pattern':'^[0-9a-f]{32}$'}})
+    result['create_infographic']=(description+' visual_mode: normal = precedente; decorative = illustrazioni curate e animazioni HTML/CSS; sequence = piano sequenza 2.5D, camera e parallasse. Per un video usa animated=true. animation_engine=motion offre scene e personaggi articolati sperimentali; sequence/decorative usano classic. voice_profile=auto usa la predefinita delle infografiche; limpida è il campione 5, aurora il campione 2, configured segue Voice. Le due voci richiedono i campioni locali installati. Non chiedere parametri tecnici se basta il prompt. sprite_ids riusa solo sprite salvati esplicitamente.',schema)
+    return result
 
 def saved(ctx,title,content,media,meta=None):
     value={'title':title[:150],'content':content,'media':media}
@@ -30,6 +41,10 @@ def execute(ctx,name,args):
     # The dedicated video engine/timeline is deliberately absent. In particular
     # no implicit video reference/background may be picked from chat history.
     source=ctx.tool_payload
+    if name in ('list_sprites','read_sprite'):
+        from .motion_sprites import listing,selected
+        if name=='read_sprite':return {'sprite':selected(ctx.app,[args['sprite_id']])[0]}
+        return {'sprites':[{k:r.get(k) for k in ('id','name','description','style','tags','palette','created')} for r in listing(ctx.app,args.get('query',''))]}
     media=[m for m in source['media'] if not m['mime'].startswith('video/')]
     ctx.active_tool_media=media
     if name=='inspect_image':
@@ -157,7 +172,9 @@ def execute(ctx,name,args):
         defaults=copy.deepcopy(local['_agent'].get('infographic_defaults',{}))
         defaults.update(output='video' if args.get('animated') else 'static',voice=args.get('voice',False),music=args.get('music','none'),
                         images='generate' if args.get('generate_images') else 'provided',sfx='none',video_background='off',video_id='')
-        defaults.update({k:args[k] for k in ('scenes','duration','format') if k in args})
+        defaults.update({k:args[k] for k in ('scenes','duration','format','visual_mode','animation_engine',
+            'character_animation','voice_profile','voice_gender','voice_style','pace','transition','sfx',
+            'style','palette','background','image_model','sprite_ids') if k in args})
         opts=options(args['prompt'],defaults)
         if opts['output']=='static' and (opts['voice'] or opts['music']!='none'):raise ValueError('Per aggiungere audio scegli una infografica animata.')
         if opts['images']=='generate':guard_intent(ctx.app.effective_settings(local),'create')

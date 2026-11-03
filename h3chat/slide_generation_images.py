@@ -26,6 +26,8 @@ def plan_images(engine,outline,history,settings,image_model,cancel,stage):
         'Il campo prompt deve contenere '+style+'. description è una breve descrizione italiana dell’illustrazione.\n'+\
         'Ogni prompt deve essere autosufficiente: traduci in inglese lo stile visivo e la direzione artistica della scaletta, includendo palette, trattamento e composizione coerenti. Il motore immagini non vede questa conversazione: non scrivere soltanto «come le slide» o un soggetto senza stile. Mantieni una stessa famiglia visiva per tutte le illustrazioni, variando soggetti e composizione.\n'+\
         'Genera soltanto illustrazioni, scene o metafore pertinenti, MAI slide o infografiche con scritte. Nessun testo, neppure grande: vietati titoli, sottotitoli, parole, lettere, numeri, etichette, formule, citazioni, loghi e watermark dentro immagini. Mantieni cartelli e schermi vuoti. Tutte le scritte saranno HTML/SVG precisi separati. Non attribuire valore documentale alle illustrazioni generate.'
+    if settings.get('_motion_character_backgrounds'):common+='\nQueste immagini sono SOLO SCENARI e oggetti: escludi tutti i personaggi, persone, figure, volti e parti del corpo. I personaggi articolati saranno inseriti separatamente dal motore; non creare duplicati statici nelle immagini di fondo.'
+    common+='\nLa tecnica delle immagini richiesta esplicitamente nel prompt prevale sul trattamento illustrativo generico: per fotografie o immagini fotorealistiche non aggiungere painterly, painting, canvas texture, cartoon o illustration. Il divieto di scritte non impone un mezzo pittorico. Se sono ricostruzioni storiche AI, mantieni la dichiarazione di ricostruzione nei testi HTML, senza presentarle come fotografie documentali.'
     def produce(numbers):
         schema={'type':'object','properties':{'images':{'type':'array','minItems':0,'maxItems':len(numbers),
             'items':{'type':'object','properties':{'slide':{'type':'integer','enum':numbers},
@@ -72,11 +74,12 @@ def plan_images(engine,outline,history,settings,image_model,cancel,stage):
     return plan
 
 
-def create(app,job,outline,history,settings,model,cancel,stage,log_path,meta):
+def create(app,job,outline,history,settings,model,cancel,stage,log_path,meta,*,restore_llm=True,additional_plan=(),only_additional=False):
     from .lab_image_model import select
     opts=settings['_slides'];selected=select(app.engine,settings,opts.get('image_model'))
     image_model=app.engine.require_model(selected,'create')
-    plan=plan_images(app.engine,outline,history,settings,image_model,cancel,stage)
+    plan=[] if only_additional else plan_images(app.engine,outline,history,settings,image_model,cancel,stage)
+    plan+=copy_plans(additional_plan)
     meta['slide_image_plan']=plan
     tuning=settings|{'memory_policy':'on_demand','ram_cache_gb':0,'_image_model':image_model['id'],
                       '_loras':[] if image_model.get('remote_media') else loras_for_model(json.loads(job['payload']).get('loras',[]),image_model)}
@@ -96,7 +99,7 @@ def create(app,job,outline,history,settings,model,cancel,stage,log_path,meta):
         tuning['_image_options']=image_options(image_model,settings,f"Formato {item['aspect']} {area:g} MP")
         item.update(width=tuning['_image_options']['width'],height=tuning['_image_options']['height'])
         image=app.engine.generate(image_model,tuning,item['prompt'],[],uuid4().hex,cancel,lambda step:stage(label+' · '+step))
-        image['name']=f"Slide {item['slide']} · illustrazione generata: "+item['description']
+        image['name']=('Personaggio · parti animabili: ' if item.get('role')=='character_parts' else f"Slide {item['slide']} · illustrazione generata: ")+item['description']
         assets.append(image)
         item['asset_id']=image['id']
         meta['slide_generated_images']=assets
@@ -104,8 +107,17 @@ def create(app,job,outline,history,settings,model,cancel,stage,log_path,meta):
     # The final composition receives text descriptions, without recaptioning generated images.
     if cancel.is_set():raise Cancelled()
     if not image_model.get('remote_media'):
-        stage('Slide · rilascio motore immagini e ripristino LLM per la composizione')
-        app.engine.stop();app.engine.start_llama(model,settings,log_path,cancel,stage=stage)
+        stage('Slide · rilascio motore immagini'+(' e ripristino LLM per la composizione' if restore_llm else ' per il prossimo passaggio'))
+        app.engine.stop()
+        if restore_llm:app.engine.start_llama(model,settings,log_path,cancel,stage=stage)
     meta.setdefault('slide_timing',{})['images_seconds']=round(time.monotonic()-started,2)
     meta['slide_image_model']=image_model['name']
     return assets,{item['asset_id']:f"Illustrazione generata per la slide {item['slide']}: "+item['description']+f". Formato {item['aspect']}, {item['width']}×{item['height']} px." for item in plan}
+
+
+def copy_plans(plans):
+    import copy
+    if not isinstance(plans,(list,tuple)) or len(plans)>2:raise ValueError('Piano personaggi: al massimo due nuovi fogli parti per generazione.')
+    for p in plans:
+        if not isinstance(p,dict) or p.get('role')!='character_parts' or p.get('slide')!=0 or p.get('aspect')!='2:3' or not isinstance(p.get('prompt'),str) or not 1<=len(p['prompt'])<=6000:raise ValueError('Piano foglio parti non valido.')
+    return copy.deepcopy(list(plans))

@@ -1,6 +1,7 @@
 import {chatModelId,cpuMode} from './execution-mode.js';
 import {initComposerSettings} from './composer-settings.js';
 import {initImageRequest} from './image-request.js';
+import {initMossLayoutEditor} from './moss-layout-editor.js';
 import {initComposerCollapse} from './composer-collapse.js';
 import {initInterfaceMode} from './interface-mode.js';
 const $=selector=>document.querySelector(selector);
@@ -85,7 +86,8 @@ export function initComposerPanel({getState,visualControls,getAttachments,notify
  const llmPicker=pills($('#chat-model'),'Modello LLM',true);llmPicker.classList.add('prompt-llm-picker');technicalBody.append(llmPicker);const modelButton=button('Scegli LLM','prompt-llm-open');footer.prepend(modelButton);modelButton.onclick=()=>open('models');
  const identity=button('File e percorso del modello');identity.className='text-button';identity.onclick=()=>{dialog.close();$('#model-name').click();};llmPicker.append(identity);
  const update=()=>render();composer.addEventListener('change',update);composer.addEventListener('input',event=>{if(event.target!==$('#prompt'))render();});
- const modeSettings=initComposerSettings({context,getState,onChange:render,visualControls});
+ const layoutEditor=initMossLayoutEditor({getState,visualControls,notify});
+ const modeSettings=initComposerSettings({context,getState,onChange:render,visualControls,onMossLayout:layoutEditor.open});
  const collapse=initComposerCollapse({getSummary:()=>{
   const mode=[...modes.querySelectorAll('[aria-pressed="true"]')].map(e=>e.textContent.trim()).join(' · ')||'Automatico';
   const count=getAttachments().length;

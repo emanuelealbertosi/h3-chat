@@ -60,5 +60,10 @@ export function initProjects({api,getState,getChat,refresh,notify,act,select,sho
  $('#sources-toggle').onclick=act(()=>toggle());$('#knowledge-close').onclick=()=>toggle(false);$('#knowledge-canvas').onclick=act(()=>{hide();showCanvas(true);});$('#rag-request-sources').onclick=act(choose);$('#rag-enabled').onchange=act(async()=>{rag.set(getChat()?.id,$('#rag-enabled').checked);controls();if($('#rag-enabled').checked)await choose();});
  $('#rag-request-top-k').oninput=()=>{requestTopK=$('#rag-request-top-k').value;depthRevision++;};
  for(const b of document.querySelectorAll('[data-knowledge-tab]'))b.onclick=act(()=>{view=b.dataset.knowledgeTab;for(const c of document.querySelectorAll('[data-knowledge-tab]'))c.classList.toggle('active',c===b);return render(true);});
- return {sidebar,controls,read,submitted,manage,poll,hide,citation,append};
+ return {sidebar,controls,read,submitted,manage,poll,hide,citation,append,set(value){
+  controls();const chat=getChat();if(!chat)return;
+  rag.set(chat.id,!!value?.rag);requestTopK=value?.rag_top_k??getState()?.settings.rag_top_k??6;depthRevision++;
+  if(chat.project_id){if(value?.rag_sources==null)selection.delete(chat.project_id);else selection.set(chat.project_id,[...value.rag_sources]);}
+  controls();if(open)render(true);
+ }};
 }

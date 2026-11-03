@@ -9,26 +9,38 @@ import {contentScale} from './slide-content-fit.js';
 import {posterPaper} from './document-formats.js';
 
 const NS='http://schemas.openxmlformats.org/drawingml/2006/chart';
+const pageScales=new WeakMap();
+const pageScale=frame=>pageScales.get(frame)||1;
 function color(raw){
   const values=parseColor(raw);if(!values)return {color:'FFFFFF',transparency:100};
   return {color:colorHex(values).slice(1).toUpperCase(),transparency:Math.round((1-values[3])*100)};
 }
-function box(element,frame){const r=element.getBoundingClientRect(),f=frame.getBoundingClientRect();return {x:(r.left-f.left)/96,y:(r.top-f.top)/96,w:r.width/96,h:r.height/96};}
+function box(element,frame){const r=element.getBoundingClientRect(),f=frame.getBoundingClientRect(),k=pageScale(frame);return {x:(r.left-f.left)/96*k,y:(r.top-f.top)/96*k,w:r.width/96*k,h:r.height/96*k};}
+function textColor(style){
+ const ordinary=parseColor(style.color);if(ordinary&&ordinary[3]>.05)return color(style.color).color;
+ // CSS gradient ink often sets color:transparent. Editable Office text uses
+ // a solid representative ink instead of becoming white/invisible.
+ const fill=style.getPropertyValue('-webkit-text-fill-color');if(fill&&parseColor(fill)?.[3]>.05)return color(fill).color;
+ const ink=style.backgroundImage.match(/#[a-f\d]{3,8}\b|rgba?\([^)]*\)/ig)?.find(c=>parseColor(c)?.[3]>.05);
+ return ink?color(ink).color:'183D36';
+}
 function font(style){return /Georgia/i.test(style.fontFamily)?'Georgia':/Segoe UI/i.test(style.fontFamily)?'Segoe UI':/Comic Sans/i.test(style.fontFamily)?'Comic Sans MS':/Consolas|monospace|Courier/i.test(style.fontFamily)?'Courier New':/Cormorant|Cambria|serif/i.test(style.fontFamily)&&!/sans-serif/i.test(style.fontFamily)?'Cambria':'Arial';}
-function addTextLines(slide,frame){
+function addTextLines(slide,frame,onlyNodes=null){
+  const k=pageScale(frame);
   const walker=document.createTreeWalker(frame,NodeFilter.SHOW_TEXT),lines=new Map();let node;
   while(node=walker.nextNode()){
+    if(onlyNodes&&!onlyNodes.has(node))continue;
     const parent=node.parentElement;if(parent.closest('.no-export,.katex,svg,canvas')||!node.data.trim())continue;
     const style=getComputedStyle(parent);if(style.display==='none'||style.visibility==='hidden')continue;
     const range=document.createRange();
     for(const part of node.data.matchAll(/\S+\s*|\s+/g)){
       range.setStart(node,part.index);range.setEnd(node,part.index+part[0].length);const rect=range.getBoundingClientRect();if(!rect.width||!rect.height)continue;
-      const f=frame.getBoundingClientRect(),x=(rect.left-f.left)/96,y=(rect.top-f.top)/96,w=rect.width/96,h=rect.height/96;
+      const f=frame.getBoundingClientRect(),x=(rect.left-f.left)/96*k,y=(rect.top-f.top)/96*k,w=rect.width/96*k,h=rect.height/96*k;
       const block=parent.closest('p,li,pre,h1,h2,h3,th,td,.slide-heading,.slide-continuation-title,.h3-slide-footer,.h3-slide-kicker')||parent;
       let row=[...lines.values()].find(l=>l.block===block&&Math.abs(l.y-y)<.025&&Math.abs(l.x+l.w-x)<.08);
-      if(!row){row={block,x,y,w:0,h,runs:[],fontSize:parseFloat(style.fontSize)*.75*contentScale(parent)};lines.set(lines.size,row);}
+      if(!row){row={block,x,y,w:0,h,runs:[],fontSize:parseFloat(style.fontSize)*.75*contentScale(parent)*k};lines.set(lines.size,row);}
       row.x=Math.min(row.x,x);row.w=Math.max(row.w,x+w-row.x);row.h=Math.max(row.h,h);
-      row.runs.push({text:part[0].replace(/\n/g,' '),options:{fontFace:font(style),fontSize:parseFloat(style.fontSize)*.75*contentScale(parent),color:color(style.color).color,bold:Number(style.fontWeight)>=600,italic:style.fontStyle==='italic'}});
+      row.runs.push({text:part[0].replace(/\n/g,' '),options:{fontFace:font(style),fontSize:parseFloat(style.fontSize)*.75*contentScale(parent)*k,color:textColor(style),bold:Number(style.fontWeight)>=600,italic:style.fontStyle==='italic'}});
     }
   }
   const listed=new Set();
@@ -36,10 +48,10 @@ function addTextLines(slide,frame){
     let bullet;
     if(row.block.tagName==='LI'&&!listed.has(row.block)){
       listed.add(row.block);const list=row.block.parentElement,ordered=list.tagName==='OL',number=Number(list.getAttribute('start')||1)+[...list.children].indexOf(row.block);
-      const scale=contentScale(row.block);bullet=ordered?{type:'number',numberType:'arabicPeriod',numberStartAt:number,indent:16.56*scale}:{indent:16.56*scale};row.x-=.23*scale;row.w+=.23*scale;
+      const scale=contentScale(row.block)*k;bullet=ordered?{type:'number',numberType:'arabicPeriod',numberStartAt:number,indent:16.56*scale}:{indent:16.56*scale};row.x-=.23*scale;row.w+=.23*scale;
     }
-    const right=(row.block.getBoundingClientRect().right-frame.getBoundingClientRect().left)/96;
-    slide.addText(row.runs,{x:row.x,y:row.y,w:Math.max(.05,row.w,Math.min(row.w*1.08+.12,right-row.x)),h:Math.max(row.h+.03,.12),margin:0,bullet,wrap:false,breakLine:false,vertAnchor:'top',fit:'shrink',paraSpaceAfterPt:0});
+    const right=(row.block.getBoundingClientRect().right-frame.getBoundingClientRect().left)/96*k;
+    slide.addText(row.runs,{x:row.x,y:row.y,w:Math.max(.05*k,row.w,Math.min(row.w*1.08+.12*k,right-row.x)),h:Math.max(row.h+.03*k,.12*k),margin:0,bullet,wrap:false,breakLine:false,valign:'top',fit:'shrink',paraSpaceAfterPt:0});
   }
 }
 function chart(slide,pres,canvas,frame){
@@ -64,6 +76,19 @@ async function repairChartAxes(blob){
     for(const id of [...xml.getElementsByTagNameNS(NS,'axId')])if(id.parentElement.localName.endsWith('Chart')&&!declared.has(id.getAttribute('val'))){id.remove();changed=true;}
     if(changed)zip.file(name,new XMLSerializer().serializeToString(xml));
   }
+  const drawing='http://schemas.openxmlformats.org/drawingml/2006/main';
+  for(const name of Object.keys(zip.files).filter(n=>/^ppt\/slides\/slide\d+\.xml$/.test(n))){
+    const xml=new DOMParser().parseFromString(await zip.file(name).async('string'),'application/xml');let repaired=false;
+    // Some rich-run exports repeat pPr before each word. DrawingML permits
+    // one paragraph-properties node, before the runs; keep that paragraph's
+    // first style and every editable text run without Office's repair dialog.
+    for(const paragraph of xml.getElementsByTagNameNS(drawing,'p')){
+      const properties=[...paragraph.children].filter(e=>e.namespaceURI===drawing&&e.localName==='pPr');
+      if(properties.length>1){for(const extra of properties.slice(1))extra.remove();repaired=true;}
+      if(properties[0]&&paragraph.firstElementChild!==properties[0]){paragraph.prepend(properties[0]);repaired=true;}
+    }
+    if(repaired){zip.file(name,new XMLSerializer().serializeToString(xml));changed=true;}
+  }
   return changed?zip.generateAsync({type:'blob',compression:'DEFLATE',mimeType:'application/vnd.openxmlformats-officedocument.presentationml.presentation'}):blob;
 }
 async function rasterGraphic(element){
@@ -86,6 +111,27 @@ async function rasterDecoration(element){
   const host=document.createElement('div');host.style.cssText='position:fixed;left:-30000px;top:0';host.append(paint);document.body.append(host);
   try{return await toPng(paint,{width:bounds.width,height:bounds.height,pixelRatio:2,backgroundColor:'transparent'});}finally{host.remove();}
 }
+async function editablePoster(slide,pres,frame){
+  // Paint the DOM tree in layer order instead of drawing every image last:
+  // a full-page illustration must stay behind the editable title and cards.
+  const hidden=e=>e.closest('.no-export')||['none'].includes(getComputedStyle(e).display)||getComputedStyle(e).visibility==='hidden';
+  async function paint(element){
+    if(hidden(element)||element.matches('style,script,link,meta'))return;
+    const bounds=box(element,frame);if(bounds.w<=0||bounds.h<=0)return;
+    if(element.matches('img,svg,.katex,canvas')){
+      if(element.tagName==='CANVAS'&&chart(slide,pres,element,frame))return;
+      slide.addImage({data:await rasterGraphic(element),...bounds});return;
+    }
+    const style=getComputedStyle(element),fill=color(style.backgroundColor),border=parseFloat(style.borderTopWidth)||0;
+    const textInk=(style.backgroundClip||style.getPropertyValue('-webkit-background-clip')).includes('text');
+    if(style.backgroundImage!=='none'&&!textInk)slide.addImage({data:await rasterDecoration(element),...bounds});
+    else if(fill.transparency<100||border){const line=border?{...color(style.borderTopColor),width:border*.75*pageScale(frame)}:{color:'FFFFFF',transparency:100};slide.addShape(parseFloat(style.borderRadius)?pres.ShapeType.roundRect:pres.ShapeType.rect,{...bounds,fill:{...fill},line});}
+    const children=[...element.children].sort((a,b)=>(Number.parseInt(getComputedStyle(a).zIndex)||0)-(Number.parseInt(getComputedStyle(b).zIndex)||0));
+    for(const child of children)await paint(child);
+    const direct=new Set([...element.childNodes].filter(n=>n.nodeType===Node.TEXT_NODE));if(direct.size)addTextLines(slide,frame,direct);
+  }
+  for(const child of [...frame.children].sort((a,b)=>(Number.parseInt(getComputedStyle(a).zIndex)||0)-(Number.parseInt(getComputedStyle(b).zIndex)||0)))await paint(child);
+}
 export async function exportPowerPoint(root,deck,title,{editable=false}={}){
   try{
   const pres=new pptxgen(),height=parseFloat(root.firstElementChild.style.getPropertyValue('--slide-height'));
@@ -93,12 +139,18 @@ export async function exportPowerPoint(root,deck,title,{editable=false}={}){
   pres.defineLayout({name:'H3',width:widthIn,height:heightIn});pres.layout='H3';pres.author='H3-Chat';pres.title=title;pres.subject=deck.title;pres.theme={headFontFace:'Cambria',bodyFontFace:'Arial',lang:'it-IT'};
   await document.fonts.ready;
   for(const frame of root.querySelectorAll('.h3-slide-page')){
+    pageScales.set(frame,widthIn*96/frame.getBoundingClientRect().width);
     const slide=pres.addSlide();slide.background={color:color(getComputedStyle(frame).backgroundColor).color};
-    if(poster||deck.engine==='llm'&&!editable){
+    if(!editable&&(poster||deck.engine==='llm')){
       // Poster art uses bundled fonts, gradient ink and effects that PowerPoint
       // text boxes cannot reproduce faithfully. Preserve the full painted page.
       slide.addImage({data:await rasterGraphic(frame),x:0,y:0,w:widthIn,h:heightIn});
-      const page=deck.pages[Number(frame.dataset.page)-1];slide.addNotes([page.title,page.editorial?.content||frame.innerText,page.notes||'','Esportazione fedele ad alta risoluzione: grafica e scritte sono un’immagine unica. Modifica testi e layout nel canvas H3, poi riesporta. Per le slide è disponibile anche PowerPoint modificabile, con possibili differenze di font e impaginazione.'].filter(Boolean).join('\n'));
+      const page=deck.pages[Number(frame.dataset.page)-1];slide.addNotes([page.title,page.editorial?.content||frame.innerText,page.notes||'','Esportazione fedele ad alta risoluzione: grafica e scritte sono un’immagine unica. Per modificare separatamente gli elementi, riesporta dal canvas H3 scegliendo PowerPoint modificabile; font ed effetti possono differire.'].filter(Boolean).join('\n'));
+      continue;
+    }
+    if(poster&&editable){
+      await editablePoster(slide,pres,frame);
+      const page=deck.pages[Number(frame.dataset.page)-1];slide.addNotes([page.title,page.editorial?.content||'',page.notes||'','Locandina modificabile: testi HTML e riquadri sono oggetti PowerPoint; immagini, formule e SVG complessi restano elementi grafici separati. Testo già nei pixel di una foto non viene ricostruito. Gradienti del testo ed effetti CSS possono essere semplificati; usa PowerPoint fedele per conservare l’aspetto esatto.'].filter(Boolean).join('\n'));
       continue;
     }
     const background=frame.querySelector('[data-h3-background-layer]');
@@ -118,7 +170,7 @@ export async function exportPowerPoint(root,deck,title,{editable=false}={}){
         const bounds=box(element,frame);if(bounds.w>0&&bounds.h>0)slide.addImage({data:await rasterDecoration(element),...bounds});continue;
       }
       if(fill.transparency===100&&!border)continue;
-      const bounds=box(element,frame),line=border?{...color(style.borderTopColor),width:border*.75}:{...fill,transparency:100};if(bounds.w>0&&bounds.h>0)slide.addShape(parseFloat(style.borderRadius)?pres.ShapeType.roundRect:pres.ShapeType.rect,{...bounds,rectRadius:.12,fill:{...fill},line,radius:.12});
+      const bounds=box(element,frame),line=border?{...color(style.borderTopColor),width:border*.75*pageScale(frame)}:{...fill,transparency:100};if(bounds.w>0&&bounds.h>0)slide.addShape(parseFloat(style.borderRadius)?pres.ShapeType.roundRect:pres.ShapeType.rect,{...bounds,rectRadius:.12*pageScale(frame),fill:{...fill},line,radius:.12*pageScale(frame)});
     }
     addTextLines(slide,frame);
     for(const element of frame.querySelectorAll('img,svg,.katex-display,.katex:not(.katex-display .katex),canvas')){

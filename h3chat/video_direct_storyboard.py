@@ -31,9 +31,9 @@ def request_text(prompt):
 def attachment_plan(refs, soundtrack, duration):
     images = [r for r in refs if r['mime'].startswith('image/')]
     audios = [r for r in refs if r['mime'].startswith('audio/')]
-    plan = {'prompt': 'Pre-authored reference music video; preserve the original soundtrack.',
+    plan = {'prompt': 'Pre-authored reference video; preserve the original soundtrack.' if soundtrack else 'Pre-authored reference video with the requested soundscape.',
             'images': [{'index': i, 'role': 'reference', 'seconds': 0}
                        for i in range(1, len(images) + 1)],
-            'audios': [{'index': i, 'role': 'lipsync' if r['id'] == soundtrack['id'] else 'reference', 'start': 0}
+            'audios': [{'index': i, 'role': 'lipsync' if soundtrack and r['id'] == soundtrack['id'] else 'reference', 'start': 0}
                        for i, r in enumerate(audios, 1)]}
     return validate_plan(plan, refs, min(15, duration))

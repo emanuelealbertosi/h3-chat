@@ -79,7 +79,7 @@ export function initPresentationPreferences({api,getState,notify,adapters}){
   if(loaded||loading||!getState()?.slide_options?.settings_presets)return;loading=true;
   try{
    const data=await api('/presentation-preferences');
-   applying=true;try{for(const slot of slots.values()){slot.group=data[slot.kind];if(slot.group.last&&!slot.dirty){slot.adapter.apply(copy(slot.group.last));slot.saved=signature(slot.group.last);}slot.status.textContent=slot.group.last?'Ultime impostazioni recuperate.':'Le modifiche vengono salvate automaticamente.';}}finally{applying=false;}
+   applying=true;try{for(const slot of slots.values()){slot.group=data[slot.kind];if(slot.group.last&&!slot.dirty&&!slot.reloaded){slot.adapter.apply(copy(slot.group.last));slot.saved=signature(slot.group.last);}if(!slot.reloaded)slot.status.textContent=slot.group.last?'Ultime impostazioni recuperate.':'Le modifiche vengono salvate automaticamente.';}}finally{applying=false;}
    loaded=true;for(const slot of slots.values()){draw(slot);if(slot.dirty&&slot.pending)flush(slot).catch(()=>{});}
   }catch(e){for(const slot of slots.values())slot.status.textContent='Impostazioni non recuperate: '+e.message;}finally{loading=false;}
  }
@@ -90,5 +90,5 @@ export function initPresentationPreferences({api,getState,notify,adapters}){
   if(signature(config)===slot.saved&&!slot.saving)continue;
   fetch('/api/presentation-preferences',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','X-H3-Token':getState()?.token||''},body:JSON.stringify({kind:slot.kind,action:'last',config})}).catch(()=>{});
  }});
- return {render(){for(const slot of slots.values()){draw(slot);if(!getState()?.slide_options?.settings_presets)slot.status.textContent='Riavvia H3-Chat a lavori terminati per attivare impostazioni salvate e preset.';}restore();},flush:()=>Promise.all([...slots.values()].map(flush))};
+ return {apply(kind,value){const slot=slots.get(kind);if(!slot)return;clearTimeout(slot.timer);slot.pending=null;slot.dirty=false;slot.reloaded=true;applying=true;try{slot.adapter.apply(copy(value));slot.select.value='';slot.status.textContent='Impostazioni della richiesta recuperate.';}finally{applying=false;}},render(){for(const slot of slots.values()){draw(slot);if(!getState()?.slide_options?.settings_presets)slot.status.textContent='Riavvia H3-Chat a lavori terminati per attivare impostazioni salvate e preset.';}restore();},flush:()=>Promise.all([...slots.values()].map(flush))};
 }

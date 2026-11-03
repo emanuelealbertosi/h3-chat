@@ -37,6 +37,9 @@ def selected(app,ids):
         path=safe_join(folder(app),ident+'.json')
         if not path.is_file():raise ValueError('Sprite non disponibile: seleziona di nuovo dalla raccolta.')
         item=json.loads(path.read_text(encoding='utf8'));validate(item['scene'])
+        if item.get('rig'):
+            from .motion_rigs import validate_rig
+            validate_rig(item['scene'],item['rig'])
         for media in item.get('media',[]):
             if not re.fullmatch(r'outputs/motion-sprite-assets/[0-9a-f]{64}\.(png|jpg|webp)',media['path']) or not safe_join(app.data,media['path']).is_file():raise ValueError('Immagine dello sprite non disponibile.')
         rows.append(item)
@@ -69,6 +72,9 @@ def save(app,body):
     palette=sorted({o[k] for o in scene['objects'] for k in ('fill','stroke') if o[k]!='none'})
     digest=hashlib.sha256(json.dumps(scene,sort_keys=True,separators=(',',':')).encode()).hexdigest()
     item=meta|{'version':1,'id':uuid4().hex,'created':time.time(),'metadata_origin':'user-confirmed','tags':list(dict.fromkeys(t.strip() for t in tags)),'palette':palette,'sha256':digest,'scene':scene,'media':media}
+    if body.get('rig'):
+        from .motion_rigs import validate_rig
+        item['rig']=validate_rig(scene,body['rig'])
     with _lock:
         folder(app).mkdir(parents=True,exist_ok=True)
         rows=index(app)
@@ -91,6 +97,10 @@ def expand(scene,sprites):
         ident=obj.pop('spriteId',None)
         if ident is None:objects.append(obj);continue
         if ident not in lookup or obj.get('type')!='group':raise ValueError('La scena usa uno sprite non selezionato.')
+        if lookup[ident].get('rig'):
+            from .motion_rigs import instantiate
+            objects.extend(instantiate(lookup[ident],obj,scene['duration']));continue
+        if any(k in obj for k in ('gesture','actionStart','actionEnd')):raise ValueError('Questo sprite non contiene articolazioni animabili.')
         objects.append(obj);sprite=lookup[ident]['scene'];mapping={o['id']:obj['id'][:54]+'_'+str(i) for i,o in enumerate(sprite['objects'])}
         for child in copy.deepcopy(sprite['objects']):
             child['parentId']=mapping[child['parentId']] if child.get('parentId') else obj['id'];child['parallax']=1;child['id']=mapping[child['id']];objects.append(child)

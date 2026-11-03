@@ -3,6 +3,19 @@ import vm from 'node:vm';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 const context={};vm.runInNewContext(readFileSync(new URL('../static/infographic-motion.js',import.meta.url),'utf8'),context);
+test('rapid explainer zooms continue in the same direction and remain deterministic',()=>{
+ const frames=[{style:{}},{style:{}}],doc={querySelectorAll:()=>frames},motion={durations:[4,4],transition:'zoom',options:{transition_seconds:1,pace:'explainer'}};
+ context.H3Motion.render(doc,motion,4.5);assert.equal(frames[0].style.transform,'scale(1.03)');assert.equal(frames[1].style.transform,'scale(0.98)');
+ context.H3Motion.render(doc,motion,7);context.H3Motion.render(doc,motion,4.5);assert.equal(frames[1].style.transform,'scale(0.98)');
+});
+test('scene transitions honor their duration and use both outgoing and incoming frames',()=>{
+ const frames=[{style:{},contentDocument:null},{style:{},contentDocument:null}],doc={querySelectorAll:()=>frames};
+ const motion={durations:[4,4],transition:'zoom',options:{transition_seconds:1}};
+ context.H3Motion.render(doc,motion,4.5);assert.equal(Number(frames[0].style.opacity),.5);assert.equal(Number(frames[1].style.opacity),.5);assert.match(frames[0].style.transform,/scale\(1\.04\)/);
+ context.H3Motion.render(doc,motion,6);assert.equal(frames[0].style.visibility,'hidden');assert.equal(Number(frames[1].style.opacity),1);
+ context.H3Motion.render(doc,motion,4.5);assert.equal(Number(frames[1].style.opacity),.5);
+ motion.transition='slide';context.H3Motion.render(doc,motion,4.5);assert.equal(frames[0].style.transform,'translateX(-50%)');assert.equal(frames[1].style.transform,'translateX(50%)');
+});
 function scene(start,duration){const style={values:{},setProperty(k,v){this.values[k]=v;}};const element={dataset:{motion:'fade',start:String(start),duration:String(duration)},style};return {element,doc:{querySelectorAll:()=>[element],defaultView:{getComputedStyle:()=>({opacity:'1',transform:'none',filter:'none',clipPath:'none'})}}};}
 test('late entrances fit the measured scene and finish before its cut',()=>{const {element,doc}=scene(5,1);context.H3Motion.apply(doc,1.9,2);assert.equal(element.style.values.opacity,'1');context.H3Motion.apply(doc,0,2);assert.equal(element.style.values.opacity,'0');});
 test('valid choreography keeps its original timing',()=>{const {element,doc}=scene(.3,1);context.H3Motion.apply(doc,.2,4);assert.equal(element.style.values.opacity,'0');context.H3Motion.apply(doc,.8,4);assert.ok(Math.abs(Number(element.style.values.opacity)-.5)<.001);context.H3Motion.apply(doc,1.4,4);assert.equal(element.style.values.opacity,'1');});
@@ -10,7 +23,7 @@ test('long scenes preserve entrances and exits beyond three minutes',()=>{const 
 
 function panels(count=3){
  const elements='123456'.slice(0,count).split('').map(panel=>({dataset:{panel,motion:'zoom'},tagName:'SECTION',style:{values:{},setProperty(k,v){this.values[k]=v;}},querySelectorAll:()=>[]}));
- const body={children:[...elements],style:{setProperty(){}},append(e){this.children=this.children.filter(x=>x!==e);this.children.push(e);}};
+ const body={children:[...elements],style:{values:{},setProperty(){}},append(e){this.children=this.children.filter(x=>x!==e);this.children.push(e);}};
  const doc={body,querySelectorAll:()=>elements,defaultView:{innerWidth:1280,innerHeight:720,getComputedStyle:e=>({opacity:e.style.values.opacity||'1',transform:'none',filter:'none',clipPath:'none'})}};
  return {elements,doc};
 }

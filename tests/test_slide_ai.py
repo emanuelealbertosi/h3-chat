@@ -15,6 +15,27 @@ ROOT=Path(__file__).resolve().parents[1]
 
 
 class SlideAITests(unittest.TestCase):
+    def test_motion_revision_updates_graph_and_preserves_other_pages_and_audio(self):
+        from h3chat.infographic_storyboard import EXAMPLE
+        from h3chat.slide_revision import build
+        self.app.store.save_settings({'context':16000,'max_tokens':4000})
+        chat=self.app.store.create_chat()['id'];_,deck=self.deck(chat)
+        deck.update(format='16:9',infographic={'version':1,'transition':'zoom','sfx':'none','scene_format_version':2,'durations':[10,10],
+            'options':{'animation_engine':'motion','layout':'full'},'voice_id':'v','music_id':'m'})
+        for p in deck['pages']:p['motion_scene']=copy.deepcopy(EXAMPLE)
+        original=copy.deepcopy(deck);changed=copy.deepcopy(EXAMPLE);changed['objects'][-1]['text']='Titolo modificato'
+        saved=self.app.store.canvas_history.save(chat,{'title':deck['title'],'content':encode(deck),'media':[]})
+        with patch.object(self.app.engine,'require_model',side_effect=self.model_for):sent=enqueue(self.app,chat,{'artifact_id':saved['id'],'page':1,'prompt':'Cambia il titolo'})
+        job=self.app.store.one('SELECT * FROM jobs WHERE id=?',(sent['job_id'],));payload=json.loads(job['payload']);meta={}
+        def author(*args):
+            self.assertEqual(args[2]['original_scene'],original['pages'][1]['motion_scene'])
+            args[-2](changed);return changed
+        with patch('h3chat.infographic_storyboard.generate',side_effect=author),patch.object(self.app.engine,'tool_call',return_value={'pages':[{}]}) as worker:
+            artifact=build(self.app,job,payload,payload['settings'],self.model,threading.Event(),lambda _:None,Path(self.temp.name)/'log',meta,prepare_engine=False)
+        result=json.loads(artifact['content'][len(PREFIX):-4]);self.assertEqual(result['pages'][0],original['pages'][0]);self.assertEqual(result['pages'][1]['motion_scene'],changed)
+        self.assertEqual(result['infographic'],original['infographic']);self.assertEqual(worker.call_count,1);self.assertEqual(worker.call_args.args[1]['mode'],'motion-check')
+        self.assertEqual(self.app.store.canvas_history.get(chat,saved['id'])['content'],encode(original))
+
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.app=Service(ROOT,self.temp.name,start_worker=False);self.addCleanup(self.app.close)

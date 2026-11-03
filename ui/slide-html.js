@@ -4,7 +4,7 @@ import renderMath from 'katex/contrib/auto-render';
 import {editHtmlSlide} from './slide-html-editing.js';
 import {contentOverflows,fitMediaBounds} from './slide-html-bounds.js';
 import {readableText} from './slide-html-contrast.js';
-import {portraitLayout} from './infographic-layout.js';
+import {portraitLayout,fitPanelText} from './infographic-layout.js';
 import {initialExportStyles,applyExportStyles} from './export-style.js';
 import {applyHtmlBackground} from './slide-background-style.js';
 import {fitHtmlBackground} from './slide-content-fit.js';
@@ -27,7 +27,11 @@ async function localMathCSS(){
 }
 
 async function markup(page,media){
-  const clean=DOMPurify.sanitize(page.html||'',{WHOLE_DOCUMENT:true,ADD_TAGS:['style'],FORBID_TAGS:['script','iframe','object','embed','link','meta','base','form','input','button','video','audio'],FORBID_ATTR:['srcset','action','formaction','autofocus','data-h3-motion-scene','data-h3-motion-root','data-h3-motion-object','data-h3-editor','data-h3-trusted','data-h3-video','data-h3-background-content','data-h3-content-canvas','data-h3-background-layer','data-h3-decoration']});
+  // Literal XML inside a CSS image URL makes the sanitizer discard the whole
+  // style element. Drop that optional texture before sanitization; never relax
+  // the sanitizer or CSP, and never parse the original HTML in a live document.
+  const prepared=(page.html||'').replace(/(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi,(_,open,css,close)=>open+css.replace(/url\(\s*(?:"[^"]*"|'[^']*'|[^)]*)\s*\)/gi,url=>url.includes('<')?'none':url)+close);
+  const clean=DOMPurify.sanitize(prepared,{WHOLE_DOCUMENT:true,ADD_TAGS:['style'],FORBID_TAGS:['script','iframe','object','embed','link','meta','base','form','input','button','video','audio'],FORBID_ATTR:['srcset','action','formaction','autofocus','data-h3-motion-scene','data-h3-motion-root','data-h3-motion-object','data-h3-editor','data-h3-trusted','data-h3-video','data-h3-background-content','data-h3-content-canvas','data-h3-background-layer','data-h3-decoration']});
   const doc=new DOMParser().parseFromString(clean,'text/html');
   doc.querySelectorAll('a').forEach(a=>{a.removeAttribute('href');a.removeAttribute('target');});
   for(const image of doc.querySelectorAll('img')){
@@ -86,7 +90,7 @@ export async function htmlPage(deck,page,index,media,mount){
   }
   doc.documentElement.dataset.h3TextTone=page.text_tone||deck.text_tone||'auto';
   readableText(doc);
-  if(deck.infographic)H3Motion.configure(doc,deck.infographic.options||{});
+  if(deck.infographic){fitPanelText(doc,deck.infographic.options||{});H3Motion.configure(doc,deck.infographic.options||{});}
   const generated=new Set((deck.image_generation?.plan||[]).map(item=>item.asset_id));
   for(const img of doc.images)if(generated.has(img.dataset.assetId)&&!img.dataset.imageFit&&doc.defaultView.getComputedStyle(img).objectFit==='cover')img.dataset.imageFit='cover';
   if(fitMediaBounds(doc,height,!deck.infographic))frame.dataset.layoutAdjusted='true';
@@ -100,7 +104,7 @@ export async function htmlPage(deck,page,index,media,mount){
 // context and briefly exposes the unscaled 1280px page.
 export async function refreshHtmlPage(frame,deck,page,index,media,current=()=>true){
   const session=sessions.get(frame);
-  if(!session||deck.infographic)return false;
+  if(!session||deck.infographic&&(deck.infographic.scene_format_version===2||page.status==='ready'))return false;
   const staging=document.createElement('div');
   staging.style.cssText='position:fixed;left:-20000px;top:0;width:1280px;visibility:hidden;pointer-events:none;contain:layout paint;';
   staging.setAttribute('aria-hidden','true');document.body.append(staging);
@@ -108,11 +112,16 @@ export async function refreshHtmlPage(frame,deck,page,index,media,current=()=>tr
     const next=await htmlPage(deck,page,index,media,staging),prepared=sessions.get(next);
     if(!current()||!frame.isConnected||session.iframe.contentDocument!==session.doc)return false;
     const {doc,iframe}=session;
+    const ink=root=>root.body.innerText.trim()||root.body.querySelector('img,svg,video,canvas');
+    // A format-repair attempt restarts with an empty/head-only stream. Keep the
+    // previous visible draft until there is actual new content to show.
+    if(page.status==='writing'&&ink(doc)&&!ink(prepared.doc))return true;
     const head=doc.importNode(prepared.doc.head,true),body=doc.importNode(prepared.doc.body,true);
     // Both replacements are synchronous, so the browser paints only the fully
     // prepared draft; generated scripts remain blocked by the existing sandbox.
     doc.head.replaceWith(head);doc.body.replaceWith(body);
     doc.documentElement.dataset.h3TextTone=prepared.doc.documentElement.dataset.h3TextTone;
+    if(deck.infographic){H3Motion.configure(doc,deck.infographic.options||{},true);H3Motion.freeze(doc);}
     iframe.title=page.title;
     if(next.dataset.layoutAdjusted)frame.dataset.layoutAdjusted='true';else delete frame.dataset.layoutAdjusted;
     return true;

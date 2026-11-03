@@ -1,0 +1,19 @@
+{
+  "default": "configured",
+  "profiles": {
+    "limpida": {
+      "path": "static/voice-profiles/limpida.wav",
+      "transcript": "Aspetta! Dimmi che è uno scherzo! Oh mio dio! È incredibile!",
+      "sha256": "5efc48ea2979beea38d2b12d2f0490f0015a3eaa718f59a50d81357e74a6ba8c",
+      "reference_language": "it",
+      "origin": "AI-generated Italian speech sample, not a recording of a real speaker."
+    },
+    "aurora": {
+      "path": "static/voice-profiles/aurora.wav",
+      "transcript": "Aspetta, aspetta, dimmi che è uno scherzo, oh mio dio, è incredibile!",
+      "sha256": "d35e521c29953dd554bb95329d82d6dccf909cccd031a4e8764e03f3db5212bd",
+      "reference_language": "it",
+      "origin": "AI-generated Italian speech sample, not a recording of a real speaker."
+    }
+  }
+}

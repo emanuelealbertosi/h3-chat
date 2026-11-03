@@ -77,14 +77,35 @@ def build(engine,plan,refs,settings,prompt,cancel,stage,log):
     preserved_audio=bool(settings.get('_video_soundtrack'))
     from .video_direct_storyboard import read as read_direct, request_text
     direct=read_direct(prompt)
+    from .video_sequence import budget as sequence_budget,scenes as sequence_scenes
+    def clip_contract(text):
+        return sequence_budget(settings) if settings.get('_video_sequence') else contract(text,duration,audio_start=settings.get('_video_audio_start',0),segment_seconds=segment_seconds)
+    def logical_metadata(result):
+        if settings.get('_video_sequence'):
+            initial=next((i['index'] for i in plan.get('images',[]) if i['role']=='keyframe' and i['seconds']==0),None)
+            for shot,clip in zip(result['shots'],sequence_scenes(settings)):
+                shot.update({k:v for k,v in clip.items() if k.startswith('logical_')})
+                if initial is not None:
+                    if clip['start']==0:
+                        for image in shot['images']:image['role']='reference'
+                        chosen=next((i for i in shot['images'] if i['index']==initial),None)
+                        if chosen:chosen['role']='keyframe'
+                        else:shot['images'].insert(0,{'index':initial,'role':'keyframe'})
+                    else:
+                        for image in shot['images']:
+                            if image['index']==initial:image['role']='reference'
+                if clip['logical_offset']:
+                    shot['continuity']='continue'
+                    for image in shot['images']:image['role']='reference'
+        return result
     if direct is not None:
         if settings.get('_assistant',True):raise ValueError('Disattiva Assistant per usare il piano video diretto senza riscritture.')
         header=request_text(prompt)
-        clip_budget=contract(header,duration,audio_start=settings.get('_video_audio_start',0),segment_seconds=segment_seconds)
+        clip_budget=clip_contract(header)
         result=validate(direct,duration,refs,header,audio_start=settings.get('_video_audio_start',0),clip_budget=clip_budget,preserved_audio=preserved_audio)
         stage(f'Storyboard diretto · {len(result["shots"])} clip · Assistant Off')
-        return result|{'direct':True}
-    clip_budget=contract(prompt,duration,audio_start=settings.get('_video_audio_start',0),segment_seconds=segment_seconds)
+        return logical_metadata(result)|{'direct':True}
+    clip_budget=clip_contract(prompt)
     # With the minimum number of clips there is no useful timing choice for
     # the LLM: use the selected windows and the exact decoded audio tail.
     ends=clip_budget['end_frames']
@@ -100,11 +121,18 @@ def build(engine,plan,refs,settings,prompt,cancel,stage,log):
         previous=end
     context={'request':prompt,'duration':duration,'audio_source_start':settings.get('_video_audio_start',0),'max_clip_seconds':segment_seconds,
              'preserved_audio':preserved_audio,'required_spoken_lines':spoken_lines(prompt,preserved_audio=preserved_audio),
+             'narrative_scenes':settings.get('_video_sequence'),'logical_clip_windows':sequence_scenes(settings) if settings.get('_video_sequence') else [],
              'clip_windows':windows,
              'generation_clips':clip_budget['count'],'minimum_generation_clips':clip_budget['minimum'],
              'required_clip_ends':[frame/24 for frame in clip_budget['end_frames']],
              'images':[{'index':i,'name':r['name'],'role':next((x['role'] for x in plan.get('images',[]) if x['index']==i),'reference')} for i,r in enumerate([r for r in refs if r['mime'].startswith('image/')],1)]}
-    instructions='''Direct a music-video storyboard covering the entire requested duration.
+    instructions='''Direct a video storyboard covering the entire requested duration, with or without an attached soundtrack.
+If narrative_scenes is present, its count and scene_seconds describe NARRATIVE
+scenes, distinct from GPU clips. logical_clip_windows maps each GPU clip to a
+logical_scene and its logical_offset. Continue a longer scene across its clips,
+without inventing cuts or replaying its opening. Follow the user's scene order.
+When preserved_audio is false, create only the soundscape/dialogue requested;
+never assume there is a song or demand an audio attachment.
 Return JSON style, shots. Each shots item is ONE GPU GENERATION CLIP, not one
 visual shot or cut. Return EXACTLY generation_clips items. Never multiply GPU
 calls for camera cuts or action changes. style contains only shared cinematography,
@@ -196,7 +224,7 @@ cut clocks, scene progression, complete ending and image assignments.'''
             result=validate(value,duration,refs,prompt,audio_start=settings.get('_video_audio_start',0),clip_budget=clip_budget,preserved_audio=preserved_audio)
             result['clip_budget']=clip_budget
             stage(f'Storyboard confermato · {len(result["shots"])} generazioni · stacchi interni · traccia continua')
-            return result
+            return logical_metadata(result)
         except (ValueError,TypeError,EmptyCompletion,StructuredCompletionError) as exc:
             if attempt:raise ValueError('Assistant: storyboard non valido dopo la correzione. '+str(exc)+' Nessun video è stato avviato.') from exc
             messages.extend([{'role':'assistant','content':raw},
@@ -218,4 +246,6 @@ def local_plan(storyboard,shot,global_plan,refs,soundtrack_index,audio_start):
     plan={'prompt':prompt,'images':[{'index':i,'role':entry['role'],'seconds':0} for i,entry in enumerate(chosen,1)],
           'audios':[entry|({'start':start,'role':'lipsync' if shot['lip_sync'] else 'reuse'} if entry['index']==soundtrack_index else {'role':'reference'}) for entry in global_plan['audios']]}
     selected=[images[entry['index']-1] for entry in chosen]+audios
+    if soundtrack_index is None:
+        plan['prompt']=f'subject_definitions: {style}\nsummary: {description}\nretention_analysis: {keep}; {reference_rules}\ndetailed_description: {description}\noverall_soundscape: Follow the requested soundscape and dialogue; no supplied soundtrack.\nnon_diegetic_music: Only as requested.'
     return validate_plan(plan,selected,shot['duration']),selected

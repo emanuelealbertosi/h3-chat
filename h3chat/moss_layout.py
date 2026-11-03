@@ -93,6 +93,8 @@ def compile_layout(value,width,height):
 
 def explicit(prompt):
     """Preserve already-authored official layouts rather than asking an LLM to rewrite."""
+    draft=editor_draft(prompt)
+    if draft is not None:return draft['prompt']
     if not prompt.lstrip().startswith('{'):return None
     try:value=json.loads(prompt)
     except ValueError:return None
@@ -101,10 +103,43 @@ def explicit(prompt):
     if not isinstance(value['summary'],dict) or not isinstance(value['summary'].get('caption'),str) or not value['summary']['caption'].strip():raise ValueError('Descrizione layout MOSS non valida.')
     if not isinstance(value['items'],list) or not value['items']:raise ValueError('Layout MOSS vuoto.')
     for item in value['items']:
-        if not isinstance(item,dict) or item.get('label') not in ('text','object') or not isinstance(item.get('caption'),str):raise ValueError('Elemento layout MOSS non valido.')
+        if not isinstance(item,dict) or item.get('label') not in ('text','object','character') or not isinstance(item.get('caption'),str):raise ValueError('Elemento layout MOSS non valido.')
         box=item.get('bbox')
         if not isinstance(box,list) or len(box)!=4:raise ValueError('Coordinate layout MOSS non valide.')
         y0,x0,y1,x1=map(number,box)
         if x0>=x1 or y0>=y1:raise ValueError('Coordinate layout MOSS invertite.')
         if item['label']=='text' and (not isinstance(item.get('text'),str) or not item['text'].strip()):raise ValueError('Testo layout MOSS vuoto.')
     return prompt.strip()
+
+
+def editor_draft(prompt):
+    """Official absolute xyxy draft -> model-facing centred yxyx pixels.
+
+    Captions and visible text are data: their numbers never select samplers,
+    seeds or output dimensions. The declared canvas is authoritative.
+    """
+    if not isinstance(prompt,str) or not prompt.lstrip().startswith('{'):return None
+    try:value=json.loads(prompt)
+    except ValueError:return None
+    if not isinstance(value,dict) or not {'summary','items','bbox_coord_space','bbox_format'}<=value.keys():return None
+    if value['bbox_coord_space']!='abs' or value['bbox_format']!='xyxy':return None
+    if set(value)-{'width','height','summary','items','bbox_coord_space','bbox_format'}:raise ValueError('Campi del layout MOSS non riconosciuti.')
+    width,height=value.get('width'),value.get('height')
+    if any(type(n) is not int or not 256<=n<=4096 or n%16 for n in (width,height)) or not 250000<=width*height<=4194304:
+        raise ValueError('Tela layout MOSS: lati da 256 a 4096 pixel, multipli di 16, da 0,25 a circa 4 MP.')
+    summary=value['summary']
+    if not isinstance(summary,dict) or set(summary)-{'caption','meta','canvas','palette'} or not isinstance(summary.get('caption'),str) or not summary['caption'].strip():raise ValueError('Descrizione globale del layout MOSS vuota o non valida.')
+    if summary.get('canvas','single') not in ('single','multi_panel','collage'):raise ValueError('Tipo di tela MOSS non valido.')
+    items=value['items']
+    if not isinstance(items,list) or not 1<=len(items)<=64:raise ValueError('Layout MOSS: da 1 a 64 riquadri; preferisci non più di 12 soggetti principali.')
+    output=[]
+    for item in items:
+        if not isinstance(item,dict) or set(item)-{'label','caption','text','bbox','tags','palette'} or item.get('label') not in ('object','character','text') or not isinstance(item.get('caption'),str) or not item['caption'].strip():raise ValueError('Sottoprompt del layout MOSS vuoto o non valido.')
+        box=item.get('bbox')
+        if not isinstance(box,list) or len(box)!=4:raise ValueError('Riquadro MOSS: servono quattro coordinate.')
+        l,t,r,b=map(number,box)
+        if not 0<=l<r<=width or not 0<=t<b<=height:raise ValueError('Un riquadro MOSS è invertito o fuori dalla tela.')
+        if item['label']=='text' and (not isinstance(item.get('text'),str) or not item['text'].strip()):raise ValueError('Inserisci il testo esatto del riquadro MOSS.')
+        output.append(item|{'bbox':[math.floor(t)-height//2,math.floor(l)-width//2,math.ceil(b)-height//2,math.ceil(r)-width//2]})
+    compiled={'summary':summary,'items':output,'bbox_coord_space':'abs_centralized','bbox_format':'yxyx'}
+    return {'width':width,'height':height,'prompt':json.dumps(compiled,ensure_ascii=False,separators=(',',':'))}

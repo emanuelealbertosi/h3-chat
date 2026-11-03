@@ -1,7 +1,8 @@
-"""Higgs-only speech, compatible with saved optional-engine requests."""
-ENGINES={'higgs':'Higgs Audio v3'}
-DEFAULTS={'voice_engine':'higgs'}
+"""Default Higgs speech and opt-in MOSS, with saved legacy request migration."""
+ENGINES={'higgs':'Higgs Audio v3','moss':'MOSS-TTS Local v1.5 · sperimentale'}
+DEFAULTS={'voice_engine':'higgs','voice_moss_model_path':'','voice_moss_codec_path':'','voice_moss_language':'Italian','voice_moss_temperature':1.7,'voice_moss_top_p':.8,'voice_moss_top_k':25,'voice_moss_repetition_penalty':1.0,'voice_moss_max_new_tokens':2048,'voice_moss_seed':734,'voice_moss_precision':'bf16'}
 RETIRED=('qwen','chatterbox')
+DEFAULTS.update(voice_moss_instruction='',voice_moss_reference_mode='configured',voice_moss_target_seconds=0.,voice_moss_codec_quality='balanced')
 
 def fields(value):
     result=dict(value)
@@ -24,8 +25,12 @@ def selected(settings):
     return 'higgs' if value in RETIRED else value
 
 def validate_overrides(value):
-    if value!={}:raise ValueError('I parametri Higgs si impostano nelle preferenze Voice.')
-    return {}
+    from .moss_tts import validate_params
+    if not isinstance(value,dict) or set(value)-{'moss'}:raise ValueError('Parametri del motore Voice non validi.')
+    if 'moss' in value:validate_params(value['moss'])
+    return value
 
 def validate(settings):
-    if selected(settings)!='higgs':raise ValueError('Motore Voice non valido.')
+    if selected(settings) not in ENGINES:raise ValueError('Motore Voice non valido.')
+    from .moss_tts import validate_settings
+    validate_settings(settings)

@@ -38,6 +38,19 @@ const selections=new Map();
 export function transferSlideView(oldId,newId){if(selections.has(oldId))selections.set(newId,selections.get(oldId));}
 const observerByTarget=new WeakMap();
 const previews=new WeakMap(),renderEpochs=new WeakMap();
+// Generation appends voice/music and updates other scenes on every poll. Only
+// dependencies of this page can invalidate its expensive, visible document.
+function previewSignature(deck,page,index,media){
+  const info=deck.infographic,ids=new Set([page.background_asset_id,...(page.motion_scene?.objects||[]).map(o=>o.assetId)]);
+  for(const video of [info?.video,...(info?.videos||[])])if(video){ids.add(video.asset_id);ids.add(video.poster_id);}
+  const sources=new Set([info?.video?.asset_id,...(info?.videos||[]).map(v=>v.asset_id)]);
+  const movie=info?[...media].reverse().find(m=>m.mime==='video/mp4'&&!sources.has(m.id)):null;
+  const visibleMedia=media.filter(m=>ids.has(m.id)||page.html?.includes(m.id)||m===movie);
+  const motion=info&&[info.scene_format_version,info.options,info.video,info.videos,info.durations?.[index],
+    info.video||info.videos?.length?info.durations?.slice(0,index):null,info.timeline_target];
+  return JSON.stringify([page.html,page.motion_scene,motion,page.text_tone||deck.text_tone,deck.background_style,
+    page.background_asset_id,page.content_viewport,visibleMedia]);
+}
 function applyStyle(element,style={}){
   element.classList.add('slide-surface-'+(['plain','soft','accent','dark'].includes(style.surface)?style.surface:'plain'));
   if(['columns','row'].includes(style.flow)){
@@ -84,16 +97,20 @@ export async function renderSlides(target,value,options={}){
   const epoch=(renderEpochs.get(target)||0)+1;renderEpochs.set(target,epoch);
   const key=value.id||'draft';let selected=selections.get(key)||{index:deck.active||0,follow:true};
   if(selected.follow)selected.index=deck.active||0;selected.index=Math.max(0,Math.min(deck.pages.length-1,selected.index));selections.set(key,selected);
-  const page=deck.pages[selected.index],context=JSON.stringify([key,deck.format,deck.engine,deck.title,deck.references,deck.pages.length,selected.index,!!selected.editing,!!options.editable,!!options.busy,!!options.onChange,!!options.onResume,!!options.onRegenerate]);
-  const pageSignature=JSON.stringify([page.html,page.text_tone||deck.text_tone,deck.image_generation,deck.background_style,page.background_asset_id,page.content_viewport,value.media]);
+  const page=deck.pages[selected.index],context=JSON.stringify([key,deck.format,deck.engine,deck.title,deck.references,deck.pages.length,selected.index,!!selected.editing,!!options.editable,!!options.busy,!!options.onChange,!!options.onResume,!!options.onRegenerate,deck.infographic? [deck.infographic.scene_format_version,page.status]:null]);
+  const pageSignature=previewSignature(deck,page,selected.index,value.media);
   const previous=previews.get(target);
-  if(deck.engine==='llm'&&!deck.infographic&&!selected.editing&&previous?.context===context&&previous.frame.isConnected){
+  if(deck.engine==='llm'&&!selected.editing&&previous?.context===context&&previous.frame.isConnected){
     previous.live.value=value;previous.live.options=options;previous.update(deck,options);
+    // Player/export callbacks keep the original object references. Refresh
+    // their data without rebuilding the iframe or interrupting playback.
+    Object.assign(previous.deck,deck);Object.assign(previous.value,value);
     if(previous.pageSignature===pageSignature)return true;
     if(await refreshHtmlPage(previous.frame,deck,page,selected.index,value.media,()=>renderEpochs.get(target)===epoch)){
       previous.pageSignature=pageSignature;previous.update(deck,options);
+      return true;
     }
-    return true;
+    if(renderEpochs.get(target)!==epoch)return true;
   }
   previews.delete(target);observerByTarget.get(target)?.disconnect();
   await renderRich(target,'');
@@ -143,7 +160,7 @@ export async function renderSlides(target,value,options={}){
   const notes=document.createElement('details');notes.className='slide-notes no-export';const summary=document.createElement('summary');summary.textContent=deck.document_kind==='poster'?'Note e fonti della locandina':'Note e fonti della slide';notes.append(summary);
   const text=document.createElement('p');text.textContent=page.notes||'Nessuna nota.';notes.append(text);
   for(const id of page.sources||[]){const ref=(deck.references||[]).find(r=>r.id===id);if(!ref)continue;const p=document.createElement('p');p.textContent='['+id+'] '+ref.label;const rag=options.sources?.find(s=>s.citation===id);if(rag&&options.onCitation){p.className='rag-citation';p.tabIndex=0;p.onclick=()=>options.onCitation(rag,options.sources);p.onkeydown=e=>{if(e.key==='Enter')p.click();};}notes.append(p);}target.append(notes);
-  if(deck.engine==='llm'&&!deck.infographic&&!selected.editing)previews.set(target,{context,pageSignature,frame,live,update(nextDeck,nextOptions){
+  if(deck.engine==='llm'&&!selected.editing)previews.set(target,{context,pageSignature,frame,live,deck,value,update(nextDeck,nextOptions){
     const currentPage=nextDeck.pages[selected.index],progress=slideProgress(nextDeck,selected.index,nextOptions.job);
     status.textContent=progress.text;status.hidden=!progress.text;
     for(const [i,p] of nextDeck.pages.entries())picker.options[i].textContent=(i+1)+'. '+p.title+(p.status==='ready'?'':' · '+(p.status==='writing'?'in creazione':p.status==='interrupted'?'interrotta':'in attesa'));

@@ -57,7 +57,8 @@ def request(app,chat_id,body):
     if config['preserve_base'] and not available['separation']:raise ValueError('Configura HTDemucs nelle impostazioni Remix.')
     if (config['mode']=='clone' or config['mode']=='singing' and config['clone_voice']) and not available['conversion']:raise ValueError('Configura SeedVC nelle impostazioni Remix.')
     if config['mode']=='singing' and not available['score'] and not config['abc']:raise ValueError('Configura SheetSage2 e MERT oppure fornisci uno spartito ABC nelle opzioni avanzate.')
-    settings=app.store.settings()
+    from .request_settings import resolve as resolve_request_settings
+    settings=resolve_request_settings(app,body)
     if config['mode'] in ('music','singing'):
         model=app.engine.require_model(settings['music_model'],'music')
         if config['mode']=='singing' and model.get('remote_media'):raise ValueError('Il nuovo canto sulla base originale richiede YuE2 standalone.')

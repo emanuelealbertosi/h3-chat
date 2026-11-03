@@ -5,16 +5,29 @@ from .downloads import Cancelled
 def voices(app,settings):
     from .voice import configuration
     result=[]
-    for gender in ('male','female'):
-        cfg,_,acting,voice=configuration(app.root,settings|{'_voice_fields':{'gender':gender,'mode':'read','delivery':'warm'}},'Lettura dello script Studio')
+    selected=settings.get('_study_audio_voices',{'voice_a':'configured','voice_b':'configured'})
+    named=any(p!='configured' for p in selected.values())
+    for key,gender in (('voice_a','male'),('voice_b','female')):
+        profile=selected[key]
+        fields={'gender':gender if profile=='configured' else 'female','mode':'read','delivery':'warm' if profile=='configured' else 'custom','profile':profile}
+        if named:fields['engine']='higgs'
+        cfg,_,acting,voice=configuration(app.root,settings|{'_voice_fields':fields},'Lettura dello script Studio')
         result.append((cfg,acting,voice))
+    if named:
+        cfg=next(result[i][0] for i,key in enumerate(('voice_a','voice_b')) if selected[key]!='configured')
+        result=[(dict(cfg),acting,voice) for _,acting,voice in result]
     if result[0][2]['id']==result[1][2]['id']:raise ValueError('Configura due voci distinte nelle impostazioni Voice prima dell’audio Studio.')
     return result
 
-def enqueue(app,chat_id,artifact_id):
+def enqueue(app,chat_id,artifact_id,body=None):
+    body={} if body is None else body
+    if not isinstance(body,dict) or set(body)-{'voice_a','voice_b'}:raise ValueError('Scelte vocali Studio non valide.')
+    from .voice import FIELDS
+    selected={'voice_a':'configured','voice_b':'configured'}|body
+    if any(v not in FIELDS['profile'] for v in selected.values()):raise ValueError('Timbro Studio non valido.')
     value,deck=loaded(app,chat_id,artifact_id)
     if deck['kind']!='dialogue' or deck['status']!='ready' or not deck['items']:raise ValueError('Crea e completa prima un dialogo a due voci nello Studio.')
-    settings=app.effective_settings(app.store.settings())
+    settings=app.effective_settings(app.store.settings())|{'_study_audio_voices':selected}
     from .execution_mode import guard_intent
     guard_intent(settings,'voice');voices(app,settings)
     settings=settings|{'_study_audio':value['id'],'_rag':False,'_assistant':False,'_voice':True}
@@ -41,5 +54,5 @@ def run(app,job,payload,settings,cancel,stage,log_path):
     result=app.engine.tool_call('voice-worker.py',{'config':profiles[0][0],'segments':segments,'output':str(folder)},cancel,stage,log_path,timeout=14400)
     media=[{'id':uid(),'name':'dialogo-studio.wav','mime':'audio/wav','path':(folder/'voce.wav').relative_to(app.data).as_posix()}]
     artifact={'title':deck['title'],'content':encode(deck),'media':media};app.save_artifact(job['chat_id'],**artifact)
-    app.store.update_answer(job,'Audio Studio pronto: script conservato e due voci alternate.','done',media,{'intent':'study_audio','artifact':artifact,'duration':result.get('duration'),'voices':[p[2]['id'] for p in profiles]})
+    app.store.update_answer(job,'Audio Studio pronto: script conservato e due voci alternate.','done',media,{'intent':'study_audio','artifact':artifact,'duration':result.get('duration'),'voices':[p[2]['id'] for p in profiles],'voice_profiles':settings.get('_study_audio_voices',{})})
     app.store.execute("UPDATE jobs SET status='done',stage='Audio Studio pronto' WHERE id=?",(job['id'],))

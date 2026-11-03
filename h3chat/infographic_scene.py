@@ -85,7 +85,7 @@ def validate(scene):
     for index,obj in enumerate(rows):
         path='objects['+str(index)+']'
         fields(obj,('id','type','parentId','layer','width','height','anchor','transform','fill','stroke','strokeWidth',
-                    'text','fontSize','fontFamily','path','value','maxValue','unit','tracks','visible','parallax','assetId','imageFit'),path)
+                    'text','fontSize','fontFamily','path','value','maxValue','unit','tracks','visible','parallax','assetId','imageFit','crop','flipX'),path)
         ident=identifier(obj.get('id'),path+'.id')
         if ident in seen:error(path+'.id','identificativo duplicato')
         seen[ident]=obj
@@ -93,6 +93,13 @@ def validate(scene):
         if obj['type']=='image':
             if not isinstance(obj.get('assetId'),str) or not re.fullmatch('[0-9a-f]{32}',obj['assetId']):error(path+'.assetId','immagine autorizzata richiesta')
             if obj.get('imageFit','contain') not in ('contain','cover'):error(path+'.imageFit','contain o cover richiesto')
+            if type(obj.get('flipX',False)) is not bool:error(path+'.flipX','valore booleano richiesto')
+            if 'crop' in obj:
+                crop=obj['crop'];fields(crop,('x','y','width','height','sourceWidth','sourceHeight'),path+'.crop')
+                for key in ('sourceWidth','sourceHeight','width','height'):number(crop.get(key),1,16384,path+'.crop.'+key)
+                for key in ('x','y'):number(crop.get(key),0,16384,path+'.crop.'+key)
+                if crop['x']+crop['width']>crop['sourceWidth'] or crop['y']+crop['height']>crop['sourceHeight']:error(path+'.crop','ritaglio fuori dall’immagine originale')
+        elif 'crop' in obj or 'flipX' in obj:error(path,'ritaglio e specchio disponibili solo per immagini')
         parents[ident]=obj.get('parentId')
         if parents[ident] is not None:identifier(parents[ident],path+'.parentId')
         number(obj.get('layer',0),-1000,1000,path+'.layer')
@@ -140,7 +147,8 @@ def validate(scene):
     for ident,parent in parents.items():
         chain={ident}
         while parent is not None:
-            if parent not in seen or seen[parent]['type']!='group':error(ident+'.parentId','gruppo padre inesistente')
+            if parent not in seen:error(ident+'.parentId','gruppo padre inesistente: '+parent)
+            if seen[parent]['type']!='group':error(ident+'.parentId','il padre '+parent+' è di tipo '+seen[parent]['type']+', deve essere group')
             if parent in chain:error(ident+'.parentId','gerarchia ciclica')
             chain.add(parent);parent=parents[parent]
     if len({o['assetId'] for o in rows if o['type']=='image'})>12:error('images','massimo dodici immagini distinte per scena')

@@ -1,6 +1,9 @@
 """Pitch-preserving modest speech tempo adjustment using the bundled PyAV."""
 def adjust(wav,rate,factor=1):
     if factor==1:return wav
+    if getattr(wav,'ndim',1)==2:
+        import numpy as np
+        channels=[adjust(wav[:,i],rate,factor) for i in range(wav.shape[1])];length=min(map(len,channels));return np.stack([c[:length] for c in channels],axis=1)
     if not .9<=factor<=1.15:raise ValueError('Ritmo voce: da 0,90 a 1,15.')
     import av,numpy as np
     from fractions import Fraction

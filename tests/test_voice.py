@@ -5,6 +5,34 @@ from h3chat.voice import DEFAULTS,validate,validate_fields,route,controls,resolv
 from h3chat.voice_controls import split_text,apply_direction
 
 class VoiceTests(unittest.TestCase):
+    def test_warm_delivery_requests_real_pitch_and_speed_without_changing_words(self):
+        choice,acting=controls(DEFAULTS|{'_voice_fields':{'delivery':'warm'}},'')
+        self.assertEqual((choice['pitch'],choice['speed'],choice['emotion']),('low','slow','affection'))
+        self.assertIn('prosody:pitch_low',acting['tags']);self.assertIn('prosody:speed_slow',acting['tags'])
+        choice,_=controls(DEFAULTS|{'_voice_fields':{'delivery':'warm','pitch':'high','speed':'fast'}},'')
+        self.assertEqual((choice['pitch'],choice['speed']),('high','fast'))
+
+    def test_two_scene_voices_share_one_worker_and_keep_identity_across_sentence_cues(self):
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);app=Mock(root=root,data=root)
+            refs={}
+            for g in ('female','male'):
+                p=root/(g+'.wav');p.write_bytes(b'fixture');refs[g]={'path':str(p),'transcript':'Campione.'}
+            settings=DEFAULTS|{'memory_policy':'on_demand','voice_references':refs,'_voice_fields':{'delivery':'warm'}}
+            parts=[{'text':'Prima. Ancora lei.','scene_id':0,'sentence_cues':True,'voice_fields':{'gender':'female'}},
+                   {'text':'Ora lui.','scene_id':1,'sentence_cues':True,'voice_fields':{'gender':'male'}}]
+            app.engine.tool_call.return_value={'duration':8};meta={}
+            with patch('h3chat.voice.runtime_ready',return_value=True),patch('h3chat.voice.resolve_model',return_value=tmp):
+                synthesize(app,root/'voice',parts,settings,'',threading.Event(),lambda _:None,root/'log',meta)
+            request=app.engine.tool_call.call_args.args[1]
+            self.assertEqual(app.engine.tool_call.call_count,1)
+            self.assertEqual([s['gender'] for s in request['segments']],['female','female','male'])
+            self.assertEqual([Path(s['voice']['reference']).stem for s in request['segments']],['female','female','male'])
+            self.assertEqual(''.join(s['text'] for s in request['segments']),'Prima. Ancora lei.Ora lui.')
+            self.assertEqual(meta['voice_identity'],'mixed');self.assertEqual(len(meta['voice_identities']),2)
+            self.assertTrue(all('prosody:pitch_low' in s['tags'] for s in request['segments']))
+
     def test_radio_profile_preserves_words_and_varies_phrase_delivery(self):
         from unittest.mock import Mock
         with tempfile.TemporaryDirectory() as tmp:

@@ -10,6 +10,7 @@ PAPER={'A3':[297,420],'A4':[210,297],'A3-landscape':[420,297],'A4-landscape':[29
 FORMATS_POSTER=tuple(PAPER)+('4:5','9:16','1:1','16:9')
 STYLES=('auto','editorial','event','cultural','commercial','comic','minimal')
 DEFAULTS={'format':'A3','style':'auto','count':1,'images':'auto','image_model':'','safe_margin':5,
+          'reference_mode':'none','reference_asset_id':'','reference_page':1,
           'composition':'html','reference_image':0,'visual_megapixels':2,'visual_strength':.9,'hero_asset_id':'','typography_engine':'expressive','text_renderer':'html'}|TYPE_DEFAULTS
 BRIEF='''Sei un art director di LOCANDINE, manifesti e poster professionali.
 Questa è una composizione pubblicitaria/editoriale autonoma, non una slide:
@@ -34,21 +35,29 @@ assenti dal catalogo. Niente JavaScript, CDN o risorse remote.'''
 
 
 def requested(prompt):
-    return bool(re.search(r'^\s*(?:(?:per favore|puoi|vorrei|please)\s+)*(?:crea\w*|genera\w*|prepara\w*|fammi|fai|realizza\w*|create|make)\b.{0,60}\b(?:locandin[ae]|manifest[oi]|volantin[oi]|posters?)\b',prompt,re.I))
+    return bool(re.search(r'^\s*(?:(?:per favore|puoi|vorrei|please)\s+)*(?:crea\w*|genera\w*|prepara\w*|fammi|fai|realizza\w*|copia|riproduci|ricrea|rifai|migliora|create|make)\b.{0,60}\b(?:locandin[ae]|manifest[oi]|volantin[oi]|posters?)\b',prompt,re.I))
 
 
 def options(prompt='',value=None):
     if value is not None and (not isinstance(value,dict) or set(value)-set(DEFAULTS)):raise ValueError('Impostazioni locandine non valide.')
     out=DEFAULTS|dict(value or {})
+    if re.search(r'\b(?:fammela\s+uguale|riproduci\s+(?:il\s+)?layout|(?:copia|riproduci|ricrea|rifai)\s+(?:questa\s+|la\s+)?(?:locandina|poster|manifesto))\b',prompt,re.I):out['reference_mode']='reproduce'
+    if re.search(r'\b(?:migliora\s+(?:questa\s+|la\s+)?(?:locandina|poster|manifesto)|migliora\s+(?:il\s+)?layout)\b',prompt,re.I):out['reference_mode']='improve'
+    if out['reference_mode'] not in ('none','reproduce','improve'):raise ValueError('Modalità riferimento grafico non valida.')
+    if not isinstance(out['reference_asset_id'],str) or out['reference_asset_id'] and not re.fullmatch('[0-9a-f]{32}',out['reference_asset_id']):raise ValueError('Riferimento grafico non valido.')
+    if type(out['reference_page']) is not int or not 1<=out['reference_page']<=1000:raise ValueError('Pagina riferimento: da 1 a 1000.')
+    if out['reference_mode']!='none':
+        if out['composition']!='html':raise ValueError('Riproduci/Migliora usa la composizione HTML/CSS.')
+        if out['images']=='auto':out['images']='existing'
     match=re.search(r'\b(A[34]|4\s*:\s*5|9\s*:\s*16|1\s*:\s*1|16\s*:\s*9)\b',prompt,re.I)
     if match:out['format']=re.sub(r'\s','',match[1]).upper()
     if out['format'] in PAPER and re.search(r'\b(?:orizzontale|landscape|horizontal)\b',prompt,re.I):out['format']=out['format'].split('-')[0]+'-landscape'
     count=re.search(r'\b(\d+)\s*(?:locandine|manifesti|volantini|posters?|varianti)\b',prompt,re.I)
     if count:out['count']=int(count[1])
     if re.search(r'\b(?:senza\s+(?:immagini|foto|illustrazioni)|solo\s+(?:tipografia|grafica)|no images)\b',prompt,re.I):out['images']='none'
-    elif re.search(r'\b(?:non|senza|do not|don.t)\s+(?:genera\w*|crea\w*|generate|create)\s+(?:(?:nuove?|new)\s+)?(?:immagini|illustrazioni|images|illustrations)\s*(?=[.!;:\n]|$)',prompt,re.I):out['images']='existing'
+    elif re.search(r'\b(?:non|senza|do not|don.t)\s+(?:genera\w*|crea\w*|generate|create)\s+(?:(?:nuove?|new)\s+)?(?:immagini|illustrazioni|images|illustrations)\s*(?=[.!;:\n]|$)',prompt,re.I) or re.search(r'\b(?:nessuna|senza|no|niente)\s+(?:nuova\s+)?generazion[ei]\s+(?:di\s+)?(?:immagini|illustrazioni)\b',prompt,re.I):out['images']='existing'
     elif re.search(r'\b(?:usa\w*|use)\b.{0,35}\b(?:immagini|foto|images)\s+(?:allegate|attached)\b',prompt,re.I):out['images']='attached'
-    elif re.search(r'\b(?:genera\w*|generate)\s+(?:nuove?\s+|le\s+|una?\s+)?(?:illustrazion[ei]|immagini|images?)\b',prompt,re.I):out['images']='generate'
+    elif re.search(r'\b(?:genera|generami|generare|generate|generiamo)\s+(?:nuove?\s+|le\s+|una?\s+)?(?:illustrazion[ei]|immagini|images?)\b',prompt,re.I):out['images']='generate'
     for word,style in [('fumetto','comic'),('editoriale','editorial'),('minimal','minimal'),('promozionale','commercial'),('culturale','cultural'),('evento','event')]:
         if re.search(r'\bstile\s+'+word+r'\b',prompt,re.I):out['style']=style;break
     if type(out['count']) is not int or not 1<=out['count']<=6:raise ValueError('Locandine: scegli da 1 a 6 varianti.')
@@ -107,22 +116,31 @@ def validate_plan(plan,opts,visual):
     if not isinstance(plan,dict) or not isinstance(plan.get('title'),str) or not isinstance(rows,list) or len(rows)!=opts['count']:raise ValueError('Il piano deve avere titolo e il numero richiesto di varianti.')
     for index,row in enumerate(rows,1):
         if not isinstance(row,dict):raise ValueError(f'Variante {index}: la voce deve essere un oggetto JSON.')
-        for key,limit in [('title',150),('copy',6000),('visual_plan',2000)]:
+        for key,limit in [('title',150),('copy',6000),('visual_plan',6000 if opts.get('reference_mode','none')!='none' else 2000)]:
             value=row.get(key)
             if not isinstance(value,str):raise ValueError(f'Variante {index}: {key} deve essere una stringa, non {type(value).__name__}.')
             if not value.strip():raise ValueError(f'Variante {index}: {key} è vuoto.')
             if len(value)>limit:raise ValueError(f'Variante {index}: {key} contiene {len(value)} caratteri, massimo {limit}.')
         if not isinstance(row.get('image_prompt'),str) or len(row['image_prompt'])>1800 or visual and not row['image_prompt'].strip():raise ValueError(f'Variante {index}: image_prompt non valido (stringa breve, richiesta per nuove illustrazioni).')
-        if row.get('image_aspect') not in ('16:9','9:16','1:1','4:3','3:4'):raise ValueError(f'Variante {index}: image_aspect non supportato.')
+        aspect=row.get('image_aspect')
+        if not isinstance(aspect,str) or len(aspect)>20:raise ValueError(f'Variante {index}: image_aspect non valido.')
+        if visual and aspect not in ('16:9','9:16','1:1','4:3','3:4','3:2','2:3'):raise ValueError(f'Variante {index}: image_aspect non supportato.')
     return rows
 
 
 def build(app,job,payload,history,settings,model,cancel,stage,log_path,meta):
-    opts=options(value=settings['_posters']);width,height=FORMATS[opts['format']]
+    opts=options(payload.get('prompt',''),settings['_posters']);width,height=FORMATS[opts['format']]
     from .slide_html import BRIEF as HTML_BRIEF,generate,source,include_planned_images
     from .slide_context import compact_history
+    from .poster_reference import prepare as prepare_reference,brief as reference_brief
+    reference_info=None;reference_media=[]
+    if opts['reference_mode']!='none':
+        app.engine.start_llama(model,settings,log_path,cancel,stage=stage)
+        reference_info,reference_media=prepare_reference(app,job,payload,opts,settings,model,cancel,stage,log_path,meta)
     assets=[];seen=set()
-    for m in payload['media']+meta.pop('_slide_assets',[]):
+    for m in payload['media']+meta.pop('_slide_assets',[])+reference_media:
+        if reference_info and m['id']==reference_info['source_asset_id']:continue
+        if m.get('mime')=='application/json' and m in reference_media:assets.append(m);continue
         if m.get('mime','').startswith('image/') and m['id'] not in seen and not m.get('slide_background'):
             # Do not promote private document-cache files into arbitrary media.
             if m['path'].startswith('document-cache/'):continue
@@ -132,13 +150,15 @@ def build(app,job,payload,history,settings,model,cancel,stage,log_path,meta):
         assets=[m for m in assets if m['id']==opts['hero_asset_id']]
         if not assets:raise ValueError('Immagine protagonista non disponibile.')
     app.engine.start_llama(model,settings,log_path,cancel,stage=stage)
-    if assets and settings.get('vision_enabled',True) and model.get('vision',{}).get('enabled'):
+    if assets and not reference_info and settings.get('vision_enabled',True) and model.get('vision',{}).get('enabled'):
         from .slide_vision import describe
         descriptions=describe(app,assets,model,settings,cancel,stage,meta,limit=8)
+    if reference_info:
+        descriptions.update({r['asset_id']:r.get('role','photo')+' · '+r['appearance']+(' · testo originale non verificabile, da conservare senza riscriverlo' if r.get('facsimile') else '') for r in reference_info['plan']['regions'] if r.get('asset_id')})
     references=[{'id':d.get('citation',f'D{i}'),'label':(d['name']+' · '+', '.join(d.get('locations',[])))[:1000]} for i,d in enumerate(meta.get('documents',[]),1)]
     references += [{'id':d['citation'],'label':d['name']+' · '+d['location']} for d in meta.get('rag_sources',[])]
     references += [{'id':f'W{i}','label':d['title'],'url':d['url']} for i,d in enumerate(meta.get('web_sources',[]),1)]
-    catalog=[{'asset_id':m['id'],'description':descriptions.get(m['id'],m['name']+' (contenuto non analizzato)')} for m in assets]
+    catalog=[{'asset_id':m['id'],'description':descriptions.get(m['id'],m['name']+' (contenuto non analizzato)')} for m in assets if m['mime'].startswith('image/')]
     visual=image_model(app,settings,opts,payload['media'])
     meta.update(poster_options=opts,poster_image_mode='generate' if visual else 'attached' if assets else 'typography',poster_variants=opts['count'])
     app.engine.start_llama(model,settings,log_path,cancel,stage=stage)
@@ -149,16 +169,22 @@ def build(app,job,payload,history,settings,model,cancel,stage,log_path,meta):
     direction=brief+f"\nFormato {opts['format']}, viewport {width:g}×{height:g}px. Stile {opts['style']}. Margine di sicurezza testi/loghi {opts['safe_margin']}% per lato."
     if not hybrid:direction+='\nCOMPOSITORE LIBERO HTML/CSS, come nelle slide ricche: crea un’identità visiva completa con SVG, gradienti, forme, livelli, tipografia espressiva, titoli sagomati e decorazioni coerenti. Le immagini sono risorse della composizione, anche a tutta pagina; l’HTML costruisce liberamente tutti gli altri elementi. Non richiedere al modello immagini box di testo o spazi numerati. Usa velature locali, gradienti trasparenti o pannelli leggeri dove servono alla leggibilità, senza coprire volti, soggetti e dettagli importanti. Evita la pila di card ripetitive: scegli la composizione per questa locandina. Rispetta gli stili espliciti, compresi quelli sobri e minimali.'
     direction+='\n'+type_brief(opts)
+    direction+=reference_brief(reference_info)
     if opts['hero_asset_id']:direction+='\nLa risorsa protagonista è già stata selezionata o ritoccata: usa esattamente asset '+opts['hero_asset_id']+' come soggetto principale. Non sostituirla, ridisegnarla o recuperare altre foto dalla cronologia. Integra sfondo, colori e tipografia con lo stile della foto.'
     base[0]['content']+='\n'+direction
     base[-1]['content']+='\nCatalogo immagini autorizzate: '+json.dumps(catalog,ensure_ascii=False)+'\nFonti citabili: '+json.dumps(references,ensure_ascii=False)
-    item={'type':'object','properties':{k:{'type':'string','maxLength':limit,**({'minLength':1} if k!='image_prompt' else {})} for k,limit in [('title',150),('copy',6000),('visual_plan',2000),('image_prompt',1800)]}|{'image_aspect':{'type':'string','enum':['16:9','9:16','1:1','4:3','3:4']}},'required':['title','copy','visual_plan','image_prompt','image_aspect'],'additionalProperties':False}
+    visual_limit=6000 if reference_info else 2000
+    item={'type':'object','properties':{k:{'type':'string','maxLength':limit,**({'minLength':1} if k!='image_prompt' else {})} for k,limit in [('title',150),('copy',6000),('visual_plan',visual_limit),('image_prompt',1800)]}|{'image_aspect':{'type':'string','enum':['16:9','9:16','1:1','4:3','3:4']}},'required':['title','copy','visual_plan','image_prompt','image_aspect'],'additionalProperties':False}
+    # A reference-only composition never calls the image generator. Its aspect
+    # annotation can match the poster (e.g. 4:5), without restricting HTML output
+    # to the narrower set supported by image-generation presets.
+    item['properties']['image_aspect']=({'type':'string','enum':['16:9','9:16','1:1','4:3','3:4','3:2','2:3']} if visual else {'type':'string','maxLength':20})
     schema={'type':'object','properties':{'title':{'type':'string','maxLength':150},'variants':{'type':'array','items':item,'minItems':opts['count'],'maxItems':opts['count']}},'required':['title','variants'],'additionalProperties':False}
     request=base+[{'role':'user','content':f"Prepara {opts['count']} alternative di LOCANDINA, ciascuna completa e autonoma. copy contiene SOLO i testi destinati al pubblico; visual_plan contiene SOLO la regia. Conserva identici dati e testi obbligatori in ogni variante. image_prompt è un prompt inglese per una sola illustrazione SENZA TESTI né loghi né scritte, con composizione adatta al poster; image_aspect ne sceglie il formato. "+('Le immagini saranno generate prima dell’impaginazione.' if visual else 'Usa solo gli asset forniti oppure grafica HTML/SVG; image_prompt deve essere vuoto.') }]
     stage('Locandine · contenuti e direzione artistica')
     folder=app.data/'outputs'/job['id'];folder.mkdir(parents=True,exist_ok=True)
     from .poster_plan_progress import Progress
-    request[-1]['content']+=' Limiti per variante: title massimo 150 caratteri; copy massimo 6000; visual_plan massimo 2000; image_prompt massimo 1800. Niente ripetizioni o riempitivi.'
+    request[-1]['content']+=f' Limiti per variante: title massimo 150 caratteri; copy massimo 6000; visual_plan massimo {visual_limit}; image_prompt massimo 1800. Niente ripetizioni o riempitivi.'
     for attempt in range(2):
         if cancel.is_set():raise Cancelled()
         meta['poster_planning_attempts']=attempt+1
@@ -171,6 +197,8 @@ def build(app,job,payload,history,settings,model,cancel,stage,log_path,meta):
             if finish=='length':raise ValueError('Piano locandine incompleto: il modello non ha chiuso il JSON. Rispetta i limiti dei campi, senza ripetizioni o riempitivi.')
             plan=json.loads(raw);rows=validate_plan(plan,opts,visual);break
         except (ValueError,TypeError) as error:
+            if getattr(error,'content',''):
+                (folder/f'poster-plan-{attempt+1}-rejected.txt').write_text(error.content,encoding='utf8')
             if attempt:raise ValueError('Piano locandine non valido dopo la correzione: '+str(error)) from error
             stage('Locandine · correggo il piano dei contenuti')
             partial=raw or progress.raw
@@ -190,6 +218,9 @@ def build(app,job,payload,history,settings,model,cancel,stage,log_path,meta):
                 fragments.append(poster_overlay.plan(app.engine,base,layout,opts|{'_settings':settings,'_diagnostic_folder':folder/f'typography-{index+1}'},width,height,cancel,stage,verify))
     deck={'version':1,'engine':'llm','document_kind':'poster','poster':opts,'format':opts['format'],'title':plan['title'][:150] or 'Locandine','theme':'lagoon','typography':'modern','design':'professional','detail':'concise','motion':'static','references':references,'active':0,'pages':[
         {'title':r['title'],'status':'pending','html':'','nodes':[],'notes':'','sources':[],'editorial':{'content':r['copy'],'visual_plan':r['visual_plan']}} for r in rows]}
+    if reference_info:
+        deck['poster_reference']=reference_info
+        for page in deck['pages']:page['notes']='Riferimento: '+reference_info['source_name']+' · pagina '+str(reference_info['page'])+'\n'+'\n'.join(reference_info['plan']['warnings'])+'\nRicostruzione del layout: font e pixel non sono garantiti identici.'
     def publish():
         artifact={'title':deck['title'],'content':encode(deck),'media':assets}
         meta['artifact']=artifact;app.save_artifact(job['chat_id'],deck['title'],artifact['content'],assets)
@@ -226,6 +257,9 @@ def build(app,job,payload,history,settings,model,cancel,stage,log_path,meta):
         if cancel.is_set():raise Cancelled()
         deck['active']=index;page['status']='writing';publish();stage(f'Locandine · impaginazione {index+1}/{len(rows)}')
         planned=generated[index:index+1]
+        if reference_info and opts['images']!='none':
+            wanted={r['asset_id']:r for r in reference_info['plan']['regions'] if r.get('asset_id')}
+            planned=[m|{'id':m['asset_id'],'role':wanted[m['asset_id']].get('role','photo'),'source_box':wanted[m['asset_id']]['box']} for m in catalog if m['asset_id'] in wanted]
         if opts['hero_asset_id']:planned=[m for m in catalog if m['asset_id']==opts['hero_asset_id']];planned=[m|{'id':m['asset_id']} for m in planned]
         if hybrid:
             background=next(m for m in assets if m['id']==planned[0]['id'])
@@ -252,6 +286,10 @@ def build(app,job,payload,history,settings,model,cancel,stage,log_path,meta):
                 html,missing=include_planned_images(app.engine,page_request,settings,cancel,html,planned,stream,stage,index+1)
                 if missing and opts['hero_asset_id']:raise ValueError('Il modello non ha inserito la foto protagonista selezionata, anche dopo la correzione. La foto non è stata sostituita o rigenerata.')
                 if missing:page['image_warning']='Il modello non ha incluso il visual assegnato. Puoi inserirlo con Modifica grafica.'
+            if reference_info:
+                from .poster_reference_check import verify
+                html=verify(app,deck,page,assets,reference_info,planned,html,page_request,settings,cancel,stream,stage,log_path,folder/f'page-{index+1}',meta,user_prompt=payload.get('prompt',''),copy_text=rows[index]['copy'])
+                page.pop('image_warning',None)
             page.update(html=html,status='ready');
             if opts['hero_asset_id']:page['hero_asset_id']=opts['hero_asset_id']
             publish()

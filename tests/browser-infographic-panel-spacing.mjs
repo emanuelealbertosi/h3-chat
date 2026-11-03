@@ -1,0 +1,18 @@
+import {createRequire} from 'node:module';import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url),{build}=require('esbuild'),{chromium}=require(process.env.H3_PLAYWRIGHT||'playwright');
+const built=await build({stdin:{contents:`import {htmlPage} from './ui/slide-html.js';import './ui/infographic-renderer.js';window.pageForTest=htmlPage;`,resolveDir:process.cwd()},bundle:true,write:false,format:'iife',loader:{'.woff':'dataurl','.woff2':'dataurl','.ttf':'dataurl'}});
+const browser=await chromium.launch({channel:'msedge',headless:true,args:['--disable-gpu']}),page=await browser.newPage({viewport:{width:1280,height:720}});
+try{
+ await page.setContent('<style>body{margin:0}</style><div id="mount"></div>');await page.addScriptTag({content:built.outputFiles[0].text});
+ const result=await page.evaluate(async()=>{
+  const html=`<style>*{box-sizing:border-box}html,body{margin:0}.scene{position:relative;width:1280px;height:720px;padding:104px 28px 28px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px;background:#dde9ef;font:20px Arial}.topbar{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;padding:18px 28px}.brand{display:flex;flex-direction:column;line-height:1}.brand strong{font-size:24px}.brand em{font-size:14px}.panel{padding:20px;background:white;display:flex;flex-direction:column}.panel h2{font-size:32px}.foot{margin-top:auto}</style><main class="scene"><header class="topbar" data-overlay="global"><div class="brand"><strong>Generic brand</strong><em>A separate subtitle</em></div></header>${[1,2,3].map(n=>`<section class="panel" data-panel="${n}"><h2>Panel ${n}</h2><p>Readable content ${n}</p><footer class="foot">Footer ${n}</footer></section>`).join('')}</main>`;
+  const options={layout:'columns3',panel_appearance:'sequence',panel_order:'321',panel_interval:.8},deck={engine:'llm',format:'16:9',title:'Test',pages:[{title:'Test',html,status:'ready'}],references:[],infographic:{version:1,durations:[6],options}};
+  const frame=await pageForTest(deck,deck.pages[0],0,[],document.querySelector('#mount')),doc=frame.querySelector('iframe').contentDocument;
+  const measure=()=>({panels:[...doc.querySelectorAll('[data-panel]')].map(p=>{const r=p.getBoundingClientRect();return{x:r.x,y:r.y,w:r.width,h:r.height,parent:p.parentElement.className,start:p.dataset.start};}),overlay:doc.querySelector('[data-overlay]').getBoundingClientRect().height,background:doc.defaultView.getComputedStyle(doc.querySelector('.scene')).backgroundColor});
+  const first=measure();H3Motion.screen(doc,options,6);const second=measure();await H3Infographic.prepare(doc,720,options,6);const offline=measure();
+  const labels=[...doc.querySelector('.brand').children].map(e=>{const r=doc.createRange();r.selectNodeContents(e);const b=r.getBoundingClientRect();return{top:b.top,bottom:b.bottom};});
+  return{first,second,offline,labels};
+ });
+ assert.deepEqual(result.first,result.second);assert.deepEqual(result.first,result.offline);assert.equal(result.first.panels[0].x,28);assert.equal(result.first.panels[0].y,104);assert.equal(result.first.panels[0].h,588);assert(result.first.panels[1].x-result.first.panels[0].x-result.first.panels[0].w>19);assert(result.first.panels.every(p=>p.parent==='scene'));assert(result.first.overlay<104);assert.notEqual(result.first.background,'rgba(0, 0, 0, 0)');assert(result.labels[0].bottom<=result.labels[1].top+.5);assert.deepEqual(result.first.panels.map(p=>p.start),['1.6','0.8','0']);
+ console.log('PASS: panel safe area/gutters/background/font inheritance preserved; header keeps natural height; stacked text clears; repeated prepare and canvas/offline match; entrance order preserved.');
+}finally{await browser.close();}
