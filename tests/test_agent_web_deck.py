@@ -19,7 +19,11 @@ class WebDeckTests(unittest.TestCase):
     tearDown=fixture.AgentTests.tearDown
     ticket=fixture.AgentTests.ticket
     def test_h3_search_download_original_images_documents_and_make_exactly_five_slides(self):
-        chat,job=self.ticket('agent: Crea una presentazione sulla macchina di Turing di 5 slide, scarica immagini e documenti e fonti da internet',confirm_writes=False)
+        # This case verifies tool composition, not the default budget. The
+        # nested HTML/image planning calls reserve their complete inputs, and
+        # the expanded tool catalog can legitimately exhaust the default cap.
+        # Budget pauses and explicit continuation are covered in AgentTests.
+        chat,job=self.ticket('agent: Crea una presentazione sulla macchina di Turing di 5 slide, scarica immagini e documenti e fonti da internet',confirm_writes=False,token_budget=1000000)
         row={'title':'Turing paper','url':'https://example.org/turing','text':'A Turing machine has a tape, a head, a finite control and a transition function.','snippet':'Original paper','read':True}
         step=[0];page=[0];seen=[False];lot=[None];doc=[None]
         def completion(messages,settings,cancel,**kwargs):
