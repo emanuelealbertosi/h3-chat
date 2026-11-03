@@ -74,7 +74,7 @@ def render(request):
         (output/'manim-render.log').write_text(log,encoding='utf-8')
         if code:
             if code==0xc0000017:raise ValueError('Manim: memoria insufficiente. Aumenta il limite nelle Preferenze.')
-            raise ValueError('Rendering Manim non riuscito.\n'+log[-6000:])
+            raise ValueError('Rendering Manim non riuscito (codice 0x'+format(code & 0xffffffff,'08x')+').\n'+(log[-6000:] or 'Il processo è terminato prima di scrivere il log. Verifica runtime e dipendenze del renderer.'))
         result=json.loads((folder/'result.json').read_text(encoding='utf-8'));path=Path(result['path']).resolve()
         if not path.is_relative_to(folder) or not path.is_file():raise ValueError('Video Manim non disponibile nella cartella isolata.')
         if path.stat().st_size>512*1024**2:raise ValueError('Video Manim oltre il limite di 512 MB.')

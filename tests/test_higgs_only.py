@@ -17,8 +17,8 @@ class HiggsOnlyTests(unittest.TestCase):
    self.assertEqual(payload['settings']['voice_precision'],'bf16')
    self.assertEqual(payload['settings']['voice_seed'],734)
    self.assertEqual(payload['settings']['_voice_fields']['delivery'],'radio')
- def test_only_higgs_and_legacy_chat_controls_preserved(self):
-  self.assertEqual(list(e.ENGINES),['higgs']);validate(copy.deepcopy(DEFAULTS))
+ def test_default_higgs_optional_moss_and_legacy_chat_controls_preserved(self):
+  self.assertEqual(list(e.ENGINES),['higgs','moss']);self.assertEqual(e.DEFAULTS['voice_engine'],'higgs');validate(copy.deepcopy(DEFAULTS))
   for old in e.RETIRED:
    value=validate_fields({'engine':old,'gender':'female','emotion':'enthusiasm','pitch':'high','delivery':'radio','params':{old:{'temperature':.8}}})
    self.assertEqual(value,{'engine':'higgs','gender':'female','emotion':'enthusiasm','pitch':'high','delivery':'radio'})
