@@ -10,7 +10,7 @@ if not run.isdecimal():raise ValueError('Package run must be numeric.')
 info=api('actions/runs/'+run)
 if info.get('head_repository',{}).get('full_name')!=os.environ['GITHUB_REPOSITORY']:raise ValueError('Package must originate from this repository.')
 jobs=api('actions/runs/'+run+'/jobs?per_page=100')['jobs']
-if not any(j['name']=='package' and j['conclusion']=='success' for j in jobs):raise ValueError('The package archive was not successfully verified.')
+if not any(j['name'] in ('package','linux / package') and j['conclusion']=='success' for j in jobs):raise ValueError('The package archive was not successfully verified.')
 artifacts=api('actions/runs/'+run+'/artifacts?per_page=100')['artifacts']
 if not any(a['name']=='H3-Chat-linux-x64' and not a['expired'] for a in artifacts):raise ValueError('Verified final package artifact unavailable.')
 revision=info['head_sha'];subprocess.run(['git','fetch','--depth=1','origin',revision],check=True)
