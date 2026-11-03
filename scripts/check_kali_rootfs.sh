@@ -13,10 +13,6 @@ docker export "$container" | sudo tar --no-same-owner -xf - -C "$root"
 sudo chown 0:0 "$root"
 test -d "$root/etc" && test ! -L "$root/etc"
 sudo cp --remove-destination -L -- /etc/resolv.conf "$root/etc/resolv.conf"
-# The minimal image may not yet contain CA certificates. Copy the disposable
-# runner's trust bundle so apt can use Kali's official HTTPS CDN from the start.
-sudo mkdir -p "$root/etc/ssl/certs"
-sudo cp --remove-destination -L -- /etc/ssl/certs/ca-certificates.crt "$root/etc/ssl/certs/ca-certificates.crt"
 # No Docker masked-/proc restriction is inherited. Mounts disappear when this
 # private mount namespace exits; no user workstation or global sysctl is touched.
 sudo unshare --mount --propagation private -- /bin/bash -s -- "$root" "$PWD" "$(id -u)" "$(id -g)" <<'HOST'
@@ -34,11 +30,14 @@ mount -o remount,bind,ro "$root/h3-input/build/kali-input"
 chroot "$root" /bin/bash <<'KALI'
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
-# The geo-selected HTTP mirror returned 500 and then stale-package 404 errors.
-# This changes only the ephemeral test root; apt signature checks stay enabled.
-printf '%s\n' 'deb https://kali.download/kali kali-rolling main contrib non-free non-free-firmware' > /etc/apt/sources.list
-apt_options=(-o Acquire::Retries=3 -o Acquire::https::Timeout=45)
-apt-get "${apt_options[@]}" update
+# The geo-selected mirror returned 500 and stale-package 404 errors. Bootstrap
+# from Kali's direct CDN using signed apt metadata/packages, also on minimal
+# images that cannot yet validate HTTPS. No unauthenticated package is allowed.
+# Ignore the image's additional deb822 mirrors and fail on any missing index.
+# These settings affect only this disposable test root, never the installer.
+printf '%s\n' 'deb http://kali.download/kali kali-rolling main contrib non-free non-free-firmware' > /etc/apt/sources.list
+apt_options=(-o Dir::Etc::sourceparts=- -o Acquire::Retries=3 -o Acquire::http::Timeout=45)
+apt-get "${apt_options[@]}" -o APT::Update::Error-Mode=any update
 apt-get "${apt_options[@]}" install -y bubblewrap polkitd pkexec dbus-x11 gnome-keyring libsecret-1-0 libnss3 libatk1.0-0 libatk-bridge2.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libxkbcommon0 libcairo2 libpango-1.0-0 libasound2t64 libgomp1
 useradd -m -s /bin/bash h3check
 tar -xzf /h3-input/build/kali-input/H3-Chat-*-linux-x64.tar.gz -C /home/h3check
