@@ -1,4 +1,4 @@
-name: Publish verified 0.19.1 packages
+name: Publish verified 0.19.2 packages
 on:
   workflow_dispatch:
   workflow_call:
@@ -6,7 +6,7 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: publish-verified-0.19.1
+  group: publish-verified-0.19.2
   cancel-in-progress: false
 jobs:
   publish:
@@ -31,19 +31,19 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: H3-Chat-windows-x64
-          run-id: 41249728720
+          run-id: 41624230410
           github-token: ${{ github.token }}
           path: verified/windows
       - uses: actions/download-artifact@v4
         with:
           name: H3-Chat-macos-arm64
-          run-id: 41249728720
+          run-id: 41624230410
           github-token: ${{ github.token }}
           path: verified/macos
       - uses: actions/download-artifact@v4
         with:
           name: H3-Chat-linux-x64
-          run-id: 41249728720
+          run-id: 41624230410
           github-token: ${{ github.token }}
           path: verified/linux
       - name: Verify all nine files, fast-forward main and publish a fresh release
