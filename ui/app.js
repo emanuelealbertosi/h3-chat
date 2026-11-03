@@ -1,4 +1,8 @@
 import {exportStudy} from './study-export.js';
+import {initWorkCenter,appendRecovery} from './work-center.js';
+import {initRequestReview} from './request-review.js';
+import {imageRequestValues} from './image-request.js';
+import {videoRequestSummary} from './video-request.js';
 import {initPosters} from './posters.js';
 import {initStudy,renderStudy,studyPrefix} from './study.js';
 import {initAgentControls,renderAgentRun} from './agent-ui.js';
@@ -57,7 +61,7 @@ import {initRequestSettings} from './request-settings.js';
 import {initRequestExtras} from './request-extras.js';
 const $=s=>document.querySelector(s);
 const chatScroll=initChatScroll($('#scroll-area'),$('#messages'));
-let composerUI=null,manimPresentation=null,infographicsUI=null;
+let composerUI=null,manimPresentation=null,infographicsUI=null,workCenter=null,requestReview=null;
 let state=null,current=null,chat=null,filter='all',collection=null,project=null,attachments=[],settingsTab='setup',settingsDraft=null;
 let canvasOpen=false,canvas={title:'Canvas',content:'',media:[]},canvasEditing=false,canvasSaveTimer,canvasDirty=false;
 let canvasHistory={items:[],active_id:null},canvasFollow=true,canvasSaving=null,canvasSelection=0,canvasHistoryRequest=0;
@@ -189,6 +193,7 @@ const executionUI=initExecutionMode({api,getState:()=>state,onChange:refresh,not
 function renderStatus(){
   agentUI.render();
   if(!state)return;
+  workCenter?.render();
   requestSettings.render();requestExtras.render();chatModels.render();
   projects.controls();
   let mode=document.getElementById('execution-hint');if(!mode){mode=document.createElement('p');mode.id='execution-hint';mode.className='mode-hint';$('#composer').after(mode);}const activeModels=[['LLM','chat_model','llm_device'],['Immagini','create_model','image_device'],['Musica','music_model','music_backend'],['Video','video_model','video_device']];let slow=false;mode.textContent=activeModels.map(([label,key,deviceKey])=>{const m=state.models.find(m=>m.id===state.settings[key]);if(!m)return null;if(m.api||m.remote_media){const p=state.media_providers?.find(p=>p.id===m.id);if(p?.device==='cpu'&&p.adapter==='h3'&&label!=='LLM')slow=true;return label+': server esterno';}const choice=state.settings[deviceKey];const cpu=label==='Video'?false:choice==='cpu'||(choice==='inherit'||choice==='auto')&&(state.settings.profile==='cpu'||state.settings.backend==='cpu'||label==='Musica'&&state.settings.backend!=='cuda');if(cpu&&['Immagini','Musica'].includes(label))slow=true;return label+': '+(cpu?'CPU':'GPU');}).filter(Boolean).join(' · ')+(slow?' · Su CPU immagini e musica possono richiedere molto tempo.':'');
@@ -235,7 +240,7 @@ function renderStatus(){
   $('#canvas-source').readOnly=!!canvasJob?.canvas;
   $('#canvas-title').readOnly=!!canvasJob?.canvas;
   $('#canvas-restore').disabled=!!canvasJob?.canvas||!canvas.id||canvas.id===canvasHistory.active_id;
-  composerUI?.render();manimPresentation?.render();infographicsUI?.render();executionUI.render();
+  composerUI?.render();manimPresentation?.render();infographicsUI?.render();executionUI.render();requestReview?.render();
 }
 function focusPrompt(){if(composerUI)composerUI.reveal();else $('#prompt').focus();}
 async function newChat(){if(current)await persistCanvas();const fresh=await api('/chats',{collection_id:collection,project_id:project});await openChat(fresh.id);await refresh();focusPrompt();}
@@ -355,7 +360,11 @@ async function renderChat(){
     if(message.role==='assistant'&&message.meta.model_warning){const note=document.createElement('div');note.className='vision-warning';note.textContent=message.meta.model_warning;content.append(note);}
     if(message.role==='assistant'&&message.meta.mtp_tokens){const badge=document.createElement('span');badge.className='badge';badge.textContent='MTP · '+message.meta.mtp_tokens;article.querySelector('.message-head').append(badge);}
     if(message.role==='assistant'&&message.meta.think_level){const badge=document.createElement('span');badge.className='badge';badge.textContent='Think '+message.meta.think_level;badge.title=message.meta.api?message.meta.think_note:message.meta.think_budget+' token massimi di ragionamento';article.querySelector('.message-head').append(badge);}
-    if(['failed','interrupted','cancelled'].includes(message.status)){const err=document.createElement('div');err.className='message-error';err.textContent=message.meta.error||'Risposta interrotta. Puoi riprovare.';content.append(err);}
+    if(['failed','interrupted','cancelled'].includes(message.status)){
+      const err=document.createElement('details');err.className='message-error';const heading=document.createElement('summary');heading.textContent='Dettagli del messaggio';const detail=document.createElement('p');detail.textContent=message.meta.error||'Risposta interrotta.';err.append(heading,detail);content.append(err);
+      const savedJob=state.jobs.find(j=>j.message_id===message.id);
+      appendRecovery(content,{message,onReload:state.video_options?.request_draft?act(()=>reloadRequest(message)):null,onResults:message.meta.canvas||savedJob?.canvas?act(()=>openWorkResults(savedJob||{chat_id:current,message_id:message.id})):null,onSettings:()=>openSettings('advanced')});
+    }
     const actions=article.querySelector('.message-actions');
     if(timing&&!pending){const duration=document.createElement('span');duration.className='message-duration';duration.textContent=timing.text;duration.title=timing.title;actions.append(duration);}
     if(message.status==='failed'&&message.meta.intent==='manim'&&message.meta.error?.startsWith('Durata errata:')){
@@ -374,7 +383,7 @@ async function renderChat(){
     renderAgentRun(content,{message,latest:!message.meta.agent||latestAgents.get(message.meta.agent.id)===message.id,api,chatId:current,busy:()=>!!userJob(),onChanged:()=>refresh(),notify:toast,readLimits:()=>agentUI.read(),openArtifact:async id=>{try{await selectCanvasArtifact(id);await toggleCanvas(true);}catch(error){toast(error.message,true);}}});
     appendVideoResume(actions,{api,message,chatId:current,busy:()=>!!userJob(),onQueued:()=>refresh(),notify:toast});
     if(message.role==='user'){const repeat=document.createElement('button');repeat.className='text-button';repeat.textContent='Riutilizza';repeat.onclick=act(()=>reloadRequest(message));actions.append(repeat);}
-    if(message.role==='assistant'&&!pending){const reload=document.createElement('button');reload.className='text-button';reload.textContent='Ricarica richiesta';reload.disabled=!state.video_options?.request_draft;reload.onclick=act(()=>reloadRequest(message));actions.append(reload);}
+    if(message.role==='assistant'&&!pending&&!['failed','interrupted','cancelled'].includes(message.status)){const reload=document.createElement('button');reload.className='text-button';reload.textContent='Ricarica richiesta';reload.disabled=!state.video_options?.request_draft;reload.onclick=act(()=>reloadRequest(message));actions.append(reload);}
     collapseInput(article,message);
   }
   chatStream.retain(streamingKeys);clearUnusedVideoProgress();chatScroll.update();
@@ -720,6 +729,31 @@ $('#canvas-write').onclick=$('#canvas-source-tab').onclick;
 $('#canvas-title').oninput=canvasChanged;$('#canvas-source').oninput=canvasChanged;$('#canvas-save').onclick=act(async()=>{await persistCanvas();toast('Canvas salvato.');});
 document.querySelector('[data-export="md"]').insertAdjacentHTML('afterend','<button class="btn small" data-export="html" hidden>HTML</button><button class="btn small" data-export="pptx" hidden title="Conserva grafica e impaginazione; testo nelle note">PowerPoint fedele</button><button class="btn small" data-export="pptx-editable" hidden title="Testi HTML, riquadri e immagini separati, anche nelle locandine; font ed effetti possono differire">PowerPoint modificabile</button>');
 document.querySelectorAll('[data-export]').forEach(b=>b.onclick=act(async()=>{if(activeJob()?.canvas&&canvas.id===canvasHistory.active_id)throw Error('Attendi che il documento sia completo prima di esportare.');await persistCanvas();if(!canvas.content&&!canvas.media.length)throw Error('Il canvas è vuoto.');canvasEditing=false;await renderCanvas();const root=$('#canvas-preview');$('#canvas-panel').classList.add('exporting');const restoreZoom=canvasZoom.suspend();try{if(canvas.content.startsWith(studyPrefix)&&['pdf','docx','md'].includes(b.dataset.export))await exportStudy(JSON.parse(canvas.content.slice(studyPrefix.length,-4)),b.dataset.export,api);else if(b.dataset.export==='md')saveBlob(new Blob([canvas.content],{type:'text/markdown;charset=utf-8'}),canvas.title+'.md');else if(readDeck(canvas.content))await exportSlides(canvas,b.dataset.export,state.token);else{if(b.dataset.export==='pdf')await exportPdf(root,canvas.title,state.token);if(b.dataset.export==='docx')await exportDocx(root,canvas.title);if(b.dataset.export==='png')await exportPng(root,canvas.title);}toast('Esportazione pronta.');}finally{restoreZoom();$('#canvas-panel').classList.remove('exporting');}}));
+async function openWorkResults(job){
+ const id=job.chat_id;if(current!==id)await openChat(id);if(current!==id)return;
+ await loadCanvasHistory(id);const item=canvasHistory.items.findLast(x=>x.message_id===job.message_id||x.source_key==='job:'+job.id);
+ if(!item){toast('Nessun artefatto associato disponibile. Controlla gli allegati del messaggio nella chat.');return;}
+ await selectCanvasArtifact(item.id);await toggleCanvas(true);
+}
+workCenter=initWorkCenter({getState:()=>state,notify:toast,onOpen:job=>openChat(job.chat_id),onResults:openWorkResults,onSettings:()=>openSettings('setup'),onCancel:async item=>{await api((item.kind==='download'?'/downloads/':'/jobs/')+item.id+'/cancel',{});await refresh();},onReload:async job=>{
+ if(current!==job.chat_id)await openChat(job.chat_id);if(current!==job.chat_id)return;
+ const message=chat.messages.find(m=>m.id===job.message_id);if(!message)throw Error('Messaggio non disponibile nella chat.');await reloadRequest(message);
+}});
+requestReview=initRequestReview({getSnapshot:()=>{
+ if(!state)return null;const v=cpuRequest(visualControls.read(),state),s=state.settings,lab=$('#lab-tool').value,mode=({slides:'Slide',poster:'Locandine',infographic:'Infografica',study:'Studio',agent:'Agente',manim:'Manim',calculate:'Calcolo'})[lab]||(v.video?'Video':v.music?'Musica':v.voice?'Voice':v.transcribe?'Trascrizione':v.image_model?'Immagini':'Automatico');
+ const models=[],parameters=[],projectId=chat?.project_id||project,p=state.projects.find(x=>x.id===projectId),rag=projects.read({validate:false});
+ const backgrounds=slideBackgrounds.peek();if(backgrounds)return {mode:'Sfondi in batch',models:[backgrounds.model?modelName(backgrounds.model):'Modello immagini predefinito'],destination:'Canvas · raccolta sfondi',media:[],rag:false,assistant:false,web:false,parameters:[['Nome lotto',backgrounds.name],['Formato',backgrounds.format],['Totale sfondi',Math.max(1,new Set(backgrounds.themes).size)*backgrounds.palettes.length*backgrounds.variants],['Margine',backgrounds.margin+'%'],['Input','Prompt della chat e temi aggiuntivi · allegati e RAG non usati']]};
+ if(!v.image_model||v.assistant||lab!=='auto')models.push('LLM: '+modelName(chatModelId(state)));
+ if(v.image_model){models.push('Immagini: '+modelName(v.image_model));const image=imageRequestValues(state,v);if(image){parameters.push(['Formato immagini',image.aspect==='auto'?image.width+' × '+image.height:image.aspect],['Risoluzione immagini',image.megapixels+' MP'],['Parametri immagini',image.steps+' passi · '+image.sampler+' / '+image.scheduler],['Seed richiesto',Number(image.seed)===-1?'Casuale':String(image.seed)]);}}
+ if(v.video)parameters.push(['Video',videoRequestSummary(v,state)]);
+ if(v.music)models.push('Musica: '+modelName(v.music_model||s.music_model));
+ if(v.voice)models.push('Voice: '+(v.voice_fields?.engine||s.voice_engine||'Higgs'));
+ if(lab==='slides')parameters.push(['Slide',$('#slides-count-mode').value==='auto'?'Numero automatico':$('#slides-count').value],['Formato',$('#slides-format').value],['Illustrazioni AI',$('#slides-generate-images')?.checked?'Attive':'Disattivate']);
+ if(lab==='poster'){const poster=postersUI.read();parameters.push(['Formato',poster.format],['Varianti',poster.count],['Immagini locandina',({existing:'Allegati e risorse esistenti',generate:'Genera nuove immagini',auto:'Automatico'})[poster.images]||poster.images]);if(poster.images!=='existing'&&!cpuMode(state))parameters.push(['Modello illustrazioni',poster.image_model?modelName(poster.image_model):'Predefinito']);}
+ if(lab==='study'){const study=studyUI.read();parameters.push(['Tipo Studio',study.kind],['Schede / sezioni',study.count]);}
+ if(lab==='infographic'){const info=infographicsUI.read();parameters.push(['Modalità grafica',({normal:'Normale',decorative:'Decorativa',sequence:'Piano sequenza 2.5D'})[info.visual_mode]||info.visual_mode],['Formato',info.format],['Scene',info.scenes],['Durata indicativa',info.duration+' s'],['Immagini',cpuMode(state)?'Risorse esistenti':info.image_model?modelName(info.image_model):'Modello predefinito']);}
+ return {mode,models,destination:canvasOpen||['slides','poster','study','infographic','agent'].includes(lab)?'Canvas':'Chat',media:attachments,project:p?.name||'',...rag,parameters,loras:cpuMode(state)?[]:loraUI.getSelections(),assistant:v.assistant,web:v.web};
+}});
 composerUI=initComposerPanel({getState:()=>state,visualControls,getAttachments:()=>attachments,notify:toast,
  getLastImageSeed:model=>api('/images/last-seed?model='+encodeURIComponent(model)),
  saveImagePresets:async presets=>{const settings=await api('/settings',{moss_presets:presets});state.settings=settings;if(settingsDraft)settingsDraft.moss_presets=structuredClone(settings.moss_presets);}});

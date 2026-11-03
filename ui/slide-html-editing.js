@@ -1,4 +1,5 @@
 import {imagePicker} from './slide-image-picker.js';
+import {initSlideEditorActions} from './slide-editor-actions.js';
 import {fitHtmlBackground,contentScale} from './slide-content-fit.js';
 import fontFamilies from '../static/typography-fonts.json';
 
@@ -57,7 +58,7 @@ function arrange(container,mode,height,normalize=true){
 }
 
 export function editHtmlSlide(target,deck,index,frame,onChange,options,media,{doc,overflow,encode}){
-  const page=deck.pages[index];let selected=null,saving=false,drag=null;
+  const page=deck.pages[index];let selected=null,saving=false,drag=null,editorActions=null;
   const toolbar=document.createElement('section');toolbar.className='slide-editor slide-html-editor no-export';toolbar.ariaLabel='Modifica grafica della slide';
   toolbar.innerHTML=`<div class="slide-editor-top"><button id="slide-html-add">+ Testo</button><button id="slide-html-heading">+ Titolo</button><button id="slide-html-block">+ Blocco</button><button id="slide-html-copy">Duplica</button><button id="slide-html-delete">Elimina</button><button id="slide-html-undo">Annulla</button><button id="slide-html-redo">Ripeti</button><button id="slide-html-save">Applica e salva</button></div>
     <p class="slide-editor-help">Seleziona un elemento nella slide. Usa ↕ per spostarlo e ↘ per ridimensionarlo. Con un layout automatico, lo spostamento cambia l’ordine dei blocchi.</p>
@@ -82,8 +83,10 @@ export function editHtmlSlide(target,deck,index,frame,onChange,options,media,{do
     if(area.dataset.h3Layout){area.removeAttribute('data-h3-background-content');delete area.dataset.h3ContentFit;for(const key of ['position','left','top','width','height','max-width','z-index','background-color','contain','overflow'])area.style.removeProperty(key);}
     else area.replaceWith(...area.childNodes);
    }}return body;};
-  const imageSources=new Map([...doc.images].map(img=>[img.dataset.assetId,img.src]));
-  const snapshot=()=>{const body=cleanBody();body.querySelectorAll('img').forEach(img=>img.removeAttribute('src'));return body.innerHTML;},past=[],future=[];
+  let history=options.editorHistory?.get(index);
+  if(!history||history.source!==page.html){history={source:page.html,past:[],future:[],images:new Map()};options.editorHistory?.set(index,history);}
+  const imageSources=history.images;for(const img of doc.images)imageSources.set(img.dataset.assetId,img.src);
+  const snapshot=()=>{const body=cleanBody();body.querySelectorAll('img').forEach(img=>img.removeAttribute('src'));return body.innerHTML;},past=history.past,future=history.future;
   const updateHistory=()=>{q('#slide-html-undo').disabled=!past.length;q('#slide-html-redo').disabled=!future.length;};
   const remember=before=>{past.push(before);if(past.length>30)past.shift();future.length=0;updateHistory();};
   const updateOverlay=()=>{
@@ -95,6 +98,7 @@ export function editHtmlSlide(target,deck,index,frame,onChange,options,media,{do
   const rgbHex=value=>{const m=value.match(/\d+/g);return m?'#'+m.slice(0,3).map(x=>Math.min(255,Number(x)).toString(16).padStart(2,'0')).join(''):'#ffffff';};
   const select=element=>{
     selected=element;
+    editorActions?.sync();
     q('#slide-image-fit-controls').hidden=element?.tagName!=='IMG';
     if(!element){q('#slide-html-selection').textContent='Nessun elemento selezionato';updateOverlay();return;}
     const css=doc.defaultView.getComputedStyle(element),r=element.getBoundingClientRect();
@@ -187,11 +191,11 @@ export function editHtmlSlide(target,deck,index,frame,onChange,options,media,{do
   const finish=cancel=>{if(!drag)return;const action=drag;drag=null;if(cancel){restore(action.before);return;}if(action.moved){try{readjust();remember(action.before);select(selected);status.textContent='Modifiche da salvare';}catch(e){restore(action.before);status.textContent=e.message;}}};
   doc.addEventListener('pointerup',()=>finish(false));doc.addEventListener('pointercancel',()=>finish(true));
   const images=document.createElement('details');images.id='slide-html-images';images.innerHTML='<summary>Immagini · PC, allegati, RAG, Internet</summary>';toolbar.append(images);
-  if(options.api)imagePicker(images,{api:options.api,chatId:options.chatId,media,onSelect:async asset=>{
+  async function insertAsset(asset,{replace=true}={}){
     if(!media.some(m=>m.id===asset.id)&&media.length>=128)throw Error('Massimo 128 risorse per presentazione.');
     const blob=await fetch('/media/'+asset.path).then(r=>{if(!r.ok)throw Error('Immagine non disponibile.');return r.blob();}),src=await new Promise(resolve=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.readAsDataURL(blob);});
     const preload=doc.createElement('img');preload.src=src;await preload.decode();
-    const replacing=selected?.tagName==='IMG';
+    const replacing=replace&&selected?.tagName==='IMG';
     imageSources.set(asset.id,src);
     const changed=change(()=>{const image=replacing?selected:doc.createElement('img');image.dataset.assetId=asset.id;image.src=src;image.alt=asset.name;
       if(!replacing){const parent=insertionParent();image.style.cssText='display:block;width:400px;max-width:100%;height:240px;object-fit:contain;';if(!automaticParent(parent))image.style.cssText+='position:absolute;left:80px;top:140px;';parent.append(image);}select(image);
@@ -200,7 +204,9 @@ export function editHtmlSlide(target,deck,index,frame,onChange,options,media,{do
     if(!media.some(m=>m.id===asset.id))media.push(asset);
     if(asset.provenance){const id='I'+asset.id.slice(0,8),label=[asset.name,asset.provenance.credit,asset.provenance.license].filter(Boolean).join(' · ');deck.references||=[];if(!deck.references.some(r=>r.id===id))deck.references.push({id,label:label.slice(0,1000),...(asset.provenance.url?{url:asset.provenance.url}:{})});page.sources||=[];if(!page.sources.includes(id))page.sources.push(id);}
     if(selected?.isConnected)status.textContent='Immagine inserita · premi Applica e salva';
-  }});
+  }
+  if(options.api)imagePicker(images,{api:options.api,chatId:options.chatId,media,onSelect:insertAsset});
+  editorActions=initSlideEditorActions({toolbar,target,doc,getSelected:()=>selected,select,insertionParent,change,media,imageSources,status,insertAsset,options});
   q('#slide-html-save').onclick=async()=>{
     if(saving)return;saving=true;const old=page.html;
     try{
@@ -210,8 +216,8 @@ export function editHtmlSlide(target,deck,index,frame,onChange,options,media,{do
       editable.querySelectorAll('img').forEach(img=>img.removeAttribute('src'));
       page.html='<style>'+[...doc.querySelectorAll('style:not([data-h3-trusted])')].map(x=>x.textContent).join('\n')+'</style>'+editable.innerHTML.replace(/<style[\s\S]*?<\/style>/gi,'');
       if(page.html.length>80000)throw Error('La slide contiene troppo HTML. Riduci i blocchi o dividila in più pagine.');
-      await onChange(encode(deck),media);status.textContent='Salvato';
-    }catch(e){page.html=old;status.textContent=e.message;}finally{saving=false;}
+      history.source=page.html;await onChange(encode(deck),media);status.textContent='Salvato';
+    }catch(e){page.html=old;history.source=old;status.textContent=e.message;}finally{saving=false;}
   };
   const readable=()=>options.repairContrast?.(doc);
 }

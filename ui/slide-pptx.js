@@ -51,7 +51,7 @@ function addTextLines(slide,frame,onlyNodes=null){
       const scale=contentScale(row.block)*k;bullet=ordered?{type:'number',numberType:'arabicPeriod',numberStartAt:number,indent:16.56*scale}:{indent:16.56*scale};row.x-=.23*scale;row.w+=.23*scale;
     }
     const right=(row.block.getBoundingClientRect().right-frame.getBoundingClientRect().left)/96*k;
-    slide.addText(row.runs,{x:row.x,y:row.y,w:Math.max(.05*k,row.w,Math.min(row.w*1.08+.12*k,right-row.x)),h:Math.max(row.h+.03*k,.12*k),margin:0,bullet,wrap:false,breakLine:false,valign:'top',fit:'shrink',paraSpaceAfterPt:0});
+    slide.addText(row.runs,{objectName:'Testo · '+row.runs.map(r=>r.text).join('').trim().slice(0,70),x:row.x,y:row.y,w:Math.max(.05*k,row.w,Math.min(row.w*1.08+.12*k,right-row.x)),h:Math.max(row.h+.03*k,.12*k),margin:0,bullet,wrap:false,breakLine:false,valign:'top',fit:'shrink',paraSpaceAfterPt:0});
   }
 }
 function chart(slide,pres,canvas,frame){
@@ -120,7 +120,7 @@ async function editablePoster(slide,pres,frame){
     const bounds=box(element,frame);if(bounds.w<=0||bounds.h<=0)return;
     if(element.matches('img,svg,.katex,canvas')){
       if(element.tagName==='CANVAS'&&chart(slide,pres,element,frame))return;
-      slide.addImage({data:await rasterGraphic(element),...bounds});return;
+      slide.addImage({objectName:(element.tagName==='IMG'?'Immagine · ':'Grafica · ')+(element.getAttribute('alt')||element.tagName).slice(0,70),data:await rasterGraphic(element),...bounds});return;
     }
     const style=getComputedStyle(element),fill=color(style.backgroundColor),border=parseFloat(style.borderTopWidth)||0;
     const textInk=(style.backgroundClip||style.getPropertyValue('-webkit-background-clip')).includes('text');
@@ -182,6 +182,6 @@ export async function exportPowerPoint(root,deck,title,{editable=false}={}){
     if(decoration)slide.addImage({data:await rasterGraphic(decoration),...box(decoration,frame)});
     const page=deck.pages[Number(frame.dataset.page)-1];slide.addNotes([page.notes||'',...(page.sources||[]).map(id=>{const r=deck.references.find(r=>r.id===id);return r?'['+id+'] '+r.label:'';}),'Formule e diagrammi sono elementi grafici; testi, riquadri e grafici dati sono modificabili in PowerPoint.'].filter(Boolean).join('\n'));
   }
-  const blob=await repairChartAxes(await pres.write({outputType:'blob',compression:true}));saveBlob(blob,(title||'Presentazione').replace(/[^\p{L}\p{N}\s_-]/gu,'').slice(0,80)+'.pptx');
+  const blob=await repairChartAxes(await pres.write({outputType:'blob',compression:true}));saveBlob(blob,(title||'Presentazione').replace(/[^\p{L}\p{N}\s_-]/gu,'').slice(0,80)+(editable?' - modificabile':' - fedele')+'.pptx');
   }catch(error){console.error('Esportazione PowerPoint:',error.stack);throw error;}
 }

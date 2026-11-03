@@ -2,6 +2,7 @@ import {themes,typography,designs,encodeDeck,applyOverride,validateDesign} from 
 import {parseColor,colorHex} from './color-contrast.js';
 import {effectiveBackground} from './slide-contrast.js';
 import {imagePicker} from './slide-image-picker.js';
+import {editorHistoryKeys} from './editor-history-keys.js';
 export function mountEditor(target,deck,index,frames,onChange,session={},options={},media=[]){
   const page=deck.pages[index];session.undo||=[];session.redo||=[];
   const panel=document.createElement('section');panel.className='slide-editor no-export';panel.ariaLabel='Modifica grafica delle slide';
@@ -27,6 +28,7 @@ export function mountEditor(target,deck,index,frames,onChange,session={},options
   q('slide-undo').disabled=!session.undo.length;q('slide-redo').disabled=!session.redo.length;
   q('slide-undo').onclick=()=>{if(!session.undo.length)return;const prior=session.undo.pop();session.redo.push(JSON.stringify(deck));commit(()=>Object.assign(deck,JSON.parse(prior)),JSON.stringify(deck),false);};
   q('slide-redo').onclick=()=>{if(!session.redo.length)return;const later=session.redo.pop();session.undo.push(JSON.stringify(deck));commit(()=>Object.assign(deck,JSON.parse(later)),JSON.stringify(deck),false);};
+  editorHistoryKeys(panel,{target,undo:()=>q('slide-undo').click(),redo:()=>q('slide-redo').click()});
   const ids=new Set(page.nodes.map(n=>n.id));let number=1;const newId=()=>{while(ids.has('edit'+number))number++;const id='edit'+number++;ids.add(id);return id;};
   q('slide-add-text').onclick=()=>commit(()=>{if(page.nodes.length>=40)throw Error('La pagina può contenere al massimo 40 elementi.');const id=newId();page.nodes.push({id,parent:'root',kind:'text',text:'Nuovo testo',asset_id:'',language:'text',style:{flow:'stack',columns:[1,1],surface:'soft',gap:16}});session.selected=id;});
   for(const node of page.nodes){const option=document.createElement('option');option.value=node.id;option.textContent=node.kind+' · '+(node.text.slice(0,55)||node.id);q('slide-element').append(option);}
