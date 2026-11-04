@@ -1,9 +1,17 @@
 """Build a self-contained portable Apple Silicon distribution on an Apple runner."""
 import hashlib,json,os,platform,plistlib,shutil,stat,subprocess,sys,tarfile,urllib.request,zipfile
+import re
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from h3chat import __version__
+
+
+def bundle_versions(version):
+    """Apple bundle numbers are numeric; retain the full RC label separately."""
+    match=re.fullmatch(r'(\d+\.\d+\.\d+)(?:-[0-9A-Za-z.-]+)?',version)
+    if not match:raise ValueError('Invalid application release version: '+version)
+    return match.group(1),match.group(1)
 
 
 def run(args,**kw):subprocess.run([str(v) for v in args],check=True,**kw)
@@ -52,7 +60,8 @@ def build():
     from h3chat.tools_runtime import mark_ready
     mark_ready(stage,'documents')
     app=stage/'H3-Chat.app/Contents';(app/'MacOS').mkdir(parents=True)
-    (app/'Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier':'org.h3-chat.desktop','CFBundleName':'H3-Chat','CFBundleDisplayName':'H3-Chat','CFBundleExecutable':'H3-Chat','CFBundlePackageType':'APPL','CFBundleShortVersionString':__version__,'CFBundleVersion':__version__,'LSMinimumSystemVersion':'15.0','NSHighResolutionCapable':True,'LSBackgroundOnly':True}))
+    short_version,build_version=bundle_versions(__version__)
+    (app/'Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier':'org.h3-chat.desktop','CFBundleName':'H3-Chat','CFBundleDisplayName':'H3-Chat','CFBundleExecutable':'H3-Chat','CFBundlePackageType':'APPL','CFBundleShortVersionString':short_version,'CFBundleVersion':build_version,'H3ReleaseVersion':__version__,'LSMinimumSystemVersion':'15.0','NSHighResolutionCapable':True,'LSBackgroundOnly':True}))
     launch=app/'MacOS/H3-Chat'
     run(['clang','-O2','-arch','arm64','-mmacosx-version-min=15.0',ROOT/'scripts/macos-launcher.c','-o',launch])
     run(['clang','-O2','-arch','arm64','-mmacosx-version-min=15.0',ROOT/'scripts/posix-process-guard.c','-o',stage/'runtime/tools/h3-process-guard'])

@@ -193,3 +193,6 @@ Nelle **Impostazioni Slide → Presentazioni · opzioni tecniche**, **Tempo mass
 Nell’**HTML esportato**, **Schermo intero** usa tutta la finestra per la slide, mantenendone le proporzioni. Titolo e comandi non riservano spazio e restano nascosti durante la proiezione. Per richiamarli, sposta il mouse sul bordo superiore o inferiore, tocca la slide oppure premi Tab; scompaiono dopo circa due secondi senza attività e restano visibili mentre li usi da tastiera. Usa le frecce per sfogliare ed Esc per uscire. Tornando alla finestra normale, le barre ricompaiono. La modifica riguarda i nuovi file esportati: per una presentazione esistente scarica nuovamente l’HTML, senza rigenerare i contenuti.
 
 Le illustrazioni AI vengono pianificate con un formato per ciascun riquadro (orizzontale, verticale o quadrato), mantenendo il budget di pixel scelto. Nel canvas, selezionando un’immagine in Modifica grafica, puoi scegliere Intera oppure Riempi riquadro e spostare il centro del ritaglio. Il riempimento conserva le proporzioni, senza deformare. Le figure originali restano intere finché non scegli un ritaglio.
+
+
+Brochure multipagina e animazioni PPTX native sono nel [piano dopo la 1.0](post-1.0-roadmap.md); non fanno parte della candidata 1.0.0-rc.1.

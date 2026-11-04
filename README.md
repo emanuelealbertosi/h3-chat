@@ -1,5 +1,9 @@
 # H3-Chat
 
+**Candidata 1.0.0-rc.1:** consolidamento delle funzioni esistenti. La versione
+stabile rimane [0.19.2](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.19.2).
+[Novità della candidata](docs/release-1.0.0-rc.1.md) · [Collaudo e aggiornamento](docs/release-candidate-testing.md) · [Dopo la 1.0](docs/post-1.0-roadmap.md).
+
 **Modifica video** importa anche MP4 esterni e mostra intervalli di massimo 15 secondi, modificabili per intero o solo in parte. **Remix** cambia audio, voce Higgs, canto sulla base originale o timbro clonato con motori interni. [Uso e installazione](docs/video-remix.md).
 
 Ogni risposta mostra il **tempo di elaborazione**, anche per immagini, musica,
@@ -73,7 +77,7 @@ estratto dai documenti. [Configurazione Ovis](docs/projects-and-animations.md#ov
 
 Ovis ora indicizza anche **foto, grafici e diagrammi**: crea un embedding delle pagine illustrate PDF, delle immagini incorporate Word e dei file PNG/JPEG/WebP caricati nel progetto. Le fonti mostrano le immagini recuperate con pagina/blocco; il modello chat le riceve quando Vision è attivo e compatibile. In **Progetto → Documenti** trovi i pulsanti **CPU / GPU NVIDIA CUDA** e l’opzione **Indicizza immagini e pagine illustrate con Ovis**, attiva di default. La scelta vale per tutti i progetti e si salva subito. Per i documenti già presenti premi **Aggiorna indice**. La GPU viene condivisa con le generazioni senza usarla contemporaneamente per due motori; la memoria dei modelli caricati a richiesta viene liberata prima del RAG.
 
-**Slide dal vivo:** fino a 50 pagine, con numero fisso o automatico dai contenuti; il prompt prevale. Chiedi «Crea 40 slide dal PDF» oppure «Decidi tu quante slide servono, massimo 25», oppure scegli
+**Slide dal vivo:** fino a 100 pagine, con numero fisso o automatico dai contenuti; il prompt prevale. Chiedi «Crea 40 slide dal PDF» oppure «Decidi tu quante slide servono, massimo 25», oppure scegli
 **Strumenti → Slide · HTML in tempo reale**. Il canvas compone le pagine mentre
 il modello scrive, usando documenti, figure, immagini della chat, RAG e fonti
 web. Testi completi o sintesi, stili professionale/giocoso/fumettoso, temi e
@@ -103,11 +107,11 @@ con ricerca per parole immediata ed embedding CPU opzionale. Anche nel pacchetto
 portabile trovi **Setup → Configura per API · nessuna GPU**.
 [Procedura completa e protocolli supportati](docs/api-only-windows.md).
 
-**Mac con chip Apple (macOS 15+):** scarica [H3-Chat-0.19.0-macos-arm64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.19.0/H3-Chat-0.19.0-macos-arm64.zip), estrai tutta la cartella e apri `H3-Chat.app` mantenendo insieme gli altri file. Include Python, llama.cpp CPU/Metal, documenti, browser PDF, Manim e LaTeX; supporta API esterne e RAG locale. I motori CUDA non sono inclusi. Firma ad hoc, senza notarizzazione Apple. [Guida Mac e funzioni disponibili](docs/macos.md).
+**Mac con chip Apple (macOS 15+):** scarica [H3-Chat-0.19.2-macos-arm64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.19.2/H3-Chat-0.19.2-macos-arm64.zip), estrai tutta la cartella e apri `H3-Chat.app` mantenendo insieme gli altri file. Include Python, llama.cpp CPU/Metal, documenti, browser PDF, Manim e LaTeX; supporta API esterne e RAG locale. I motori CUDA non sono inclusi. Firma ad hoc, senza notarizzazione Apple. [Guida Mac e funzioni disponibili](docs/macos.md).
 
-**Pacchetto Windows:** scarica [H3-Chat-0.19.0-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.19.0/H3-Chat-0.19.0-windows-x64.zip) dalla [release v0.19.0](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.19.0), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
+**Pacchetto Windows:** scarica [H3-Chat-0.19.2-windows-x64.zip](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.19.2/H3-Chat-0.19.2-windows-x64.zip) dalla [release v0.19.2](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.19.2), estrailo in una cartella scrivibile e apri `H3-Chat.exe`. Il pacchetto include Python, i motori CPU e tutte le librerie dell'interfaccia. Non occorrono privilegi di amministratore. Non avviare l'app direttamente dentro lo ZIP.
 
-**Linux x64 (Ubuntu e Kali):** scarica [H3-Chat-0.19.0-linux-x64.tar.gz](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.19.0/H3-Chat-0.19.0-linux-x64.tar.gz), estrai tutta la cartella e segui [la guida Linux](docs/linux.md). La base CPU/API è inclusa; i pesi e le dipendenze dei motori GPU si scelgono separatamente. [Novità e limiti della versione 0.19.0](docs/release-0.19.0.md).
+**Linux x64 (Ubuntu e Kali):** scarica [H3-Chat-0.19.2-linux-x64.tar.gz](https://github.com/emanuelealbertosi/h3-chat/releases/download/v0.19.2/H3-Chat-0.19.2-linux-x64.tar.gz), estrai tutta la cartella e segui [la guida Linux](docs/linux.md). La base CPU/API è inclusa; i pesi e le dipendenze dei motori GPU si scelgono separatamente. [Novità e limiti della versione 0.19.2](docs/release-0.19.2.md).
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 

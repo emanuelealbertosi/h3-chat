@@ -77,3 +77,6 @@ una descrizione strutturata di box, colori, testi leggibili e incertezze; il
 piano viene conservato con l'artefatto. Per PDF digitali si estraggono coordinate
 e risorse originali prima della Vision. La brochure resta multipagina con
 ordine delle facciate esplicito. Il percorso per una locandina è attivo localmente dal 2 novembre: Riproduci/Migliora con immagine o singola pagina PDF, piano Vision salvato e ritagli riutilizzati. Collaudi reali e limiti in work/poster-reference-2026-11-02/verification.json. La brochure multipagina resta rinviata.
+
+
+Brochure multipagina e animazioni PPTX native sono nel [piano dopo la 1.0](post-1.0-roadmap.md); non fanno parte della candidata 1.0.0-rc.1.
