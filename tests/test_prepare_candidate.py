@@ -1,11 +1,46 @@
 from pathlib import Path
+import hashlib
+import io
+import json
+import tarfile
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 from scripts import prepare_candidate as candidate
 
 class CandidateGates(unittest.TestCase):
+    def packages(self,folder):
+        version=(candidate.ROOT/'h3chat/__init__.py').read_bytes().replace(b'\r\n',b'\n')
+        reports={}
+        for platform,arch,extension in (('windows','x64','zip'),('macos','arm64','zip'),('linux','x64','tar.gz')):
+            stem=f'H3-Chat-{candidate.__version__}-{platform}-{arch}';base=Path(folder)/platform;base.mkdir()
+            path=base/(stem+'.'+extension)
+            if extension=='zip':
+                with zipfile.ZipFile(path,'w') as z:z.writestr('H3-Chat/h3chat/__init__.py',version.replace(b'\n',b'\r\n') if platform=='windows' else version)
+            else:
+                with tarfile.open(path,'w:gz') as tar:
+                    info=tarfile.TarInfo('H3-Chat/h3chat/__init__.py');info.size=len(version);tar.addfile(info,io.BytesIO(version))
+            digest=hashlib.sha256(path.read_bytes()).hexdigest()
+            path.with_name(path.name+'.sha256').write_text(digest+'  '+path.name+'\n')
+            reports[platform]={'status':'passed','archive':path.name,'sha256':digest,'size':path.stat().st_size,'verified_files':1}
+            path.with_name(stem+'.verification.json').write_text(json.dumps(reports[platform]))
+        return reports
+
+    def test_nine_files_checksums_reports_and_cross_platform_version_encodings(self):
+        with tempfile.TemporaryDirectory() as folder:
+            reports=self.packages(folder)
+            # Archive internals use the separately tested ZIP and Linux verifiers.
+            with patch.object(candidate,'verify_zip',return_value=1),patch.object(candidate,'verify_linux',return_value=reports['linux']):
+                files,proof=candidate.verify_packages(folder)
+                self.assertEqual(len(files),9);self.assertEqual(set(proof),{'windows','macos','linux'})
+                unexpected=Path(folder)/'extra.txt';unexpected.write_text('not a release file')
+                with self.assertRaisesRegex(ValueError,'nine'):candidate.verify_packages(folder)
+                unexpected.unlink()
+                checksum=next((Path(folder)/'windows').glob('*.sha256'));checksum.write_text('0'*64+' wrong.zip')
+                with self.assertRaisesRegex(ValueError,'checksum'):candidate.verify_packages(folder)
+
     def fixture(self,*,failed=False,missing=False,foreign=False,changed='scripts/prepare_candidate.py'):
         def git(*args):
             if args==('rev-parse','HEAD'):return 'candidate-sha'
