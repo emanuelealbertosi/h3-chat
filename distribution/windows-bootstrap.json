@@ -1,7 +1,7 @@
 {
   "archive": "windows-bootstrap.zip",
-  "size": 3921477,
-  "sha256": "5178f98db0fd97644487a0aa6baa9828f637761a9d679cc762ce10cec7801df8",
+  "size": 3921483,
+  "sha256": "befce61ad45686a331635ebd864048f9f4283b0ee23feec79371fd88f66d77c5",
   "sources": {
     "ui/account-session.js": "7c93a887736f45621c9349d5fc78b4629c45aaf487a0a1b660241eeabbbb19e0",
     "ui/agent-computer.js": "2f768c398634288d28830ab8eb583b9a99d3b776fcef143e45c25f5eef761f0f",
@@ -57,7 +57,7 @@
     "ui/model-identity.js": "d04d01e35c9ccbea3db7623d2fb64a868050ee2353cbe631937706beb62506a8",
     "ui/moss-layout-editor.js": "0b17cf8a42860c74d01fa3d04495bc837916b60335227b8ba668ffd0aca5e476",
     "ui/moss-presets.js": "794f3013de1d3f31f7b121bec111bd576978a2bf51053c12405d51ec5ab497a7",
-    "ui/moss-turbo.js": "53bc5be902cf64ce68e7e090d19afd0f77864a452afdcd0280682aee970c3e00",
+    "ui/moss-turbo.js": "15cb18ab31eeb95a5d7e7784a6b3bc706e8fe450666f1aed65ef3252072815a5",
     "ui/moss-voice.js": "e80261568df2f568e64188d571734e8c173b0f5b7a54684360af6b897899eef1",
     "ui/motion-editor.js": "274cf74bb1efb962394525ac76e3c0f8ba827ea5a509d9bb05cd45e3573b22b6",
     "ui/motion-preview.js": "bfacabf69ed1dd8d8827f75c8299b96e4b429bf660f02bb001e804d408720e25",
@@ -172,7 +172,7 @@
   "files": {
     "H3-Chat.exe": "58e4ddd79a0433b6b70d39b4afadee85f41cd183a2c9aedf1197ee5fb062d2ea",
     "native/h3-sd-worker.exe": "66fccd074b6334335d37b3d051f17c36d403e67ad69ebd45d2f920bc9868ebca",
-    "static/app.js": "ef0d4e176ed3c26b88f8da79cff3496e185d1ccc37fadca5574595da8a6fdfed",
+    "static/app.js": "d52281ae782c5953c4f9c4915b3441f2cc5a55127bc1034c75fb9715cf51ec51",
     "static/vendor/fonts/KaTeX_AMS-Regular.ttf": "68534840bcfdd2bffb6f0e8deb48684dd01e7f04ea2813267577afb906de1d13",
     "static/vendor/fonts/KaTeX_AMS-Regular.woff": "30da91e84c893f875e252689faebdc590b2871145e8adc7f9a9d4dbd8ce0b251",
     "static/vendor/fonts/KaTeX_AMS-Regular.woff2": "0cdd387c9590a1a9f9794560022dbb59654a7d86f187aa0c81495ad42d3a7308",

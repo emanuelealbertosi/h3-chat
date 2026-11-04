@@ -95,7 +95,7 @@ Fonti: [MOSS-Image ufficiale e preset ComfyUI](https://github.com/OpenMOSS/MOSS-
 
 In **Immagini → Impostazioni Immagini**, seleziona MOSS INT8, MOSS BF16 o Kromoss,
 poi attiva **Turbo DMD2 · 8 passi**. La stessa scelta è nelle Preferenze immagini
-per modello. Il flag imposta 8 passi, CFG 1, Euler / SGM Uniform; il motore mantiene
+per modello. Il flag imposta 8 passi, CFG 1, Euler / Simple; il motore mantiene
 shift 5 e non applica il salto SLG del ramo negativo. A CFG 1 il negativo salvato
 non viene valutato. Formato, megapixel, seed e intensità img2img restano indipendenti.
 I parametri tecnici del Turbo sono disabilitati nella modale durante l'attivazione;

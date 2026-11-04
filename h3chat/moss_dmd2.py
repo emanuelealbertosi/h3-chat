@@ -3,7 +3,7 @@ import json
 import re
 from pathlib import Path
 
-RECIPE = {'steps':8, 'cfg':1, 'sampler':'euler', 'scheduler':'sgm_uniform'}
+RECIPE = {'steps':8, 'cfg':1, 'sampler':'euler', 'scheduler':'simple'}
 SHA256 = '7683fe1fb51f73f5d690f24dd6b7f46f31ab9a9873729a854ac5c9a420ffe6f2'
 SIZE = 1189176800
 
