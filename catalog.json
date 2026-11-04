@@ -359,7 +359,7 @@
     "size": 17283091112,
     "license": "Qwen Research License · uso non commerciale; https://huggingface.co/Qwen/Qwen-Image-2.1-Turbo/blob/main/LICENSE",
     "ram_gb": 20,
-    "max_refs": 4,
+    "max_refs": 6,
     "architecture": "qwen21",
     "engine": "vision",
     "steps": 8,

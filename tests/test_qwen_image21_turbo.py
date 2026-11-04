@@ -61,13 +61,14 @@ class TurboTests(unittest.TestCase):
                 pixels.__getitem__=Mock(return_value=Mock());pixels.__getitem__.return_value.clamp.return_value.cpu.return_value.numpy.return_value=np.zeros((8,8,3))
                 worker.vae.decode.return_value=pixels;sample=Mock(return_value='samples')
                 worker.comfy=SimpleNamespace(samplers=SimpleNamespace(KSampler=SimpleNamespace(SAMPLERS=['euler'],SCHEDULERS=['simple'])),sample=SimpleNamespace(sample=sample,prepare_noise=Mock(return_value='noise')))
-                worker.images=Mock(return_value=[]);worker.encode=Mock(return_value=('positive','negative','latent'));worker.release_gpu=Mock()
+                worker.images=Mock(return_value=list(range(6)));worker.encode=Mock(return_value=('positive','negative','latent'));worker.release_gpu=Mock()
                 worker.generate({'scheduler':scheduler,'sampler':'euler','steps':steps,'cfg':1,'seed':42,'width':8,'height':8,'output':str(Path(folder)/'image.png')})
                 self.assertEqual(sample.call_args.args[5],'simple')
                 if scheduler==TURBO_SCHEDULER:self.assertEqual(sample.call_args.kwargs['sigmas'],list(TURBO_SIGMAS))
                 else:self.assertNotIn('sigmas',sample.call_args.kwargs)
                 self.assertTrue((Path(folder)/'image.png').is_file())
                 self.assertEqual(events[-1][1]['parameters']['steps'],steps)
+                self.assertEqual(events[-1][1]['parameters']['reference_count'],6)
 
     def test_catalog_contains_pinned_verified_components_with_correct_preset(self):
         models=json.loads((ROOT/'catalog.json').read_text(encoding='utf-8'))

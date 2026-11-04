@@ -17,6 +17,7 @@ export function imageRequestValues(state,value){
  if(Number.isFinite(area)&&area>0){
   const grid=imageModelOptions(model,state.image_options||{}).grid;
   p.width=Math.ceil(Math.sqrt(area*ratio[0]/ratio[1])/grid)*grid;p.height=Math.ceil(area/p.width/grid)*grid;
+  if(model.architecture==='qwen21')p.height=Math.ceil(Math.sqrt(area*ratio[1]/ratio[0])/grid)*grid;
   if(model.architecture==='moss'&&p.aspect!=='auto'){const k=Math.ceil(Math.sqrt(area/(ratio[0]*ratio[1])));p.width=ratio[0]*k;p.height=ratio[1]*k;}
  }
  return p;

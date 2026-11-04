@@ -216,14 +216,18 @@ class Worker:
             latent = torch.zeros([1, 16, 1, height // 8, width // 8], device=comfy.model_management.intermediate_device())
         else:
             refs, vision = [], []
-            area = width * height
+            # Qwen's official encoder uses ~1024 squared per reference.
+            # Raising the OUTPUT resolution must not multiply all six inputs too.
+            area = min(width * height, 1024 * 1024)
             for image in images:
                 ratio = image.shape[2] / image.shape[1]
                 w = max(32, round(math.sqrt(area * ratio) / 32) * 32)
                 h = max(32, round(math.sqrt(area / ratio) / 32) * 32)
                 resized = comfy.utils.common_upscale(image.movedim(-1, 1), w, h, 'lanczos', 'disabled').movedim(1, -1)
                 if not vision and request.get('preserve_reference_aspect',True):
-                    width, height = w, h
+                    output_area = width * height
+                    width = max(32, round(math.sqrt(output_area * ratio) / 32) * 32)
+                    height = max(32, round(math.sqrt(output_area / ratio) / 32) * 32)
                 rgb = resized[:, :, :, :3]
                 if resized.shape[-1] > 3:
                     rgb = rgb * resized[:, :, :, 3:] + 1 - resized[:, :, :, 3:]
@@ -268,8 +272,9 @@ class Worker:
         if sampler not in comfy.samplers.KSampler.SAMPLERS or (not turbo and scheduler not in comfy.samplers.KSampler.SCHEDULERS):
             raise ValueError('Sampler o scheduler non supportato da questo modello.')
         images = self.images(request.get('references', []))
-        if len(images) > 4:
-            raise ValueError('Sono supportati fino a quattro riferimenti.')
+        limit = 6 if self.architecture == 'qwen21' else 4
+        if len(images) > limit:
+            raise ValueError(f'Sono supportati fino a {limit} riferimenti per questo modello.')
         reference_count = len(images)
         self.canvas_size=(request['width'],request['height'])
         denoise=request.get('strength',.65) if self.architecture=='moss' and images else 1.0

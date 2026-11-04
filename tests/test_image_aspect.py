@@ -39,6 +39,24 @@ class AspectTests(unittest.TestCase):
     def test_invalid_settings_rejected(self):
         with self.assertRaises(ValueError):validate_overrides({'test':{'aspect':'7:99'}})
 
+    def test_qwen_two_mp_prompt_and_saved_controls_keep_native_area(self):
+        settings=DEFAULTS|{'image_overrides':{'test':{'megapixels':2,'aspect':'16:9','seed':42}}}
+        value=options(self.model,settings)
+        self.assertEqual((value['width'],value['height']),(1888,1088))
+        self.assertGreaterEqual(value['width']*value['height'],2_000_000)
+        self.assertFalse(value['preserve_reference_aspect'])
+        explicit=options(self.model,settings,'Una foto di gruppo 2048x1152')
+        self.assertEqual((explicit['width'],explicit['height']),(2048,1152))
+        smaller=options(self.model,settings,'Una foto quadrata a 1 MP')
+        self.assertEqual((smaller['width'],smaller['height']),(1024,1024))
+        validate_overrides({'test':{'width':1888,'height':1088}},{'test':self.model})
+        for dims in ((4096,4096),(4128,1024),(1800,1080)):
+            with self.subTest(dims=dims),self.assertRaises(ValueError):
+                validate_overrides({'test':dict(zip(('width','height'),dims))},{'test':self.model})
+        for prompt in ('Una foto 4096x4096','Una foto 4128x1024'):
+            with self.assertRaises(ValueError):options(self.model,settings,prompt)
+        with self.assertRaises(ValueError):options(self.model|{'architecture':'sd'},DEFAULTS,'2048x1152')
+
     def test_all_image_families_honor_saved_format_and_literal_prompt_override(self):
         for arch in ('qwen21','qwen-edit','anima','krea2','flux2','sd15','moss'):
             model={'id':arch,'architecture':arch,'engine':'vision','width':1024,'height':1024}

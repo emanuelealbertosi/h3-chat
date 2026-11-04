@@ -52,15 +52,17 @@ def capture_request(model,settings,value):
 def apply_aspect(result,prompt='',model=None):
     moss=(model or {}).get('architecture')=='moss'
     ph3=(model or {}).get('architecture')=='ph3'
-    limit=8192 if ph3 else 4096 if moss else 1536
-    grid=32 if ph3 else 1 if moss else 64
+    qwen=(model or {}).get('architecture')=='qwen21'
+    limit=8192 if ph3 else 4096 if moss or qwen else 1536
+    grid=32 if ph3 or qwen else 1 if moss else 64
     # Explicit canvas dimensions also override an editing reference's shape.
     dimensions=re.findall(r'(?<!\d)(\d{3,4})\s*[x×*]\s*(\d{3,4})(?!\d)',prompt,re.I)
     if dimensions:
         width,height=map(int,dimensions[-1])
-        if any(n<256 or n>limit or n%grid for n in (width,height)) or (moss and width*height>4_194_304) or (ph3 and width*height>16_777_216):
+        if any(n<256 or n>limit or n%grid for n in (width,height)) or ((moss or qwen) and width*height>4_194_304) or (ph3 and width*height>16_777_216):
             if ph3:raise ValueError('P-H3: dimensioni tra 256 e 8192 pixel, multipli di 32 e massimo circa 16 MP.')
             if moss:raise ValueError('MOSS: dimensioni tra 256 e 4096 pixel e massimo circa 4,2 MP. La richiesta non viene ridotta automaticamente.')
+            if qwen:raise ValueError('Qwen Image 2.1: dimensioni tra 256 e 4096 pixel, multipli di 32 e massimo circa 4,2 MP.')
             raise ValueError('Dimensioni immagine: scegli da 256 a 1536 pixel, in multipli di 64 (es. 1024x576).')
         divisor=math.gcd(width,height);aspect=f'{width//divisor}:{height//divisor}'
         result.update(width=width,height=height,megapixels=width*height/1_000_000,aspect=aspect if aspect in ASPECTS else 'auto',preserve_reference_aspect=False)
@@ -82,9 +84,10 @@ def apply_aspect(result,prompt='',model=None):
         a,b=map(int,aspect.split(':')) if aspect!='auto' else (result['width'],result['height'])
         ratio=a/b
         width=math.ceil(math.sqrt(area*ratio)/grid)*grid;height=math.ceil(area/width/grid)*grid
+        if qwen:height=math.ceil(math.sqrt(area/ratio)/grid)*grid
         if moss and aspect!='auto':
             k=math.ceil(math.sqrt(area/(a*b)));width,height=a*k,b*k
-        if max(width,height)>(8192 if ph3 else 4096):raise ValueError('Formato troppo estremo per i megapixel scelti.')
+        if min(width,height)<256 or max(width,height)>limit or (qwen and width*height>4_194_304):raise ValueError('Formato troppo estremo per i megapixel scelti.')
         result.update(width=width,height=height,megapixels=area/1_000_000)
         return result
     if aspect!='auto':
@@ -141,14 +144,16 @@ def validate_overrides(value,models=None):
         if not isinstance(ident,str) or not 1<=len(ident)<=100 or not isinstance(settings,dict) or set(settings)-set(OVERRIDE_KEYS):raise ValueError('Personalizzazione immagine non valida.')
         moss=(models or {}).get(ident,{}).get('architecture')=='moss'
         ph3=(models or {}).get(ident,{}).get('architecture')=='ph3'
+        qwen=(models or {}).get(ident,{}).get('architecture')=='qwen21'
         if 'ph3_upsample' in settings and type(settings['ph3_upsample']) is not bool:raise ValueError('Espansore P-H3: scegli attivo o disattivo.')
         from .moss_dmd2 import validate as validate_turbo
         validate_turbo(settings,moss if models is not None else None)
-        limit=8192 if ph3 else 4096 if moss else 1536
+        limit=8192 if ph3 else 4096 if moss or qwen else 1536
         for key,lo,hi in (('width',256,limit),('height',256,limit),('steps',1,100),('seed',-1,2147483647)):
             if key in settings and (type(settings[key]) is not int or not lo<=settings[key]<=hi):raise ValueError(f'{key}: intero tra {lo} e {hi}.')
         for key in ('width','height'):
-            if key in settings and not moss and settings[key]%(32 if ph3 else 64):raise ValueError('Le dimensioni non rispettano la griglia del modello.')
+            if key in settings and not moss and settings[key]%(32 if ph3 or qwen else 64):raise ValueError('Le dimensioni non rispettano la griglia del modello.')
+        if qwen and settings.get('width',256)*settings.get('height',256)>4_194_304:raise ValueError('Qwen Image 2.1: massimo circa 4,2 MP.')
         for key,lo,hi in (('cfg',0,30),('strength',.05,1),('megapixels',.25,16 if ph3 else 4)):
             if key in settings and (type(settings[key]) not in (int,float) or not math.isfinite(settings[key]) or not lo<=settings[key]<=hi):raise ValueError(key+' fuori intervallo.')
         if settings.get('sampler','auto') not in SAMPLERS or settings.get('scheduler','auto') not in SCHEDULERS:raise ValueError('Sampler o scheduler non supportato.')

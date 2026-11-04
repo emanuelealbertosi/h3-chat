@@ -65,3 +65,10 @@ galleria si possono anche spuntare **Confronta** su due immagini e premere
 con zoom sincronizzato, scambio A/B e cursore utilizzabile anche da tastiera.
 Le proporzioni vengono conservate; immagini con formati diversi mantengono
 spazi vuoti anziché essere deformate. Il confronto non modifica gli originali.
+
+
+## Qwen Image 2.1: riferimenti e megapixel
+
+Qwen 2.1 standard e Turbo accettano fino a **6 riferimenti**, tutti inviati al motore nello stesso ordine. In Impostazioni immagini della chat scegli **2 MP** e un formato esplicito (es. 16:9); puoi anche scriverli nel prompt. La tela viene allineata a 32 pixel, senza ridurla a 1536 pixel per lato. Limite locale: 4 MP nominali, circa 4,2 MP dopo allineamento, massimo 4096 pixel per lato. Il vecchio Qwen Edit mantiene i suoi limiti separati.
+
+I riferimenti Qwen vengono codificati fino a circa 1 MP ciascuno, come nel nodo ufficiale, indipendentemente dai MP dell’immagine finale. Questo evita che aumentando la risoluzione finale aumenti anche quella di tutti i riferimenti. Sei riferimenti possono comunque richiedere più tempo e memoria; non garantiscono sei identità perfette.

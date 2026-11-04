@@ -53,7 +53,7 @@ class VisualModelsTests(unittest.TestCase):
             value = options(model,self.settings)
             self.assertEqual((value['width'],value['height'],value['steps'],value['cfg'],value['sampler'],value['scheduler']), (1024,1024,steps,1,'euler','simple'))
             self.assertEqual(value['strength'],1)
-            self.assertEqual(model['max_refs'],4)
+            self.assertEqual(model['max_refs'],6 if model['architecture']=='qwen21' else 4)
             self.assertEqual(model['engine'],'vision')
             with self.assertRaises(ValueError):
                 self.app.validate_settings({'image_overrides':{model['id']:{'sampler':'ddim_trailing'}}})
@@ -67,6 +67,15 @@ class VisualModelsTests(unittest.TestCase):
         request=self.app.engine.image_request(self.ming,self.settings,'prompt',media,self.base/'out.png')
         self.assertEqual(request['references'],[str(self.app.data/m['path']) for m in media])
         with self.assertRaises(ValueError):self.app.engine.image_request(self.ming,self.settings,'prompt',media+media,self.base/'out.png')
+
+    def test_qwen_six_inputs_and_two_mp_reach_request_without_changing_ming(self):
+        media=[{'id':str(i),'path':str(i)+'.png'} for i in range(6)]
+        opts=options(self.qwen,self.settings,'A group portrait, 2 MP, 16:9')
+        request=self.app.engine.image_request(self.qwen,self.settings|{'_image_options':opts},'group',media,self.base/'out.png')
+        self.assertEqual(request['references'],[str(self.app.data/m['path']) for m in media])
+        self.assertEqual((request['width'],request['height']),(1888,1088))
+        with self.assertRaises(ValueError):self.app.engine.image_request(self.qwen,self.settings,'group',media+media[:1],self.base/'out.png')
+        with self.assertRaises(ValueError):self.app.engine.image_request(self.ming,self.settings,'group',media,self.base/'out.png')
 
     def test_assistant_choice_is_snapshotted_and_off_skips_refiner(self):
         for assistant in (True,False):
