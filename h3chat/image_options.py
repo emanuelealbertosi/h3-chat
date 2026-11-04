@@ -92,7 +92,7 @@ def apply_aspect(result,prompt='',model=None):
         return result
     if aspect!='auto':
         a,b=map(int,aspect.split(':'));area=result['width']*result['height']
-        pairs=[(a*k*64,b*k*64) for k in range(1,25) if 256<=a*k*64<=1536 and 256<=b*k*64<=1536]
+        pairs=[(a*k*64,b*k*64) for k in range(1,65) if 256<=a*k*64<=limit and 256<=b*k*64<=limit and (not qwen or a*b*(k*64)**2<=4_194_304)]
         result['width'],result['height']=min(pairs,key=lambda p:abs(math.log(p[0]*p[1]/area)))
     return result
 

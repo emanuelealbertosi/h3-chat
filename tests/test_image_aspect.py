@@ -50,6 +50,8 @@ class AspectTests(unittest.TestCase):
         smaller=options(self.model,settings,'Una foto quadrata a 1 MP')
         self.assertEqual((smaller['width'],smaller['height']),(1024,1024))
         validate_overrides({'test':{'width':1888,'height':1088}},{'test':self.model})
+        saved=options(self.model,DEFAULTS|{'image_overrides':{'test':{'width':2048,'height':1152,'aspect':'16:9'}}})
+        self.assertEqual((saved['width'],saved['height']),(2048,1152))
         for dims in ((4096,4096),(4128,1024),(1800,1080)):
             with self.subTest(dims=dims),self.assertRaises(ValueError):
                 validate_overrides({'test':dict(zip(('width','height'),dims))},{'test':self.model})
