@@ -7,7 +7,7 @@ export function initLoras({api,getState,getChatId,pickDirectory,openPreferences,
  const read=()=>{try{const value=JSON.parse(localStorage.getItem(key(getChatId()))||'[]');return Array.isArray(value)?value.slice(0,8):[];}catch{return [];}};
  const save=items=>{localStorage.setItem(key(getChatId()),JSON.stringify(items));render();onChange?.();};
  const getSelections=()=>read().map(({id,weight,model_id})=>({id,weight,model_id}));
- const modelFamily=m=>m?.lora_family||(m?.id==='sd15'?'sd15':m?.external_config?.profile==='krea2'?'krea2':m?.external_config?.profile==='sdxl'?'sdxl':m?.architecture==='qwen-edit'?'qwen-image':m?.architecture);
+ const modelFamily=m=>m?.lora_family||(m?.id==='sd15'?'sd15':m?.external_config?.profile==='krea2'?'krea2':m?.external_config?.profile==='sdxl'?'sdxl':m?.architecture==='ph3'?'minimax-h3':m?.architecture==='qwen-edit'?'qwen-image':m?.architecture);
  const compatible=(l,m)=>!!l.family&&(m?.capabilities?.includes('video')?l.family==='minimax-h3':l.family===modelFamily(m));
  const safe=fn=>async(...args)=>{try{await fn(...args);}catch(e){notify(e.message,true);}};
  function render(){
@@ -26,7 +26,7 @@ export function initLoras({api,getState,getChatId,pickDirectory,openPreferences,
   const items=library.items.filter(l=>model&&compatible(l,model)&&(modelFamily(model)!=='krea2'||l.family==='krea2')&&(l.name+' '+l.relative).toLowerCase().includes(search.toLowerCase()));
   $('#lora-list').innerHTML=items.map(l=>{const checked=selected.some(s=>s.id===l.id&&s.model_id===target),ok=!!model&&compatible(l,model);return `<label class="lora-item ${ok?'':'incompatible'}"><input type="checkbox" data-lora-id="${esc(l.id)}" ${checked?'checked':''} ${!ok&&!checked?'disabled':''}><span><strong>${esc(l.name)}</strong><small title="${esc(l.path)}">${esc(l.relative)} · ${(l.size/1024**2).toFixed(1)} MiB</small><small>${esc(!ok?'Famiglia incompatibile con questo modello.':l.family?'Famiglia: '+l.family:l.note)}</small></span></label>`;}).join('')||'<p>Nessun LoRA trovato. Collega le cartelle dalle Preferenze e usa file LoRA safetensors.</p>';
   const unknown=library.items.filter(l=>!l.family).length;
-  $('#lora-status').textContent=[library.warnings.join(' '),`${items.length} LoRA per questo modello · ${library.items.length} nella libreria.`,unknown?`${unknown} senza famiglia riconoscibile: esclusi dalle selezioni automatiche.`:'','La compatibilità dei tensori viene verificata anche al caricamento.'].filter(Boolean).join(' ');
+  $('#lora-status').textContent=[library.warnings.join(' '),`${items.length} LoRA per questo modello · ${library.items.length} nella libreria.`,unknown?`${unknown} senza famiglia riconoscibile: esclusi dalle selezioni automatiche.`:'',model.architecture==='ph3'?'P-H3: LoRA MiniMax H3 sperimentali. I tensori compatibili non garantiscono la resa visiva; gli adattatori video possono non avere effetto su immagini singole.':'','La compatibilità dei tensori viene verificata anche al caricamento.'].filter(Boolean).join(' ');
   $('#lora-list').querySelectorAll('[data-lora-id]').forEach(box=>box.onchange=()=>{
    let values=read();const id=box.dataset.loraId;
    if(box.checked){if(values.length>=8){box.checked=false;notify('Puoi selezionare fino a 8 LoRA.',true);return;}const item=library.items.find(l=>l.id===id);values.push({id,weight:1,model_id:target,model_name:model.name,name:item.name});}

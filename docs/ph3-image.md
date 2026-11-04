@@ -21,6 +21,12 @@ decodifica greedy e thinking come nel workflow originale. Il modello accetta
 fino a otto immagini: la prima è quella da modificare e le successive sono
 riferimenti. Il prompt effettivo espanso è conservato nei dati di creazione.
 
+I LoRA della famiglia MiniMax H3 sono selezionabili per P-H3 come compatibilità
+sperimentale: la derivazione comune non garantisce che tutti gli adattatori
+video o per personaggi funzionino bene. Il motore rifiuta un LoRA senza tensori
+applicabili e registra i patch realmente applicati. Il test delle sei immagini
+iniziali non usa LoRA e non costituisce una verifica della loro qualità.
+
 Il runtime è in `runtime/ph3`, con una revisione ComfyUI separata e due
 estensioni di quantizzazione. Torch e il runtime condiviso non vengono aggiornati.
 I processi caldi P-H3 non vengono riutilizzati dai motori con il vecchio core.

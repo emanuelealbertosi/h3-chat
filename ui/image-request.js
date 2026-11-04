@@ -3,7 +3,7 @@ import {initMossPresets} from './moss-presets.js';
 import {mossNegativeDefault} from './image-negative-defaults.js';
 import {IMAGE_FORMATS,imageFormatLabel} from './image-formats.js';
 import {imageModelOptions} from './image-model-options.js';
-import {mountMossTurbo,mossTurboValues,MOSS_TURBO_RECIPE} from './moss-turbo.js';
+import {mountMossTurbo,mossTurboValues,MOSS_TURBO_RECIPE,refreshMossRecipe} from './moss-turbo.js';
 
 export function imageRequestValues(state,value){
  const model=state?.models.find(m=>m.id===value.image_model);if(!model)return null;
@@ -103,6 +103,7 @@ export function initImageRequest({holder,getState,visualControls,savePresets,get
   const fixedSeed=host.querySelector('[data-image-seed-fixed]');if(fixedSeed)fixedSeed.checked=Number.isInteger(p.seed)&&p.seed>=0;
   for(const [key] of Object.entries(MOSS_TURBO_RECIPE)){const input=host.querySelector(`[data-image-request="${key}"]`);if(input)input.disabled=!!p.moss_turbo||model.architecture==='ph3';}
   const turboFlag=host.querySelector('[data-moss-turbo]');if(turboFlag)turboFlag.checked=!!p.moss_turbo;
+  refreshMossRecipe(host,p);
   if(model.architecture==='ph3')host.querySelector('[data-image-request="negative_prompt"]').disabled=true;
   presetsUI?.render();
  }

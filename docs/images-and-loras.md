@@ -51,3 +51,17 @@ Sono indicizzati file **safetensors con coppie LoRA standard** (`lora_down/up` o
 I pesi originali non vengono copiati né modificati. Gli adapter sono applicati durante l'inferenza, con rimozione della selezione precedente a ogni generazione; cambiare peso o selezione normalmente riusa il modello base. Se un file già usato cambia, il contesto viene ricaricato. Un file rimosso o cambiato dopo l'invio ferma quel lavoro con una spiegazione.
 
 Le stime di memoria includono un margine per i LoRA selezionati. **A richiesta** conserva un solo modello alla volta; **Residenti** conserva quelli scelti nel Setup. Le selezioni correnti per chat sono nel profilo locale del browser; i LoRA dei messaggi inviati restano anche nella cronologia, recuperabili con **Riutilizza**. Non sono sincronizzati automaticamente tra browser diversi.
+
+
+## Zoom e confronto immagini
+
+Aprire un’immagine in chat o nel canvas mostra Zoom, Adatta e 100%.
+Il ridimensionamento manuale resta impostato anche se cambia la finestra.
+La rotella cambia lo zoom e il trascinamento sposta la vista sui due assi.
+
+**Confronta con…** apre la galleria per scegliere la seconda immagine. In
+galleria si possono anche spuntare **Confronta** su due immagini e premere
+**Confronta immagini · 2/2**. Il confronto offre **Affiancate** e **Cursore**,
+con zoom sincronizzato, scambio A/B e cursore utilizzabile anche da tastiera.
+Le proporzioni vengono conservate; immagini con formati diversi mantengono
+spazi vuoti anziché essere deformate. Il confronto non modifica gli originali.

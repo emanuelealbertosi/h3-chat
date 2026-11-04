@@ -30,7 +30,7 @@ class Worker(base.Worker):
         import gc,time
         import numpy as np
         from PIL import Image
-        from h3chat.ph3_image import SIGMAS,validate,upsample_input
+        from h3chat.ph3_image import SIGMAS,validate,upsample_input,apply_loras
         from comfy_extras.nodes_minimax_h3 import PH3ImageConditioning,MiniMaxH3SigmaShift
         import comfy.nested_tensor
         validate({'architecture':'ph3'},request)
@@ -68,10 +68,7 @@ class Worker(base.Worker):
                     vae=self.vae,images={f'image_{i}':im for i,im in enumerate(images,1)})
             finally:self.release_gpu(self.base_clip.patcher);self.release_gpu(self.vae.patcher)
             model=MiniMaxH3SigmaShift.execute(self.base_model,1.,1.)[0]
-            for lora in request.get('loras',[]):
-                if lora['weight']:
-                    weights=comfy.utils.load_torch_file(lora['path'],safe_load=True)
-                    model,_=comfy.sd.load_lora_for_models(model,None,weights,lora['weight'],0)
+            model,loras_applied=apply_loras(model,request.get('loras',[]),comfy)
             samples=latent['samples'];noise=comfy.sample.prepare_noise(samples,request['seed'])
             self.phase='P-H3 · generazione immagine · 8 passi';emit('stage',message=self.phase);last=time.monotonic()
             def progress(step,x0,x,total):
@@ -91,7 +88,7 @@ class Worker(base.Worker):
             finally:self.release_gpu(self.vae.patcher)
         emit('done',parameters={'width':int(array.shape[1]),'height':int(array.shape[0]),'steps':8,'cfg':1,
             'sampler':'euler','scheduler':'ph3_image','sigmas':list(SIGMAS),'seed':request['seed'],
-            'reference_count':reference_count,'engine':'vision','ph3_upsample':expanded,'effective_prompt':prompt})
+            'reference_count':reference_count,'engine':'vision','ph3_upsample':expanded,'effective_prompt':prompt,'loras_applied':loras_applied})
 
 
 base.Worker=Worker

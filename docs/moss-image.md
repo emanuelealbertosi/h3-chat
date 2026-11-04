@@ -125,3 +125,10 @@ con DMD/PDD/Turbo per MiniMax H3 video.
 Fonte: https://huggingface.co/lodestones/Kromoss . Installazione e prove locali:
 `work/moss-dmd2-2026-10-23`. Distinguere test isolati, browser e prove GPU reali nei
 relativi risultati salvati; il numero di passi non misura da solo il tempo totale.
+
+
+Nelle due modali immagini, **Applica ricetta standard · 50 passi / CFG 3**
+recupera la ricetta normale di MOSS/Kromoss conservando seed e formato.
+Il flag Turbo carica l’adattatore e passa a 8 passi / CFG 1: impostare soltanto
+8 passi senza il flag non equivale al Turbo. Le impostazioni personalizzate
+salvate per ogni modello restano indipendenti.

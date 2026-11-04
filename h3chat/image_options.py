@@ -162,6 +162,7 @@ def family(model):
     if model.get('id')=='sd15':return 'sd15'
     if model.get('external_config',{}).get('profile')=='krea2':return 'krea2'
     if model.get('external_config',{}).get('profile')=='sdxl':return 'sdxl'
+    if arch=='ph3':return 'minimax-h3'
     return 'qwen-image' if arch=='qwen-edit' else arch
 
 

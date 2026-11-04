@@ -14,6 +14,7 @@ STUDIO_FILES=frozenset((
     'static/dialogs.css',
 ))
 NEW_FEATURE_FILES=frozenset((
+    'ui/image-viewer.js','ui/image-zoom.js',
     'h3chat/ph3_image.py','native/ph3-worker.py','scripts/install-ph3.py','scripts/ph3-sources.json','docs/ph3-image.md',
     'h3chat/generation_presets.py','h3chat/slide_image_reuse.py','ui/generation-presets.js',
     'ui/work-center.js','ui/request-review.js','ui/slide-editor-actions.js','ui/editor-history-keys.js','static/workflows.css',

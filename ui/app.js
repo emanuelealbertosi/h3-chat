@@ -49,6 +49,7 @@ import {initComposerPanel} from './composer-panel.js';
 import {initManimPresentation} from './manim-presentation.js';
 import {initWorkspaceLayout} from './workspace-layout.js';
 import {initGallery} from './gallery.js';
+import {initImageViewer} from './image-zoom.js';
 import {appendVideoProgress,clearUnusedVideoProgress} from './video-progress.js';
 import {appendVideoActivity} from './video-activity.js';
 import {initInfographics} from './infographics.js';
@@ -697,6 +698,7 @@ async function reuseImageRecipe(value){
  $('#prompt').value=imageRecipePrompt(recipe);$('#prompt').dispatchEvent(new Event('input',{bubbles:true}));composerUI?.render();focusPrompt();
  toast('Ricetta recuperata · seed '+parameters.seed+' fissato · Assistant Off. Controlla la bozza e premi Invia.');
 }
+initImageViewer({api});
 initGallery({api,getAttachments:()=>attachments,setAttachments:items=>{attachments=items;renderAttachments();},notify:toast,getProjectId:()=>current?chat?.project_id:project,getProjects:()=>state?.projects||[],
  actions:{reuseImage:reuseImageRecipe,edit:async(media,item)=>{if(item.chat_id&&item.chat_id!==current)await openChat(item.chat_id);await editVideo(media);},recreate:recreateVideo,remix:remixVideo,upscale:upscaleVideo}});
 const upscaleOpen=document.createElement('button');upscaleOpen.type='button';upscaleOpen.className='btn small';upscaleOpen.id='upscale-open';upscaleOpen.textContent='↗ Upscale';upscaleOpen.title='Migliora un video dalla galleria o dal PC';$('#gallery-open').after(upscaleOpen);upscaleOpen.onclick=()=>upscaleVideo();

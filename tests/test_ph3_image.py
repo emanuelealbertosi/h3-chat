@@ -36,6 +36,27 @@ class PH3Tests(unittest.TestCase):
         self.assertEqual(upsample_input('A glass pear',2048,1024),'Aspect ratio: 2:1\nRequest: A glass pear')
 
 class RuntimeReadinessTests(unittest.TestCase):
+    def test_minimax_family_is_allowed_but_other_adapters_are_not(self):
+        from h3chat.image_options import compatible
+        model={'architecture':'ph3'}
+        self.assertTrue(compatible('minimax-h3',model))
+        self.assertFalse(compatible('moss',model))
+        self.assertFalse(compatible('qwen-image',model))
+
+    def test_lora_reports_actual_patches_and_refuses_zero_matches(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from h3chat.ph3_image import apply_loras
+        original=SimpleNamespace(patches={})
+        patched=SimpleNamespace(patches={'layer':[(1,'patch')]})
+        comfy=SimpleNamespace(utils=SimpleNamespace(load_torch_file=Mock(return_value=({'weights':1},{}))),sd=SimpleNamespace(load_lora_for_models=Mock(return_value=(patched,None))))
+        adapter={'path':'character.safetensors','weight':.7}
+        model,report=apply_loras(original,[adapter],comfy)
+        self.assertEqual(original.patches,{})
+        self.assertEqual(report,[{'name':'character.safetensors','weight':.7,'applied_patches':1}])
+        comfy.sd.load_lora_for_models.return_value=(original,None)
+        with self.assertRaisesRegex(ValueError,'senza tensori'):apply_loras(original,[adapter],comfy)
+
     def test_namespace_aimdo_install_is_ready_and_missing_control_is_not(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);folder=root/'runtime/ph3'

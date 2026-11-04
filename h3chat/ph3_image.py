@@ -29,3 +29,17 @@ def upsample_input(prompt,width,height):
     from math import gcd
     d=gcd(width,height)
     return f'Aspect ratio: {width//d}:{height//d}\nRequest: {prompt}'
+
+
+def apply_loras(model,adapters,comfy):
+    """Patch a request-local clone, reject zero matches and report actual patches."""
+    applied=[]
+    for adapter in adapters:
+        if not adapter['weight']:continue
+        weights,metadata=comfy.utils.load_torch_file(adapter['path'],safe_load=True,return_metadata=True)
+        before=sum(len(v) for v in model.patches.values())
+        model,_=comfy.sd.load_lora_for_models(model,None,weights,adapter['weight'],0,metadata)
+        count=sum(len(v) for v in model.patches.values())-before
+        if count<=0:raise ValueError('LoRA senza tensori compatibili con P-H3: '+Path(adapter['path']).name)
+        applied.append({'name':Path(adapter['path']).name,'weight':adapter['weight'],'applied_patches':count})
+    return model,applied
