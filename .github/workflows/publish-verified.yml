@@ -1,15 +1,25 @@
-name: Publish verified 0.19.2 packages
+name: Prepare verified RC draft
 on:
   workflow_dispatch:
+    inputs:
+      build_run:
+        description: 'Successful exact candidate build (Windows, Mac, Linux and Kali)'
+        required: true
+        type: string
   workflow_call:
+    inputs:
+      build_run:
+        description: 'Successful exact candidate build'
+        required: false
+        type: string
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: publish-verified-0.19.2
+  group: prepare-candidate-draft
   cancel-in-progress: false
 jobs:
-  publish:
+  draft:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -22,31 +32,37 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Test publication validators without publishing
-        run: python -m unittest discover -s tests -p test_publish_verified.py -v
-      - name: Verify exact successful jobs and unchanged application sources
+      - name: Test draft-only gates with disposable fixtures
+        run: python -m unittest discover -s tests -p test_prepare_candidate.py -v
+      - name: Require successful platform gates and unchanged application
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python scripts/publish_verified.py provenance
+          BUILD_RUN: ${{ inputs.build_run }}
+        run: python scripts/prepare_candidate.py provenance "$BUILD_RUN"
       - uses: actions/download-artifact@v4
         with:
           name: H3-Chat-windows-x64
-          run-id: 41624230410
+          run-id: ${{ inputs.build_run }}
           github-token: ${{ github.token }}
           path: verified/windows
       - uses: actions/download-artifact@v4
         with:
           name: H3-Chat-macos-arm64
-          run-id: 41624230410
+          run-id: ${{ inputs.build_run }}
           github-token: ${{ github.token }}
           path: verified/macos
       - uses: actions/download-artifact@v4
         with:
           name: H3-Chat-linux-x64
-          run-id: 41624230410
+          run-id: ${{ inputs.build_run }}
           github-token: ${{ github.token }}
           path: verified/linux
-      - name: Verify all nine files, fast-forward main and publish a fresh release
+      - name: Verify all nine files and prepare an unpublished prerelease draft
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python scripts/publish_verified.py publish verified
+          BUILD_RUN: ${{ inputs.build_run }}
+        run: python scripts/prepare_candidate.py prepare "$BUILD_RUN" verified
+      - uses: actions/upload-artifact@v4
+        with:
+          name: H3-Chat-candidate-proof
+          path: build/candidate-proof.json

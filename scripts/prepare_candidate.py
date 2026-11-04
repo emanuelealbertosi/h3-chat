@@ -19,7 +19,7 @@ from scripts.verify_linux_package import verify as verify_linux
 
 REPO='emanuelealbertosi/h3-chat'
 GATES={'windows','macos / macos','linux / cpu','linux / package','linux / kali'}
-ADMIN_CHANGES={'.github/workflows/prepare-candidate.yml','scripts/prepare_candidate.py','tests/test_prepare_candidate.py'}
+ADMIN_CHANGES={'.github/workflows/publish-verified.yml','scripts/prepare_candidate.py','tests/test_prepare_candidate.py'}
 
 def require(ok,message):
     if not ok:raise ValueError(message)
