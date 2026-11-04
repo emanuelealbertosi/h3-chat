@@ -1,5 +1,6 @@
-import copy,unittest
-from h3chat.ph3_image import SIGMAS,validate,upsample_input
+import copy,unittest,tempfile,json
+from pathlib import Path
+from h3chat.ph3_image import SIGMAS,validate,upsample_input,ready,CORE_REVISION
 from h3chat.image_options import options,capture_request,validate_overrides
 import test_visual_models as fixture
 
@@ -33,5 +34,16 @@ class PH3Tests(unittest.TestCase):
         with self.assertRaises(ValueError):validate_overrides({self.qwen['id']:{'width':2912}},{self.qwen['id']:self.qwen})
         with self.assertRaises(ValueError):validate_overrides({model['id']:{'ph3_upsample':'yes'}},{model['id']:model})
         self.assertEqual(upsample_input('A glass pear',2048,1024),'Aspect ratio: 2:1\nRequest: A glass pear')
+
+class RuntimeReadinessTests(unittest.TestCase):
+    def test_namespace_aimdo_install_is_ready_and_missing_control_is_not(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);folder=root/'runtime/ph3'
+            for name in ('core/comfy_extras/nodes_minimax_h3.py','core/comfy/text_encoders/minimax.py','packages/comfy_kitchen/__init__.py','packages/comfy_aimdo/control.py'):
+                path=folder/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('')
+            (folder/'provenance.json').write_text(json.dumps({'revision':CORE_REVISION}))
+            self.assertFalse((folder/'packages/comfy_aimdo/__init__.py').exists())
+            self.assertTrue(ready(root))
+            (folder/'packages/comfy_aimdo/control.py').unlink();self.assertFalse(ready(root))
 
 if __name__=='__main__':unittest.main()

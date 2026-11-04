@@ -13,7 +13,7 @@ def ready(root):
     except (OSError,ValueError,KeyError):return False
     return revision==CORE_REVISION and all((folder/p).is_file() for p in (
         'core/comfy_extras/nodes_minimax_h3.py','core/comfy/text_encoders/minimax.py',
-        'packages/comfy_kitchen/__init__.py','packages/comfy_aimdo/__init__.py'))
+        'packages/comfy_kitchen/__init__.py','packages/comfy_aimdo/control.py'))
 
 
 def validate(model,value):
