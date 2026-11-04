@@ -91,16 +91,15 @@ def check_inventory(release,files):
 
 def prepare(run_id,folder):
     record=provenance(run_id);files,reports=verify_packages(folder);tag='v'+__version__
-    try:api('releases/tags/'+tag)
-    except urllib.error.HTTPError as exc:
-        if exc.code!=404:raise
-    else:raise ValueError('Candidate already exists: inspect it instead of overwriting or duplicating.')
+    require(not any(r.get('tag_name')==tag for r in api('releases?per_page=100')),'Candidate already exists: inspect it instead of overwriting or duplicating.')
     require(not git('ls-remote','--tags','origin','refs/tags/'+tag),'Candidate tag already exists.')
     # Every member is verified before making the draft; main and stable releases are untouched.
     subprocess.run(['gh','release','create',tag,*map(str,files),'--repo',REPO,
         '--target',record['candidate_sha'],'--draft','--prerelease','--latest=false',
         '--title','H3-Chat '+__version__,'--notes-file',str(ROOT/f'docs/release-{__version__}.md')],check=True)
-    release=api('releases/tags/'+tag);check_inventory(release,files)
+    matches=[r for r in api('releases?per_page=100') if r.get('tag_name')==tag]
+    require(len(matches)==1,'Candidate draft not uniquely confirmed.')
+    release=api('releases/'+str(matches[0]['id']));check_inventory(release,files)
     record.update(status='draft_ready',url=release['html_url'],release_id=release['id'],assets=[p.name for p in files],reports=reports,stable_release_changed=False)
     output=ROOT/'build/candidate-proof.json';output.parent.mkdir(exist_ok=True);output.write_text(json.dumps(record,ensure_ascii=False,indent=2)+'\n',encoding='utf8')
     if os.environ.get('GITHUB_STEP_SUMMARY'):
