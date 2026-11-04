@@ -1,0 +1,62 @@
+name: Prepare verified RC draft
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: 'Successful exact candidate build (Windows, Mac, Linux and Kali)'
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: prepare-candidate-draft
+  cancel-in-progress: false
+jobs:
+  draft:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Test draft-only gates with disposable fixtures
+        run: python -m unittest discover -s tests -p test_prepare_candidate.py -v
+      - name: Require successful platform gates and unchanged application
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RUN: ${{ inputs.build_run }}
+        run: python scripts/prepare_candidate.py provenance "$BUILD_RUN"
+      - uses: actions/download-artifact@v4
+        with:
+          name: H3-Chat-windows-x64
+          run-id: ${{ inputs.build_run }}
+          github-token: ${{ github.token }}
+          path: verified/windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: H3-Chat-macos-arm64
+          run-id: ${{ inputs.build_run }}
+          github-token: ${{ github.token }}
+          path: verified/macos
+      - uses: actions/download-artifact@v4
+        with:
+          name: H3-Chat-linux-x64
+          run-id: ${{ inputs.build_run }}
+          github-token: ${{ github.token }}
+          path: verified/linux
+      - name: Verify all nine files and prepare an unpublished prerelease draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RUN: ${{ inputs.build_run }}
+        run: python scripts/prepare_candidate.py prepare "$BUILD_RUN" verified
+      - uses: actions/upload-artifact@v4
+        with:
+          name: H3-Chat-candidate-proof
+          path: build/candidate-proof.json
