@@ -11,7 +11,7 @@ archive=W/f'H3-Chat-{__version__}-windows-x64.zip'
 with zipfile.ZipFile(archive) as package:
     manifest=json.loads(package.read('H3-Chat/FILES-SHA256.json'))
     names=set(package.namelist())
-    features=verify_members(names)
+    features=verify_members(names,platform='windows')
     assert names=={'H3-Chat/'+name for name in manifest}|{'H3-Chat/FILES-SHA256.json'}
     for name,digest in manifest.items():
         assert hashlib.sha256(package.read('H3-Chat/'+name)).hexdigest()==digest,name

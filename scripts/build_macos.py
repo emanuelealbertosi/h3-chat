@@ -98,7 +98,7 @@ def package(stage):
     digest=hashlib.sha256(target.read_bytes()).hexdigest();target.with_name(target.name+'.sha256').write_text(digest+'  '+target.name+'\n')
     with zipfile.ZipFile(target) as package:
         from scripts.verify_feature_files import verify_members
-        features=verify_members(package.namelist())
+        features=verify_members(package.namelist(),platform='macos')
         for name,value in manifest.items():assert hashlib.sha256(package.read('H3-Chat/'+name)).hexdigest()==value,name
     result={'status':'passed','archive':target.name,'sha256':digest,'size':target.stat().st_size,'verified_files':len(manifest),'all_member_sha256_verified':True,'private_data_and_generative_model_weights_excluded':True,'architecture':'arm64','feature_files':features}
     target.with_name(target.stem+'.verification.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))

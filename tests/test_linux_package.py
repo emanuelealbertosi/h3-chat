@@ -6,7 +6,8 @@ import tempfile
 import unittest
 
 from scripts.verify_linux_package import verify
-from scripts.verify_feature_files import REQUIRED
+from scripts.verify_feature_files import REQUIRED as COMMON_REQUIRED,NVIDIA_INSTALLER_FILES
+REQUIRED=COMMON_REQUIRED|NVIDIA_INSTALLER_FILES
 
 
 class LinuxPackageTests(unittest.TestCase):

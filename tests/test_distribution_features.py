@@ -1,12 +1,18 @@
 """Ensure the common archive gate covers the actual portable feature source."""
 from pathlib import Path
 import unittest
-from scripts.verify_feature_files import REQUIRED,POSTER_FILES,STUDIO_FILES,FONT_FILES,verify_members
+from scripts.verify_feature_files import REQUIRED,POSTER_FILES,STUDIO_FILES,FONT_FILES,NVIDIA_INSTALLER_FILES,verify_members
 from scripts.package import collect_files
 
 ROOT=Path(__file__).resolve().parents[1]
 
 class DistributionFeatureTests(unittest.TestCase):
+    def test_macos_omits_cuda_installers_while_nvidia_packages_still_require_them(self):
+        self.assertEqual(verify_members(REQUIRED,platform='macos')['total_required_files'],len(REQUIRED))
+        for platform in ('windows','linux'):
+            with self.subTest(platform=platform):
+                with self.assertRaisesRegex(ValueError,'install-ph3'):verify_members(REQUIRED,platform=platform)
+                self.assertEqual(verify_members(REQUIRED|NVIDIA_INSTALLER_FILES,platform=platform)['total_required_files'],len(REQUIRED|NVIDIA_INSTALLER_FILES))
     def test_common_archive_gate_checks_relative_or_packaged_members(self):
         expected=verify_members(REQUIRED)
         self.assertEqual(verify_members('H3-Chat/'+name for name in REQUIRED),expected)

@@ -33,7 +33,7 @@ def verify(path):
             elif not member.isdir():raise ValueError('Unsupported archive object: '+name)
     for name in ('Avvia-H3-Chat.sh','Ferma-H3-Chat.sh','Installa-dipendenze-Linux.sh','runtime/python/bin/python3','native/h3-sd-worker','runtime/cpu/llama/llama-server','skills/h3/SKILL.md'):
         if 'H3-Chat/'+name not in names:raise ValueError('Required packaged file missing: '+name)
-    features=verify_members(names)
+    features=verify_members(names,platform='linux')
     with path.open('rb') as stream:digest=hashlib.file_digest(stream,'sha256').hexdigest()
     if path.with_name(path.name+'.sha256').read_text().split()[0]!=digest:raise ValueError('Archive checksum mismatch.')
     report={'status':'passed','archive':path.name,'size':path.stat().st_size,'sha256':digest,'verified_members':len(names),'regular_files':regular,'all_member_payloads_read':True,'private_data_and_generative_weights_excluded':True,'links_confined_to_package':True,'gpu_inference_tested':False,'feature_files':features}

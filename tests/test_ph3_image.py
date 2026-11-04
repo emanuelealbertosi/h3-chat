@@ -31,7 +31,8 @@ class PH3Tests(unittest.TestCase):
         model=self.model();before=self.app.store.settings()
         saved=capture_request(model,before,{'width':2912,'height':2912,'megapixels':8,'ph3_upsample':False})
         self.assertFalse(options(model,saved)['ph3_upsample']);self.assertEqual(self.app.store.settings(),before)
-        with self.assertRaises(ValueError):validate_overrides({self.qwen['id']:{'width':2912}},{self.qwen['id']:self.qwen})
+        validate_overrides({self.qwen['id']:{'width':2912}},{self.qwen['id']:self.qwen})
+        with self.assertRaises(ValueError):validate_overrides({self.qwen['id']:{'width':4128}},{self.qwen['id']:self.qwen})
         with self.assertRaises(ValueError):validate_overrides({model['id']:{'ph3_upsample':'yes'}},{model['id']:model})
         self.assertEqual(upsample_input('A glass pear',2048,1024),'Aspect ratio: 2:1\nRequest: A glass pear')
 

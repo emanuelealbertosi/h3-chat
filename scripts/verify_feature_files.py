@@ -33,11 +33,13 @@ FONT_FILES=frozenset('static/'+name+'.ttf' for name in ('Manrope','Cormorant','B
     'static/font-licenses/bebasneue/OFL.txt','static/font-licenses/baloo2/OFL.txt',
     'static/font-licenses/caveat/OFL.txt','static/font-licenses/bangers/OFL.txt',
 ))
-REQUIRED=POSTER_FILES|STUDIO_FILES|FONT_FILES|NEW_FEATURE_FILES
+NVIDIA_INSTALLER_FILES=frozenset(('scripts/install-ph3.py','scripts/ph3-sources.json'))
+REQUIRED=(POSTER_FILES|STUDIO_FILES|FONT_FILES|NEW_FEATURE_FILES)-NVIDIA_INSTALLER_FILES
 
-def verify_members(names):
+def verify_members(names,platform=None):
     """Validate actual archive members, not merely files on the build host."""
     relative={str(name).removeprefix('H3-Chat/') for name in names}
-    missing=REQUIRED-relative
+    required=REQUIRED|(NVIDIA_INSTALLER_FILES if platform in ('windows','linux') else frozenset())
+    missing=required-relative
     if missing:raise ValueError('Release incomplete: missing poster/Studio/font files: '+', '.join(sorted(missing)))
-    return {'poster_files':len(POSTER_FILES),'studio_files':len(STUDIO_FILES),'font_and_license_files':len(FONT_FILES),'total_required_files':len(REQUIRED)}
+    return {'poster_files':len(POSTER_FILES),'studio_files':len(STUDIO_FILES),'font_and_license_files':len(FONT_FILES),'total_required_files':len(required)}
