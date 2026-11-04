@@ -11,7 +11,7 @@ try{
  await page.goto(process.env.H3_TEST_URL||'http://127.0.0.1:8789');
  await page.waitForFunction(()=>document.querySelector('#model-name').textContent!=='Scegli un modello');
  if(!await page.locator('#settings').evaluate(d=>d.open))await page.click('#settings-open');
- const choose='[data-setting="chat_model"]';await page.selectOption(choose,'qwen3-06');
+ await page.locator('#settings-body>.settings-page-layout>.settings-page-nav').getByRole('button',{name:'3 · Scegli i modelli',exact:true}).click();const choose='[data-setting="chat_model"]';await page.selectOption(choose,'qwen3-06');
  await page.selectOption('[data-setting="create_model"]','sd15');
  await page.selectOption('[data-setting="edit_model"]','sd15');
  await page.click('[data-tab="advanced"]');

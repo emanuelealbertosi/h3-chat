@@ -1,8 +1,8 @@
 # H3-Chat
 
-**Candidata 1.0.0-rc.1:** consolidamento delle funzioni esistenti. La versione
+**Candidata 1.0.0-rc.2:** consolidamento delle funzioni esistenti. La versione
 stabile rimane [0.19.2](https://github.com/emanuelealbertosi/h3-chat/releases/tag/v0.19.2).
-[Novità della candidata](docs/release-1.0.0-rc.1.md) · [Collaudo e aggiornamento](docs/release-candidate-testing.md) · [Dopo la 1.0](docs/post-1.0-roadmap.md).
+[Novità della candidata](docs/release-1.0.0-rc.2.md) · [Collaudo e aggiornamento](docs/release-candidate-testing.md) · [Dopo la 1.0](docs/post-1.0-roadmap.md).
 
 **Modifica video** importa anche MP4 esterni e mostra intervalli di massimo 15 secondi, modificabili per intero o solo in parte. **Remix** cambia audio, voce Higgs, canto sulla base originale o timbro clonato con motori interni. [Uso e installazione](docs/video-remix.md).
 
@@ -115,7 +115,9 @@ portabile trovi **Setup → Configura per API · nessuna GPU**.
 
 Se il salvataggio delle impostazioni fallisce, il messaggio completo resta visibile dentro la finestra, accanto a **Salva impostazioni**. I valori inseriti restano disponibili per correggere l’errore e riprovare.
 
-**Primo avvio:** apri **Impostazioni → Setup**, scegli hardware e modelli. Il catalogo scarica i pesi e tutti i componenti richiesti, controllando dimensione e SHA-256. I backend GPU si installano dallo stesso setup. Dopo i download, inferenza, interfaccia e documenti funzionano offline.
+**Provider Heabsy:** in **Provider API** scegli il preset Heabsy, inserisci la chiave nel campo protetto, premi **Carica elenco modelli**, scegli l’ID e salva il collegamento. Usa poi **Usa in chat**. Il preset usa Chat Completions su `https://api.heabsy.com/v1`; non imposta né scarica modelli locali. La compatibilità del protocollo è documentata dal [provider](https://heabsy.com/integrations).
+
+**Primo avvio:** apri **Impostazioni → Primo avvio**. La guida separa utilizzo locale/API/misto, hardware rilevato, modelli e memoria. Applica il suggerimento hardware se desideri, poi salva. Da **Modelli e installazioni** nella barra laterale trovi catalogo, collegamenti locali, motori e componenti, modelli RAG/trascrizione e avanzamento dei download. Usa ricerca e filtro per funzione; prima di scaricare puoi controllare la compatibilità stimata. I download partono soltanto su tua scelta e controllano dimensioni e SHA-256. Le **Preferenze** sono divise in argomenti e sottosezioni, conservando la bozza mentre cambi pagina. Dopo i download le funzioni locali possono lavorare offline; le API richiedono il collegamento al provider.
 
 **Da GitHub, come H3-Music:** su Windows x64 esegui `git clone https://github.com/emanuelealbertosi/h3-chat.git`, entra nella cartella e apri **`install.bat`**. L'installatore prepara Python privato, estrae interfaccia e launcher precompilati, scarica i motori CPU chat/immagini/musica dalle revisioni fissate e verifica gli SHA-256. Non richiede Python di sistema, Node.js, Visual Studio o compilatori. Le librerie Microsoft necessarie ai motori vengono incluse accanto ai motori, senza installazioni di sistema. Poi usa **`start.bat`** e **`stop.bat`**; restano disponibili anche i nomi italiani Installa/Avvia/Ferma. Modelli e GPU si scelgono dal Setup: i pesi non vengono copiati da un altro PC e non vengono scaricati automaticamente dall'installatore.
 
@@ -205,7 +207,7 @@ I componenti PDF/Word sono inclusi nello ZIP Windows e preparati da `install.bat
 
 Il composer offre **Vision On / Off** (On di default) e indica **Vision · CPU/GPU**, **Vision disattivata** oppure **Non vision**, con un avviso se manca il proiettore. Il nome commerciale del modello non basta: l'app verifica la presenza del `mmproj`. Nei modelli del catalogo usa esclusivamente il componente associato; non prende proiettori di altri modelli dalla cache condivisa. Se il proiettore viene rimosso da un modello già installato, i pesi verificati restano utilizzabili per il testo e il catalogo permette di completare di nuovo il download.
 
-Per usare un GGUF già scaricato, apri **Catalogo modelli → Collega un modello → Chat / vision** e scegli il file con **Sfoglia** oppure incolla il suo percorso completo. Non serve copiarlo in H3-Chat. In modalità mmproj Automatico l’app cerca il proiettore nella stessa cartella: se ne trova uno lo usa, se ne trova più di uno segnala l’ambiguità e puoi sceglierlo manualmente. Le vecchie cartelle `models/local/NomeModello/` continuano a essere rilevate. I metadati GGUF vengono letti senza eseguire codice; il proiettore presente nella stessa cartella viene passato automaticamente al motore. Se ci sono più proiettori non viene scelto arbitrariamente. La presenza del file non certifica l'abbinamento: un proiettore incompatibile viene rifiutato dal motore. Il GGUF deve essere supportato dalla versione integrata di llama.cpp. I file locali non sono scaricati né verificati contro un hash del catalogo.
+Per usare un GGUF già scaricato, apri **Modelli e installazioni → Collegamenti locali → Collega un modello → Chat / vision** e scegli il file con **Sfoglia** oppure incolla il suo percorso completo. Non serve copiarlo in H3-Chat. In modalità mmproj Automatico l’app cerca il proiettore nella stessa cartella: se ne trova uno lo usa, se ne trova più di uno segnala l’ambiguità e puoi sceglierlo manualmente. Le vecchie cartelle `models/local/NomeModello/` continuano a essere rilevate. I metadati GGUF vengono letti senza eseguire codice; il proiettore presente nella stessa cartella viene passato automaticamente al motore. Se ci sono più proiettori non viene scelto arbitrariamente. La presenza del file non certifica l'abbinamento: un proiettore incompatibile viene rifiutato dal motore. Il GGUF deve essere supportato dalla versione integrata di llama.cpp. I file locali non sono scaricati né verificati contro un hash del catalogo.
 
 Il menu **Vision CPU / GPU** in chat sceglie dove elaborare le immagini, dal prossimo messaggio. CPU è il default e risparmia VRAM; GPU usa il backend LLM CUDA o Vulkan e richiede VRAM aggiuntiva. Il modello LLM e i suoi layer restano impostati come prima. Vision Off evita di caricare il proiettore. Il RAG Ovis ha una scelta del dispositivo separata.
 
@@ -213,7 +215,7 @@ Senza vision, la chat testuale continua a funzionare e le risposte conservano l'
 
 ## Modelli già scaricati in altre cartelle
 
-**Impostazioni → Catalogo modelli → Collega un modello** registra soltanto i percorsi assoluti dei file in `data/chat.sqlite`. Puoi usare altre cartelle, unità locali o percorsi UNC accessibili al tuo utente Windows. Sfoglia mostra le unità e le cartelle; puoi anche incollare un percorso. La navigazione è esplicita, una cartella alla volta: nessuna scansione automatica dell’intero disco.
+**Modelli e installazioni → Collegamenti locali → Collega un modello** registra soltanto i percorsi assoluti dei file in `data/chat.sqlite`. Puoi usare altre cartelle, unità locali o percorsi UNC accessibili al tuo utente Windows. Sfoglia mostra le unità e le cartelle; puoi anche incollare un percorso. La navigazione è esplicita, una cartella alla volta: nessuna scansione automatica dell’intero disco.
 
 - **Chat / vision:** GGUF, anche suddiviso in più parti (seleziona la prima `00001`). Il mmproj è automatico nella stessa cartella, selezionabile manualmente oppure disattivabile. Se manca, il modello resta utilizzabile per il testo con avviso Non vision. La presenza di un proiettore non certifica la compatibilità: il motore verifica l’abbinamento al caricamento.
 - **Stable Diffusion / SDXL:** checkpoint completo GGUF o safetensors, con eventuale VAE esterno.

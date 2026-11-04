@@ -1,13 +1,12 @@
-// Group existing controls without recreating them or losing their draft values.
+import {settingsPages,compactForm,foldSettingsHelp} from './settings-navigation.js';
 export function organizeSettings(body,tab){
- if(tab!=='advanced')return;
- const groups=[['chat','Chat e immagini'],['agent','Agente autonomo'],['media','Video, musica e voce'],['rag','Progetti e RAG'],['computer','Calcolo e memoria'],['tools','Strumenti'],['access','Server e accessi']];
- const holders=new Map(),nav=document.createElement('nav');nav.className='settings-sections';nav.ariaLabel='Sezioni delle preferenze';
- for(const [key,label] of groups){const section=document.createElement('section');section.className='settings-section';section.dataset.settingsSection=key;const title=document.createElement('h3');title.textContent=label;section.append(title);holders.set(key,section);const button=document.createElement('button');button.type='button';button.className='btn small';button.textContent=label;button.onclick=()=>section.scrollIntoView({behavior:'smooth',block:'start'});nav.append(button);}
- for(const [selector,key] of [['.network-settings-section','access'],['.device-settings-section','computer'],['.lab-settings-section','tools'],['.agent-settings-section','agent']])for(const e of body.querySelectorAll(selector))holders.get(key).append(e);
- const threads=body.querySelector('[data-setting="threads"]')?.closest('label');if(threads){const card=document.createElement('section');card.className='card';card.append(threads);holders.get('computer').append(card);}
- for(const child of [...body.children]){
-  const key=child.matches('.memory-assessment')?'computer':child.matches('.video-settings,.music-settings,.voice-settings,.upscale-settings')?'media':child.matches('.server-settings-section')?'access':child.matches('.workspace-settings')?'rag':child.matches('.tools-settings')?'tools':child.querySelector('#llm-settings-card')?'chat':child.matches('.lora-folder-settings')?'chat':child.querySelector('[data-media-server]')?'access':'media';holders.get(key).append(child);
- }
- body.append(nav,...holders.values());for(const section of holders.values())if(section.children.length===1)section.hidden=true;
+ if(tab!=='advanced')return null;
+ const definitions=[['chat','Chat e Assistant'],['images','Immagini e LoRA'],['video','Video'],['music','Musica'],['voice','Voce'],['rag','Progetti e RAG'],['agent','Agente'],['tools','Ricerca e strumenti'],['computer','Computer e memoria'],['access','Server e accessi'],['general','Istruzioni personali']];
+ const groups=new Map(definitions.map(([id,label])=>[id,{id,label,nodes:[]}]));
+ const add=(key,node)=>{if(node){node.remove();groups.get(key).nodes.push(node);}};
+ for(const [selector,key] of [['.network-settings-section','access'],['.device-settings-section','computer'],['.lab-settings-section','tools'],['.agent-settings-section','agent']])for(const e of body.querySelectorAll(selector))add(key,e);
+ const grid=body.querySelector(':scope > .settings-grid');if(grid){for(const card of [...grid.children])add(card.id==='llm-settings-card'?'chat':card.id==='image-settings-card'?'images':'general',card);grid.remove();}
+ for(const child of [...body.children]){if([...groups.values()].some(g=>g.nodes.includes(child)))continue;add(child.matches('.memory-assessment')?'computer':child.matches('.video-settings,.upscale-settings')?'video':child.matches('.music-settings')?'music':child.matches('.voice-settings')?'voice':child.matches('.server-settings-section')?'access':child.matches('.workspace-settings')?'rag':child.matches('.tools-settings')?'tools':child.matches('.lora-folder-settings')?'images':'video',child);}
+ for(const group of groups.values())for(const node of group.nodes)if(!node.matches('.memory-assessment'))compactForm(node,'advanced-'+group.id+'-'+(node.id||node.className));
+ const controller=settingsPages(body,[...groups.values()],{key:tab});foldSettingsHelp(body);return controller;
 }

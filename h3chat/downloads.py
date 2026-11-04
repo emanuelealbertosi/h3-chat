@@ -158,6 +158,22 @@ class Downloads:
         with self.lock:
             return [{k: v for k, v in task.items() if k != "cancel"} for task in self.tasks.values()]
 
+    def model_options(self):
+        """Public tool-model inventory; never read weights or expose download credentials."""
+        result = []
+        for key, model in self.tool_models.items():
+            files = model['files']
+            def present(entry):
+                try:
+                    path = safe_join(self.root, entry['path'])
+                    return path.is_file() and path.stat().st_size == entry['size']
+                except OSError:
+                    return False
+            result.append({'id': key, 'name': model.get('name', key),
+                           'size': sum(f['size'] for f in files),
+                           'ready': bool(files) and all(present(f) for f in files)})
+        return result
+
     def start(self, key, kind="model"):
         from .platform_runtime import is_macos,require_local_model
         if is_macos() and kind=="runtime":raise ValueError("I motori macOS compatibili sono inclusi nel pacchetto. Aggiorna o reinstalla il pacchetto Mac; i runtime Windows non possono essere installati qui.")

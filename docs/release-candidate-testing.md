@@ -1,4 +1,4 @@
-# Collaudare H3-Chat 1.0.0-rc.1
+# Collaudare H3-Chat 1.0.0-rc.2
 
 Questa checklist distingue i collaudi da eseguire dalle capacità già implementate.
 Una casella qui sotto non indica da sola che la prova sia stata eseguita.
@@ -7,7 +7,7 @@ La versione stabile rimane disponibile separatamente.
 ## Installazione e piattaforme
 
 - [ ] Windows: estrarre il pacchetto in una cartella scrivibile, anche con spazi,
-  avviare e verificare che la versione visualizzata sia `1.0.0-rc.1`.
+  avviare e verificare che la versione visualizzata sia `1.0.0-rc.2`.
 - [ ] Windows senza GPU: configurare un LLM API, chat e RAG CPU, senza avviare
   download o caricamenti di pesi generativi non scelti.
 - [ ] Windows NVIDIA: usare un modello già installato; verificare selezione,
@@ -33,6 +33,16 @@ La versione stabile rimane disponibile separatamente.
 La procedura non autorizza l'eliminazione della vecchia cartella o dei suoi dati.
 Chi aggiorna un checkout Git deve attendere la fine dei lavori, fermare H3,
 aggiornare il codice e rieseguire l'installazione come descritto nel README.
+
+## Primo avvio, installazioni e impostazioni
+
+- [ ] Completare la guida locale/API/mista e applicare il suggerimento hardware.
+- [ ] In Modelli e installazioni filtrare catalogo, componenti e modelli RAG;
+  verificare spazio di download, stima compatibilità, avanzamento e annullamento.
+- [ ] Cambiare sezione nelle Preferenze e tornare ai valori non ancora salvati.
+- [ ] Ripristinare preset slide/sfondi e controllare le schede delle modalità.
+- [ ] Provider Heabsy: selezionare il preset e configurare una propria chiave
+  soltanto nel campo protetto. La presenza del preset non certifica un account.
 
 ## Percorsi funzionali
 

@@ -17,14 +17,14 @@ try{
  await page.goto(process.env.H3_TEST_URL||'http://127.0.0.1:8788');await page.waitForFunction(()=>document.querySelector('#think-note').textContent.length>0);
  await api('/settings',{image_advanced:false,chat_advanced:false,image_overrides:{},lora_dirs:[]});await page.evaluate(()=>localStorage.clear());await page.reload();await page.waitForFunction(()=>document.querySelector('#think-note').textContent.length>0);
  await page.click('#settings-open');await page.click('[data-tab="advanced"]');
- await page.selectOption('#image-settings-model',config.anima);
+ await page.locator('#settings-body>.settings-page-layout>.settings-page-nav').getByRole('button',{name:'Immagini e LoRA',exact:true}).click();await page.selectOption('#image-settings-model',config.anima);
  assert.equal(await page.isChecked('#image-advanced'),false);assert.equal(await page.isVisible('#image-advanced-fields'),false);
  assert.match(await page.locator('.image-preset-summary').innerText(),/8 step · CFG 1/);await shot('preferences-defaults');
  await page.check('#image-advanced');await page.fill('[data-image-setting="steps"]','10');await page.fill('[data-image-setting="width"]','768');
  await page.selectOption('[data-image-setting="sampler"]','euler');await page.selectOption('[data-image-setting="scheduler"]','simple');
  await page.fill('[data-image-setting="seed"]','456');await page.fill('[data-image-setting="negative_prompt"]','sfocato');
- await page.selectOption('#image-settings-model','');assert.equal(await page.inputValue('#image-settings-model'),'');
- assert.equal(await page.inputValue('[data-image-setting="steps"]'),'20');await page.selectOption('#image-settings-model',config.anima);
+ await page.locator('#settings-body>.settings-page-layout>.settings-page-nav').getByRole('button',{name:'Immagini e LoRA',exact:true}).click();await page.selectOption('#image-settings-model','');assert.equal(await page.inputValue('#image-settings-model'),'');
+ assert.equal(await page.inputValue('[data-image-setting="steps"]'),'20');await page.locator('#settings-body>.settings-page-layout>.settings-page-nav').getByRole('button',{name:'Immagini e LoRA',exact:true}).click();await page.selectOption('#image-settings-model',config.anima);
  assert.equal(await page.inputValue('[data-image-setting="steps"]'),'10');await shot('preferences-advanced');
  await page.uncheck('#image-advanced');
  for(const dir of config.dirs){

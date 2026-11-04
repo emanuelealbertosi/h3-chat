@@ -1,3 +1,4 @@
+import {compactForm} from './settings-navigation.js';
 import {videoRequestSummary} from './video-request.js';
 import {chosenMusicModel} from './music-request.js';
 const $=selector=>document.querySelector(selector);
@@ -40,7 +41,7 @@ export function initComposerSettings({context,getState,onChange,visualControls,o
    }
    const tab=document.createElement('button');tab.type='button';tab.className='prompt-choice';tab.textContent=title;tab.dataset.modeTab=id;tabs.append(tab);
    const entry={id,title,describe,panel,wrapper,row,button,text,tab};entries.push(entry);
-   button.onclick=()=>{if(id==='agent-options'){panel.querySelector('[data-agent-preferences]').click();return;}current=id;opener=button;render();dialog.showModal();};tab.onclick=()=>{if(id==='agent-options'){dialog.close();panel.querySelector('[data-agent-preferences]').click();return;}current=id;render();};
+   button.onclick=()=>{if(id==='agent-options'){panel.querySelector('[data-agent-preferences]').click();return;}current=id;opener=button;render();dialog.showModal();compactForm(panel,'mode-'+id);};tab.onclick=()=>{if(id==='agent-options'){dialog.close();panel.querySelector('[data-agent-preferences]').click();return;}current=id;render();};
   }
  }
  function render(){
@@ -52,7 +53,7 @@ export function initComposerSettings({context,getState,onChange,visualControls,o
    const layout=entry.row.querySelector('[data-moss-layout-open]');if(layout){const model=getState()?.models.find(m=>m.id===visualControls.read().image_model);layout.disabled=model?.architecture!=='moss';layout.title=layout.disabled?'Seleziona MOSS per disegnare riquadri e sottoprompt.':'Apri l’editor di riquadri, testi e sottoprompt MOSS.';}
    const resing=entry.row.querySelector('[data-music-resing]');if(resing){const model=chosenMusicModel(getState(),visualControls.read());resing.disabled=!getState()?.music_options?.resing||model?.architecture==='minimax-music'||!!model?.remote_media;resing.title=!getState()?.music_options?.resing?'Novità pronta: riavvia il server quando i lavori in corso sono terminati.':resing.disabled?'Re-sing sulla melodia originale richiede YuE2 locale. Sceglilo nelle impostazioni Music.':'Usa una canzone allegata come base originale e canta il nuovo testo. Da 3 secondi a 5 minuti. Se Testo è vuoto, Assistant lo inventa dal prompt.';resing.setAttribute('aria-pressed',String(!!visualControls.read().music_resing));}
   }
-  const entry=entries.find(e=>e.id===current);dialog.querySelector('h2').textContent='Impostazioni '+(entry?.title||'della modalità');tabs.hidden=active.length<2;
+  const entry=entries.find(e=>e.id===current);if(dialog.open&&entry)compactForm($('#'+entry.id),'mode-'+entry.id);dialog.querySelector('h2').textContent='Impostazioni '+(entry?.title||'della modalità');tabs.hidden=active.length<2;
   if(!active.length&&dialog.open)dialog.close();
  }
  dialog.querySelector('header button').onclick=dialog.querySelector('footer button').onclick=()=>dialog.close();

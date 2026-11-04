@@ -85,3 +85,62 @@ dialog.image-zoom-dialog .image-compare-divider{position:absolute;z-index:3;top:
 .image-compare-note{padding:0 18px 12px;font-size:11px}.image-viewer-status{margin:0;padding:8px 18px;color:var(--red)}
 .gallery-compare-pick{display:flex!important;align-items:center!important;flex-direction:row!important;gap:5px!important;font-weight:500!important;font-size:11px!important;margin-bottom:7px}
 @media(max-width:600px){.image-compare-modes{margin-left:0}.image-compare-slider span{display:none}.image-compare-note{font-size:10px}.image-compare-captions{gap:8px}}
+
+/* Settings use one topic at a time. Only the active content pane scrolls. */
+#settings-body.settings-paged{display:flex;flex-direction:column;overflow:hidden;padding:0;min-height:0}
+.settings-page-layout{display:grid;grid-template-columns:190px minmax(0,1fr);min-width:0;min-height:0;flex:1}
+.settings-page-nav{display:flex;flex-direction:column;gap:5px;padding:18px 12px;background:var(--paper,#f5f3ed);border-right:1px solid var(--line);overflow:auto;min-height:0}
+dialog .settings-page-button{font-size:12px;line-height:1.35;min-height:36px;padding:10px 12px;text-align:left;background:transparent;color:var(--ink);border:1px solid transparent;border-radius:8px}
+dialog .settings-page-button[aria-pressed=true]{background:var(--green,#153d40);color:white}
+.settings-page-content{min-width:0;min-height:0;overflow:auto;padding:20px 24px;overscroll-behavior:contain;scrollbar-gutter:stable}
+.settings-page[hidden]{display:none!important}.settings-page-title{margin:0 0 16px!important;font-size:18px!important}
+.settings-page .card{margin:0 0 16px;padding:16px 18px}
+.settings-page .field{margin-bottom:14px}.settings-page .settings-grid{gap:12px 18px}
+.settings-page p{margin:8px 0 14px;line-height:1.5}
+.settings-page .card.settings-paged{padding:0;display:block;overflow:visible}
+.card.settings-paged>.settings-page-layout{display:block}
+.card.settings-paged .settings-page-nav{display:flex;flex-direction:row;flex-wrap:wrap;overflow:visible;border-right:0;border-bottom:1px solid var(--line);padding:8px;gap:4px}
+.card.settings-paged .settings-page-content{padding:16px 18px;overflow:visible;scrollbar-gutter:auto}
+.card.settings-paged .settings-page-title{font-size:15px!important}
+.setup-paths{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.setup-step-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 24px;border-top:1px solid var(--line);flex:none}
+.setup-step-actions span{font-size:12px}.settings-page-intro{padding:12px 24px;margin:0}
+#settings-body.installation-center{display:flex;flex-direction:column;padding:0;overflow:hidden}
+.installation-toolbar{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(180px,1fr) minmax(180px,1fr);gap:16px;padding:16px 24px;border-bottom:1px solid var(--line);align-items:center;flex:none}
+.installation-toolbar h3{margin:0}.installation-toolbar p{font-size:12px;margin:4px 0}.installation-toolbar .field{margin:0}
+.installation-list{overflow:auto;min-height:0;padding:16px 24px;flex:1}
+.installation-list>[hidden]{display:none!important}.installation-list .model-card{margin:0 0 12px;padding:14px 18px}
+.installation-list .model-top{gap:12px}.installation-list .model-top h3{margin:0;font-size:15px}.installation-list>.installation-intro{margin-bottom:14px}
+.installation-center>p{padding:0 24px}.settings-dialog>.settings-tabs{padding:8px 24px;gap:6px;display:flex;flex-wrap:wrap}
+.settings-dialog>header{padding:16px 24px}.settings-dialog>header h2{margin:2px 0}.settings-dialog>footer{padding:12px 24px}
+.settings-help{font-size:12px;margin:10px 0}.settings-help>summary{cursor:pointer;color:var(--green)}
+.setup-hardware-summary{padding:0 0 14px;border-bottom:1px solid var(--line);margin-bottom:14px}.setup-hardware-summary h3{display:none}.setup-hardware-summary>p:last-child{font-size:11px}
+.prompt-options-body:has(>.prompt-mode-section:not([hidden])>.settings-paged){display:flex;flex-direction:column;overflow:hidden;padding:0}
+.prompt-mode-section:has(>.settings-paged):not([hidden]){display:flex;flex-direction:column;min-height:0;flex:1}
+.prompt-mode-section>.settings-paged:not([hidden]){display:flex!important;flex-direction:column;min-height:0;flex:1;padding:0!important;border:0!important;margin:0!important}
+.prompt-mode-section>.settings-paged>.settings-page-layout{flex:1}
+.prompt-mode-section .settings-page-content{padding:18px 22px}
+.prompt-mode-section .settings-page>label{display:flex;flex-direction:column;gap:6px;margin:0 0 16px;font-weight:600}
+.prompt-mode-section .settings-page>label:has(input[type=checkbox]){flex-direction:row;align-items:center;font-weight:400}
+.agent-settings-fields.settings-paged{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+.agent-settings-fields .settings-page>label{display:block;margin:14px 0}
+.background-form.settings-paged{display:block}.background-form.settings-paged>.settings-page-layout{display:block}
+.background-form.settings-paged .settings-page-nav{flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid var(--line);padding:8px;overflow:visible}
+.background-form.settings-paged .settings-page-content{padding:16px 0;overflow:visible}
+.background-form.settings-paged .settings-page{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.background-form.settings-paged .settings-page-title{grid-column:1/-1}
+.prompt-mode-section>.settings-paged>[data-presentation-presets]{flex:none;margin:12px 20px;padding:10px 14px}
+@media(max-width:800px){
+ .settings-page-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+ .settings-page-nav{flex-direction:row;overflow:auto;max-height:100px;padding:8px;gap:4px;border-right:0;border-bottom:1px solid var(--line)}
+ dialog .settings-page-button{flex:none;max-width:180px}.settings-page-content{padding:14px}
+ .installation-toolbar{grid-template-columns:1fr 1fr;padding:12px 14px;gap:8px}.installation-toolbar>div{grid-column:1/-1}.installation-toolbar p{display:none}
+ .installation-list{padding:12px 14px}.setup-paths{grid-template-columns:1fr}.setup-paths .btn{padding:10px}
+ .settings-dialog>header,.settings-dialog>footer{padding:10px 14px}.settings-dialog>.settings-tabs{padding:6px 10px}
+ .settings-dialog>header{gap:8px}.settings-dialog>header h2{font-size:24px;white-space:nowrap}.settings-dialog>header .eyebrow{display:none}
+ .settings-dialog>header .btn{font-size:11px;padding:8px;min-width:0}
+ .settings-dialog>.settings-tabs{flex-wrap:nowrap;overflow:auto}.settings-dialog>.settings-tabs>button{flex:none;white-space:nowrap;font-size:12px}
+ .settings-dialog>footer>#settings-note{display:none}
+ .background-form.settings-paged .settings-page{grid-template-columns:1fr}
+ .prompt-mode-section>.settings-paged>[data-presentation-presets]{margin:8px 12px;padding:8px}.prompt-mode-section>.settings-paged>[data-presentation-presets] small{display:none}
+}

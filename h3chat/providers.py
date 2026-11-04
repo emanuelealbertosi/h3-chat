@@ -11,6 +11,7 @@ from .store import uid
 PRESETS={
     'deepseek':{'name':'DeepSeek','base_url':'https://api.deepseek.com','model':'deepseek-flash','format':'json_object','thinking':'deepseek'},
     'openrouter':{'name':'OpenRouter','base_url':'https://openrouter.ai/api/v1','model':'','format':'json_object','thinking':'openrouter'},
+    'heabsy':{'name':'Heabsy','base_url':'https://api.heabsy.com/v1','model':'','format':'json_object','thinking':'none'},
     'custom':{'name':'Personalizzato · Chat Completions','base_url':'','model':'','format':'json_object','thinking':'none'},
 }
 

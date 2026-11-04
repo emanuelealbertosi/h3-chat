@@ -3,6 +3,7 @@ import {labImageDefault} from './lab-image-model.js';
 import {appendBackgroundGrid} from './background-grid.js';
 import {collectionExportButton} from './image-collections.js';
 import {deleteCollections} from './collection-delete.js';
+import {compactBackgroundForm} from './settings-navigation.js';
 
 const PALETTES=[['pastel','Pastello'],['natural','Naturale'],['blue','Blu e ghiaccio'],['warm','Sabbia e terracotta'],['mono','Monocromatica'],['custom','Personalizzata']];
 const defaults={name:'Set di sfondi',kind:'frame',format:'16:9',themes:[],palettes:['pastel'],custom_palette:'',variants:2,margin:12,opacity:20,tone:'light',design:'professional',model:'',megapixels:null,seed_mode:'saved',seed:0};
@@ -117,7 +118,7 @@ export function initSlideBackgrounds({api,getState,onRecipe,notify}){
   const blocked=getState()?.execution?.mode==='cpu'||getState()?.settings?.execution_mode==='cpu';
   dialog.querySelector('[data-use]').disabled=blocked||dialog.querySelector('[data-use]').disabled;
  }
- button.onclick=()=>{render();dialog.showModal();if(dialog.querySelector('[data-background-library]').open)loadLibrary();};
+ button.onclick=()=>{render();compactBackgroundForm(form);dialog.showModal();if(dialog.querySelector('[data-background-library]').open)loadLibrary();};
  dialog.querySelector('header button').onclick=()=>dialog.close();
  dialog.querySelector('[data-slides]').onclick=()=>{active=false;render();dialog.close();};
  dialog.querySelector('[data-use]').onclick=()=>{if(!validate())return;active=true;render();dialog.close();notify('Sfondi selezionati: scrivi il tema nel prompt e premi Invia.');};

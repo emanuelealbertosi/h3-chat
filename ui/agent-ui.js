@@ -1,6 +1,7 @@
 import {cpuMode} from './execution-mode.js';
 import {connectionPrompt} from './agent-connection.js';
 import {initComputerScope,adminPrompt} from './agent-computer.js';
+import {settingsPages,foldSettingsHelp} from './settings-navigation.js';
 const DEFAULTS={max_steps:16,max_minutes:30,max_calls:80,token_budget:500000,planning_agents:1,max_images:50,command_timeout:120,max_download_megabytes:8192,confirm_writes:true,allow_images:false,allow_audio:false,allow_video:false,allow_manim:false,allow_transcription:true,allow_projects:false,allow_browser:false,web_on_demand:true};
 const labels={list_sprites:"Cerca sprite salvati",read_sprite:"Leggi sprite",list_model_catalog:'Catalogo modelli',download_catalog_model:'Scarica modello verificato',model_download_status:'Stato download modello',set_model_preset:'Configura preset modello',import_computer_file:'Importa file in H3',export_computer_file:'Esporta file nel computer',computer_files:'File del computer',computer_run:'Esegui codice/comandi',request_admin:'Richiedi privilegi amministratore',download_web_document:'Scarica documento Web',configure_api:'Configura connessione API',create_files:'Crea file sorgente',create_pdf:'Crea PDF con H3',read_web_page:'Leggi pagina Web',search_web_images:'Cerca immagini Web',import_web_images:'Importa immagini nel lotto',import_web_sources:'Importa pagine nel RAG',list_projects:'Elenca progetti',read_project:'Leggi progetto',list_rag_models:'Modelli RAG disponibili',ensure_project:'Trova o crea progetto',import_project_files:'Aggiungi file al progetto',catalog_images:'Cataloga immagini con Vision',index_project:'Indicizza progetto',inspect_image:'Descrivi immagine con Vision',resing_music:'Ricanta su melodia originale',calculate:'Calcola',web_search:'Cerca sul Web',read_skill:'Leggi skill',list_models:'Modelli disponibili',project_search:'Cerca nelle fonti',read_attachment:'Leggi allegato',list_artifacts:'Artefatti della chat',read_artifact:'Leggi artefatto',list_image_lots:'Lotti disponibili',read_image_lot:'Leggi lotto',create_slides:'Crea slide',inspect_slides:'Controlla bordi slide',revise_slide:'Modifica slide',complete_slides:'Completa slide',create_image_lot:'Genera lotto immagini',create_voice:'Crea voce',create_music:'Crea musica',create_infographic:'Crea infografica',create_manim:'Crea animazione Manim',transcribe_audio:'Trascrivi audio',edit_image:'Ritocca immagine',apply_infographic_music:'Applica musica all’infografica',render_infographic:'Aggiorna filmato infografica'};
 const statuses={awaiting_video:'Video nella coda H3',prepared:'Preparato',approved:'Approvato',executing:'In esecuzione',done:'Completato',failed:'Errore',reused:'Risultato riutilizzato',awaiting_admin:'Attende amministratore',awaiting_connection:'Attende dati della connessione',awaiting_approval:'Attende conferma',rejected:'Rifiutato',uncertain:'Esito da verificare'};
@@ -28,7 +29,15 @@ export function initAgentControls({getState,api,pickDirectory,notify,onPreferenc
  warning.querySelector('[data-cancel]').onclick=()=>warning.close();warning.querySelector('[data-enable]').onclick=()=>{confirmation.checked=false;syncAuto();warning.close();remember();};
  confirmation.onchange=()=>{if(!confirmation.checked)askAuto();else{syncAuto();remember();}};
  auto.onclick=()=>{if(confirmation.checked)askAuto();else{confirmation.checked=true;syncAuto();remember();}};
- function openSettings(){dialog.querySelector('[data-agent-error]').textContent='';dialog.showModal();}
+ function openSettings(){
+  dialog.querySelector('[data-agent-error]').textContent='';
+  if(!controls.classList.contains('settings-paged')){
+   const groups=[{id:'budget',label:'Budget e tempi',nodes:[]},{id:'tools',label:'Strumenti H3',nodes:[]},{id:'permissions',label:'Web e autorizzazioni',nodes:[]}];
+   for(const node of [...controls.children]){const field=node.querySelector('[data-agent]')?.dataset.agent;groups[node.matches('p,.settings-grid')?0:['confirm_writes','web_on_demand','allow_browser'].includes(field)?2:1].nodes.push(node);}
+   const note=dialog.querySelector(':scope > .small-note');if(note)groups[0].nodes.push(note);settingsPages(controls,groups,{key:'agent-preferences'});foldSettingsHelp(controls);
+  }
+  dialog.showModal();
+ }
  panel.querySelector('[data-agent-preferences]').onclick=openSettings;dialog.querySelector('[data-agent-close]').onclick=()=>dialog.close();
  try{const saved=JSON.parse(localStorage.getItem('h3.agent-options.v1')||'{}');apply({...saved,confirm_writes:true});}catch{}
  function apply(config){for(const [k,v] of Object.entries(config)){const input=controls.querySelector(`[data-agent="${k}"]`);if(input){if(input.type==='checkbox')input.checked=!!v;else input.value=String(v);}}syncAuto();}

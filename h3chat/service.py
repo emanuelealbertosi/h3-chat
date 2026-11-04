@@ -167,6 +167,7 @@ class Service:
                 "collections": self.store.all("SELECT * FROM collections ORDER BY name"),
                 "projects": self.knowledge.list(),
                 "jobs": self.store.all("SELECT id,chat_id,message_id,status,stage,error,created,json_extract(payload,'$.canvas') AS canvas FROM jobs ORDER BY created DESC LIMIT 100"),
+                "installation_models":self.downloads.model_options(),
                 "downloads": self.downloads.snapshot(), "memory": self.engine.snapshot()}
 
     def provider_request(self,body,operation='save'):
